@@ -151,8 +151,6 @@ describe('RunReport', () => {
       totalTokens: 5000,
       estimatedCost: 0.25,
       prsCreated: 2,
-      agentInvocations: 10,
-      retries: 1,
       totals: baseTotals,
     };
     expect(report.runId).toBe('run-abc-123');
@@ -165,8 +163,6 @@ describe('RunReport', () => {
     expect(report.totalTokens).toBe(5000);
     expect(report.estimatedCost).toBe(0.25);
     expect(report.prsCreated).toBe(2);
-    expect(report.agentInvocations).toBe(10);
-    expect(report.retries).toBe(1);
     expect(report.totals).toEqual(baseTotals);
   });
 
@@ -182,8 +178,6 @@ describe('RunReport', () => {
       totalTokens: 0,
       estimatedCost: 0,
       prsCreated: 0,
-      agentInvocations: 0,
-      retries: 0,
       totals: {
         tokens: 0,
         estimatedCost: 0,
@@ -217,8 +211,6 @@ describe('RunReport', () => {
       totalTokens: 2600,
       estimatedCost: 0.13,
       prsCreated: 1,
-      agentInvocations: 5,
-      retries: 2,
       totals: { tokens: 2600, estimatedCost: 0.13, issues: 2, prsCreated: 1, failures: 1 },
     };
     expect(report.issues).toHaveLength(2);

@@ -246,8 +246,6 @@ describe('ReportWriter', () => {
         totalTokens: 0,
         estimatedCost: 0,
         prsCreated: 0,
-        agentInvocations: 0,
-        retries: 0,
         totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
       };
 
@@ -270,8 +268,6 @@ describe('ReportWriter', () => {
         totalTokens: 0,
         estimatedCost: 0,
         prsCreated: 0,
-        agentInvocations: 0,
-        retries: 0,
         totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
       };
 
@@ -295,8 +291,6 @@ describe('ReportWriter', () => {
         totalTokens: 0,
         estimatedCost: 0,
         prsCreated: 0,
-        agentInvocations: 0,
-        retries: 0,
         totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
       };
 
@@ -374,8 +368,6 @@ describe('ReportWriter', () => {
         totalTokens: 100,
         estimatedCost: 0.01,
         prsCreated: 0,
-        agentInvocations: 0,
-        retries: 0,
         totals: { tokens: 100, estimatedCost: 0.01, issues: 0, prsCreated: 0, failures: 0 },
       };
 
