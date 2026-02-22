@@ -60,6 +60,24 @@ describe('CostEstimator', () => {
     });
   });
 
+  describe('estimateIssueTokens', () => {
+    it('should return the default 200,000 tokens when no argument is provided', () => {
+      expect(estimator.estimateIssueTokens()).toBe(200_000);
+    });
+
+    it('should return the historical average when provided', () => {
+      expect(estimator.estimateIssueTokens(150_000)).toBe(150_000);
+    });
+
+    it('should return zero when zero is explicitly provided', () => {
+      expect(estimator.estimateIssueTokens(0)).toBe(0);
+    });
+
+    it('should return large values unchanged', () => {
+      expect(estimator.estimateIssueTokens(1_000_000)).toBe(1_000_000);
+    });
+  });
+
   describe('cost overrides', () => {
     it('should use overridden costs when provided', () => {
       const custom = new CostEstimator({
