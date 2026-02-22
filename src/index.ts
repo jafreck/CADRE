@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
+import { PreRunValidationSuite } from './validation/suite.js';
 
 const program = new Command();
 
@@ -22,6 +23,7 @@ program
   .option('-i, --issue <numbers...>', 'Override: process specific issue numbers')
   .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
   .option('--no-pr', 'Skip PR creation')
+  .option('--skip-validation', 'Skip pre-run validation checks')
   .action(async (opts) => {
     try {
       let config = await loadConfig(opts.config);
@@ -39,7 +41,7 @@ program
       }
 
       const runtime = new CadreRuntime(config);
-      const result = await runtime.run();
+      const result = await runtime.run(opts.skipValidation);
 
       process.exit(result.success ? 0 : 1);
     } catch (err: unknown) {
@@ -101,6 +103,25 @@ program
       } else {
         await runtime.listWorktrees();
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(chalk.red(`Error: ${msg}`));
+      process.exit(1);
+    }
+  });
+
+// ─── validate ─────────────────────────────────────────
+program
+  .command('validate')
+  .description('Run pre-run validation checks and report results')
+  .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
+  .action(async (opts) => {
+    try {
+      const config = await loadConfig(opts.config);
+      const suite = new PreRunValidationSuite();
+      const result = await suite.run(config);
+      console.log(suite.formatResults(result));
+      process.exit(result.passed ? 0 : 1);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));

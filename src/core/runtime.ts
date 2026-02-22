@@ -12,6 +12,7 @@ import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { killAllTrackedProcesses } from '../util/process.js';
 import { FleetProgressWriter } from './progress.js';
+import { PreRunValidationSuite } from '../validation/suite.js';
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
@@ -38,9 +39,20 @@ export class CadreRuntime {
   /**
    * Run the full CADRE pipeline.
    */
-  async run(): Promise<FleetResult> {
+  async run(skipValidation?: boolean): Promise<FleetResult> {
     // Set up graceful shutdown
     this.setupShutdownHandlers();
+
+    // Run pre-run validation unless explicitly skipped
+    if (!skipValidation) {
+      const suite = new PreRunValidationSuite();
+      const suiteResult = await suite.run(this.config);
+      console.log(suite.formatResults(suiteResult));
+      if (!suiteResult.passed) {
+        console.error('❌ Pre-run validation failed');
+        process.exit(1);
+      }
+    }
 
     this.logger.info('CADRE Runtime starting', {
       data: {
