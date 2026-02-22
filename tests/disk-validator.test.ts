@@ -131,7 +131,7 @@ describe('diskValidator', () => {
 
     it('should return passed:true using the fallback df result when space is sufficient', async () => {
       const repoSizeKb = 100000;
-      const availableKb = repoSizeKb * 3; // >= 2× estimate (3 parallel by default)
+      const availableKb = repoSizeKb * 3 * 2; // >= 2× estimate (3 parallel by default)
 
       vi.mocked(exec)
         .mockResolvedValueOnce({ ...okResult, stdout: makeDuOutput(repoSizeKb) }) // du
