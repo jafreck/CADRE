@@ -8,7 +8,7 @@ import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from './progress.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
-import { TokenTracker } from '../budget/token-tracker.js';
+import { TokenTracker, type TokenSummary } from '../budget/token-tracker.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { getPhaseCount } from './phase-registry.js';
@@ -26,12 +26,7 @@ export interface FleetResult {
   /** Total duration across all pipelines. */
   totalDuration: number;
   /** Aggregate token usage. */
-  tokenUsage: {
-    total: number;
-    byIssue: Record<number, number>;
-    byAgent: Record<string, number>;
-    byPhase: Record<number, number>;
-  };
+  tokenUsage: TokenSummary;
 }
 
 /**
@@ -42,6 +37,8 @@ export class FleetOrchestrator {
   private readonly fleetCheckpoint: FleetCheckpointManager;
   private readonly fleetProgress: FleetProgressWriter;
   private readonly tokenTracker: TokenTracker;
+  private readonly costEstimator: CostEstimator;
+  private fleetBudgetExceeded = false;
 
   constructor(
     private readonly config: CadreConfig,
@@ -55,6 +52,7 @@ export class FleetOrchestrator {
     this.fleetCheckpoint = new FleetCheckpointManager(this.cadreDir, config.projectName, logger);
     this.fleetProgress = new FleetProgressWriter(this.cadreDir, logger);
     this.tokenTracker = new TokenTracker();
+    this.costEstimator = new CostEstimator(config.copilot);
   }
 
   /**
@@ -115,6 +113,61 @@ export class FleetOrchestrator {
    * Process a single issue through its full pipeline.
    */
   private async processIssue(issue: IssueDetail): Promise<IssueResult> {
+    // Abort early if fleet budget was already exceeded by a completed issue
+    if (this.fleetBudgetExceeded) {
+      this.logger.warn(`Skipping issue #${issue.number}: fleet budget exceeded`, {
+        issueNumber: issue.number,
+      });
+      await this.fleetCheckpoint.setIssueStatus(
+        issue.number,
+        'budget-exceeded',
+        '',
+        '',
+        0,
+        'Fleet budget exceeded',
+      );
+      return {
+        issueNumber: issue.number,
+        issueTitle: issue.title,
+        success: false,
+        budgetExceeded: true,
+        phases: [],
+        totalDuration: 0,
+        tokenUsage: 0,
+        error: 'Fleet budget exceeded',
+      };
+    }
+
+    // Pre-flight: skip if estimated tokens would exceed remaining budget
+    if (this.config.options.tokenBudget) {
+      const estimate = this.costEstimator.estimateIssueTokens();
+      const currentTotal = this.tokenTracker.getTotal();
+      if (currentTotal + estimate > this.config.options.tokenBudget) {
+        this.logger.warn(
+          `Skipping issue #${issue.number}: estimated tokens (${estimate.toLocaleString()}) would exceed remaining budget`,
+          { issueNumber: issue.number },
+        );
+        await this.fleetCheckpoint.setIssueStatus(
+          issue.number,
+          'budget-exceeded',
+          '',
+          '',
+          0,
+          'Pre-flight budget estimation exceeded',
+        );
+        return {
+          issueNumber: issue.number,
+          issueTitle: issue.title,
+          success: false,
+          budgetExceeded: true,
+          phases: [],
+          totalDuration: 0,
+          tokenUsage: 0,
+          error: 'Pre-flight budget estimation exceeded',
+        };
+      }
+    }
+
     this.logger.info(`Processing issue #${issue.number}: ${issue.title}`, {
       issueNumber: issue.number,
     });
@@ -167,7 +220,11 @@ export class FleetOrchestrator {
       const result = await issueOrchestrator.run();
 
       // 7. Update fleet checkpoint
-      const status = result.success ? 'completed' : 'failed';
+      const status = result.budgetExceeded
+        ? 'budget-exceeded'
+        : result.success
+          ? 'completed'
+          : 'failed';
       await this.fleetCheckpoint.setIssueStatus(
         issue.number,
         status,
@@ -178,14 +235,17 @@ export class FleetOrchestrator {
       );
 
       // 8. Record token usage
-      this.tokenTracker.record(issue.number, 'total', 0, result.tokenUsage);
-      await this.fleetCheckpoint.recordTokenUsage(issue.number, result.tokenUsage);
+      if (result.tokenUsage !== null) {
+        this.tokenTracker.record(issue.number, 'total', 0, result.tokenUsage);
+        await this.fleetCheckpoint.recordTokenUsage(issue.number, result.tokenUsage);
+      }
 
       // 9. Check budget
       const budgetStatus = this.tokenTracker.checkFleetBudget(
         this.config.options.tokenBudget,
       );
       if (budgetStatus === 'exceeded') {
+        this.fleetBudgetExceeded = true;
         this.logger.error('Fleet token budget exceeded — pausing', {
           data: {
             current: this.tokenTracker.getTotal(),

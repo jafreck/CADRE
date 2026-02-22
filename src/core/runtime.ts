@@ -380,7 +380,7 @@ export class CadreRuntime {
       prsCreated: [],
       failedIssues: [],
       totalDuration: 0,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {} },
+      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
     };
   }
 }

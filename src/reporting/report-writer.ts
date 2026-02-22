@@ -32,7 +32,7 @@ export class ReportWriter {
       issueTitle: ir.issueTitle,
       success: ir.success,
       prNumber: ir.pr?.number,
-      tokens: ir.tokenUsage,
+      tokens: ir.tokenUsage ?? 0,
       duration: ir.totalDuration,
       error: ir.error,
     }));
