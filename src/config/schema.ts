@@ -97,6 +97,8 @@ export const CadreConfigSchema = z.object({
       buildVerification: z.boolean().default(true),
       /** Run test command after implementation to verify tests pass. */
       testVerification: z.boolean().default(true),
+      /** Skip pre-run validation checks. */
+      skipValidation: z.boolean().default(false),
     })
     .default({}),
 

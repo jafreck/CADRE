@@ -76,6 +76,15 @@ export class CostEstimator {
   }
 
   /**
+   * Estimate the total tokens for processing one issue through the full pipeline.
+   * Returns the provided historical average if given, or a conservative default.
+   */
+  estimateIssueTokens(historicalAvgTokens?: number): number {
+    const DEFAULT_ISSUE_TOKENS = 200_000;
+    return historicalAvgTokens ?? DEFAULT_ISSUE_TOKENS;
+  }
+
+  /**
    * Format a cost estimate as a human-readable string.
    */
   format(estimate: CostEstimate): string {

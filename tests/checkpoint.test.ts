@@ -3,6 +3,7 @@ import { mkdir, writeFile, readFile, access, rename, readdir, stat, rm } from 'n
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { CheckpointManager, FleetCheckpointManager } from '../src/core/checkpoint.js';
+import type { CheckpointState, FleetIssueStatus } from '../src/core/checkpoint.js';
 import { Logger } from '../src/logging/logger.js';
 
 describe('CheckpointManager', () => {
@@ -99,5 +100,133 @@ describe('CheckpointManager', () => {
 
     const resume = manager.getResumePoint();
     expect(resume.phase).toBe(2);
+  });
+
+  it('should initialize with budgetExceeded undefined', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    const state = await manager.load('42');
+    expect(state.budgetExceeded).toBeUndefined();
+  });
+
+  it('CheckpointState should accept budgetExceeded as optional boolean', () => {
+    const base: CheckpointState = {
+      issueNumber: 1,
+      version: 1,
+      currentPhase: 0,
+      currentTask: null,
+      completedPhases: [],
+      completedTasks: [],
+      failedTasks: [],
+      blockedTasks: [],
+      phaseOutputs: {},
+      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+      worktreePath: '',
+      branchName: '',
+      baseCommit: '',
+      startedAt: new Date().toISOString(),
+      lastCheckpoint: new Date().toISOString(),
+      resumeCount: 0,
+    };
+    expect(base.budgetExceeded).toBeUndefined();
+
+    const withFlag: CheckpointState = { ...base, budgetExceeded: true };
+    expect(withFlag.budgetExceeded).toBe(true);
+  });
+});
+
+describe('FleetCheckpointManager', () => {
+  let mockLogger: Logger;
+  let tempDir: string;
+
+  beforeEach(async () => {
+    mockLogger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Logger;
+    tempDir = join(tmpdir(), `cadre-fleet-cp-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('should initialize fresh fleet checkpoint', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+    expect(state.projectName).toBe('my-project');
+    expect(state.issues).toEqual({});
+    expect(state.resumeCount).toBe(0);
+  });
+
+  it('isIssueCompleted should return true for completed status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(1, 'completed', '/path', 'branch', 5);
+    expect(manager.isIssueCompleted(1)).toBe(true);
+  });
+
+  it('isIssueCompleted should return true for budget-exceeded status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(2, 'budget-exceeded', '/path', 'branch', 3);
+    expect(manager.isIssueCompleted(2)).toBe(true);
+  });
+
+  it('isIssueCompleted should return false for in-progress status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(3, 'in-progress', '/path', 'branch', 1);
+    expect(manager.isIssueCompleted(3)).toBe(false);
+  });
+
+  it('isIssueCompleted should return false for failed status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(4, 'failed', '/path', 'branch', 2, 'Some error');
+    expect(manager.isIssueCompleted(4)).toBe(false);
+  });
+
+  it('isIssueCompleted should return false for blocked status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(5, 'blocked', '/path', 'branch', 2);
+    expect(manager.isIssueCompleted(5)).toBe(false);
+  });
+
+  it('isIssueCompleted should return false for not-started status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(6, 'not-started', '/path', 'branch', 0);
+    expect(manager.isIssueCompleted(6)).toBe(false);
+  });
+
+  it('isIssueCompleted should return false for unknown issue', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    expect(manager.isIssueCompleted(999)).toBe(false);
+  });
+
+  it('FleetIssueStatus should accept budget-exceeded as a valid status', () => {
+    const status: FleetIssueStatus = {
+      status: 'budget-exceeded',
+      worktreePath: '/path',
+      branchName: 'branch',
+      lastPhase: 2,
+    };
+    expect(status.status).toBe('budget-exceeded');
+  });
+
+  it('should persist and reload fleet checkpoint', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(7, 'budget-exceeded', '/worktree/7', 'issue-7', 3);
+
+    const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager2.load();
+    expect(manager2.getIssueStatus(7)?.status).toBe('budget-exceeded');
+    expect(manager2.isIssueCompleted(7)).toBe(true);
   });
 });
