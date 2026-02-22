@@ -1,14 +1,14 @@
-# Task Result: task-004 - Register agents Command in src/index.ts
+# Task Result: task-004 - Extract PlanningPhaseExecutor
 
 ## Changes Made
-- `src/index.ts`: Already contains `import { registerAgentsCommand } from './cli/agents.js'` and `registerAgentsCommand(program)` call — no changes needed.
+- `src/executors/planning-phase-executor.ts`: Created `PlanningPhaseExecutor` class implementing `PhaseExecutor` with `phaseId = 2` and `name = 'Planning'`. The `execute()` method contains the exact logic from `IssueOrchestrator.executePlanning()`, adapted to use `ctx` fields instead of `this`. Includes a private `launchWithRetry` helper matching the pattern in `AnalysisPhaseExecutor`.
 
 ## Files Modified
 - (none)
 
 ## Files Created
-- (none)
+- src/executors/planning-phase-executor.ts
 
 ## Notes
-- The implementation was already present in `src/index.ts` (lines 7 and 113). The import and registration of `registerAgentsCommand` were in place prior to this task running, likely applied as part of a prior step.
-- All acceptance criteria are satisfied: `cadre agents --help` will show the `list`, `scaffold`, and `validate` subcommands registered in `src/cli/agents.ts`; existing commands (`run`, `status`, `reset`, `worktrees`) are unaffected; TypeScript compilation should succeed.
+- Modeled after `analysis-phase-executor.ts` for consistency in structure and `launchWithRetry` pattern
+- File compiles cleanly with `npm run build`
