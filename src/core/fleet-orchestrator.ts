@@ -28,6 +28,7 @@ export interface FleetResult {
     total: number;
     byIssue: Record<number, number>;
     byAgent: Record<string, number>;
+    byPhase: Record<number, number>;
   };
 }
 

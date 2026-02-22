@@ -35,7 +35,5 @@ export interface RunReport {
   totalTokens: number;
   estimatedCost: number;
   prsCreated: number;
-  agentInvocations: number;
-  retries: number;
   totals: RunTotals;
 }
