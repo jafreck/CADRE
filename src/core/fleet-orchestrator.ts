@@ -9,8 +9,10 @@ import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from './progress.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
 import { TokenTracker } from '../budget/token-tracker.js';
+import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { getPhaseCount } from './phase-registry.js';
+import { ReportWriter } from '../reporting/report-writer.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -89,6 +91,16 @@ export class FleetOrchestrator {
 
     // Aggregate results
     const fleetResult = this.aggregateResults(results, startTime);
+
+    // Write run report
+    try {
+      const reportWriter = new ReportWriter(this.config, new CostEstimator(this.config.copilot));
+      const report = reportWriter.buildReport(fleetResult, this.issues, startTime);
+      const reportPath = await reportWriter.write(report);
+      this.logger.info(`Run report written: ${reportPath}`);
+    } catch (err) {
+      this.logger.warn(`Failed to write run report: ${err}`);
+    }
 
     // Write final progress
     await this.writeFleetProgress(fleetResult);
