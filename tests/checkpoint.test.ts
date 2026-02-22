@@ -3,6 +3,7 @@ import { mkdir, writeFile, readFile, access, rename, readdir, stat, rm } from 'n
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { CheckpointManager, FleetCheckpointManager } from '../src/core/checkpoint.js';
+import type { CheckpointState, FleetIssueStatus } from '../src/core/checkpoint.js';
 import { Logger } from '../src/logging/logger.js';
 
 describe('CheckpointManager', () => {

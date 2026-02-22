@@ -26,6 +26,7 @@ export interface CheckpointState {
     byPhase: Record<number, number>;
     byAgent: Record<string, number>;
   };
+  budgetExceeded?: boolean;
   worktreePath: string;
   branchName: string;
   baseCommit: string;
@@ -37,7 +38,7 @@ export interface CheckpointState {
 // ── Fleet Checkpoint ──
 
 export interface FleetIssueStatus {
-  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked';
+  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded';
   worktreePath: string;
   branchName: string;
   lastPhase: number;
@@ -387,7 +388,8 @@ export class FleetCheckpointManager {
   }
 
   isIssueCompleted(issueNumber: number): boolean {
-    return this.state?.issues[issueNumber]?.status === 'completed';
+    const status = this.state?.issues[issueNumber]?.status;
+    return status === 'completed' || status === 'budget-exceeded';
   }
 
   private async save(): Promise<void> {
