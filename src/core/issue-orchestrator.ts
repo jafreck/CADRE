@@ -19,6 +19,7 @@ import {
   type GateContext,
   type PhaseGate,
 } from './phase-gate.js';
+import { NotificationManager } from '../notifications/manager.js';
 import { IssueProgressWriter } from './progress.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { ContextBuilder } from '../agents/context-builder.js';
@@ -73,6 +74,7 @@ export class IssueOrchestrator {
     private readonly launcher: AgentLauncher,
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
+    private readonly notificationManager?: NotificationManager,
   ) {
     this.progressDir = join(
       worktree.path,
@@ -110,6 +112,13 @@ export class IssueOrchestrator {
     });
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
+
+    await this.notificationManager?.dispatch({
+      type: 'issue-started',
+      issueNumber: this.issue.number,
+      issueTitle: this.issue.title,
+      worktreePath: this.worktree.path,
+    });
 
     for (const phase of ISSUE_PHASES) {
       // Skip completed phases on resume
@@ -209,12 +218,26 @@ export class IssueOrchestrator {
           phase: phase.id,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${phase.id} failed`);
+        await this.notificationManager?.dispatch({
+          type: 'issue-failed',
+          issueNumber: this.issue.number,
+          error: phaseResult.error ?? `Phase ${phase.id} failed`,
+          phase: phase.id,
+        });
         return this.buildResult(false, phaseResult.error, startTime);
       }
     }
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
-    return this.buildResult(true, undefined, startTime);
+    const successResult = this.buildResult(true, undefined, startTime);
+    await this.notificationManager?.dispatch({
+      type: 'issue-completed',
+      issueNumber: successResult.issueNumber,
+      success: successResult.success,
+      duration: successResult.totalDuration,
+      tokenUsage: successResult.tokenUsage,
+    });
+    return successResult;
   }
 
   /**

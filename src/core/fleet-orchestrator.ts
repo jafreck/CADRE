@@ -13,6 +13,7 @@ import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { getPhaseCount } from './phase-registry.js';
 import { ReportWriter } from '../reporting/report-writer.js';
+import { NotificationManager } from '../notifications/manager.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -47,6 +48,7 @@ export class FleetOrchestrator {
     private readonly launcher: AgentLauncher,
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
+    private readonly notifications: NotificationManager = new NotificationManager(),
   ) {
     this.cadreDir = join(config.repoPath, '.cadre');
     this.fleetCheckpoint = new FleetCheckpointManager(this.cadreDir, config.projectName, logger);
@@ -68,6 +70,11 @@ export class FleetOrchestrator {
     await this.fleetProgress.appendEvent(
       `Fleet started: ${this.issues.length} issues`,
     );
+    await this.notifications.dispatch({
+      type: 'fleet-started',
+      issueCount: this.issues.length,
+      maxParallel: this.config.options.maxParallelIssues,
+    });
 
     // Filter out already completed issues on resume
     const issuesToProcess = this.config.options.resume
@@ -105,6 +112,14 @@ export class FleetOrchestrator {
     await this.fleetProgress.appendEvent(
       `Fleet completed: ${fleetResult.prsCreated.length} PRs, ${fleetResult.failedIssues.length} failures`,
     );
+    await this.notifications.dispatch({
+      type: 'fleet-completed',
+      success: fleetResult.success,
+      prsCreated: fleetResult.prsCreated.length,
+      failedIssues: fleetResult.failedIssues.length,
+      totalDuration: fleetResult.totalDuration,
+      totalTokens: fleetResult.tokenUsage.total,
+    });
 
     return fleetResult;
   }
@@ -251,6 +266,22 @@ export class FleetOrchestrator {
             current: this.tokenTracker.getTotal(),
             budget: this.config.options.tokenBudget,
           },
+        });
+        await this.notifications.dispatch({
+          type: 'budget-exceeded',
+          scope: 'fleet',
+          currentUsage: this.tokenTracker.getTotal(),
+          budget: this.config.options.tokenBudget ?? 0,
+        });
+      } else if (budgetStatus === 'warning') {
+        const current = this.tokenTracker.getTotal();
+        const budget = this.config.options.tokenBudget ?? 0;
+        await this.notifications.dispatch({
+          type: 'budget-warning',
+          scope: 'fleet',
+          currentUsage: current,
+          budget,
+          percentUsed: budget > 0 ? Math.round((current / budget) * 100) : 0,
         });
       }
 
