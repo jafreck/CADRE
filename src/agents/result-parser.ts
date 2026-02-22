@@ -55,11 +55,11 @@ export class ResultParser {
     const name = headerMatch?.[2]?.trim() ?? headerLine;
 
     // Parse description
-    const descMatch = block.match(/\*\*Description:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/s);
+    const descMatch = block.match(/^\*\*Description:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/ms);
     const description = descMatch?.[1]?.trim() ?? '';
 
     // Parse files
-    const filesMatch = block.match(/\*\*Files:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/s);
+    const filesMatch = block.match(/^\*\*Files:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/ms);
     const filesStr = filesMatch?.[1]?.trim() ?? '';
     const files = filesStr
       .split(/[,\n]/)
@@ -67,7 +67,7 @@ export class ResultParser {
       .filter(Boolean);
 
     // Parse dependencies
-    const depsMatch = block.match(/\*\*Dependencies:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/s);
+    const depsMatch = block.match(/^\*\*Dependencies:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/ms);
     const depsStr = depsMatch?.[1]?.trim() ?? 'none';
     const dependencies = depsStr.toLowerCase() === 'none'
       ? []
@@ -77,11 +77,11 @@ export class ResultParser {
           .filter(Boolean);
 
     // Parse complexity
-    const complexityMatch = block.match(/\*\*Complexity:\*\*\s*(simple|moderate|complex)/i);
+    const complexityMatch = block.match(/^\*\*Complexity:\*\*\s*(simple|moderate|complex)/im);
     const complexity = (complexityMatch?.[1]?.toLowerCase() ?? 'moderate') as 'simple' | 'moderate' | 'complex';
 
     // Parse acceptance criteria
-    const criteriaMatch = block.match(/\*\*Acceptance Criteria:\*\*\s*([\s\S]*?)(?=\n\*\*|\n#{2,}|$)/);
+    const criteriaMatch = block.match(/^\*\*Acceptance Criteria:\*\*\s*([\s\S]*?)(?=\n\*\*|\n#{2,}|$)/m);
     const criteriaStr = criteriaMatch?.[1]?.trim() ?? '';
     const acceptanceCriteria = criteriaStr
       .split('\n')
