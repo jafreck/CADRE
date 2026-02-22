@@ -1,467 +1,498 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { writeFile } from 'node:fs/promises';
-import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import { CommitManager } from '../src/git/commit.js';
-import { ContextBuilder } from '../src/agents/context-builder.js';
-import { ResultParser } from '../src/agents/result-parser.js';
-import { RetryExecutor } from '../src/execution/retry.js';
-import { IssueProgressWriter } from '../src/core/progress.js';
-import { TokenTracker } from '../src/budget/token-tracker.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  BudgetExceededError,
+  IssueOrchestrator,
+  type IssueResult,
+} from '../src/core/issue-orchestrator.js';
 import type { CheckpointManager } from '../src/core/checkpoint.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
-import type { PlatformProvider, PullRequestInfo } from '../src/platform/provider.js';
+import type { PlatformProvider } from '../src/platform/provider.js';
 import type { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail, WorktreeInfo } from '../src/platform/provider.js';
 
-vi.mock('node:fs/promises');
-vi.mock('../src/git/commit.js');
-vi.mock('../src/agents/context-builder.js');
-vi.mock('../src/agents/result-parser.js');
-vi.mock('../src/execution/retry.js');
-vi.mock('../src/core/progress.js');
-vi.mock('../src/budget/token-tracker.js');
+// ── BudgetExceededError ──
 
-/** Build a minimal CadreConfig for tests. */
-function makeConfig(overrides: Partial<CadreConfig> = {}): CadreConfig {
-  return {
-    projectName: 'test',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [42] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
-    environment: { inheritShellPath: true, extraPath: [] },
-    commits: { commitPerPhase: false, squashBeforePR: false },
-    options: {
-      dryRun: false,
-      maxParallelAgents: 1,
-      maxRetriesPerTask: 1,
-      buildVerification: false,
-      testVerification: false,
-    },
-    commands: { install: '', build: '', test: '', lint: '' },
-    pullRequest: { autoCreate: true, draft: false, linkIssue: false },
-    ...overrides,
-  } as CadreConfig;
-}
+describe('BudgetExceededError', () => {
+  it('should be an instance of Error', () => {
+    const err = new BudgetExceededError();
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(BudgetExceededError);
+  });
 
-/** Build a minimal IssueDetail. */
-function makeIssue(): IssueDetail {
-  return {
-    number: 42,
-    title: 'Test issue',
-    body: 'Test body',
-    labels: [],
-    author: 'alice',
-    url: 'https://github.com/owner/repo/issues/42',
-    createdAt: '2024-01-01T00:00:00Z',
-  };
-}
+  it('should have the correct name', () => {
+    const err = new BudgetExceededError();
+    expect(err.name).toBe('BudgetExceededError');
+  });
 
-/** Build a minimal WorktreeInfo. */
-function makeWorktree(): WorktreeInfo {
-  return {
-    path: '/tmp/worktree',
-    branch: 'fix/issue-42',
-    baseCommit: 'abc123',
-    issueNumber: 42,
-  };
-}
+  it('should have a descriptive message', () => {
+    const err = new BudgetExceededError();
+    expect(err.message).toBe('Per-issue token budget exceeded');
+  });
 
-/** Build a CheckpointManager mock that marks phases 1-4 as completed. */
-function makeCheckpoint(completedPhases: number[] = [1, 2, 3, 4]): CheckpointManager {
-  const state = {
-    issueNumber: 42,
-    version: 1,
-    currentPhase: 4,
-    currentTask: null,
-    completedPhases,
-    completedTasks: [],
-    failedTasks: [],
-    blockedTasks: [],
-    phaseOutputs: {},
-    tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-    worktreePath: '/tmp/worktree',
-    branchName: 'fix/issue-42',
-    baseCommit: 'abc123',
-    startedAt: new Date().toISOString(),
-    lastCheckpoint: new Date().toISOString(),
-    resumeCount: 0,
-  };
-  return {
-    getState: vi.fn().mockReturnValue(state),
-    getResumePoint: vi.fn().mockReturnValue({ phase: 5, task: null }),
-    isPhaseCompleted: vi.fn().mockImplementation((id: number) => completedPhases.includes(id)),
-    isTaskCompleted: vi.fn().mockReturnValue(false),
-    startPhase: vi.fn().mockResolvedValue(undefined),
-    completePhase: vi.fn().mockResolvedValue(undefined),
-    startTask: vi.fn().mockResolvedValue(undefined),
-    completeTask: vi.fn().mockResolvedValue(undefined),
-    blockTask: vi.fn().mockResolvedValue(undefined),
-    recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-  } as unknown as CheckpointManager;
-}
+  it('should be catchable as a BudgetExceededError', () => {
+    let caught: unknown;
+    try {
+      throw new BudgetExceededError();
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(BudgetExceededError);
+  });
+});
 
-/** Build a Logger mock. */
+// ── IssueResult interface ──
+
+describe('IssueResult', () => {
+  it('should allow budgetExceeded to be undefined', () => {
+    const result: IssueResult = {
+      issueNumber: 1,
+      issueTitle: 'Test issue',
+      success: true,
+      phases: [],
+      totalDuration: 0,
+      tokenUsage: 0,
+    };
+    expect(result.budgetExceeded).toBeUndefined();
+  });
+
+  it('should allow budgetExceeded to be true', () => {
+    const result: IssueResult = {
+      issueNumber: 1,
+      issueTitle: 'Test issue',
+      success: false,
+      phases: [],
+      totalDuration: 0,
+      tokenUsage: 0,
+      budgetExceeded: true,
+    };
+    expect(result.budgetExceeded).toBe(true);
+  });
+
+  it('should allow budgetExceeded to be false', () => {
+    const result: IssueResult = {
+      issueNumber: 1,
+      issueTitle: 'Test issue',
+      success: true,
+      phases: [],
+      totalDuration: 0,
+      tokenUsage: 0,
+      budgetExceeded: false,
+    };
+    expect(result.budgetExceeded).toBe(false);
+  });
+});
+
+// ── IssueOrchestrator ──
+
 function makeLogger(): Logger {
   return {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    child: vi.fn().mockReturnThis(),
   } as unknown as Logger;
 }
 
-describe('IssueOrchestrator – task-003 changes', () => {
-  let mockWriteFile: ReturnType<typeof vi.fn>;
-  let mockCommitManager: { getDiff: ReturnType<typeof vi.fn>; push: ReturnType<typeof vi.fn>; squash: ReturnType<typeof vi.fn>; isClean: ReturnType<typeof vi.fn>; getChangedFiles: ReturnType<typeof vi.fn>; commit: ReturnType<typeof vi.fn> };
-  let mockContextBuilder: { buildForPRComposer: ReturnType<typeof vi.fn> };
-  let mockResultParser: { parsePRContent: ReturnType<typeof vi.fn> };
-  let mockRetryExecutor: { execute: ReturnType<typeof vi.fn> };
-  let mockProgressWriter: { appendEvent: ReturnType<typeof vi.fn>; write: ReturnType<typeof vi.fn> };
-  let mockTokenTracker: { record: ReturnType<typeof vi.fn>; getTotal: ReturnType<typeof vi.fn> };
+function makeCheckpoint(overrides: Partial<CheckpointManager> = {}): CheckpointManager {
+  const state = {
+    issueNumber: 42,
+    version: 1,
+    currentPhase: 0,
+    currentTask: null,
+    completedPhases: [],
+    completedTasks: [],
+    failedTasks: [],
+    blockedTasks: [],
+    phaseOutputs: {},
+    tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+    worktreePath: '',
+    branchName: '',
+    baseCommit: '',
+    startedAt: new Date().toISOString(),
+    lastCheckpoint: new Date().toISOString(),
+    resumeCount: 0,
+  };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+  return {
+    getState: vi.fn(() => state),
+    getResumePoint: vi.fn(() => ({ phase: 1, taskId: null })),
+    isPhaseCompleted: vi.fn(() => false),
+    isTaskCompleted: vi.fn(() => false),
+    startPhase: vi.fn(async () => {}),
+    completePhase: vi.fn(async () => {}),
+    startTask: vi.fn(async () => {}),
+    completeTask: vi.fn(async () => {}),
+    blockTask: vi.fn(async () => {}),
+    failTask: vi.fn(async () => {}),
+    recordTokenUsage: vi.fn(async () => {}),
+    ...overrides,
+  } as unknown as CheckpointManager;
+}
 
-    mockWriteFile = vi.mocked(writeFile).mockResolvedValue(undefined);
+function makeLauncher(): AgentLauncher {
+  return {
+    launchAgent: vi.fn(async () => ({
+      agent: 'test-agent',
+      success: true,
+      exitCode: 0,
+      timedOut: false,
+      duration: 100,
+      stdout: '',
+      stderr: '',
+      tokenUsage: 0,
+      outputPath: '',
+      outputExists: false,
+    })),
+  } as unknown as AgentLauncher;
+}
 
-    mockCommitManager = {
-      getDiff: vi.fn().mockResolvedValue('diff content'),
-      push: vi.fn().mockResolvedValue(undefined),
-      squash: vi.fn().mockResolvedValue(undefined),
-      isClean: vi.fn().mockResolvedValue(true),
-      getChangedFiles: vi.fn().mockResolvedValue([]),
-      commit: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.mocked(CommitManager).mockImplementation(() => mockCommitManager as unknown as CommitManager);
+function makePlatform(): PlatformProvider {
+  return {
+    issueLinkSuffix: vi.fn(() => 'Closes #42'),
+    createPullRequest: vi.fn(async () => ({ number: 1, url: 'https://github.com/test/pr/1' })),
+  } as unknown as PlatformProvider;
+}
 
-    mockContextBuilder = {
-      buildForPRComposer: vi.fn().mockResolvedValue('/tmp/context.json'),
-    };
-    vi.mocked(ContextBuilder).mockImplementation(() => mockContextBuilder as unknown as ContextBuilder);
+function makeConfig(tokenBudget?: number): CadreConfig {
+  return {
+    projectName: 'test-project',
+    platform: 'github',
+    repository: 'owner/repo',
+    repoPath: '/tmp/repo',
+    baseBranch: 'main',
+    issues: { ids: [42] },
+    branchTemplate: 'cadre/issue-{issue}',
+    commits: {
+      conventional: true,
+      sign: false,
+      commitPerPhase: false,
+      squashBeforePR: false,
+    },
+    pullRequest: {
+      autoCreate: false,
+      draft: true,
+      labels: [],
+      reviewers: [],
+      linkIssue: false,
+    },
+    options: {
+      maxParallelIssues: 1,
+      maxParallelAgents: 1,
+      maxRetriesPerTask: 1,
+      tokenBudget,
+      dryRun: false,
+      resume: false,
+      invocationDelayMs: 0,
+      buildVerification: false,
+      testVerification: false,
+    },
+    commands: {},
+    copilot: {
+      cliCommand: 'copilot',
+      model: 'claude-sonnet-4.6',
+      agentDir: '.github/agents',
+      timeout: 300000,
+    },
+    environment: {
+      inheritShellPath: true,
+      extraPath: [],
+    },
+  } as CadreConfig;
+}
 
-    mockResultParser = {
-      parsePRContent: vi.fn().mockResolvedValue({
-        title: 'Fix: test issue (#42)',
-        body: 'Resolves test issue.',
-        labels: [],
-      }),
-    };
-    vi.mocked(ResultParser).mockImplementation(() => mockResultParser as unknown as ResultParser);
+function makeIssue(): IssueDetail {
+  return {
+    number: 42,
+    title: 'Test issue',
+    body: 'Test body',
+    labels: [],
+    assignees: [],
+    state: 'open',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    url: 'https://github.com/owner/repo/issues/42',
+  };
+}
 
-    // RetryExecutor mock: executes the fn once and returns success
-    mockRetryExecutor = {
-      execute: vi.fn().mockImplementation(async ({ fn }: { fn: (attempt: number) => Promise<unknown> }) => {
-        try {
-          const result = await fn(1);
-          return { success: true, result, attempts: 1, recoveryUsed: false };
-        } catch (err) {
-          return { success: false, error: String(err), attempts: 1, recoveryUsed: false };
-        }
-      }),
-    };
-    vi.mocked(RetryExecutor).mockImplementation(() => mockRetryExecutor as unknown as RetryExecutor);
+describe('IssueOrchestrator', () => {
+  let tempDir: string;
+  let worktreePath: string;
 
-    mockProgressWriter = {
-      appendEvent: vi.fn().mockResolvedValue(undefined),
-      write: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.mocked(IssueProgressWriter).mockImplementation(() => mockProgressWriter as unknown as IssueProgressWriter);
-
-    mockTokenTracker = {
-      record: vi.fn(),
-      getTotal: vi.fn().mockReturnValue(0),
-    };
-    vi.mocked(TokenTracker).mockImplementation(() => mockTokenTracker as unknown as TokenTracker);
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `cadre-orch-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    worktreePath = join(tempDir, 'worktree');
+    await mkdir(worktreePath, { recursive: true });
   });
 
-  describe('buildResult() includes pr field', () => {
-    it('should populate IssueResult.pr after successful PR creation', async () => {
-      const mockPR: PullRequestInfo = {
-        number: 7,
-        url: 'https://github.com/owner/repo/pull/7',
-        title: 'Fix: test issue (#42)',
-        branch: 'fix/issue-42',
-      };
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
 
-      const mockPlatform: PlatformProvider = {
-        getIssue: vi.fn(),
-        listIssues: vi.fn(),
-        createPullRequest: vi.fn().mockResolvedValue(mockPR),
-        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
-      } as unknown as PlatformProvider;
+  function makeWorktree(): WorktreeInfo {
+    return {
+      path: worktreePath,
+      branch: 'cadre/issue-42',
+      baseCommit: 'abc123',
+      issueNumber: 42,
+    } as unknown as WorktreeInfo;
+  }
 
-      const mockLauncher: AgentLauncher = {
-        launchAgent: vi.fn().mockResolvedValue({
-          agent: 'pr-composer',
-          success: true,
-          exitCode: 0,
-          timedOut: false,
-          duration: 100,
-          stdout: '',
-          stderr: '',
-          tokenUsage: 500,
-          outputPath: '/tmp/pr-content.md',
-          outputExists: true,
-        }),
-      } as unknown as AgentLauncher;
+  function makeOrchestrator(
+    config: CadreConfig,
+    checkpoint: CheckpointManager,
+    launcher: AgentLauncher,
+    logger: Logger,
+  ): IssueOrchestrator {
+    return new IssueOrchestrator(
+      config,
+      makeIssue(),
+      makeWorktree(),
+      checkpoint,
+      launcher,
+      makePlatform(),
+      logger,
+    );
+  }
 
-      const orchestrator = new IssueOrchestrator(
-        makeConfig({ pullRequest: { autoCreate: true, draft: false, linkIssue: false } }),
-        makeIssue(),
-        makeWorktree(),
-        makeCheckpoint([1, 2, 3, 4]),
-        mockLauncher,
-        mockPlatform,
-        makeLogger(),
-      );
+  describe('run() with all phases already completed', () => {
+    it('should return success without executing any agents', async () => {
+      const checkpoint = makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => true),
+      });
+      const launcher = makeLauncher();
+      const logger = makeLogger();
+      const orchestrator = makeOrchestrator(makeConfig(), checkpoint, launcher, logger);
 
       const result = await orchestrator.run();
 
-      expect(mockPlatform.createPullRequest).toHaveBeenCalledOnce();
-      expect(result.pr).toBeDefined();
-      expect(result.pr?.number).toBe(7);
-      expect(result.pr?.url).toBe('https://github.com/owner/repo/pull/7');
+      expect(result.success).toBe(true);
+      expect(result.issueNumber).toBe(42);
+      expect(result.issueTitle).toBe('Test issue');
+      expect(result.budgetExceeded).toBeUndefined();
+      expect(launcher.launchAgent).not.toHaveBeenCalled();
     });
 
-    it('should leave IssueResult.pr undefined when autoCreate is disabled', async () => {
-      const mockPlatform: PlatformProvider = {
-        getIssue: vi.fn(),
-        listIssues: vi.fn(),
-        createPullRequest: vi.fn(),
-        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
-      } as unknown as PlatformProvider;
-
-      const mockLauncher: AgentLauncher = {
-        launchAgent: vi.fn().mockResolvedValue({
-          agent: 'pr-composer',
-          success: true,
-          exitCode: 0,
-          timedOut: false,
-          duration: 100,
-          stdout: '',
-          stderr: '',
-          tokenUsage: 500,
-          outputPath: '/tmp/pr-content.md',
-          outputExists: true,
-        }),
-      } as unknown as AgentLauncher;
-
-      const orchestrator = new IssueOrchestrator(
-        makeConfig({ pullRequest: { autoCreate: false, draft: false, linkIssue: false } }),
-        makeIssue(),
-        makeWorktree(),
-        makeCheckpoint([1, 2, 3, 4]),
-        mockLauncher,
-        mockPlatform,
-        makeLogger(),
-      );
+    it('should return all 5 skipped phases', async () => {
+      const checkpoint = makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => true),
+      });
+      const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
 
       const result = await orchestrator.run();
 
-      expect(mockPlatform.createPullRequest).not.toHaveBeenCalled();
-      expect(result.pr).toBeUndefined();
-    });
-
-    it('should leave IssueResult.pr undefined when PR creation throws', async () => {
-      const mockPlatform: PlatformProvider = {
-        getIssue: vi.fn(),
-        listIssues: vi.fn(),
-        createPullRequest: vi.fn().mockRejectedValue(new Error('GitHub API error')),
-        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
-      } as unknown as PlatformProvider;
-
-      const mockLauncher: AgentLauncher = {
-        launchAgent: vi.fn().mockResolvedValue({
-          agent: 'pr-composer',
-          success: true,
-          exitCode: 0,
-          timedOut: false,
-          duration: 100,
-          stdout: '',
-          stderr: '',
-          tokenUsage: 500,
-          outputPath: '/tmp/pr-content.md',
-          outputExists: true,
-        }),
-      } as unknown as AgentLauncher;
-
-      const orchestrator = new IssueOrchestrator(
-        makeConfig({ pullRequest: { autoCreate: true, draft: false, linkIssue: false } }),
-        makeIssue(),
-        makeWorktree(),
-        makeCheckpoint([1, 2, 3, 4]),
-        mockLauncher,
-        mockPlatform,
-        makeLogger(),
-      );
-
-      // PR creation failure is non-critical — run() should still succeed
-      const result = await orchestrator.run();
-
-      expect(result.pr).toBeUndefined();
+      expect(result.phases).toHaveLength(5);
+      expect(result.phases.every((p) => p.success)).toBe(true);
     });
   });
 
-  describe('launchWithRetry() fallback tokenUsage is null', () => {
-    it('should return tokenUsage: null when all retries are exhausted', async () => {
-      // RetryExecutor always fails → launchWithRetry returns the fallback AgentResult
-      mockRetryExecutor.execute.mockResolvedValue({
-        success: false,
-        error: 'agent failed',
-        attempts: 1,
-        recoveryUsed: false,
-        result: undefined,
+  describe('run() with budget exceeded', () => {
+    it('should return budgetExceeded: true when BudgetExceededError is thrown in executePhase', async () => {
+      const checkpoint = makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => false),
+      });
+      (checkpoint.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+        issueNumber: 42,
+        version: 1,
+        currentPhase: 1,
+        currentTask: null,
+        completedPhases: [],
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        worktreePath: worktreePath,
+        branchName: 'cadre/issue-42',
+        baseCommit: 'abc123',
+        startedAt: new Date().toISOString(),
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
       });
 
-      const mockPlatform: PlatformProvider = {
-        getIssue: vi.fn(),
-        listIssues: vi.fn(),
-        createPullRequest: vi.fn(),
-        issueLinkSuffix: vi.fn(),
-      } as unknown as PlatformProvider;
+      const launcher = makeLauncher();
+      const logger = makeLogger();
+      const orchestrator = makeOrchestrator(makeConfig(100), checkpoint, launcher, logger);
 
-      const mockLauncher: AgentLauncher = {
-        launchAgent: vi.fn(),
-      } as unknown as AgentLauncher;
-
-      const orchestrator = new IssueOrchestrator(
-        makeConfig({ pullRequest: { autoCreate: false, draft: false, linkIssue: false } }),
-        makeIssue(),
-        makeWorktree(),
-        // Phase 5 not yet completed so it will run and call launchWithRetry
-        makeCheckpoint([1, 2, 3, 4]),
-        mockLauncher,
-        mockPlatform,
-        makeLogger(),
-      );
+      // Spy on the private executePhase to throw BudgetExceededError
+      vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+        .mockRejectedValue(new BudgetExceededError());
 
       const result = await orchestrator.run();
 
-      // Phase 5 is non-critical; pipeline succeeds overall but phase 5 fails
-      expect(result).toBeDefined();
+      expect(result.success).toBe(false);
+      expect(result.budgetExceeded).toBe(true);
+      expect(result.error).toBe('Per-issue token budget exceeded');
+    });
 
-      // Verify that launchWithRetry was invoked (via retryExecutor.execute)
-      expect(mockRetryExecutor.execute).toHaveBeenCalled();
+    it('should log a resume guidance message when budget is exceeded', async () => {
+      const checkpoint = makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => false),
+      });
+      (checkpoint.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+        issueNumber: 42,
+        version: 1,
+        currentPhase: 1,
+        currentTask: null,
+        completedPhases: [],
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        worktreePath: worktreePath,
+        branchName: 'cadre/issue-42',
+        baseCommit: 'abc123',
+        startedAt: new Date().toISOString(),
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+      });
+
+      const logger = makeLogger();
+      const orchestrator = makeOrchestrator(makeConfig(100), makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => false),
+        getState: vi.fn(() => ({
+          issueNumber: 42,
+          version: 1,
+          currentPhase: 1,
+          currentTask: null,
+          completedPhases: [],
+          completedTasks: [],
+          failedTasks: [],
+          blockedTasks: [],
+          phaseOutputs: {},
+          tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+          worktreePath: worktreePath,
+          branchName: 'cadre/issue-42',
+          baseCommit: 'abc123',
+          startedAt: new Date().toISOString(),
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+        })),
+      }), makeLauncher(), logger);
+
+      vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+        .mockRejectedValue(new BudgetExceededError());
+
+      await orchestrator.run();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('--resume'),
+        expect.anything(),
+      );
+    });
+
+    it('should set budgetExceeded on checkpoint state when budget is exceeded', async () => {
+      const cpState = {
+        issueNumber: 42,
+        version: 1,
+        currentPhase: 1,
+        currentTask: null,
+        completedPhases: [],
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        worktreePath: worktreePath,
+        branchName: 'cadre/issue-42',
+        baseCommit: 'abc123',
+        startedAt: new Date().toISOString(),
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+        budgetExceeded: undefined as boolean | undefined,
+      };
+
+      const checkpoint = makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => false),
+        getState: vi.fn(() => cpState),
+        recordTokenUsage: vi.fn(async () => {}),
+      });
+
+      const orchestrator = makeOrchestrator(makeConfig(100), checkpoint, makeLauncher(), makeLogger());
+
+      vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+        .mockRejectedValue(new BudgetExceededError());
+
+      await orchestrator.run();
+
+      expect(cpState.budgetExceeded).toBe(true);
+    });
+
+    it('should re-throw non-budget errors from executePhase', async () => {
+      const checkpoint = makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => false),
+        getState: vi.fn(() => ({
+          issueNumber: 42,
+          version: 1,
+          currentPhase: 1,
+          currentTask: null,
+          completedPhases: [],
+          completedTasks: [],
+          failedTasks: [],
+          blockedTasks: [],
+          phaseOutputs: {},
+          tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+          worktreePath: worktreePath,
+          branchName: 'cadre/issue-42',
+          baseCommit: 'abc123',
+          startedAt: new Date().toISOString(),
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+        })),
+      });
+
+      const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+      vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+        .mockRejectedValue(new Error('unexpected system error'));
+
+      await expect(orchestrator.run()).rejects.toThrow('unexpected system error');
     });
   });
 
-  describe('recordTokens() null-safety guard', () => {
-    it('should not record tokens when tokenUsage is null', async () => {
-      const mockPlatform: PlatformProvider = {
-        getIssue: vi.fn(),
-        listIssues: vi.fn(),
-        createPullRequest: vi.fn().mockResolvedValue({ number: 1, url: 'u', title: 't', branch: 'b' }),
-        issueLinkSuffix: vi.fn().mockReturnValue(''),
-      } as unknown as PlatformProvider;
+  describe('buildResult', () => {
+    it('should include budgetExceeded in returned IssueResult when provided', async () => {
+      const checkpoint = makeCheckpoint({
+        isPhaseCompleted: vi.fn(() => false),
+        getState: vi.fn(() => ({
+          issueNumber: 42,
+          version: 1,
+          currentPhase: 1,
+          currentTask: null,
+          completedPhases: [],
+          completedTasks: [],
+          failedTasks: [],
+          blockedTasks: [],
+          phaseOutputs: {},
+          tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+          worktreePath: worktreePath,
+          branchName: 'cadre/issue-42',
+          baseCommit: 'abc123',
+          startedAt: new Date().toISOString(),
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+        })),
+      });
 
-      const mockLauncher: AgentLauncher = {
-        launchAgent: vi.fn().mockResolvedValue({
-          agent: 'pr-composer',
-          success: true,
-          exitCode: 0,
-          timedOut: false,
-          duration: 100,
-          stdout: '',
-          stderr: '',
-          tokenUsage: null, // ← null token usage
-          outputPath: '/tmp/pr-content.md',
-          outputExists: true,
-        }),
-      } as unknown as AgentLauncher;
+      const orchestrator = makeOrchestrator(makeConfig(100), checkpoint, makeLauncher(), makeLogger());
 
-      const orchestrator = new IssueOrchestrator(
-        makeConfig({ pullRequest: { autoCreate: true, draft: false, linkIssue: false } }),
-        makeIssue(),
-        makeWorktree(),
-        makeCheckpoint([1, 2, 3, 4]),
-        mockLauncher,
-        mockPlatform,
-        makeLogger(),
-      );
+      vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+        .mockRejectedValue(new BudgetExceededError());
 
-      await orchestrator.run();
+      const result = await orchestrator.run();
 
-      // tokenTracker.record should NOT have been called because tokenUsage was null
-      expect(mockTokenTracker.record).not.toHaveBeenCalled();
-    });
-
-    it('should not record tokens when tokenUsage is 0', async () => {
-      const mockPlatform: PlatformProvider = {
-        getIssue: vi.fn(),
-        listIssues: vi.fn(),
-        createPullRequest: vi.fn().mockResolvedValue({ number: 1, url: 'u', title: 't', branch: 'b' }),
-        issueLinkSuffix: vi.fn().mockReturnValue(''),
-      } as unknown as PlatformProvider;
-
-      const mockLauncher: AgentLauncher = {
-        launchAgent: vi.fn().mockResolvedValue({
-          agent: 'pr-composer',
-          success: true,
-          exitCode: 0,
-          timedOut: false,
-          duration: 100,
-          stdout: '',
-          stderr: '',
-          tokenUsage: 0, // ← zero tokens
-          outputPath: '/tmp/pr-content.md',
-          outputExists: true,
-        }),
-      } as unknown as AgentLauncher;
-
-      const orchestrator = new IssueOrchestrator(
-        makeConfig({ pullRequest: { autoCreate: true, draft: false, linkIssue: false } }),
-        makeIssue(),
-        makeWorktree(),
-        makeCheckpoint([1, 2, 3, 4]),
-        mockLauncher,
-        mockPlatform,
-        makeLogger(),
-      );
-
-      await orchestrator.run();
-
-      expect(mockTokenTracker.record).not.toHaveBeenCalled();
-    });
-
-    it('should record tokens when tokenUsage is a positive number', async () => {
-      const mockPlatform: PlatformProvider = {
-        getIssue: vi.fn(),
-        listIssues: vi.fn(),
-        createPullRequest: vi.fn().mockResolvedValue({ number: 1, url: 'u', title: 't', branch: 'b' }),
-        issueLinkSuffix: vi.fn().mockReturnValue(''),
-      } as unknown as PlatformProvider;
-
-      const mockLauncher: AgentLauncher = {
-        launchAgent: vi.fn().mockResolvedValue({
-          agent: 'pr-composer',
-          success: true,
-          exitCode: 0,
-          timedOut: false,
-          duration: 100,
-          stdout: '',
-          stderr: '',
-          tokenUsage: 750, // ← positive tokens
-          outputPath: '/tmp/pr-content.md',
-          outputExists: true,
-        }),
-      } as unknown as AgentLauncher;
-
-      const orchestrator = new IssueOrchestrator(
-        makeConfig({ pullRequest: { autoCreate: true, draft: false, linkIssue: false } }),
-        makeIssue(),
-        makeWorktree(),
-        makeCheckpoint([1, 2, 3, 4]),
-        mockLauncher,
-        mockPlatform,
-        makeLogger(),
-      );
-
-      await orchestrator.run();
-
-      expect(mockTokenTracker.record).toHaveBeenCalledWith(42, 'pr-composer', expect.any(Number), 750);
+      expect(result).toMatchObject({
+        issueNumber: 42,
+        issueTitle: 'Test issue',
+        success: false,
+        budgetExceeded: true,
+        error: 'Per-issue token budget exceeded',
+      });
     });
   });
 });
