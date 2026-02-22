@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
+import { AgentLauncher } from './core/agent-launcher.js';
 import { registerAgentsCommand } from './cli/agents.js';
 
 const program = new Command();
@@ -23,6 +24,7 @@ program
   .option('-i, --issue <numbers...>', 'Override: process specific issue numbers')
   .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
   .option('--no-pr', 'Skip PR creation')
+  .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
   .action(async (opts) => {
     try {
       let config = await loadConfig(opts.config);
@@ -37,6 +39,20 @@ program
         console.log(chalk.green('✓ Configuration is valid'));
         console.log(JSON.stringify(config, null, 2));
         return;
+      }
+
+      if (!opts.skipAgentValidation) {
+        const issues = await AgentLauncher.validateAgentFiles(config.copilot.agentDir);
+        if (issues.length > 0) {
+          console.error(
+            chalk.red(`❌ Agent validation failed — ${issues.length} issue(s) found:\n`) +
+              issues.join('\n'),
+          );
+          console.error(
+            chalk.yellow(`\nRun 'cadre agents scaffold' to create missing files, or use --skip-agent-validation to bypass.`),
+          );
+          process.exit(1);
+        }
       }
 
       const runtime = new CadreRuntime(config);
