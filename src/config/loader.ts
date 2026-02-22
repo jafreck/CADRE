@@ -84,6 +84,7 @@ export function applyOverrides(
     issue?: number;
     maxParallelIssues?: number;
     issueIds?: number[];
+    skipValidation?: boolean;
   },
 ): CadreConfig {
   const merged = { ...config };
@@ -106,6 +107,10 @@ export function applyOverrides(
 
   if (overrides.maxParallelIssues != null) {
     merged.options = { ...merged.options, maxParallelIssues: overrides.maxParallelIssues };
+  }
+
+  if (overrides.skipValidation != null) {
+    merged.options = { ...merged.options, skipValidation: overrides.skipValidation };
   }
 
   return Object.freeze(merged);
