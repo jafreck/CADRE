@@ -1,3 +1,7 @@
+---
+description: "Implement a single task from the implementation plan by modifying or creating source files in the worktree."
+tools: ["*"]
+---
 # Code Writer
 
 ## Role

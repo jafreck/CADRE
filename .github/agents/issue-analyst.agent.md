@@ -1,3 +1,7 @@
+---
+description: "Analyze a GitHub issue to extract concrete requirements, classify the change type, estimate scope, and identify affected areas."
+tools: ["*"]
+---
 # Issue Analyst
 
 ## Role

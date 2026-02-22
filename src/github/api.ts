@@ -27,7 +27,8 @@ export class GitHubAPI {
    * Get full issue details including comments.
    */
   async getIssue(issueNumber: number): Promise<Record<string, unknown>> {
-    const issue = await this.mcp.callTool<Record<string, unknown>>('get_issue', {
+    const issue = await this.mcp.callTool<Record<string, unknown>>('issue_read', {
+      method: 'get',
       owner: this.owner,
       repo: this.repo,
       issue_number: issueNumber,
@@ -36,11 +37,18 @@ export class GitHubAPI {
     // Fetch comments separately — the MCP issue endpoint doesn't inline them
     let comments: unknown[] = [];
     try {
-      comments = await this.mcp.callTool<unknown[]>('list_issue_comments', {
+      const rawComments = await this.mcp.callTool<unknown[] | { comments?: unknown[] }>('issue_read', {
+        method: 'get_comments',
         owner: this.owner,
         repo: this.repo,
         issue_number: issueNumber,
       });
+      // Normalize — some versions of the MCP server wrap comments in an envelope
+      if (Array.isArray(rawComments)) {
+        comments = rawComments;
+      } else if (rawComments && typeof rawComments === 'object' && 'comments' in rawComments) {
+        comments = (rawComments as { comments: unknown[] }).comments ?? [];
+      }
     } catch {
       this.logger.debug(`Could not fetch comments for issue #${issueNumber}`);
     }
@@ -80,7 +88,17 @@ export class GitHubAPI {
       args.perPage = Math.min(filters.limit, 100);
     }
 
-    return this.mcp.callTool<Record<string, unknown>[]>('list_issues', args);
+    // The list_issues MCP tool returns a paginated envelope: { issues, pageInfo, totalCount }
+    const result = await this.mcp.callTool<
+      Record<string, unknown>[] | { issues: Record<string, unknown>[] }
+    >('list_issues', args);
+
+    // Unwrap paginated envelope if present
+    if (result && !Array.isArray(result) && 'issues' in result) {
+      return (result as { issues: Record<string, unknown>[] }).issues;
+    }
+
+    return result as Record<string, unknown>[];
   }
 
   /**
@@ -122,7 +140,8 @@ export class GitHubAPI {
    * Get a pull request by number.
    */
   async getPullRequest(prNumber: number): Promise<Record<string, unknown>> {
-    return this.mcp.callTool<Record<string, unknown>>('get_pull_request', {
+    return this.mcp.callTool<Record<string, unknown>>('pull_request_read', {
+      method: 'get',
       owner: this.owner,
       repo: this.repo,
       pullNumber: prNumber,

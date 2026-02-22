@@ -1,0 +1,53 @@
+{
+  "projectName": "cadre",
+  "platform": "github",
+  "repository": "jafreck/CADRE",
+  "repoPath": "/Users/jacobfreck/Source/cadre",
+  "baseBranch": "main",
+  "issues": {
+    "query": {
+      "state": "open",
+      "limit": 20
+    }
+  },
+  "branchTemplate": "cadre/issue-{issue}",
+  "commits": {
+    "conventional": true,
+    "sign": false,
+    "commitPerPhase": true,
+    "squashBeforePR": false
+  },
+  "pullRequest": {
+    "autoCreate": true,
+    "draft": true,
+    "labels": ["cadre-generated"],
+    "reviewers": [],
+    "linkIssue": true
+  },
+  "options": {
+    "maxParallelIssues": 3,
+    "maxParallelAgents": 2,
+    "maxRetriesPerTask": 3,
+    "tokenBudget": 500000,
+    "perIssueTokenBudget": 100000,
+    "dryRun": false,
+    "resume": false,
+    "invocationDelayMs": 0,
+    "buildVerification": true,
+    "testVerification": true
+  },
+  "commands": {
+    "install": "npm install",
+    "build": "npm run build",
+    "test": "npx vitest run"
+  },
+  "copilot": {
+    "cliCommand": "copilot",
+    "agentDir": ".github/agents",
+    "timeout": 300000
+  },
+  "environment": {
+    "inheritShellPath": true,
+    "extraPath": []
+  }
+}

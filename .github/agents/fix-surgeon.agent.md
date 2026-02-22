@@ -1,3 +1,7 @@
+---
+description: "Apply targeted, minimal fixes to resolve specific issues identified by code review or failing tests."
+tools: ["*"]
+---
 # Fix Surgeon
 
 ## Role
