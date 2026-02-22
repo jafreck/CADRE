@@ -1,23 +1,43 @@
-# Test Result: task-003 - Wire PR info into IssueResult and handle null tokenUsage in IssueOrchestrator
+# Test Result: task-003 - Extract AnalysisPhaseExecutor
 
 ## Tests Written
-- `tests/issue-orchestrator.test.ts`: 7 new test cases
-  - should populate IssueResult.pr after successful PR creation
-  - should leave IssueResult.pr undefined when autoCreate is disabled
-  - should leave IssueResult.pr undefined when PR creation throws
-  - should return tokenUsage: null when all retries are exhausted
-  - should not record tokens when tokenUsage is null
-  - should not record tokens when tokenUsage is 0
-  - should record tokens when tokenUsage is a positive number
+- `tests/analysis-phase-executor.test.ts`: 21 new test cases
+
+  **PhaseExecutor contract** (3):
+  - should have phaseId of 1
+  - should have name "Analysis & Scouting"
+  - should implement the PhaseExecutor interface
+
+  **execute() happy path** (12):
+  - should ensure the progressDir exists
+  - should write the issue JSON to progressDir/issue.json
+  - should list files in the worktree
+  - should write the file tree to progressDir/repo-file-tree.txt
+  - should filter .cadre/ files from the file tree
+  - should build context for issue-analyst with correct args
+  - should launch issue-analyst with correct invocation
+  - should build context for codebase-scout after analyst succeeds
+  - should launch codebase-scout with correct invocation
+  - should return path to scout-report.md
+  - should record tokens for both agents
+  - should check budget multiple times during execution
+
+  **execute() error handling** (4):
+  - should throw if issue-analyst fails
+  - should throw if codebase-scout fails
+  - should not launch codebase-scout if issue-analyst fails
+  - should return a failure AgentResult when retryExecutor fails completely
+
+  **launchWithRetry uses correct retry configuration** (2):
+  - should pass maxRetriesPerTask from config to retryExecutor
+  - should use agent name as description for retryExecutor
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/issue-orchestrator.test.ts
+- tests/analysis-phase-executor.test.ts
 
 ## Coverage Notes
-- All internal class instantiations (CommitManager, ContextBuilder, ResultParser, RetryExecutor, IssueProgressWriter, TokenTracker) are mocked via vi.mock() so tests run without filesystem or process dependencies.
-- Tests use a CheckpointManager mock that marks phases 1–4 as completed, ensuring only phase 5 executes and keeping tests focused on PR composition logic.
-- The `launchWithRetry` fallback `tokenUsage: null` is verified indirectly by observing that RetryExecutor.execute returning failure causes the pipeline phase to fail gracefully (the fallback AgentResult structure itself is an internal implementation detail).
-- The `recordTokens` null/zero guards are verified by asserting `TokenTracker.record` is or is not called, which directly tests the runtime guard condition `tokens != null && tokens > 0`.
+- `launchWithRetry` is private; it is exercised indirectly through `execute()`. The retry loop itself (multiple attempts on thrown errors) is controlled by the mocked `retryExecutor`, so actual retry iteration logic in `RetryExecutor` is not re-tested here.
+- File I/O functions (`ensureDir`, `atomicWriteJSON`, `writeFile`, `listFilesRecursive`) are mocked to keep tests deterministic and filesystem-free.
