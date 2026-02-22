@@ -21,6 +21,7 @@ import {
   diskValidator,
 } from '../validation/index.js';
 import { ReportWriter } from '../reporting/report-writer.js';
+import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
@@ -29,7 +30,9 @@ export class CadreRuntime {
   private readonly logger: Logger;
   private readonly cadreDir: string;
   private readonly provider: PlatformProvider;
+  private readonly notifications: NotificationManager;
   private isShuttingDown = false;
+  private activeIssueNumbers: number[] = [];
 
   constructor(private readonly config: CadreConfig) {
     this.cadreDir = join(config.repoPath, '.cadre');
@@ -42,6 +45,8 @@ export class CadreRuntime {
 
     // Create the platform provider (GitHub or Azure DevOps)
     this.provider = createPlatformProvider(config, this.logger);
+
+    this.notifications = createNotificationManager(config);
   }
 
   /**
@@ -101,6 +106,7 @@ export class CadreRuntime {
     }
 
     this.logger.info(`Resolved ${issues.length} issues: ${issues.map((i) => `#${i.number}`).join(', ')}`);
+    this.activeIssueNumbers = issues.map((i) => i.number);
 
     // 3. Initialize components
     const worktreeManager = new WorktreeManager(
@@ -122,6 +128,7 @@ export class CadreRuntime {
       launcher,
       this.provider,
       this.logger,
+      this.notifications,
     );
 
     const result = await fleet.run();
@@ -357,6 +364,13 @@ export class CadreRuntime {
       // Write interrupted status to progress
       const progressWriter = new FleetProgressWriter(this.cadreDir, this.logger);
       await progressWriter.appendEvent(`Fleet interrupted by user (${signal})`);
+
+      // Notify about interruption
+      await this.notifications.dispatch({
+        type: 'fleet-interrupted',
+        signal,
+        issuesInProgress: this.activeIssueNumbers,
+      });
 
       // Exit with appropriate code
       process.exit(signal === 'SIGINT' ? 130 : 143);
