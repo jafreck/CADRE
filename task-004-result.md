@@ -1,16 +1,14 @@
-# Task Result: task-004 - Implement Platform Validator
+# Task Result: task-004 - Fill in `codebase-scout.md` template
 
 ## Changes Made
-- `src/validation/platform-validator.ts`: Created new file implementing `platformValidator` that checks platform-specific prerequisites
+- `src/agents/templates/codebase-scout.md`: Replaced 4-line stub with full system prompt including role, input contract, tool permissions, output contract with 4 sections (Relevant Files, Dependency Map, Test Files, Estimated Change Surface), and a complete example output.
 
 ## Files Modified
-- (none)
+- src/agents/templates/codebase-scout.md
 
 ## Files Created
-- src/validation/platform-validator.ts
+- (none)
 
 ## Notes
-- For GitHub platform: checks `github-mcp-server` is on PATH via `exec('which', ...)` and that a token is available from `config.github.auth.token` (with `${ENV_VAR}` expansion) or `GITHUB_TOKEN` env var
-- For Azure DevOps platform: checks `config.azureDevOps.auth.pat` resolves to a non-empty string after `${ENV_VAR}` expansion
-- Follows the same `PreRunValidator` interface pattern as `gitValidator` and `agentBackendValidator`
-- Uses `exec` from `src/util/process.ts` as required
+- All 21 `agent-templates.test.ts` tests pass.
+- Template follows the same heading/section style as `cadre-runner.md`.

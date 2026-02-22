@@ -1,23 +1,26 @@
-# Test Result: task-003 - Wire PR info into IssueResult and handle null tokenUsage in IssueOrchestrator
+# Test Result: task-003 - Fill in `issue-analyst.md` template
 
 ## Tests Written
-- `tests/issue-orchestrator.test.ts`: 7 new test cases
-  - should populate IssueResult.pr after successful PR creation
-  - should leave IssueResult.pr undefined when autoCreate is disabled
-  - should leave IssueResult.pr undefined when PR creation throws
-  - should return tokenUsage: null when all retries are exhausted
-  - should not record tokens when tokenUsage is null
-  - should not record tokens when tokenUsage is 0
-  - should record tokens when tokenUsage is a positive number
+- `tests/issue-analyst-template.test.ts`: 12 new test cases
+  - should start with a # Issue Analyst heading
+  - should have at least 30 lines of content
+  - should describe the issue number as input
+  - should describe repository context as input
+  - should describe a Requirements output section
+  - should describe a Change Type output section
+  - should describe a Scope Estimate output section
+  - should describe an Affected Areas output section
+  - should describe an Ambiguities output section
+  - should mention GitHub issue read permission
+  - should mention code search permission
+  - should include at least one example output section
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/issue-orchestrator.test.ts
+- tests/issue-analyst-template.test.ts
 
 ## Coverage Notes
-- All internal class instantiations (CommitManager, ContextBuilder, ResultParser, RetryExecutor, IssueProgressWriter, TokenTracker) are mocked via vi.mock() so tests run without filesystem or process dependencies.
-- Tests use a CheckpointManager mock that marks phases 1–4 as completed, ensuring only phase 5 executes and keeping tests focused on PR composition logic.
-- The `launchWithRetry` fallback `tokenUsage: null` is verified indirectly by observing that RetryExecutor.execute returning failure causes the pipeline phase to fail gracefully (the fallback AgentResult structure itself is an internal implementation detail).
-- The `recordTokens` null/zero guards are verified by asserting `TokenTracker.record` is or is not called, which directly tests the runtime guard condition `tokens != null && tokens > 0`.
+- All 12 tests pass against the current issue-analyst.md implementation.
+- Tests follow the same pattern as cadre-runner-template.test.ts and issue-orchestrator-template.test.ts.
