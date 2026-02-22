@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
+import { registerAgentsCommand } from './cli/agents.js';
 
 const program = new Command();
 
@@ -107,5 +108,8 @@ program
       process.exit(1);
     }
   });
+
+// ─── agents ───────────────────────────────────────────
+registerAgentsCommand(program);
 
 program.parse();
