@@ -1,23 +1,30 @@
-# Test Result: task-001 - Change tokenUsage to `number | null` in core types
+# Test Result: task-001 - Fill in `cadre-runner.md` template
 
 ## Tests Written
-- `tests/agent-types.test.ts`: 9 new test cases
-  - AgentResult.tokenUsage: should accept null for tokenUsage
-  - AgentResult.tokenUsage: should accept a number for tokenUsage
-  - AgentResult.tokenUsage: should accept zero for tokenUsage
-  - PhaseResult.tokenUsage: should accept null for tokenUsage
-  - PhaseResult.tokenUsage: should accept a number for tokenUsage
-  - PhaseResult.tokenUsage: should accept null with optional fields unset
-  - IssueResult.tokenUsage: should accept null for tokenUsage
-  - IssueResult.tokenUsage: should accept a number for tokenUsage
-  - IssueResult.tokenUsage: should carry tokenUsage from phases
+- `tests/cadre-runner-template.test.ts`: 15 new test cases
+  - should have a # CADRE Runner heading
+  - should have at least 40 lines of content
+  - should describe Phase 1 (Analysis & Scouting)
+  - should describe Phase 2 (Planning)
+  - should describe Phase 3 (Implementation)
+  - should describe Phase 4 (Integration Verification)
+  - should describe Phase 5 (PR Composition)
+  - should mention agents participating in Phase 1
+  - should mention agents participating in Phase 3
+  - should mention context file or context files
+  - should describe the worktreePath field
+  - should describe the inputFiles field
+  - should describe the outputPath field
+  - should mention output file or output files
+  - should describe worktree isolation or per-issue worktrees
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/agent-types.test.ts
+- tests/cadre-runner-template.test.ts
 
 ## Coverage Notes
-- The changes are purely type-level; tests verify the runtime shape of `AgentResult`, `PhaseResult`, and `IssueResult` objects with `tokenUsage` set to both `null` and numeric values.
-- `recordTokens` in `issue-orchestrator.ts` still has signature `tokens: number` (not `number | null`), which is a downstream concern noted in the task result as intentionally deferred.
+- Tests validate all acceptance criteria from the task definition.
+- Content validation uses regex patterns so minor wording changes won't break tests.
+- Runtime behavior (Phases 1–3 critical, Phases 4–5 non-critical) is not directly tested as it is prose documentation; the presence of the prose is confirmed indirectly by the phase-description tests.
