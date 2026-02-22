@@ -30,7 +30,7 @@ export interface IssueResult {
   phases: PhaseResult[];
   pr?: PullRequestInfo;
   totalDuration: number;
-  tokenUsage: number;
+  tokenUsage: number | null;
   error?: string;
 }
 
@@ -46,6 +46,7 @@ export class IssueOrchestrator {
   private readonly progressWriter: IssueProgressWriter;
   private readonly tokenTracker: TokenTracker;
   private readonly phases: PhaseResult[] = [];
+  private createdPR: PullRequestInfo | undefined;
 
   constructor(
     private readonly config: CadreConfig,
@@ -722,8 +723,7 @@ export class IssueOrchestrator {
           draft: this.config.pullRequest.draft,
         });
 
-        // Store PR info
-        // The fleet orchestrator will collect this
+        this.createdPR = pr;
         this.logger.info(`PR created: #${pr.number}`, {
           issueNumber: this.issue.number,
           data: { prUrl: pr.url },
@@ -770,7 +770,7 @@ export class IssueOrchestrator {
         duration: 0,
         stdout: '',
         stderr: result.error ?? 'Unknown failure',
-        tokenUsage: 0,
+        tokenUsage: null,
         outputPath: invocation.outputPath,
         outputExists: false,
         error: result.error,
@@ -780,8 +780,8 @@ export class IssueOrchestrator {
     return result.result;
   }
 
-  private recordTokens(agent: string, tokens: number): void {
-    if (tokens > 0) {
+  private recordTokens(agent: string, tokens: number | null): void {
+    if (tokens != null && tokens > 0) {
       this.tokenTracker.record(
         this.issue.number,
         agent,
@@ -859,6 +859,7 @@ export class IssueOrchestrator {
       issueTitle: this.issue.title,
       success,
       phases: this.phases,
+      pr: this.createdPR,
       totalDuration: startTime ? Date.now() - startTime : 0,
       tokenUsage: this.tokenTracker.getTotal(),
       error,
