@@ -30,7 +30,7 @@ export interface IssueResult {
   phases: PhaseResult[];
   pr?: PullRequestInfo;
   totalDuration: number;
-  tokenUsage: number;
+  tokenUsage: number | null;
   error?: string;
 }
 
