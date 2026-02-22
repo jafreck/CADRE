@@ -53,7 +53,18 @@ Read it to understand your inputs, outputs, and constraints.
    - A "Testing" section describing how the changes were verified
    - A "Closes #N" reference to auto-close the issue
    - Any caveats, known limitations, or follow-up work needed
+   - A **"## Cadre Process Challenges"** section (see below)
 4. Add appropriate labels based on the change type.
+
+### Cadre Process Challenges (REQUIRED — dogfooding data)
+
+This project uses **CADRE itself** to implement its own issues. As part of every PR, you **must** include a `## Cadre Process Challenges` section. Reflect candidly on:
+- What aspects of the cadre workflow were difficult, confusing, or error-prone during this implementation?
+- Were there unclear agent contracts, parsing issues, context limitations, or worktree/git problems?
+- What information was missing from the issue that made analysis harder?
+- What would have made this implementation smoother?
+
+These observations will be aggregated to prioritize improvements to cadre itself.
 
 ## Output Format
 
@@ -95,6 +106,19 @@ Closes #{issueNumber}
 ## Notes
 
 - {Any caveats, limitations, or follow-up work}
+
+## Cadre Process Challenges
+
+> **This section is required for all CADRE-generated PRs (dogfooding data).**
+> Document honestly what was difficult, confusing, or error-prone when CADRE processed this issue.
+
+- **Issue clarity**: {Was the issue description clear enough to act on? What was ambiguous?}
+- **Agent contracts**: {Any issues with input/output format expectations for any agent?}
+- **Context limitations**: {Was the context passed to agents sufficient? What was missing?}
+- **Git/worktree**: {Any branch, worktree, or commit problems encountered?}
+- **Parsing/output**: {Were agent outputs parsed correctly or were there schema mismatches?}
+- **Retry behavior**: {Did any agents need retries, and did the retry context help?}
+- **Overall**: {1-2 sentence summary of the biggest friction point in this run}
 ```
 
 ## Constraints
