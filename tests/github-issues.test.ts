@@ -45,7 +45,8 @@ describe('GitHubAPI', () => {
       const issue = await api.getIssue(42);
       expect(issue).toBeDefined();
       expect(issue.number).toBe(42);
-      expect(mockMCP.callTool).toHaveBeenCalledWith('get_issue', {
+      expect(mockMCP.callTool).toHaveBeenCalledWith('issue_read', {
+        method: 'get',
         owner: 'owner',
         repo: 'repo',
         issue_number: 42,
