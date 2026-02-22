@@ -1,137 +1,131 @@
 import { describe, it, expect } from 'vitest';
-import type { AgentResult, PhaseResult } from '../src/agents/types.js';
-import type { IssueResult } from '../src/core/issue-orchestrator.js';
+import { AGENT_DEFINITIONS } from '../src/agents/types.js';
+import type { AgentName } from '../src/agents/types.js';
 
-describe('AgentResult.tokenUsage', () => {
-  it('should accept null for tokenUsage', () => {
-    const result: AgentResult = {
-      agent: 'code-writer',
-      success: true,
-      exitCode: 0,
-      timedOut: false,
-      duration: 1000,
-      stdout: '',
-      stderr: '',
-      tokenUsage: null,
-      outputPath: '/tmp/output',
-      outputExists: true,
-    };
-    expect(result.tokenUsage).toBeNull();
+const ALL_AGENT_NAMES: AgentName[] = [
+  'issue-analyst',
+  'codebase-scout',
+  'implementation-planner',
+  'adjudicator',
+  'code-writer',
+  'test-writer',
+  'code-reviewer',
+  'fix-surgeon',
+  'integration-checker',
+  'pr-composer',
+  'issue-orchestrator',
+  'cadre-runner',
+];
+
+describe('AGENT_DEFINITIONS', () => {
+  it('should contain exactly 12 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(12);
   });
 
-  it('should accept a number for tokenUsage', () => {
-    const result: AgentResult = {
-      agent: 'code-writer',
-      success: true,
-      exitCode: 0,
-      timedOut: false,
-      duration: 1000,
-      stdout: '',
-      stderr: '',
-      tokenUsage: 4200,
-      outputPath: '/tmp/output',
-      outputExists: true,
-    };
-    expect(result.tokenUsage).toBe(4200);
+  it('should have one entry for each AgentName', () => {
+    const names = AGENT_DEFINITIONS.map((d) => d.name);
+    for (const agentName of ALL_AGENT_NAMES) {
+      expect(names).toContain(agentName);
+    }
   });
 
-  it('should accept zero for tokenUsage', () => {
-    const result: AgentResult = {
-      agent: 'issue-analyst',
-      success: false,
-      exitCode: 1,
-      timedOut: false,
-      duration: 500,
-      stdout: '',
-      stderr: 'error',
-      tokenUsage: 0,
-      outputPath: '/tmp/output',
-      outputExists: false,
-    };
-    expect(result.tokenUsage).toBe(0);
-  });
-});
-
-describe('PhaseResult.tokenUsage', () => {
-  it('should accept null for tokenUsage', () => {
-    const result: PhaseResult = {
-      phase: 1,
-      phaseName: 'Analysis & Scouting',
-      success: true,
-      duration: 5000,
-      tokenUsage: null,
-    };
-    expect(result.tokenUsage).toBeNull();
+  it('should have no duplicate agent names', () => {
+    const names = AGENT_DEFINITIONS.map((d) => d.name);
+    const unique = new Set(names);
+    expect(unique.size).toBe(AGENT_DEFINITIONS.length);
   });
 
-  it('should accept a number for tokenUsage', () => {
-    const result: PhaseResult = {
-      phase: 2,
-      phaseName: 'Planning',
-      success: true,
-      duration: 3000,
-      tokenUsage: 7500,
-    };
-    expect(result.tokenUsage).toBe(7500);
+  it('should have non-empty required fields for every entry', () => {
+    for (const def of AGENT_DEFINITIONS) {
+      expect(def.name).toBeTruthy();
+      expect(def.phaseName).toBeTruthy();
+      expect(def.description).toBeTruthy();
+      expect(def.templateFile).toBeTruthy();
+      expect(typeof def.phase).toBe('number');
+      expect(typeof def.hasStructuredOutput).toBe('boolean');
+    }
   });
 
-  it('should accept null with optional fields unset', () => {
-    const result: PhaseResult = {
-      phase: 3,
-      phaseName: 'Implementation',
-      success: false,
-      duration: 0,
-      tokenUsage: null,
-      error: 'Agent timed out',
-    };
-    expect(result.tokenUsage).toBeNull();
-    expect(result.error).toBe('Agent timed out');
-    expect(result.outputPath).toBeUndefined();
-  });
-});
-
-describe('IssueResult.tokenUsage', () => {
-  it('should accept null for tokenUsage', () => {
-    const result: IssueResult = {
-      issueNumber: 14,
-      issueTitle: 'Fix tokenUsage type',
-      success: true,
-      phases: [],
-      totalDuration: 10000,
-      tokenUsage: null,
-    };
-    expect(result.tokenUsage).toBeNull();
+  it('should have templateFile matching pattern <name>.md for every entry', () => {
+    for (const def of AGENT_DEFINITIONS) {
+      expect(def.templateFile).toBe(`${def.name}.md`);
+    }
   });
 
-  it('should accept a number for tokenUsage', () => {
-    const result: IssueResult = {
-      issueNumber: 14,
-      issueTitle: 'Fix tokenUsage type',
-      success: true,
-      phases: [],
-      totalDuration: 10000,
-      tokenUsage: 15000,
-    };
-    expect(result.tokenUsage).toBe(15000);
+  it('should have valid phase numbers (0-5)', () => {
+    for (const def of AGENT_DEFINITIONS) {
+      expect(def.phase).toBeGreaterThanOrEqual(0);
+      expect(def.phase).toBeLessThanOrEqual(5);
+    }
   });
 
-  it('should carry tokenUsage from phases', () => {
-    const phase: PhaseResult = {
-      phase: 1,
-      phaseName: 'Analysis & Scouting',
-      success: true,
-      duration: 2000,
-      tokenUsage: null,
-    };
-    const result: IssueResult = {
-      issueNumber: 14,
-      issueTitle: 'Fix tokenUsage type',
-      success: true,
-      phases: [phase],
-      totalDuration: 2000,
-      tokenUsage: null,
-    };
-    expect(result.phases[0].tokenUsage).toBeNull();
-    expect(result.tokenUsage).toBeNull();
+  it('should mark structured-output agents correctly', () => {
+    const structured = AGENT_DEFINITIONS.filter((d) => d.hasStructuredOutput).map((d) => d.name);
+    expect(structured).toContain('issue-analyst');
+    expect(structured).toContain('codebase-scout');
+    expect(structured).toContain('implementation-planner');
+    expect(structured).toContain('adjudicator');
+    expect(structured).toContain('code-reviewer');
+    expect(structured).toContain('integration-checker');
+    expect(structured).toContain('pr-composer');
+  });
+
+  it('should mark non-structured-output agents correctly', () => {
+    const unstructured = AGENT_DEFINITIONS.filter((d) => !d.hasStructuredOutput).map((d) => d.name);
+    expect(unstructured).toContain('cadre-runner');
+    expect(unstructured).toContain('issue-orchestrator');
+    expect(unstructured).toContain('code-writer');
+    expect(unstructured).toContain('test-writer');
+    expect(unstructured).toContain('fix-surgeon');
+  });
+
+  it('should group orchestration agents in phase 0', () => {
+    const phase0 = AGENT_DEFINITIONS.filter((d) => d.phase === 0).map((d) => d.name);
+    expect(phase0).toContain('cadre-runner');
+    expect(phase0).toContain('issue-orchestrator');
+    for (const def of AGENT_DEFINITIONS.filter((d) => d.phase === 0)) {
+      expect(def.phaseName).toBe('Orchestration');
+    }
+  });
+
+  it('should group analysis agents in phase 1', () => {
+    const phase1 = AGENT_DEFINITIONS.filter((d) => d.phase === 1).map((d) => d.name);
+    expect(phase1).toContain('issue-analyst');
+    expect(phase1).toContain('codebase-scout');
+    for (const def of AGENT_DEFINITIONS.filter((d) => d.phase === 1)) {
+      expect(def.phaseName).toBe('Analysis & Scouting');
+    }
+  });
+
+  it('should group planning agents in phase 2', () => {
+    const phase2 = AGENT_DEFINITIONS.filter((d) => d.phase === 2).map((d) => d.name);
+    expect(phase2).toContain('implementation-planner');
+    expect(phase2).toContain('adjudicator');
+    for (const def of AGENT_DEFINITIONS.filter((d) => d.phase === 2)) {
+      expect(def.phaseName).toBe('Planning');
+    }
+  });
+
+  it('should group implementation agents in phase 3', () => {
+    const phase3 = AGENT_DEFINITIONS.filter((d) => d.phase === 3).map((d) => d.name);
+    expect(phase3).toContain('code-writer');
+    expect(phase3).toContain('test-writer');
+    expect(phase3).toContain('code-reviewer');
+    expect(phase3).toContain('fix-surgeon');
+    for (const def of AGENT_DEFINITIONS.filter((d) => d.phase === 3)) {
+      expect(def.phaseName).toBe('Implementation');
+    }
+  });
+
+  it('should have integration-checker in phase 4', () => {
+    const def = AGENT_DEFINITIONS.find((d) => d.name === 'integration-checker');
+    expect(def?.phase).toBe(4);
+    expect(def?.phaseName).toBe('Integration Verification');
+  });
+
+  it('should have pr-composer in phase 5', () => {
+    const def = AGENT_DEFINITIONS.find((d) => d.name === 'pr-composer');
+    expect(def?.phase).toBe(5);
+    expect(def?.phaseName).toBe('PR Composition');
   });
 });

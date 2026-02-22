@@ -17,6 +17,116 @@ export type AgentName =
   | 'issue-orchestrator'
   | 'cadre-runner';
 
+/** Metadata describing a single CADRE agent. */
+export interface AgentDefinition {
+  name: AgentName;
+  phase: number;
+  phaseName: string;
+  description: string;
+  hasStructuredOutput: boolean;
+  templateFile: string;
+}
+
+/** Registry of all 12 CADRE agents with their metadata. */
+export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
+  {
+    name: 'cadre-runner',
+    phase: 0,
+    phaseName: 'Orchestration',
+    description: 'Top-level agent describing the CADRE fleet execution model and runtime behavior.',
+    hasStructuredOutput: false,
+    templateFile: 'cadre-runner.md',
+  },
+  {
+    name: 'issue-orchestrator',
+    phase: 0,
+    phaseName: 'Orchestration',
+    description: 'Reference agent describing the per-issue 5-phase development pipeline.',
+    hasStructuredOutput: false,
+    templateFile: 'issue-orchestrator.md',
+  },
+  {
+    name: 'issue-analyst',
+    phase: 1,
+    phaseName: 'Analysis & Scouting',
+    description: 'Analyzes a GitHub issue to extract requirements, classify change type, estimate scope, and identify affected areas.',
+    hasStructuredOutput: true,
+    templateFile: 'issue-analyst.md',
+  },
+  {
+    name: 'codebase-scout',
+    phase: 1,
+    phaseName: 'Analysis & Scouting',
+    description: 'Scans the repository to locate relevant files, map dependencies, and identify related tests.',
+    hasStructuredOutput: true,
+    templateFile: 'codebase-scout.md',
+  },
+  {
+    name: 'implementation-planner',
+    phase: 2,
+    phaseName: 'Planning',
+    description: 'Breaks a GitHub issue into discrete implementation tasks with dependencies, ordering, and acceptance criteria.',
+    hasStructuredOutput: true,
+    templateFile: 'implementation-planner.md',
+  },
+  {
+    name: 'adjudicator',
+    phase: 2,
+    phaseName: 'Planning',
+    description: 'Evaluates competing implementation plans or design decisions and selects the best option.',
+    hasStructuredOutput: true,
+    templateFile: 'adjudicator.md',
+  },
+  {
+    name: 'code-writer',
+    phase: 3,
+    phaseName: 'Implementation',
+    description: 'Implements a single task from the implementation plan by modifying or creating source files.',
+    hasStructuredOutput: false,
+    templateFile: 'code-writer.md',
+  },
+  {
+    name: 'test-writer',
+    phase: 3,
+    phaseName: 'Implementation',
+    description: 'Writes unit and integration tests for changes made by the code-writer.',
+    hasStructuredOutput: false,
+    templateFile: 'test-writer.md',
+  },
+  {
+    name: 'code-reviewer',
+    phase: 3,
+    phaseName: 'Implementation',
+    description: 'Reviews code changes for correctness, style, and potential issues with a pass/fail verdict.',
+    hasStructuredOutput: true,
+    templateFile: 'code-reviewer.md',
+  },
+  {
+    name: 'fix-surgeon',
+    phase: 3,
+    phaseName: 'Implementation',
+    description: 'Applies targeted, minimal fixes to resolve issues identified by code review or failing tests.',
+    hasStructuredOutput: false,
+    templateFile: 'fix-surgeon.md',
+  },
+  {
+    name: 'integration-checker',
+    phase: 4,
+    phaseName: 'Integration Verification',
+    description: 'Verifies all changes integrate correctly by running build, test, and lint commands.',
+    hasStructuredOutput: true,
+    templateFile: 'integration-checker.md',
+  },
+  {
+    name: 'pr-composer',
+    phase: 5,
+    phaseName: 'PR Composition',
+    description: 'Writes a clear, informative pull request title and body summarizing all changes made.',
+    hasStructuredOutput: true,
+    templateFile: 'pr-composer.md',
+  },
+] as const;
+
 /** An invocation request for an agent. */
 export interface AgentInvocation {
   /** Which agent to launch. */

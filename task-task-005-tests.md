@@ -1,43 +1,25 @@
-# Test Result: task-005 - Create domain error classes in src/errors.ts
+# Test Result: task-005 - Add Optional Pre-flight Agent Validation to cadre run
 
 ## Tests Written
-- `tests/errors.test.ts`: 25 test cases (expanded from 4)
-  - **BudgetExceededError** (6 tests)
-    - instantiates with correct name, message, and properties
-    - is an instance of BudgetExceededError
-    - has a stack trace
-    - handles zero values for current and budget
-    - handles current equal to budget
-    - can be caught as a generic Error
-  - **PhaseFailedError** (5 tests)
-    - instantiates with correct name, message, and properties
-    - is an instance of PhaseFailedError
-    - has a stack trace
-    - handles phase 0
-    - can be caught as a generic Error
-  - **AgentTimeoutError** (6 tests)
-    - instantiates with correct name, message, and properties
-    - is an instance of AgentTimeoutError
-    - has a stack trace
-    - handles zero timeoutMs
-    - handles empty agent string
-    - can be caught as a generic Error
-  - **SchemaValidationError** (8 tests)
-    - instantiates with correct name, message, and properties
-    - is an instance of SchemaValidationError
-    - has a stack trace
-    - accepts null as received
-    - accepts undefined as received
-    - accepts an object as received
-    - accepts a string as received
-    - can be caught as a generic Error
+
+### `tests/agent-launcher.test.ts`: 5 new test cases (in new `AgentLauncher.validateAgentFiles` describe block)
+- should return empty array when all agent files exist and are non-empty
+- should report missing files when agent files do not exist
+- should report empty files
+- should report multiple issues when several files are missing or empty
+- should return empty array for an empty agent list directory that has all files
+
+### `tests/cli-index.test.ts`: 1 new test case
+- should register --skip-agent-validation option on the run command
 
 ## Test Files Modified
-- tests/errors.test.ts
+- tests/agent-launcher.test.ts
+- tests/cli-index.test.ts
 
 ## Test Files Created
 - (none)
 
 ## Coverage Notes
-- All four error classes are fully covered: happy path, `instanceof` hierarchy, stack trace presence, boundary values (zero, empty string, phase 0), and `received` accepting all `unknown` types (number, string, object, null, undefined).
-- No external dependencies; no mocks required.
+- The `validateAgentFiles` method is tested with a real temp directory (no mocking of `statOrNull`) to exercise the actual file-system checks end-to-end.
+- The CLI flag test relies on updating the `buildProgram` helper in `cli-index.test.ts` to mirror the real `src/index.ts` `run` command options, since `src/index.ts` calls `program.parse()` at module level making it difficult to import directly.
+- The runtime behavior of `--skip-agent-validation` (bypassing the validation block in the `action` handler) is not covered by a unit test, as it requires mocking `loadConfig`, `CadreRuntime`, and `process.exit`, which is out of scope for these focused unit tests.

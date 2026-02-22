@@ -1,9 +1,10 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import type { CadreConfig } from '../config/schema.js';
 import type { AgentInvocation, AgentResult, AgentName } from '../agents/types.js';
+import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { spawnProcess, stripVSCodeEnv, trackProcess, type ProcessResult } from '../util/process.js';
-import { exists, ensureDir } from '../util/fs.js';
+import { exists, ensureDir, statOrNull } from '../util/fs.js';
 import { Logger } from '../logging/logger.js';
 
 /**
@@ -21,6 +22,25 @@ export class AgentLauncher {
     this.cliCommand = config.copilot.cliCommand;
     this.agentDir = config.copilot.agentDir;
     this.defaultTimeout = config.copilot.timeout;
+  }
+
+  /**
+   * Validate that all agent instruction files exist and are non-empty.
+   * Returns an array of error strings for any missing or empty files.
+   */
+  static async validateAgentFiles(agentDir: string): Promise<string[]> {
+    const resolvedDir = resolve(agentDir);
+    const issues: string[] = [];
+    for (const agent of AGENT_DEFINITIONS) {
+      const filePath = join(resolvedDir, `${agent.name}.md`);
+      const fileStat = await statOrNull(filePath);
+      if (fileStat === null) {
+        issues.push(`  ❌ Missing: ${filePath}`);
+      } else if (fileStat.size === 0) {
+        issues.push(`  ❌ Empty:   ${filePath}`);
+      }
+    }
+    return issues;
   }
 
   /**
