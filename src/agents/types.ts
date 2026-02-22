@@ -161,8 +161,8 @@ export interface AgentResult {
   stdout: string;
   /** Full stderr from the agent process. */
   stderr: string;
-  /** Token usage (parsed from output if available). */
-  tokenUsage: number;
+  /** Token usage (parsed from output if available), or null if not reported. */
+  tokenUsage: number | null;
   /** Path to the output file(s) the agent produced. */
   outputPath: string;
   /** Whether the expected output file exists. */
@@ -248,7 +248,7 @@ export interface PhaseResult {
   phaseName: string;
   success: boolean;
   duration: number;
-  tokenUsage: number;
+  tokenUsage: number | null;
   outputPath?: string;
   error?: string;
 }

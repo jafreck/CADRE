@@ -13,7 +13,7 @@ export interface PullRequestRef {
 export interface IssueProgressInfo {
   issueNumber: number;
   issueTitle: string;
-  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked';
+  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded';
   currentPhase: number;
   totalPhases: number;
   prNumber?: number;
@@ -50,6 +50,7 @@ export class FleetProgressWriter {
     const failed = issues.filter((i) => i.status === 'failed').length;
     const blocked = issues.filter((i) => i.status === 'blocked').length;
     const notStarted = issues.filter((i) => i.status === 'not-started').length;
+    const budgetExceeded = issues.filter((i) => i.status === 'budget-exceeded').length;
 
     const budgetStr = tokenUsage.budget
       ? `${tokenUsage.current.toLocaleString()} / ${tokenUsage.budget.toLocaleString()}`
@@ -57,7 +58,7 @@ export class FleetProgressWriter {
 
     let md = `# CADRE Progress\n\n`;
     md += `## Fleet Status\n`;
-    md += `- **Issues**: ${total} total | ${completed} completed | ${inProgress} in-progress | ${failed} failed | ${blocked} blocked | ${notStarted} not-started\n`;
+    md += `- **Issues**: ${total} total | ${completed} completed | ${inProgress} in-progress | ${failed} failed | ${blocked} blocked | ${notStarted} not-started | ${budgetExceeded} budget-exceeded\n`;
     md += `- **PRs Created**: ${prs.length}\n`;
     md += `- **Token Usage**: ${budgetStr}\n`;
     md += `- **Last Updated**: ${new Date().toISOString()}\n\n`;
@@ -74,6 +75,7 @@ export class FleetProgressWriter {
         completed: '✅',
         failed: '❌',
         blocked: '🚫',
+        'budget-exceeded': '💸',
       }[issue.status];
       md += `\n| #${issue.issueNumber} | ${issue.issueTitle} | ${statusEmoji} ${issue.status} | ${issue.currentPhase}/${issue.totalPhases} | ${prLink} |`;
     }

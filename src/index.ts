@@ -25,6 +25,7 @@ program
   .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
   .option('--no-pr', 'Skip PR creation')
   .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
+  .option('--skip-validation', 'Skip pre-run validation checks')
   .action(async (opts) => {
     try {
       let config = await loadConfig(opts.config);
@@ -33,6 +34,7 @@ program
         dryRun: opts.dryRun,
         issueIds: opts.issue?.map(Number),
         maxParallelIssues: opts.parallel,
+        skipValidation: opts.skipValidation,
       });
 
       if (opts.dryRun) {
@@ -103,6 +105,25 @@ program
     }
   });
 
+// ─── report ───────────────────────────────────────────
+program
+  .command('report')
+  .description('Show a summary report of pipeline runs')
+  .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
+  .option('-f, --format <format>', 'Output format (json for raw JSON)', 'human')
+  .option('--history', 'List all historical run reports')
+  .action(async (opts) => {
+    try {
+      const config = await loadConfig(opts.config);
+      const runtime = new CadreRuntime(config);
+      await runtime.report({ format: opts.format, history: opts.history });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(chalk.red(`Error: ${msg}`));
+      process.exit(1);
+    }
+  });
+
 // ─── worktrees ────────────────────────────────────────
 program
   .command('worktrees')
@@ -127,5 +148,23 @@ program
 
 // ─── agents ───────────────────────────────────────────
 registerAgentsCommand(program);
+
+// ─── validate ─────────────────────────────────────────
+program
+  .command('validate')
+  .description('Run pre-flight validation checks against the configuration')
+  .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
+  .action(async (opts) => {
+    try {
+      const config = await loadConfig(opts.config);
+      const runtime = new CadreRuntime(config);
+      const passed = await runtime.validate();
+      process.exit(passed ? 0 : 1);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(chalk.red(`Error: ${msg}`));
+      process.exit(1);
+    }
+  });
 
 program.parse();
