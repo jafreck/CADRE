@@ -180,19 +180,10 @@ export class PlanningToImplementationGate implements PhaseGate {
     }
 
     // Verify dependency DAG is acyclic
-    if (errors.length === 0) {
-      try {
-        new TaskQueue(tasks);
-      } catch (err) {
-        errors.push(`Implementation plan has a dependency cycle: ${String(err)}`);
-      }
-    } else {
-      // Attempt cycle check even with other errors, but warn if we can't
-      try {
-        new TaskQueue(tasks);
-      } catch (err) {
-        errors.push(`Implementation plan has a dependency cycle: ${String(err)}`);
-      }
+    try {
+      new TaskQueue(tasks);
+    } catch (err) {
+      errors.push(`Implementation plan has a dependency cycle: ${String(err)}`);
     }
 
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);

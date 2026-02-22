@@ -968,6 +968,11 @@ export class IssueOrchestrator {
     const result = await gate.validate(context);
     await this.checkpoint.recordGateResult(phaseId, result);
 
+    this.phases[this.phases.length - 1] = {
+      ...this.phases[this.phases.length - 1],
+      gateResult: result,
+    };
+
     if (result.status === 'warn') {
       for (const w of result.warnings) {
         this.logger.warn(`Gate phase ${phaseId}: ${w}`, { issueNumber: this.issue.number, phase: phaseId });
