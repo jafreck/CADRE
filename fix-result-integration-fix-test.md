@@ -4,14 +4,13 @@
 test-failures
 
 ## Fixes Applied
-
-### Fix 1: Update test assertion to match new MCP tool API
+### Fix 1: Update outdated `get_issue` assertion to `issue_read` with method parameter
 **File:** `tests/github-issues.test.ts`
-**Issue:** Test expected `callTool('get_issue', ...)` but implementation was updated to use `callTool('issue_read', { method: 'get', ... })`
-**Fix:** Updated `toHaveBeenCalledWith` assertion in `should fetch issue details via MCP` to use `'issue_read'` with `method: 'get'` to match the current implementation in `src/github/api.ts`
+**Issue:** The test asserted `callTool` was called with `'get_issue'` (old API), but the source code (`src/github/api.ts`) correctly uses `'issue_read'` with `{ method: 'get', ... }`.
+**Fix:** Updated the `expect(mockMCP.callTool).toHaveBeenCalledWith(...)` assertion to use `'issue_read'` with `method: 'get'` to match the actual implementation.
 
 ## Files Modified
 - `tests/github-issues.test.ts`
 
 ## Verification Notes
-- Run `npx vitest run tests/github-issues.test.ts` — all 7 tests pass
+- Run `npx vitest run tests/github-issues.test.ts` — all 7 tests pass.
