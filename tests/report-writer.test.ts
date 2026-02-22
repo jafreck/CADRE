@@ -90,6 +90,7 @@ describe('ReportWriter', () => {
       expect(report.startTime).toBe(new Date(startTime).toISOString());
       expect(typeof report.endTime).toBe('string');
       expect(report.duration).toBeGreaterThan(0);
+      expect(report.totalTokens).toBe(result.tokenUsage.total);
     });
 
     it('should map FleetResult.issues to RunIssueSummary array', () => {
