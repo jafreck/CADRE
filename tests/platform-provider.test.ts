@@ -80,16 +80,79 @@ describe('Platform Provider Factory', () => {
     expect(provider.name).toBe('Azure DevOps');
   });
 
-  it('should throw when github platform selected without github config', () => {
+  it('should create GitHubProvider with token-based auth', () => {
     const config = CadreConfigSchema.parse({
       ...baseConfig,
       repository: 'owner/repo',
-      platform: 'github',
+      github: {
+        auth: {
+          token: 'ghp_test123',
+        },
+      },
     });
 
-    expect(() => createPlatformProvider(config, mockLogger)).toThrow(
-      'GitHub platform selected but no "github" configuration provided',
+    const provider = createPlatformProvider(config, mockLogger);
+    expect(provider).toBeInstanceOf(GitHubProvider);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('token-based'),
     );
+  });
+
+  it('should create GitHubProvider with zero-config when GITHUB_TOKEN is set', () => {
+    process.env.GITHUB_TOKEN = 'ghp_env_token';
+
+    const config = CadreConfigSchema.parse({
+      ...baseConfig,
+      repository: 'owner/repo',
+    });
+
+    const provider = createPlatformProvider(config, mockLogger);
+    expect(provider).toBeInstanceOf(GitHubProvider);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Auto-detected'),
+    );
+
+    delete process.env.GITHUB_TOKEN;
+  });
+
+  it('should create GitHubProvider with zero-config when GH_TOKEN is set', () => {
+    process.env.GH_TOKEN = 'ghp_gh_token';
+
+    const config = CadreConfigSchema.parse({
+      ...baseConfig,
+      repository: 'owner/repo',
+    });
+
+    const provider = createPlatformProvider(config, mockLogger);
+    expect(provider).toBeInstanceOf(GitHubProvider);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Auto-detected'),
+    );
+
+    delete process.env.GH_TOKEN;
+  });
+
+  it('should warn when no GitHub auth is available', () => {
+    // Make sure no tokens are set
+    const savedGH = process.env.GITHUB_TOKEN;
+    const savedGhToken = process.env.GH_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.GH_TOKEN;
+
+    const config = CadreConfigSchema.parse({
+      ...baseConfig,
+      repository: 'owner/repo',
+    });
+
+    const provider = createPlatformProvider(config, mockLogger);
+    expect(provider).toBeInstanceOf(GitHubProvider);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('No GitHub authentication configured'),
+    );
+
+    // Restore
+    if (savedGH) process.env.GITHUB_TOKEN = savedGH;
+    if (savedGhToken) process.env.GH_TOKEN = savedGhToken;
   });
 
   it('should throw when azure-devops platform selected without azureDevOps config', () => {

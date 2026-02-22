@@ -37,9 +37,11 @@ describe('CadreConfigSchema', () => {
     expect(result.copilot.timeout).toBe(300_000);
     expect(result.github?.mcpServer.command).toBe('github-mcp-server');
     expect(result.github?.mcpServer.args).toEqual(['stdio']);
-    expect(result.github?.auth.appId).toBe('12345');
-    expect(result.github?.auth.installationId).toBe('67890');
-    expect(result.github?.auth.privateKeyFile).toBe('/path/to/key.pem');
+    // Auth is a union — the validConfig uses App auth
+    const auth = result.github?.auth as { appId: string; installationId: string; privateKeyFile: string };
+    expect(auth.appId).toBe('12345');
+    expect(auth.installationId).toBe('67890');
+    expect(auth.privateKeyFile).toBe('/path/to/key.pem');
   });
 
   it('should reject invalid projectName', () => {
@@ -205,5 +207,48 @@ describe('CadreConfigSchema', () => {
       },
     });
     expect(result.success).toBe(true);
+  });
+
+  it('should accept token-based github auth', () => {
+    const result = CadreConfigSchema.safeParse({
+      projectName: 'test-project',
+      repository: 'owner/repo',
+      repoPath: '/tmp/repo',
+      issues: { ids: [1] },
+      github: {
+        auth: {
+          token: '${GITHUB_TOKEN}',
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept zero-config github (no github section at all)', () => {
+    const result = CadreConfigSchema.safeParse({
+      projectName: 'test-project',
+      repository: 'owner/repo',
+      repoPath: '/tmp/repo',
+      issues: { ids: [1] },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.platform).toBe('github');
+      expect(result.data.github).toBeUndefined();
+    }
+  });
+
+  it('should accept github with no auth (auto-detect from env)', () => {
+    const result = CadreConfigSchema.safeParse({
+      projectName: 'test-project',
+      repository: 'owner/repo',
+      repoPath: '/tmp/repo',
+      issues: { ids: [1] },
+      github: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.github?.auth).toBeUndefined();
+    }
   });
 });

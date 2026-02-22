@@ -143,6 +143,9 @@ export const CadreConfigSchema = z.object({
   /**
    * GitHub MCP server and authentication configuration.
    * Required when platform is "github".
+   *
+   * If omitted entirely, CADRE will look for GITHUB_TOKEN in the environment
+   * and use the default `github-mcp-server stdio` command.
    */
   github: z
     .object({
@@ -159,18 +162,39 @@ export const CadreConfigSchema = z.object({
           args: ['stdio'],
         }),
 
-      /** GitHub App authentication credentials. */
-      auth: z.object({
-        /** GitHub App ID. */
-        appId: z.string().min(1),
-        /** GitHub App installation ID for the target repository/org. */
-        installationId: z.string().min(1),
-        /**
-         * Path to the PEM-encoded private key file.
-         * Supports ${ENV_VAR} syntax to reference host environment variables.
-         */
-        privateKeyFile: z.string().min(1),
-      }),
+      /**
+       * Authentication method. Two options:
+       *
+       * 1. **Token** (simplest — works with `gh auth token`, Copilot CLI, Claude CLI):
+       *    `{ "token": "${GITHUB_TOKEN}" }`
+       *
+       * 2. **GitHub App** (for CI / org-level access):
+       *    `{ "appId": "...", "installationId": "...", "privateKeyFile": "..." }`
+       *
+       * If omitted, CADRE auto-detects from GITHUB_TOKEN env var.
+       * Supports ${ENV_VAR} syntax in all values.
+       */
+      auth: z
+        .union([
+          // Token-based auth (PAT or gh auth token)
+          z.object({
+            /** Personal access token or `gh auth token` output. */
+            token: z.string().min(1),
+          }),
+          // GitHub App auth (existing)
+          z.object({
+            /** GitHub App ID. */
+            appId: z.string().min(1),
+            /** GitHub App installation ID for the target repository/org. */
+            installationId: z.string().min(1),
+            /**
+             * Path to the PEM-encoded private key file.
+             * Supports ${ENV_VAR} syntax to reference host environment variables.
+             */
+            privateKeyFile: z.string().min(1),
+          }),
+        ])
+        .optional(),
     })
     .optional(),
 
