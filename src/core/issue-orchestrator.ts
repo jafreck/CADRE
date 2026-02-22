@@ -7,9 +7,8 @@ import type {
   ImplementationTask,
   PhaseResult,
 } from '../agents/types.js';
-import type { IssueDetail } from '../github/issues.js';
+import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
-import type { PullRequestInfo } from '../git/pr.js';
 import { CheckpointManager } from './checkpoint.js';
 import { ISSUE_PHASES, type PhaseDefinition } from './phase-registry.js';
 import { IssueProgressWriter } from './progress.js';
@@ -17,8 +16,6 @@ import { AgentLauncher } from './agent-launcher.js';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { CommitManager } from '../git/commit.js';
-import { PullRequestCreator } from '../git/pr.js';
-import { GitHubAPI } from '../github/api.js';
 import { TaskQueue } from '../execution/task-queue.js';
 import { RetryExecutor } from '../execution/retry.js';
 import { TokenTracker } from '../budget/token-tracker.js';
@@ -56,7 +53,7 @@ export class IssueOrchestrator {
     private readonly worktree: WorktreeInfo,
     private readonly checkpoint: CheckpointManager,
     private readonly launcher: AgentLauncher,
-    private readonly githubAPI: GitHubAPI,
+    private readonly platform: PlatformProvider,
     private readonly logger: Logger,
   ) {
     this.progressDir = join(
@@ -708,15 +705,22 @@ export class IssueOrchestrator {
       await this.commitManager.push(true);
 
       // Create PR
-      const prCreator = new PullRequestCreator(this.config, this.logger, this.githubAPI);
       try {
-        const pr = await prCreator.create(
-          this.issue.number,
-          prContent.title || this.issue.title,
-          this.worktree.branch,
-          prContent.body,
-          this.worktree.path,
-        );
+        const prTitle = `${prContent.title || this.issue.title} (#${this.issue.number})`;
+        let prBody = prContent.body;
+
+        // Add issue link if configured
+        if (this.config.pullRequest.linkIssue) {
+          prBody += `\n\n${this.platform.issueLinkSuffix(this.issue.number)}`;
+        }
+
+        const pr = await this.platform.createPullRequest({
+          title: prTitle,
+          body: prBody,
+          head: this.worktree.branch,
+          base: this.config.baseBranch,
+          draft: this.config.pullRequest.draft,
+        });
 
         // Store PR info
         // The fleet orchestrator will collect this

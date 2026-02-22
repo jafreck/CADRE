@@ -4,10 +4,9 @@ import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
 import { FleetCheckpointManager } from './checkpoint.js';
-import { IssueFetcher, type IssueDetail } from '../github/issues.js';
-import { IssueQueryResolver } from '../github/query.js';
-import { GitHubAPI } from '../github/api.js';
-import { GitHubMCPClient } from '../github/mcp-client.js';
+import type { IssueDetail } from '../platform/provider.js';
+import type { PlatformProvider } from '../platform/provider.js';
+import { createPlatformProvider } from '../platform/factory.js';
 import { TokenTracker } from '../budget/token-tracker.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
@@ -20,7 +19,7 @@ import { FleetProgressWriter } from './progress.js';
 export class CadreRuntime {
   private readonly logger: Logger;
   private readonly cadreDir: string;
-  private readonly mcpClient: GitHubMCPClient;
+  private readonly provider: PlatformProvider;
   private isShuttingDown = false;
 
   constructor(private readonly config: CadreConfig) {
@@ -32,25 +31,8 @@ export class CadreRuntime {
       console: true,
     });
 
-    // Build GitHub App auth env vars for the MCP server process
-    const resolveEnvRef = (value: string) =>
-      value.replace(/\$\{(\w+)\}/g, (_, name) => process.env[name] ?? '');
-
-    const appAuth = config.github.auth;
-    const mcpEnv: Record<string, string> = {
-      GITHUB_APP_ID: resolveEnvRef(appAuth.appId),
-      GITHUB_APP_INSTALLATION_ID: resolveEnvRef(appAuth.installationId),
-      GITHUB_APP_PRIVATE_KEY_FILE: resolveEnvRef(appAuth.privateKeyFile),
-    };
-
-    this.mcpClient = new GitHubMCPClient(
-      {
-        command: config.github.mcpServer.command,
-        args: config.github.mcpServer.args,
-        env: mcpEnv,
-      },
-      this.logger,
-    );
+    // Create the platform provider (GitHub or Azure DevOps)
+    this.provider = createPlatformProvider(config, this.logger);
   }
 
   /**
@@ -68,20 +50,14 @@ export class CadreRuntime {
       },
     });
 
-    // 1. Connect to GitHub MCP server
-    await this.mcpClient.connect();
-
-    const githubAPI = new GitHubAPI(
-      this.config.repository,
-      this.logger,
-      this.mcpClient,
-    );
+    // 1. Connect to platform provider
+    await this.provider.connect();
 
     // Verify authentication
-    const authed = await githubAPI.checkAuth();
+    const authed = await this.provider.checkAuth();
     if (!authed) {
       throw new Error(
-        'GitHub MCP server is not authenticated. Check your github.auth configuration (appId, installationId, privateKeyFile).',
+        `${this.provider.name} authentication failed. Check your platform configuration.`,
       );
     }
 
@@ -89,7 +65,7 @@ export class CadreRuntime {
     const issues = await this.resolveIssues();
     if (issues.length === 0) {
       this.logger.warn('No issues to process');
-      await this.mcpClient.disconnect();
+      await this.provider.disconnect();
       return this.emptyResult();
     }
 
@@ -113,14 +89,14 @@ export class CadreRuntime {
       issues,
       worktreeManager,
       launcher,
-      githubAPI,
+      this.provider,
       this.logger,
     );
 
     const result = await fleet.run();
 
-    // 5. Disconnect MCP client
-    await this.mcpClient.disconnect();
+    // 5. Disconnect platform provider
+    await this.provider.disconnect();
 
     // 6. Print summary
     this.printSummary(result);
@@ -251,11 +227,38 @@ export class CadreRuntime {
   }
 
   /**
-   * Resolve issues from config.
+   * Resolve issues from config using the platform provider.
    */
   private async resolveIssues(): Promise<IssueDetail[]> {
-    const resolver = new IssueQueryResolver(this.config, this.logger, this.mcpClient);
-    return resolver.resolve();
+    if ('ids' in this.config.issues) {
+      this.logger.info(`Resolving ${this.config.issues.ids.length} explicit issues`);
+      const issues: IssueDetail[] = [];
+      for (const id of this.config.issues.ids) {
+        try {
+          const issue = await this.provider.getIssue(id);
+          issues.push(issue);
+        } catch (err) {
+          this.logger.error(`Failed to fetch issue #${id}: ${err}`, { issueNumber: id });
+        }
+      }
+      return issues;
+    }
+
+    if ('query' in this.config.issues) {
+      const q = this.config.issues.query;
+      this.logger.info('Resolving issues from query', {
+        data: q as Record<string, unknown>,
+      });
+      return this.provider.listIssues({
+        labels: q.labels,
+        milestone: q.milestone,
+        assignee: q.assignee,
+        state: q.state,
+        limit: q.limit,
+      });
+    }
+
+    return [];
   }
 
   /**
@@ -271,8 +274,8 @@ export class CadreRuntime {
       // Kill all running agent processes
       killAllTrackedProcesses();
 
-      // Disconnect MCP client
-      await this.mcpClient.disconnect();
+      // Disconnect platform provider
+      await this.provider.disconnect();
 
       // Write interrupted status to progress
       const progressWriter = new FleetProgressWriter(this.cadreDir, this.logger);

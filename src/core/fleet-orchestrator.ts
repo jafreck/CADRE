@@ -1,15 +1,14 @@
 import { join } from 'node:path';
 import pLimit from 'p-limit';
 import type { CadreConfig } from '../config/schema.js';
-import type { IssueDetail } from '../github/issues.js';
-import type { PullRequestInfo } from '../git/pr.js';
+import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
+import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from './progress.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
 import { TokenTracker } from '../budget/token-tracker.js';
-import { GitHubAPI } from '../github/api.js';
 import { Logger } from '../logging/logger.js';
 import { getPhaseCount } from './phase-registry.js';
 
@@ -46,7 +45,7 @@ export class FleetOrchestrator {
     private readonly issues: IssueDetail[],
     private readonly worktreeManager: WorktreeManager,
     private readonly launcher: AgentLauncher,
-    private readonly githubAPI: GitHubAPI,
+    private readonly platform: PlatformProvider,
     private readonly logger: Logger,
   ) {
     this.cadreDir = join(config.repoPath, '.cadre');
@@ -147,7 +146,7 @@ export class FleetOrchestrator {
         worktree,
         checkpoint,
         this.launcher,
-        this.githubAPI,
+        this.platform,
         this.logger.child(issue.number, join(this.cadreDir, 'logs')),
       );
 

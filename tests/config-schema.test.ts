@@ -35,11 +35,11 @@ describe('CadreConfigSchema', () => {
     expect(result.copilot.cliCommand).toBe('copilot');
     expect(result.copilot.agentDir).toBe('.github/agents');
     expect(result.copilot.timeout).toBe(300_000);
-    expect(result.github.mcpServer.command).toBe('github-mcp-server');
-    expect(result.github.mcpServer.args).toEqual(['stdio']);
-    expect(result.github.auth.appId).toBe('12345');
-    expect(result.github.auth.installationId).toBe('67890');
-    expect(result.github.auth.privateKeyFile).toBe('/path/to/key.pem');
+    expect(result.github?.mcpServer.command).toBe('github-mcp-server');
+    expect(result.github?.mcpServer.args).toEqual(['stdio']);
+    expect(result.github?.auth.appId).toBe('12345');
+    expect(result.github?.auth.installationId).toBe('67890');
+    expect(result.github?.auth.privateKeyFile).toBe('/path/to/key.pem');
   });
 
   it('should reject invalid projectName', () => {
@@ -50,10 +50,10 @@ describe('CadreConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('should reject invalid repository format', () => {
+  it('should reject empty repository', () => {
     const result = CadreConfigSchema.safeParse({
       ...validConfig,
-      repository: 'not-a-repo',
+      repository: '',
     });
     expect(result.success).toBe(false);
   });
@@ -153,5 +153,57 @@ describe('CadreConfigSchema', () => {
       projectName: '',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('should default platform to github', () => {
+    const result = CadreConfigSchema.parse(validConfig);
+    expect(result.platform).toBe('github');
+  });
+
+  it('should accept azure-devops platform config', () => {
+    const result = CadreConfigSchema.safeParse({
+      projectName: 'test-project',
+      repository: 'my-repo',
+      repoPath: '/tmp/repo',
+      baseBranch: 'main',
+      platform: 'azure-devops',
+      issues: { ids: [42] },
+      azureDevOps: {
+        organization: 'my-org',
+        project: 'my-project',
+        auth: {
+          pat: '${AZURE_DEVOPS_PAT}',
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.platform).toBe('azure-devops');
+      expect(result.data.azureDevOps?.organization).toBe('my-org');
+    }
+  });
+
+  it('should reject invalid platform value', () => {
+    const result = CadreConfigSchema.safeParse({
+      ...validConfig,
+      platform: 'bitbucket',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should allow github config without github section when using azure-devops', () => {
+    const result = CadreConfigSchema.safeParse({
+      projectName: 'test-project',
+      repository: 'my-repo',
+      repoPath: '/tmp/repo',
+      platform: 'azure-devops',
+      issues: { ids: [1] },
+      azureDevOps: {
+        organization: 'org',
+        project: 'proj',
+        auth: { pat: 'token' },
+      },
+    });
+    expect(result.success).toBe(true);
   });
 });

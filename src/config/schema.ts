@@ -4,8 +4,18 @@ export const CadreConfigSchema = z.object({
   /** Human-readable project name, used for directory naming. */
   projectName: z.string().min(1).regex(/^[a-z0-9-]+$/),
 
-  /** GitHub repository in owner/repo format. */
-  repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/),
+  /**
+   * Platform to use for issue tracking and PRs.
+   * Defaults to "github" for backward compatibility.
+   */
+  platform: z.enum(['github', 'azure-devops']).default('github'),
+
+  /**
+   * Repository identifier.
+   * For GitHub: "owner/repo" format.
+   * For Azure DevOps: the repository name (or "project/repo").
+   */
+  repository: z.string().min(1),
 
   /** Path to the local clone of the repository (the main worktree). */
   repoPath: z.string(),
@@ -130,34 +140,62 @@ export const CadreConfigSchema = z.object({
     })
     .default({}),
 
-  /** GitHub MCP server and authentication configuration. */
-  github: z.object({
-    /** MCP server spawn configuration. */
-    mcpServer: z
-      .object({
-        /** Command to launch the GitHub MCP server. */
-        command: z.string(),
-        /** Arguments for the server command. */
-        args: z.array(z.string()).default([]),
-      })
-      .default({
-        command: 'github-mcp-server',
-        args: ['stdio'],
-      }),
+  /**
+   * GitHub MCP server and authentication configuration.
+   * Required when platform is "github".
+   */
+  github: z
+    .object({
+      /** MCP server spawn configuration. */
+      mcpServer: z
+        .object({
+          /** Command to launch the GitHub MCP server. */
+          command: z.string(),
+          /** Arguments for the server command. */
+          args: z.array(z.string()).default([]),
+        })
+        .default({
+          command: 'github-mcp-server',
+          args: ['stdio'],
+        }),
 
-    /** GitHub App authentication credentials. */
-    auth: z.object({
-      /** GitHub App ID. */
-      appId: z.string().min(1),
-      /** GitHub App installation ID for the target repository/org. */
-      installationId: z.string().min(1),
-      /**
-       * Path to the PEM-encoded private key file.
-       * Supports ${ENV_VAR} syntax to reference host environment variables.
-       */
-      privateKeyFile: z.string().min(1),
-    }),
-  }),
+      /** GitHub App authentication credentials. */
+      auth: z.object({
+        /** GitHub App ID. */
+        appId: z.string().min(1),
+        /** GitHub App installation ID for the target repository/org. */
+        installationId: z.string().min(1),
+        /**
+         * Path to the PEM-encoded private key file.
+         * Supports ${ENV_VAR} syntax to reference host environment variables.
+         */
+        privateKeyFile: z.string().min(1),
+      }),
+    })
+    .optional(),
+
+  /**
+   * Azure DevOps configuration.
+   * Required when platform is "azure-devops".
+   */
+  azureDevOps: z
+    .object({
+      /** Azure DevOps organization name. */
+      organization: z.string().min(1),
+      /** Azure DevOps project name. */
+      project: z.string().min(1),
+      /** Repository name within the project (defaults to project name). */
+      repositoryName: z.string().optional(),
+      /** Authentication credentials. */
+      auth: z.object({
+        /**
+         * Personal Access Token.
+         * Supports ${ENV_VAR} syntax to reference host environment variables.
+         */
+        pat: z.string().min(1),
+      }),
+    })
+    .optional(),
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;

@@ -6,7 +6,7 @@ import type {
   AgentContext,
   ImplementationTask,
 } from './types.js';
-import type { IssueDetail } from '../github/issues.js';
+import type { IssueDetail } from '../platform/provider.js';
 import { Logger } from '../logging/logger.js';
 
 /**
