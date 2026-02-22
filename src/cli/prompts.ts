@@ -166,8 +166,10 @@ async function promptCommands(yes: boolean): Promise<CommandAnswers> {
 /**
  * Interactively collect all answers needed to assemble a CadreConfig.
  * When `yes` is true, non-essential prompts are skipped with defaults.
+ * @param yes - skip non-essential prompts and use defaults
+ * @param repoPathOverride - pre-supplied repo path (e.g. from --repo-path flag)
  */
-export async function collectAnswers(yes: boolean): Promise<InitAnswers> {
+export async function collectAnswers(yes: boolean, repoPathOverride?: string): Promise<InitAnswers> {
   const projectName = await input({
     message: 'Project name (lowercase letters, digits, hyphens):',
     validate: validateProjectName,
@@ -190,19 +192,25 @@ export async function collectAnswers(yes: boolean): Promise<InitAnswers> {
       platform === 'github' ? validateGitHubRepository : validateAzureDevOpsRepository,
   });
 
-  const repoPath = await input({
-    message: 'Path to local git repository:',
-    default: process.cwd(),
-    validate: validateRepoPath,
-  });
+  const repoPath = yes
+    ? (repoPathOverride ?? process.cwd())
+    : await input({
+        message: 'Path to local git repository:',
+        default: repoPathOverride ?? process.cwd(),
+        validate: validateRepoPath,
+      });
 
-  const baseBranch = await input({
-    message: 'Base branch:',
-    default: 'main',
-    validate: validateNonEmpty,
-  });
+  const baseBranch = yes
+    ? 'main'
+    : await input({
+        message: 'Base branch:',
+        default: 'main',
+        validate: validateNonEmpty,
+      });
 
-  const issueMode = await promptIssueMode();
+  const issueMode: IssueModeAnswers = yes
+    ? { mode: 'query', state: 'open', limit: 10 }
+    : await promptIssueMode();
 
   let githubAuth: GitHubAuthAnswers | undefined;
   if (platform === 'github' && !yes) {
