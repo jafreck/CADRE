@@ -1,7 +1,7 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { join } from 'node:path';
 import { Logger } from '../logging/logger.js';
-import { exists, ensureDir } from '../util/fs.js';
+import { exists, ensureDir, readFileOrNull, atomicWriteFile } from '../util/fs.js';
 
 export interface WorktreeInfo {
   /** Issue number this worktree is for. */
@@ -86,6 +86,9 @@ export class WorktreeManager {
     await ensureDir(this.worktreeRoot);
     await this.git.raw(['worktree', 'add', worktreePath, branch]);
 
+    // 5. Bootstrap the worktree's .cadre/ directory and gitignore cadre artifacts
+    await this.initCadreDir(worktreePath, issueNumber);
+
     this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
       issueNumber,
       data: { path: worktreePath, branch, baseCommit: baseCommit.trim().slice(0, 8) },
@@ -98,6 +101,30 @@ export class WorktreeManager {
       exists: true,
       baseCommit: baseCommit.trim(),
     };
+  }
+
+  /**
+   * Bootstrap the worktree's `.cadre/` directory and ensure it is gitignored.
+   * This must run once immediately after the worktree is created so that cadre
+   * internal artifacts never get picked up by `git add -A`.
+   */
+  private async initCadreDir(worktreePath: string, issueNumber: number): Promise<void> {
+    const cadreDir = join(worktreePath, '.cadre');
+    await ensureDir(cadreDir);
+
+    // Ensure cadre's tasks scratch dir exists too so agents can write there
+    await ensureDir(join(cadreDir, 'tasks'));
+
+    // Append `.cadre/` to the worktree's .gitignore if not already present
+    const gitignorePath = join(worktreePath, '.gitignore');
+    const existing = (await readFileOrNull(gitignorePath)) ?? '';
+    if (!existing.split('\n').some((line) => line.trim() === '.cadre/')) {
+      const updated = existing.endsWith('\n') || existing === ''
+        ? `${existing}.cadre/\n`
+        : `${existing}\n.cadre/\n`;
+      await atomicWriteFile(gitignorePath, updated);
+      this.logger.debug('Added .cadre/ to worktree .gitignore', { issueNumber });
+    }
   }
 
   /**
