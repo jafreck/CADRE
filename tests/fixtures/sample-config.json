@@ -1,0 +1,61 @@
+{
+  "projectName": "test-project",
+  "repository": "owner/test-project",
+  "repoPath": "/tmp/cadre-test-repo",
+  "baseBranch": "main",
+  "issues": {
+    "ids": [42, 57]
+  },
+  "branchTemplate": "cadre/issue-{issue}",
+  "commits": {
+    "conventionalPrefix": true,
+    "signoff": false,
+    "squashOnPR": true
+  },
+  "pullRequest": {
+    "draft": false,
+    "labels": ["cadre-generated"],
+    "reviewers": [],
+    "autoCreate": true,
+    "linkIssue": true
+  },
+  "options": {
+    "maxParallelIssues": 2,
+    "maxParallelAgents": 2,
+    "maxRetries": 2,
+    "tokenBudget": 100000,
+    "perIssueBudget": 50000,
+    "dryRun": false,
+    "resume": false,
+    "invocationDelayMs": 0,
+    "buildVerification": true,
+    "testVerification": true
+  },
+  "commands": {
+    "install": "npm install",
+    "build": "npm run build",
+    "test": "npm test",
+    "lint": "npm run lint"
+  },
+  "copilot": {
+    "cliCommand": "copilot",
+    "model": "claude-sonnet-4-20250514",
+    "agentDir": ".github/agents",
+    "timeout": 300000
+  },
+  "environment": {
+    "inheritShellPath": true,
+    "extraPath": []
+  },
+  "github": {
+    "mcpServer": {
+      "command": "github-mcp-server",
+      "args": ["stdio"]
+    },
+    "auth": {
+      "appId": "${CADRE_GITHUB_APP_ID}",
+      "installationId": "${CADRE_GITHUB_INSTALLATION_ID}",
+      "privateKeyFile": "${CADRE_GITHUB_PRIVATE_KEY_FILE}"
+    }
+  }
+}

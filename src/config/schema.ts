@@ -1,0 +1,163 @@
+import { z } from 'zod';
+
+export const CadreConfigSchema = z.object({
+  /** Human-readable project name, used for directory naming. */
+  projectName: z.string().min(1).regex(/^[a-z0-9-]+$/),
+
+  /** GitHub repository in owner/repo format. */
+  repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/),
+
+  /** Path to the local clone of the repository (the main worktree). */
+  repoPath: z.string(),
+
+  /** Base branch that worktrees are created from (e.g. "main", "develop"). */
+  baseBranch: z.string().default('main'),
+
+  /** Where to create worktree directories. Defaults to `.cadre/worktrees/`. */
+  worktreeRoot: z.string().optional(),
+
+  /** Issue selection — either explicit IDs or a query. */
+  issues: z.union([
+    z.object({
+      ids: z.array(z.number().int().positive()),
+    }),
+    z.object({
+      query: z.object({
+        labels: z.array(z.string()).optional(),
+        milestone: z.string().optional(),
+        assignee: z.string().optional(),
+        state: z.enum(['open', 'closed', 'all']).default('open'),
+        limit: z.number().int().min(1).max(100).default(10),
+      }),
+    }),
+  ]),
+
+  /** Branch naming template. Supports {issue} and {title} placeholders. */
+  branchTemplate: z.string().default('cadre/issue-{issue}'),
+
+  /** Commit message conventions. */
+  commits: z
+    .object({
+      /** Use conventional commits (feat:, fix:, etc.). */
+      conventional: z.boolean().default(true),
+      /** Sign commits with GPG. */
+      sign: z.boolean().default(false),
+      /** Commit after each completed phase. */
+      commitPerPhase: z.boolean().default(true),
+      /** Squash all phase commits into one before PR. */
+      squashBeforePR: z.boolean().default(false),
+    })
+    .default({}),
+
+  /** Pull request configuration. */
+  pullRequest: z
+    .object({
+      /** Auto-create PR when issue pipeline completes. */
+      autoCreate: z.boolean().default(true),
+      /** Draft PR instead of ready-for-review. */
+      draft: z.boolean().default(true),
+      /** Add labels to the PR. */
+      labels: z.array(z.string()).default(['cadre-generated']),
+      /** Request review from these users. */
+      reviewers: z.array(z.string()).default([]),
+      /** Link PR to the issue (closes #N). */
+      linkIssue: z.boolean().default(true),
+    })
+    .default({}),
+
+  options: z
+    .object({
+      /** Max issues processed in parallel (each in its own worktree). */
+      maxParallelIssues: z.number().int().min(1).max(20).default(3),
+      /** Max agents running in parallel within a single issue pipeline. */
+      maxParallelAgents: z.number().int().min(1).max(10).default(3),
+      /** Max retries per task before marking blocked. */
+      maxRetriesPerTask: z.number().int().min(1).max(5).default(3),
+      /** Total token budget across all issues (optional cap). */
+      tokenBudget: z.number().int().optional(),
+      /** Per-issue token budget (optional cap). */
+      perIssueTokenBudget: z.number().int().optional(),
+      /** Dry run — analyze and plan only, no code changes. */
+      dryRun: z.boolean().default(false),
+      /** Resume from last checkpoint. */
+      resume: z.boolean().default(false),
+      /** Delay between agent invocations in ms (rate limiting). */
+      invocationDelayMs: z.number().int().min(0).default(0),
+      /** Run build command after implementation to verify compilation. */
+      buildVerification: z.boolean().default(true),
+      /** Run test command after implementation to verify tests pass. */
+      testVerification: z.boolean().default(true),
+    })
+    .default({}),
+
+  /** Build and test commands to run inside the worktree. */
+  commands: z
+    .object({
+      /** Install dependencies command (runs once per worktree). */
+      install: z.string().optional(),
+      /** Build/compile command. */
+      build: z.string().optional(),
+      /** Test command. */
+      test: z.string().optional(),
+      /** Lint command. */
+      lint: z.string().optional(),
+    })
+    .default({}),
+
+  copilot: z
+    .object({
+      cliCommand: z.string().default('copilot'),
+      model: z.string().optional(),
+      agentDir: z.string().default('.github/agents'),
+      timeout: z.number().int().default(300_000),
+      costOverrides: z
+        .record(
+          z.string(),
+          z.object({
+            input: z.number().min(0),
+            output: z.number().min(0),
+          }),
+        )
+        .optional(),
+    })
+    .default({}),
+
+  environment: z
+    .object({
+      inheritShellPath: z.boolean().default(true),
+      shell: z.string().optional(),
+      extraPath: z.array(z.string()).default([]),
+    })
+    .default({}),
+
+  /** GitHub MCP server and authentication configuration. */
+  github: z.object({
+    /** MCP server spawn configuration. */
+    mcpServer: z
+      .object({
+        /** Command to launch the GitHub MCP server. */
+        command: z.string(),
+        /** Arguments for the server command. */
+        args: z.array(z.string()).default([]),
+      })
+      .default({
+        command: 'github-mcp-server',
+        args: ['stdio'],
+      }),
+
+    /** GitHub App authentication credentials. */
+    auth: z.object({
+      /** GitHub App ID. */
+      appId: z.string().min(1),
+      /** GitHub App installation ID for the target repository/org. */
+      installationId: z.string().min(1),
+      /**
+       * Path to the PEM-encoded private key file.
+       * Supports ${ENV_VAR} syntax to reference host environment variables.
+       */
+      privateKeyFile: z.string().min(1),
+    }),
+  }),
+});
+
+export type CadreConfig = z.infer<typeof CadreConfigSchema>;

@@ -1,0 +1,72 @@
+{
+  "issueNumber": 42,
+  "projectName": "test-project",
+  "startedAt": "2024-07-01T10:00:00.000Z",
+  "lastCheckpoint": "2024-07-01T10:35:00.000Z",
+  "completedPhases": [1, 2],
+  "currentPhase": 3,
+  "phaseResults": {
+    "1": {
+      "phaseId": 1,
+      "status": "completed",
+      "startedAt": "2024-07-01T10:00:00.000Z",
+      "completedAt": "2024-07-01T10:10:00.000Z",
+      "outputs": ["analysis.md", "scout-report.md"]
+    },
+    "2": {
+      "phaseId": 2,
+      "status": "completed",
+      "startedAt": "2024-07-01T10:10:00.000Z",
+      "completedAt": "2024-07-01T10:20:00.000Z",
+      "outputs": ["implementation-plan.md"]
+    },
+    "3": {
+      "phaseId": 3,
+      "status": "in-progress",
+      "startedAt": "2024-07-01T10:20:00.000Z",
+      "outputs": []
+    }
+  },
+  "tasks": {
+    "task-001": {
+      "taskId": "task-001",
+      "status": "completed",
+      "startedAt": "2024-07-01T10:20:00.000Z",
+      "completedAt": "2024-07-01T10:25:00.000Z",
+      "attempts": 1
+    },
+    "task-002": {
+      "taskId": "task-002",
+      "status": "in-progress",
+      "startedAt": "2024-07-01T10:25:00.000Z",
+      "attempts": 1
+    },
+    "task-003": {
+      "taskId": "task-003",
+      "status": "not-started",
+      "attempts": 0
+    }
+  },
+  "tokenUsage": {
+    "total": 25000,
+    "byAgent": {
+      "issue-analyst": 3000,
+      "codebase-scout": 4000,
+      "implementation-planner": 5000,
+      "code-writer": 8000,
+      "test-writer": 3000,
+      "code-reviewer": 2000
+    },
+    "byPhase": {
+      "1": 7000,
+      "2": 5000,
+      "3": 13000
+    }
+  },
+  "worktree": {
+    "path": "/tmp/cadre-test-repo/.cadre/worktrees/issue-42",
+    "branch": "cadre/issue-42",
+    "baseCommit": "abc123def456"
+  },
+  "resumeCount": 0
+}

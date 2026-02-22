@@ -1,0 +1,32 @@
+{
+  "name": "cadre",
+  "version": "0.1.0",
+  "description": "Coordinated Agent Development Runtime Engine",
+  "type": "module",
+  "bin": {
+    "cadre": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest",
+    "test:e2e": "CADRE_E2E=1 vitest run tests/e2e-*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12",
+    "zod": "^3.23",
+    "commander": "^12",
+    "chalk": "^5",
+    "ora": "^8",
+    "p-limit": "^6",
+    "p-queue": "^8",
+    "date-fns": "^3",
+    "simple-git": "^3.27"
+  },
+  "devDependencies": {
+    "typescript": "^5.5",
+    "vitest": "^2",
+    "@types/node": "^22",
+    "tsx": "^4"
+  }
+}

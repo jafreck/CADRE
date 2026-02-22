@@ -1,0 +1,24 @@
+{
+  "number": 42,
+  "title": "Fix login timeout handling",
+  "body": "## Problem\n\nThe login handler does not respect the configured timeout value. When a user's session takes longer than expected, the system hangs indefinitely instead of timing out.\n\n## Expected Behavior\n\nThe login handler should:\n1. Use the timeout value from the configuration\n2. Return a `408 Request Timeout` if the login takes too long\n3. Log the timeout event for debugging\n\n## Steps to Reproduce\n\n1. Set `LOGIN_TIMEOUT=5000` in config\n2. Simulate a slow authentication backend (>5s response)\n3. Observe that the login request never times out\n\n## Additional Context\n\nThis affects both the REST API and the GraphQL mutation. The timeout logic was removed in PR #35 as part of a refactor.",
+  "labels": ["bug", "priority:high"],
+  "assignees": ["developer-1"],
+  "milestone": "v2.1",
+  "comments": [
+    {
+      "author": "maintainer-1",
+      "body": "Confirmed. The timeout was accidentally removed. We should also add a test for this.",
+      "createdAt": "2024-06-28T14:30:00Z"
+    },
+    {
+      "author": "developer-2",
+      "body": "I think the timeout should be configurable per-route, not just globally.",
+      "createdAt": "2024-06-29T09:15:00Z"
+    }
+  ],
+  "state": "open",
+  "createdAt": "2024-06-28T10:00:00Z",
+  "updatedAt": "2024-06-29T09:15:00Z",
+  "linkedPRs": []
+}

@@ -1,0 +1,265 @@
+import { simpleGit, type SimpleGit } from 'simple-git';
+import { join } from 'node:path';
+import { Logger } from '../logging/logger.js';
+import { exists, ensureDir } from '../util/fs.js';
+
+export interface WorktreeInfo {
+  /** Issue number this worktree is for. */
+  issueNumber: number;
+  /** Absolute path to the worktree directory. */
+  path: string;
+  /** Branch name checked out in this worktree. */
+  branch: string;
+  /** Whether the worktree currently exists on disk. */
+  exists: boolean;
+  /** Base commit SHA the branch was created from. */
+  baseCommit: string;
+}
+
+/**
+ * Manages the lifecycle of git worktrees — one per issue.
+ */
+export class WorktreeManager {
+  private readonly git: SimpleGit;
+
+  constructor(
+    private readonly repoPath: string,
+    private readonly worktreeRoot: string,
+    private readonly baseBranch: string,
+    private readonly branchTemplate: string,
+    private readonly logger: Logger,
+  ) {
+    this.git = simpleGit(repoPath);
+  }
+
+  /**
+   * Create a worktree for an issue.
+   * If the worktree already exists (resume scenario), validate and return info.
+   */
+  async provision(issueNumber: number, issueTitle: string): Promise<WorktreeInfo> {
+    const branch = this.resolveBranchName(issueNumber, issueTitle);
+    const worktreePath = this.getWorktreePath(issueNumber);
+
+    // Check if worktree already exists (resume)
+    if (await exists(worktreePath)) {
+      this.logger.info(`Worktree already exists for issue #${issueNumber}`, {
+        issueNumber,
+        data: { path: worktreePath, branch },
+      });
+
+      const baseCommit = await this.getBaseCommit(worktreePath);
+      return {
+        issueNumber,
+        path: worktreePath,
+        branch,
+        exists: true,
+        baseCommit,
+      };
+    }
+
+    // 1. Ensure base branch is up to date
+    try {
+      await this.git.fetch('origin', this.baseBranch);
+      this.logger.debug(`Fetched origin/${this.baseBranch}`, { issueNumber });
+    } catch (err) {
+      this.logger.warn(`Failed to fetch origin/${this.baseBranch}, continuing with local`, {
+        issueNumber,
+      });
+    }
+
+    // 2. Get the base commit SHA
+    const baseCommit = await this.git.revparse([`origin/${this.baseBranch}`]).catch(async () => {
+      // Fallback to local base branch
+      return this.git.revparse([this.baseBranch]);
+    });
+
+    // 3. Create the branch if it doesn't exist
+    const branchExists = await this.branchExistsLocal(branch);
+    if (!branchExists) {
+      await this.git.branch([branch, baseCommit.trim()]);
+      this.logger.info(`Created branch ${branch} from ${baseCommit.trim().slice(0, 8)}`, {
+        issueNumber,
+      });
+    }
+
+    // 4. Create worktree directory
+    await ensureDir(this.worktreeRoot);
+    await this.git.raw(['worktree', 'add', worktreePath, branch]);
+
+    this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
+      issueNumber,
+      data: { path: worktreePath, branch, baseCommit: baseCommit.trim().slice(0, 8) },
+    });
+
+    return {
+      issueNumber,
+      path: worktreePath,
+      branch,
+      exists: true,
+      baseCommit: baseCommit.trim(),
+    };
+  }
+
+  /**
+   * Remove a worktree after the PR is created.
+   */
+  async remove(issueNumber: number): Promise<void> {
+    const worktreePath = this.getWorktreePath(issueNumber);
+
+    if (!(await exists(worktreePath))) {
+      this.logger.debug(`Worktree for issue #${issueNumber} already removed`, { issueNumber });
+      return;
+    }
+
+    try {
+      await this.git.raw(['worktree', 'remove', worktreePath, '--force']);
+      this.logger.info(`Removed worktree for issue #${issueNumber}`, { issueNumber });
+    } catch (err) {
+      this.logger.error(`Failed to remove worktree for issue #${issueNumber}: ${err}`, {
+        issueNumber,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * List all active CADRE worktrees.
+   */
+  async listActive(): Promise<WorktreeInfo[]> {
+    const output = await this.git.raw(['worktree', 'list', '--porcelain']);
+    const worktrees: WorktreeInfo[] = [];
+    const blocks = output.split('\n\n').filter((b) => b.trim());
+
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+      let path = '';
+      let branch = '';
+
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          path = line.slice('worktree '.length);
+        }
+        if (line.startsWith('branch ')) {
+          branch = line.slice('branch refs/heads/'.length);
+        }
+      }
+
+      // Only include worktrees managed by CADRE
+      if (path && path.startsWith(this.worktreeRoot)) {
+        const issueMatch = path.match(/issue-(\d+)\/?$/);
+        if (issueMatch) {
+          const issueNumber = parseInt(issueMatch[1], 10);
+          const baseCommit = await this.getBaseCommit(path).catch(() => '');
+          worktrees.push({
+            issueNumber,
+            path,
+            branch,
+            exists: true,
+            baseCommit,
+          });
+        }
+      }
+    }
+
+    return worktrees;
+  }
+
+  /**
+   * Check if a worktree for this issue already exists.
+   */
+  async exists(issueNumber: number): Promise<boolean> {
+    const worktreePath = this.getWorktreePath(issueNumber);
+    return exists(worktreePath);
+  }
+
+  /**
+   * Rebase the worktree's branch onto the latest base branch.
+   */
+  async rebase(issueNumber: number): Promise<{ success: boolean; conflicts?: string[] }> {
+    const worktreePath = this.getWorktreePath(issueNumber);
+    const worktreeGit = simpleGit(worktreePath);
+
+    try {
+      // Fetch latest
+      await worktreeGit.fetch('origin', this.baseBranch);
+      // Attempt rebase
+      await worktreeGit.rebase([`origin/${this.baseBranch}`]);
+      this.logger.info(`Rebased worktree for issue #${issueNumber}`, { issueNumber });
+      return { success: true };
+    } catch (err) {
+      // Abort the rebase on conflict
+      try {
+        await worktreeGit.rebase(['--abort']);
+      } catch {
+        // May already be aborted
+      }
+
+      const errorStr = String(err);
+      const conflictMatch = errorStr.match(/CONFLICT.*?: (.+)/g);
+      const conflicts = conflictMatch ?? [errorStr];
+
+      this.logger.warn(`Rebase failed for issue #${issueNumber}`, {
+        issueNumber,
+        data: { conflicts },
+      });
+
+      return { success: false, conflicts };
+    }
+  }
+
+  /**
+   * Resolve the branch name for an issue using branchTemplate.
+   */
+  resolveBranchName(issueNumber: number, issueTitle?: string): string {
+    let branch = this.branchTemplate
+      .replace('{issue}', String(issueNumber))
+      .replace('{title}', issueTitle ?? '');
+
+    // Sanitize: lowercase, replace non-safe chars with hyphens, collapse multiple hyphens
+    branch = branch
+      .toLowerCase()
+      .replace(/[^a-z0-9/\-_]/g, '-')
+      .replace(/-{2,}/g, '-')
+      .replace(/-$/, '')
+      .replace(/^-/, '');
+
+    // Truncate to a reasonable length
+    if (branch.length > 100) {
+      branch = branch.slice(0, 100).replace(/-$/, '');
+    }
+
+    return branch;
+  }
+
+  /**
+   * Get the worktree directory path for an issue.
+   */
+  private getWorktreePath(issueNumber: number): string {
+    return join(this.worktreeRoot, `issue-${issueNumber}`);
+  }
+
+  /**
+   * Check if a branch exists locally.
+   */
+  private async branchExistsLocal(branchName: string): Promise<boolean> {
+    try {
+      const branches = await this.git.branchLocal();
+      return branches.all.includes(branchName);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get the merge-base commit between the worktree HEAD and the base branch.
+   */
+  private async getBaseCommit(worktreePath: string): Promise<string> {
+    try {
+      const worktreeGit = simpleGit(worktreePath);
+      const head = await worktreeGit.revparse(['HEAD']);
+      return head.trim();
+    } catch {
+      return '';
+    }
+  }
+}
