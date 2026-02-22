@@ -1,23 +1,21 @@
-# Test Result: task-001 - Change tokenUsage to `number | null` in core types
+# Test Result: task-001 - Define PhaseExecutor Interface and PhaseContext Type
 
 ## Tests Written
-- `tests/agent-types.test.ts`: 9 new test cases
-  - AgentResult.tokenUsage: should accept null for tokenUsage
-  - AgentResult.tokenUsage: should accept a number for tokenUsage
-  - AgentResult.tokenUsage: should accept zero for tokenUsage
-  - PhaseResult.tokenUsage: should accept null for tokenUsage
-  - PhaseResult.tokenUsage: should accept a number for tokenUsage
-  - PhaseResult.tokenUsage: should accept null with optional fields unset
-  - IssueResult.tokenUsage: should accept null for tokenUsage
-  - IssueResult.tokenUsage: should accept a number for tokenUsage
-  - IssueResult.tokenUsage: should carry tokenUsage from phases
+- `tests/phase-executor.test.ts`: 7 new test cases
+  - PhaseExecutor: should accept an object with phaseId, name, and execute
+  - PhaseExecutor: should allow execute to return a Promise<string>
+  - PhaseExecutor: should allow phaseId to be any positive number
+  - PhaseExecutor: execute should propagate errors from the implementation
+  - PhaseContext: should accept an object with all required dependency fields
+  - PhaseContext: recordTokens should accept agent name and nullable token count
+  - PhaseContext: checkBudget should be callable with no arguments
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/agent-types.test.ts
+- tests/phase-executor.test.ts
 
 ## Coverage Notes
-- The changes are purely type-level; tests verify the runtime shape of `AgentResult`, `PhaseResult`, and `IssueResult` objects with `tokenUsage` set to both `null` and numeric values.
-- `recordTokens` in `issue-orchestrator.ts` still has signature `tokens: number` (not `number | null`), which is a downstream concern noted in the task result as intentionally deferred.
+- `PhaseContext` and `PhaseExecutor` are pure TypeScript types/interfaces with no runtime representation, so tests verify structural conformance by constructing objects that satisfy the types and confirming behavior of their function fields.
+- Deep integration of `PhaseContext` fields (e.g., `contextBuilder`, `launcher`) is tested in higher-level orchestrator tests; this file focuses on the contract itself.

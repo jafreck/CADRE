@@ -1,17 +1,15 @@
-# Task Result: task-001 - Change tokenUsage to `number | null` in core types
+# Task Result: task-001 - Define PhaseExecutor Interface and PhaseContext Type
 
 ## Changes Made
-- `src/agents/types.ts`: Changed `AgentResult.tokenUsage` from `number` to `number | null`
-- `src/agents/types.ts`: Changed `PhaseResult.tokenUsage` from `number` to `number | null`
-- `src/core/issue-orchestrator.ts`: Changed `IssueResult.tokenUsage` from `number` to `number | null`
+- `src/core/phase-executor.ts`: Created new file exporting `PhaseContext` type and `PhaseExecutor` interface
 
 ## Files Modified
-- src/agents/types.ts
-- src/core/issue-orchestrator.ts
-
-## Files Created
 - (none)
 
+## Files Created
+- src/core/phase-executor.ts
+
 ## Notes
-- These are purely type-level changes; no runtime logic was altered.
-- Downstream callers that pass `tokenUsage` (e.g., `recordTokens`) may produce TypeScript errors until updated in subsequent tasks.
+- `PhaseContext` captures all dependencies accessed via `this` in the five phase methods of `IssueOrchestrator`: issue, worktree, config, progressDir, contextBuilder, launcher, resultParser, checkpoint, commitManager, retryExecutor, tokenTracker, progressWriter, platform, recordTokens, checkBudget, logger
+- `PhaseExecutor` interface has `phaseId: number`, `name: string`, and `execute(ctx: PhaseContext): Promise<string>` as required
+- File compiles cleanly with `npm run build` (exit code 0)
