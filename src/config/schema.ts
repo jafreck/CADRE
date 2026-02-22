@@ -117,7 +117,7 @@ export const CadreConfigSchema = z.object({
   copilot: z
     .object({
       cliCommand: z.string().default('copilot'),
-      model: z.string().optional(),
+      model: z.string().default('claude-sonnet-4.6'),
       agentDir: z.string().default('.github/agents'),
       timeout: z.number().int().default(300_000),
       costOverrides: z
