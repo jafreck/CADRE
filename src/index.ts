@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { runInit } from './cli/init.js';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
 
@@ -101,6 +102,22 @@ program
       } else {
         await runtime.listWorktrees();
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(chalk.red(`Error: ${msg}`));
+      process.exit(1);
+    }
+  });
+
+// ─── init ─────────────────────────────────────────────
+program
+  .command('init')
+  .description('Initialize CADRE in the current repository')
+  .option('-y, --yes', 'Accept all defaults without prompting')
+  .option('--repo-path <path>', 'Path to git repository root (overrides cwd)')
+  .action(async (opts) => {
+    try {
+      await runInit({ yes: !!opts.yes, repoPath: opts.repoPath });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));
