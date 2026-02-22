@@ -1,15 +1,16 @@
-# Task Result: task-006 - Tests for ReportWriter
+# Task Result: task-006 - Implement Disk Space Validator
 
 ## Changes Made
-- `tests/report-writer.test.ts`: Already exists and is complete with full test coverage
+- `src/validation/disk-validator.ts`: Created disk space validator that estimates required space as `repoSize × maxParallelIssues`, checks available space via `df -k`, and returns pass/warn/fail accordingly.
 
 ## Files Modified
 - (none)
 
 ## Files Created
-- (none)
+- src/validation/disk-validator.ts
 
 ## Notes
-- All 19 tests pass with `npx vitest run`
-- Tests cover `buildReport()`, `write()`, `listReports()`, and `readReport()` per acceptance criteria
-- The implementation in `src/reporting/report-writer.ts` already satisfies all test assertions
+- Uses `exec` from `src/util/process.ts` to run `du -sk` (repo size) and `df -k` (available space).
+- Uses `statOrNull` from `src/util/fs.ts` to verify `repoPath` exists before running `du`.
+- Falls back to `config.repoPath` for `df` if `worktreeRoot` is not accessible.
+- Returns `passed: false` when available < 1× estimate; warning when available < 2× estimate; `passed: true` with no warning when available ≥ 2× estimate.

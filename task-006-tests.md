@@ -1,39 +1,32 @@
-# Test Result: task-006 - Tests for ReportWriter
+# Test Result: task-006 - Implement Disk Space Validator
 
 ## Tests Written
-- `tests/report-writer.test.ts`: 19 test cases (already existed and complete)
-  - **buildReport** (9 tests):
-    - should return a RunReport with correct metadata
-    - should map FleetResult.issues to RunIssueSummary array
-    - should map a failed issue with error field
-    - should produce one RunPhaseSummary per ISSUE_PHASES entry
-    - should default missing byPhase entries to 0 tokens
-    - should handle result with empty byPhase
-    - should populate totals correctly
-    - should not include agentInvocations or retries fields
-    - should set prsCreated count from prsCreated array length
-  - **write** (3 tests):
-    - should call ensureDir and atomicWriteJSON with correct paths
-    - should use ISO timestamp from report.startTime in the filename
-    - should return the full path of the written file
-  - **listReports (static)** (5 tests):
-    - should return sorted paths of run-report-*.json files
-    - should return empty array when reports directory does not exist
-    - should exclude non-run-report files
-    - should return empty array when no run-report files exist
-    - should include the reports subdirectory in each returned path
-  - **readReport (static)** (2 tests):
-    - should return parsed RunReport from file
-    - should propagate errors from readJSON
+- `tests/disk-validator.test.ts`: 19 test cases
+  - should expose the name "disk"
+  - when repoPath does not exist: should return passed:false with an error
+  - when repoPath does not exist: should not call exec when repoPath is absent
+  - when du -sk fails: should return passed:false with an error
+  - when du output is unparseable: should return passed:false when du stdout has no numeric first field
+  - when du output is unparseable: should return passed:false when du reports zero size
+  - when df -k fails on worktreeRoot and repoPath: should return passed:false with an error
+  - when df -k fails on worktreeRoot but succeeds on repoPath fallback: should return passed:true using the fallback df result when space is sufficient
+  - when df output has unparseable available field: should return passed:false
+  - disk space thresholds: should return passed:false when available < 1× estimate
+  - disk space thresholds: should return passed:true with warning when available is between 1× and 2× estimate
+  - disk space thresholds: should return passed:true with no warnings when available >= 2× estimate
+  - disk space thresholds: should return passed:true with warning at exactly 2× estimate minus 1
+  - maxParallelIssues default: should default maxParallelIssues to 3 when not configured
+  - maxParallelIssues default: should use configured maxParallelIssues when set
+  - df target path: should call df on worktreeRoot when configured
+  - df target path: should call df on default worktreeRoot path when worktreeRoot is not configured
+  - df target path: should call du on repoPath
+  - df target path: should call statOrNull on repoPath
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- (none)
+- tests/disk-validator.test.ts
 
 ## Coverage Notes
-- All 19 tests pass with `npx vitest run tests/report-writer.test.ts`
-- fs/promises and src/util/fs.js are fully mocked so no real disk I/O occurs
-- The `write()` tests verify path construction and delegation to `atomicWriteJSON` rather than real file creation; actual filename timestamp sanitization (`:` → `-`) is asserted via `not.toContain(':')`
-- `buildReport()` assertions cover `runId` (UUID format), `totalTokens`, `totals.failures`, and `issues` array length per acceptance criteria
+- The `formatKb` helper (KB/MB/GB formatting) is exercised indirectly through error/warning message content checks but not tested in isolation, since it is a private unexported function.

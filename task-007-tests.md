@@ -1,29 +1,30 @@
-# Test Result: task-007 - Tests for fleet-level budget enforcement
+# Test Result: task-007 - Implement PreRunValidationSuite
 
 ## Tests Written
-- `tests/fleet-orchestrator.test.ts`: 13 test cases (pre-existing, all passing)
-  - constructor: should instantiate without throwing
-  - run() - basic flow: should return a FleetResult with success when all issues succeed
-  - run() - basic flow: should include totalDuration in the result
-  - run() - basic flow: should process all issues in the fleet
-  - fleetBudgetExceeded flag: should skip subsequent issues when fleet budget is exceeded by a prior issue
-  - fleetBudgetExceeded flag: should report budget-exceeded issues as failures in the fleet result
-  - pre-flight budget estimation: should skip issue when estimated tokens would exceed remaining budget
-  - pre-flight budget estimation: should warn when pre-flight estimation causes a skip
-  - pre-flight budget estimation: should allow issue to proceed when estimated tokens are within remaining budget
-  - pre-flight budget estimation: should not apply pre-flight check when tokenBudget is not configured
-  - run() with resume option: should skip already-completed issues when resume is enabled
-  - aggregateResults: should set success=false when any issue fails
-  - aggregateResults: should collect PRs from successful issues
+- `tests/validation-suite.test.ts`: 17 new test cases
+  - should return true when all validators pass with no warnings
+  - should return true when all validators pass with warnings
+  - should return false when any validator fails
+  - should return false when all validators fail
+  - should return true with an empty validators list
+  - should return false when a validator promise rejects
+  - should print ✅ for a passing validator with no warnings
+  - should print ⚠️ for a passing validator with warnings
+  - should print ❌ for a failing validator
+  - should print error messages indented below the validator line
+  - should print warning messages indented below the validator line
+  - should print ❌ (unknown validator) when a validator promise rejects
+  - should print the rejection reason for a rejected validator
+  - should print output for all validators
+  - should call validate on all validators
+  - should pass config to each validator
+  - should still report passing validators even when one fails
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- (none)
+- tests/validation-suite.test.ts
 
 ## Coverage Notes
-- The test file was already fully implemented by a prior code-writer pass (task-007-result.md confirms all 13 tests passing).
-- Covers: constructor, basic run flow, fleet budget cutoff (post-issue), pre-flight budget estimation (skip + warn + allow + no-budget), resume/skip-completed, and aggregateResults (failure propagation, PR collection).
-- Parallel issue processing is not tested since `maxParallelIssues` is set to 1 in helpers; concurrent behaviour would require more complex async mocking.
-- External dependencies (FleetCheckpointManager, IssueOrchestrator, WorktreeManager, FleetProgressWriter) are fully mocked — no filesystem or network side effects.
+- Concurrency is validated indirectly by confirming all validators are called and their outputs are all printed; true parallel scheduling is inherent to `Promise.allSettled` and does not require timing-based assertions.

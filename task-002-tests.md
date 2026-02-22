@@ -1,38 +1,29 @@
-# Test Result: task-002 - Create ReportWriter
+# Test Result: task-002 - Implement Git Validator
 
 ## Tests Written
-- `tests/report-writer.test.ts`: 19 new test cases
-  - **buildReport** (9 tests)
-    - should return a RunReport with correct metadata
-    - should map FleetResult.issues to RunIssueSummary array
-    - should map a failed issue with error field
-    - should produce one RunPhaseSummary per ISSUE_PHASES entry
-    - should default missing byPhase entries to 0 tokens
-    - should handle result without byPhase (undefined)
-    - should populate totals correctly
-    - should set agentInvocations and retries to 0
-    - should set prsCreated count from prsCreated array length
-  - **write** (3 tests)
-    - should call ensureDir and atomicWriteJSON with correct paths
-    - should use ISO timestamp from report.startTime in the filename
-    - should return the full path of the written file
-  - **listReports (static)** (5 tests)
-    - should return sorted paths of run-report-*.json files
-    - should return empty array when reports directory does not exist
-    - should exclude non-run-report files
-    - should return empty array when no run-report files exist
-    - should include the reports subdirectory in each returned path
-  - **readReport (static)** (2 tests)
-    - should return parsed RunReport from file
-    - should propagate errors from readJSON
+
+- `tests/git-validator.test.ts`: 11 test cases
+  - should expose the name "git"
+  - should return passed:false immediately (when .git absent)
+  - should not call exec when .git is absent
+  - should return passed:false when baseBranch does not exist locally
+  - should return passed:true with no warnings when repo is clean and remote reachable
+  - should return passed:true with warning when there are uncommitted changes
+  - should return passed:true with warning when remote is unreachable
+  - should return passed:true with warning when remote check times out
+  - should include both uncommitted-changes and unreachable warnings together
+  - should call rev-parse with the configured baseBranch
+  - should check existence of .git inside repoPath
+
+- `tests/agent-backend-validator.test.ts`: 8 test cases (already existed, kept unchanged)
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/report-writer.test.ts
+- tests/git-validator.test.ts
 
 ## Coverage Notes
-- `atomicWriteJSON` and `ensureDir` from `src/util/fs.ts` are mocked; actual file I/O is not exercised
-- `readdir` from `node:fs/promises` is mocked for `listReports` tests
-- Phase cost estimates are verified to be non-negative but not exact values, since they depend on `CostEstimator` internals
+- All acceptance criteria from task-task-002.md are covered.
+- `exec` and `exists` are mocked via `vi.mock` to keep tests deterministic.
+- The timed-out branch (`lsRemote.timedOut === true`) is tested via a `timedOutResult` fixture.

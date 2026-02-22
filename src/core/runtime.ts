@@ -12,6 +12,14 @@ import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { killAllTrackedProcesses } from '../util/process.js';
 import { FleetProgressWriter } from './progress.js';
+import {
+  PreRunValidationSuite,
+  gitValidator,
+  agentBackendValidator,
+  platformValidator,
+  commandValidator,
+  diskValidator,
+} from '../validation/index.js';
 import { ReportWriter } from '../reporting/report-writer.js';
 
 /**
@@ -37,9 +45,31 @@ export class CadreRuntime {
   }
 
   /**
+   * Run pre-flight validation checks and return true if all pass.
+   */
+  async validate(): Promise<boolean> {
+    const suite = new PreRunValidationSuite([
+      gitValidator,
+      agentBackendValidator,
+      platformValidator,
+      commandValidator,
+      diskValidator,
+    ]);
+    return suite.run(this.config);
+  }
+
+  /**
    * Run the full CADRE pipeline.
    */
   async run(): Promise<FleetResult> {
+    // Run validation unless explicitly skipped
+    if (!this.config.options.skipValidation) {
+      const passed = await this.validate();
+      if (!passed) {
+        throw new Error('Pre-run validation failed. Fix the errors above or use --skip-validation to bypass.');
+      }
+    }
+
     // Set up graceful shutdown
     this.setupShutdownHandlers();
 

@@ -1,21 +1,22 @@
-# Test Result: task-003 - Integrate ReportWriter into FleetOrchestrator
+# Test Result: task-003 - Implement Agent Backend Validator
 
 ## Tests Written
-- `tests/fleet-orchestrator.test.ts`: 6 new test cases
-  - should call ReportWriter.buildReport after aggregating results
-  - should call ReportWriter.write with the built report
-  - should log the report path via logger.info after writing
-  - should log a warning and not throw when report writing fails
-  - should still return a valid FleetResult when report writing throws
-  - should pass fleetResult, issues, and startTime to buildReport
+- `tests/agent-backend-validator.test.ts`: 8 new test cases
+  - should expose the name "agent-backend-validator"
+  - should return passed:true when CLI is found and agentDir exists
+  - should return passed:false when CLI command is not on PATH
+  - should return passed:false when agentDir does not exist
+  - should return passed:false with two errors when both CLI missing and agentDir absent
+  - should call which with the configured cliCommand
+  - should check existence of the configured agentDir
+  - should always return an empty warnings array
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- `tests/fleet-orchestrator.test.ts`
+- tests/agent-backend-validator.test.ts
 
 ## Coverage Notes
-- All heavy dependencies (WorktreeManager, IssueOrchestrator, CheckpointManager, FleetProgressWriter, TokenTracker, CostEstimator, ReportWriter, p-limit, phase-registry) are mocked at the module level so tests remain fast and isolated.
-- The non-fatal error path (write() throws → logger.warn, run still returns FleetResult) is explicitly covered.
-- The happy path verifies that buildReport receives the correct fleetResult, issues array, and a numeric startTime.
+- `exec` and `exists` are mocked via `vi.mock` so tests are fully deterministic and require no real filesystem or PATH.
+- The validator does not produce warnings currently, so warning-path coverage is limited to verifying the empty array is always present.

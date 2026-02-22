@@ -1,15 +1,15 @@
-# Task Result: task-005 - Add `cadre report` CLI Command
+# Task Result: task-005 - Implement Command Validator
 
 ## Changes Made
-- `src/index.ts`: Added `cadre report` command with `--format <format>` and `--history` options, following the same pattern as `status` and `reset`. The action handler loads config, creates a `CadreRuntime`, and calls `runtime.report({ format: opts.format, history: opts.history })`.
+- `src/validation/command-validator.ts`: Created new validator that checks each configured command's executable is on PATH using `which` via `exec` from `src/util/process.ts`
 
 ## Files Modified
-- src/index.ts
-
-## Files Created
 - (none)
 
+## Files Created
+- src/validation/command-validator.ts
+
 ## Notes
-- Default format is `'human'`; passing `--format json` sets it to `'json'`
-- `--history` is a boolean flag (defaults to `false` when omitted)
-- File compiles cleanly with `npm run build`
+- `build` and `test` commands are treated as required (checked if configured); `install` and `lint` are optional and skipped if not set
+- Extracts the first whitespace-delimited token from the command string as the executable name
+- Returns `passed: true` with no errors when all configured executables are found

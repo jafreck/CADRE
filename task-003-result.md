@@ -1,15 +1,16 @@
-# Task Result: task-003 - Integrate ReportWriter into FleetOrchestrator
+# Task Result: task-003 - Implement Agent Backend Validator
 
 ## Changes Made
-- `src/core/fleet-orchestrator.ts`: Added imports for `CostEstimator` and `ReportWriter`; added report writing block in `run()` after `aggregateResults()` that instantiates `ReportWriter`, builds and writes the report, logs the path via `this.logger.info`, and catches/logs any errors as warnings without aborting the run.
+- `src/validation/agent-backend-validator.ts`: Created new validator that checks CLI command availability via `which` and verifies the `agentDir` directory exists.
 
 ## Files Modified
-- src/core/fleet-orchestrator.ts
-
-## Files Created
 - (none)
 
+## Files Created
+- src/validation/agent-backend-validator.ts
+
 ## Notes
-- `ReportWriter.buildReport` receives `fleetResult`, `this.issues`, and `startTime` (captured at the top of `run()`).
-- Errors during report writing are caught and logged as warnings (non-fatal).
-- Build confirmed clean with `npm run build`.
+- Uses `exec` from `src/util/process.ts` to run `which <cliCommand>` and checks exit code.
+- Uses `exists` from `src/util/fs.ts` to check if `agentDir` is present on disk.
+- Returns `passed: false` with descriptive error messages when either check fails.
+- Returns `passed: true` (with empty warnings array) when both checks pass.

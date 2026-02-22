@@ -1,15 +1,16 @@
-# Task Result: task-007 - Tests for fleet-level budget enforcement
+# Task Result: task-007 - Implement PreRunValidationSuite
 
 ## Changes Made
-- `tests/fleet-orchestrator.test.ts`: Test file already present with full coverage
+- `src/validation/suite.ts`: Created `PreRunValidationSuite` class with a `run(config): Promise<boolean>` method
 
 ## Files Modified
 - (none)
 
 ## Files Created
-- (none)
+- src/validation/suite.ts
 
 ## Notes
-- All 13 tests in `tests/fleet-orchestrator.test.ts` pass with `npx vitest run`.
-- Test file covers: constructor, basic run flow, fleet budget cutoff, pre-flight estimation skip, resume option, and aggregateResults.
-- Tests are self-contained with all external dependencies mocked (FleetCheckpointManager, IssueOrchestrator, WorktreeManager, etc.).
+- Runs all validators concurrently via `Promise.allSettled`
+- Prints ✅ for pass with no warnings, ⚠️ for pass with warnings, ❌ for failures
+- Prints each error/warning message indented below its validator line
+- Returns `false` if any validator returned `passed: false`; `true` otherwise
