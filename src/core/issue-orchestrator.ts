@@ -23,6 +23,13 @@ import { Logger } from '../logging/logger.js';
 import { atomicWriteJSON, ensureDir, exists, listFilesRecursive } from '../util/fs.js';
 import { execShell } from '../util/process.js';
 
+export class BudgetExceededError extends Error {
+  constructor() {
+    super('Per-issue token budget exceeded');
+    this.name = 'BudgetExceededError';
+  }
+}
+
 export interface IssueResult {
   issueNumber: number;
   issueTitle: string;
@@ -32,6 +39,7 @@ export interface IssueResult {
   totalDuration: number;
   tokenUsage: number;
   error?: string;
+  budgetExceeded?: boolean;
 }
 
 /**
@@ -46,6 +54,7 @@ export class IssueOrchestrator {
   private readonly progressWriter: IssueProgressWriter;
   private readonly tokenTracker: TokenTracker;
   private readonly phases: PhaseResult[] = [];
+  private budgetExceeded = false;
 
   constructor(
     private readonly config: CadreConfig,
@@ -118,11 +127,29 @@ export class IssueOrchestrator {
         break;
       }
 
-      const result = await this.executePhase(phase);
-      this.phases.push(result);
+      let phaseResult: PhaseResult;
+      try {
+        phaseResult = await this.executePhase(phase);
+      } catch (err) {
+        if (err instanceof BudgetExceededError) {
+          const cpState = this.checkpoint.getState();
+          cpState.budgetExceeded = true;
+          // recordTokenUsage always calls save(); this is how we persist budgetExceeded.
+          await this.checkpoint.recordTokenUsage('__budget__', cpState.currentPhase, 0);
+          this.logger.warn(
+            `Issue #${this.issue.number} exceeded per-issue token budget. ` +
+            `Increase tokenBudget in cadre.config.json and run with --resume to continue.`,
+            { issueNumber: this.issue.number },
+          );
+          await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
+          return this.buildResult(false, 'Per-issue token budget exceeded', startTime, true);
+        }
+        throw err;
+      }
+      this.phases.push(phaseResult);
 
-      if (result.success) {
-        await this.checkpoint.completePhase(phase.id, result.outputPath ?? '');
+      if (phaseResult.success) {
+        await this.checkpoint.completePhase(phase.id, phaseResult.outputPath ?? '');
 
         // Commit after phase if configured
         if (this.config.commits.commitPerPhase) {
@@ -136,7 +163,7 @@ export class IssueOrchestrator {
           phase: phase.id,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${phase.id} failed`);
-        return this.buildResult(false, result.error, startTime);
+        return this.buildResult(false, phaseResult.error, startTime);
       }
     }
 
@@ -190,6 +217,7 @@ export class IssueOrchestrator {
         outputPath,
       };
     } catch (err) {
+      if (err instanceof BudgetExceededError) throw err;
       const duration = Date.now() - phaseStart;
       const error = String(err);
       await this.progressWriter.appendEvent(`Phase ${phase.id} failed: ${error}`);
@@ -379,6 +407,7 @@ export class IssueOrchestrator {
 
     const retryResult = await this.retryExecutor.execute({
       fn: async (attempt) => {
+        this.checkBudget();
         // 1. Write task plan slice
         const taskPlanPath = join(this.progressDir, `task-${task.id}.md`);
         const taskPlanContent = this.buildTaskPlanSlice(task);
@@ -407,6 +436,7 @@ export class IssueOrchestrator {
         );
 
         this.recordTokens('code-writer', writerResult.tokenUsage);
+        this.checkBudget();
 
         if (!writerResult.success) {
           throw new Error(`Code writer failed: ${writerResult.error}`);
@@ -436,6 +466,7 @@ export class IssueOrchestrator {
         );
 
         this.recordTokens('test-writer', testResult.tokenUsage);
+        this.checkBudget();
 
         // 4. Launch code-reviewer
         const diffPath = join(this.progressDir, `diff-${task.id}.patch`);
@@ -464,6 +495,7 @@ export class IssueOrchestrator {
         );
 
         this.recordTokens('code-reviewer', reviewResult.tokenUsage);
+        this.checkBudget();
 
         // 5. Check review verdict
         if (reviewResult.success) {
@@ -495,6 +527,7 @@ export class IssueOrchestrator {
               );
 
               this.recordTokens('fix-surgeon', fixResult.tokenUsage);
+              this.checkBudget();
 
               if (!fixResult.success) {
                 throw new Error(`Fix surgeon failed: ${fixResult.error}`);
@@ -508,6 +541,8 @@ export class IssueOrchestrator {
       maxAttempts: maxRetries,
       description: `Task ${task.id}: ${task.name}`,
     });
+
+    this.checkBudget();
 
     if (retryResult.success) {
       queue.complete(task.id);
@@ -650,6 +685,7 @@ export class IssueOrchestrator {
     );
 
     this.recordTokens('fix-surgeon', fixResult.tokenUsage);
+    this.checkBudget();
   }
 
   // ── Phase 5: PR Composition ──
@@ -747,11 +783,13 @@ export class IssueOrchestrator {
   ): Promise<AgentResult> {
     const result = await this.retryExecutor.execute<AgentResult>({
       fn: async () => {
+        this.checkBudget();
         const agentResult = await this.launcher.launchAgent(
           invocation as AgentInvocation,
           this.worktree.path,
         );
         this.recordTokens(agentName, agentResult.tokenUsage);
+        this.checkBudget();
         if (!agentResult.success) {
           throw new Error(agentResult.error ?? `Agent ${agentName} failed`);
         }
@@ -760,6 +798,8 @@ export class IssueOrchestrator {
       maxAttempts: this.config.options.maxRetriesPerTask,
       description: agentName,
     });
+
+    this.checkBudget();
 
     if (!result.success || !result.result) {
       return {
@@ -794,6 +834,16 @@ export class IssueOrchestrator {
         tokens,
       );
     }
+    if (
+      !this.budgetExceeded &&
+      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'exceeded'
+    ) {
+      this.budgetExceeded = true;
+    }
+  }
+
+  private checkBudget(): void {
+    if (this.budgetExceeded) throw new BudgetExceededError();
   }
 
   private async commitPhase(phase: PhaseDefinition): Promise<void> {
@@ -853,7 +903,7 @@ export class IssueOrchestrator {
     ].join('\n');
   }
 
-  private buildResult(success: boolean, error?: string, startTime?: number): IssueResult {
+  private buildResult(success: boolean, error?: string, startTime?: number, budgetExceeded?: boolean): IssueResult {
     return {
       issueNumber: this.issue.number,
       issueTitle: this.issue.title,
@@ -862,6 +912,7 @@ export class IssueOrchestrator {
       totalDuration: startTime ? Date.now() - startTime : 0,
       tokenUsage: this.tokenTracker.getTotal(),
       error,
+      budgetExceeded,
     };
   }
 }
