@@ -61,7 +61,7 @@
       },
       {
         "type": "slack",
-        "url": "${SLACK_WEBHOOK_URL}",
+        "webhookUrl": "${SLACK_WEBHOOK_URL}",
         "channel": "#cadre-notifications",
         "events": ["fleet.completed", "issue.failed"]
       },
