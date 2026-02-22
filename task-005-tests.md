@@ -1,28 +1,35 @@
-# Test Result: task-005 - Enforce fleet budget cancellation in `FleetOrchestrator`
+# Test Result: task-005 - Add `cadre report` CLI Command
 
 ## Tests Written
-- `tests/fleet-orchestrator.test.ts`: 13 new test cases
-  - constructor: should instantiate without throwing
-  - run() - basic flow: should return a FleetResult with success when all issues succeed
-  - run() - basic flow: should include totalDuration in the result
-  - run() - basic flow: should process all issues in the fleet
-  - fleetBudgetExceeded flag: should skip subsequent issues when fleet budget is exceeded by a prior issue
-  - fleetBudgetExceeded flag: should report budget-exceeded issues as failures in the fleet result
-  - pre-flight budget estimation: should skip issue when estimated tokens would exceed remaining budget
-  - pre-flight budget estimation: should warn when pre-flight estimation causes a skip
-  - pre-flight budget estimation: should allow issue to proceed when estimated tokens are within remaining budget
-  - pre-flight budget estimation: should not apply pre-flight check when tokenBudget is not configured
-  - run() with resume option: should skip already-completed issues when resume is enabled
-  - aggregateResults: should set success=false when any issue fails
-  - aggregateResults: should collect PRs from successful issues
-
-## Test Files Created
-- `tests/fleet-orchestrator.test.ts`
+- `tests/cli-report.test.ts`: 13 new test cases
+  - **option defaults (2)**
+    - should call runtime.report with format "human" by default
+    - should call runtime.report with history undefined/falsy by default
+  - **--format option (3)**
+    - should pass format "json" to runtime.report when --format json is given
+    - should pass format "human" to runtime.report when --format human is given
+    - should accept short flag -f for format
+  - **--history flag (2)**
+    - should pass history: true to runtime.report when --history is given
+    - should allow --history combined with --format json
+  - **config loading (3)**
+    - should load config from cadre.config.json by default
+    - should load config from custom path when -c is given
+    - should construct CadreRuntime with the loaded config
+  - **error handling (3)**
+    - should log error and exit with code 1 when loadConfig throws
+    - should log error and exit with code 1 when runtime.report throws
+    - should handle non-Error throws and stringify them
 
 ## Test Files Modified
 - (none)
 
+## Test Files Created
+- `tests/cli-report.test.ts`
+
 ## Coverage Notes
-- `FleetCheckpointManager`, `FleetProgressWriter`, `IssueOrchestrator`, and `WorktreeManager` are all mocked via `vi.mock()` since they depend on filesystem I/O and external processes.
-- The `fleetBudgetExceeded` flag is tested indirectly through `run()` since `processIssue` is private; a budget of 4999 tokens against the 5000 returned by the mocked IssueOrchestrator triggers the flag for subsequent issues.
-- Direct mutation of the private flag cannot be tested; tests rely on the budget enforcement path through `TokenTracker.checkFleetBudget`.
+- Tests mock `loadConfig`, `applyOverrides`, and `CadreRuntime` to isolate CLI argument parsing from business logic.
+- The `CadreRuntime.report()` method's internal behavior is already comprehensively covered by `tests/runtime.test.ts` (19 tests); these tests focus exclusively on the CLI layer.
+- Each test uses `vi.resetModules()` + dynamic `import('../src/index.js')` to load a fresh Commander program per invocation, allowing `process.argv` to be set independently.
+- `process.exit` is mocked to prevent tests from terminating the process on error paths.
+- All 13 tests pass with `npx vitest run tests/cli-report.test.ts`.

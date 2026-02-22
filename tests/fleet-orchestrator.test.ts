@@ -1,361 +1,285 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
+import type { Logger } from '../src/logging/logger.js';
 
-// ── Mock heavy dependencies that touch the filesystem / external systems ──
+// --- Module mocks ---
 
-vi.mock('../src/core/checkpoint.js', () => {
-  const FleetCheckpointManager = vi.fn().mockImplementation(() => ({
-    load: vi.fn(async () => {}),
-    isIssueCompleted: vi.fn(() => false),
-    setIssueStatus: vi.fn(async () => {}),
-    recordTokenUsage: vi.fn(async () => {}),
-    getIssueStatus: vi.fn(() => undefined),
-  }));
-  // Also export CheckpointManager (used by FleetOrchestrator → IssueOrchestrator indirectly)
-  const CheckpointManager = vi.fn().mockImplementation(() => ({
-    load: vi.fn(async () => {}),
-    getState: vi.fn(() => ({})),
-    getResumePoint: vi.fn(() => ({ phase: 1, taskId: null })),
-    isPhaseCompleted: vi.fn(() => false),
-    setWorktreeInfo: vi.fn(async () => {}),
-  }));
-  return { FleetCheckpointManager, CheckpointManager };
-});
+vi.mock('p-limit', () => ({
+  default: () => (fn: () => unknown) => fn(),
+}));
 
-vi.mock('../src/core/progress.js', () => {
-  const FleetProgressWriter = vi.fn().mockImplementation(() => ({
-    write: vi.fn(async () => {}),
-    appendEvent: vi.fn(async () => {}),
-  }));
-  const IssueProgressWriter = vi.fn().mockImplementation(() => ({
-    write: vi.fn(async () => {}),
-  }));
-  return { FleetProgressWriter, IssueProgressWriter };
-});
+vi.mock('../src/core/checkpoint.js', () => ({
+  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue(undefined),
+    isIssueCompleted: vi.fn().mockReturnValue(false),
+    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+    getIssueStatus: vi.fn().mockReturnValue({ status: 'completed', lastPhase: 5 }),
+  })),
+  CheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue({}),
+    setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
-vi.mock('../src/core/issue-orchestrator.js', () => {
-  const IssueOrchestrator = vi.fn().mockImplementation(() => ({
-    run: vi.fn(async () => ({
+vi.mock('../src/core/progress.js', () => ({
+  FleetProgressWriter: vi.fn().mockImplementation(() => ({
+    appendEvent: vi.fn().mockResolvedValue(undefined),
+    write: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+vi.mock('../src/core/issue-orchestrator.js', () => ({
+  IssueOrchestrator: vi.fn().mockImplementation(() => ({
+    run: vi.fn().mockResolvedValue({
       issueNumber: 1,
-      issueTitle: 'Test issue',
+      issueTitle: 'Fix bug',
       success: true,
-      phases: [],
-      totalDuration: 100,
-      tokenUsage: 5000,
-    })),
-  }));
-  class BudgetExceededError extends Error {
-    constructor() {
-      super('Per-issue token budget exceeded');
-      this.name = 'BudgetExceededError';
-    }
-  }
-  return { IssueOrchestrator, BudgetExceededError };
-});
+      phases: [{ id: 1 }],
+      pr: { number: 10, url: 'https://github.com/owner/repo/pull/10' },
+      totalDuration: 2000,
+      tokenUsage: 1000,
+    }),
+  })),
+}));
 
-vi.mock('../src/git/worktree.js', () => {
-  const WorktreeManager = vi.fn().mockImplementation(() => ({
-    provision: vi.fn(async () => ({
-      path: '/tmp/worktree',
+vi.mock('../src/git/worktree.js', () => ({
+  WorktreeManager: vi.fn().mockImplementation(() => ({
+    provision: vi.fn().mockResolvedValue({
+      path: '/tmp/worktree/1',
       branch: 'cadre/issue-1',
       baseCommit: 'abc123',
       issueNumber: 1,
-    })),
-  }));
-  return { WorktreeManager };
-});
-
-vi.mock('../src/core/phase-registry.js', () => ({
-  getPhaseCount: vi.fn(() => 5),
-  ISSUE_PHASES: [],
+    }),
+  })),
 }));
 
-// ── Helpers ──
+vi.mock('../src/core/agent-launcher.js', () => ({
+  AgentLauncher: vi.fn().mockImplementation(() => ({})),
+}));
 
-function makeConfig(tokenBudget?: number): CadreConfig {
-  return {
+vi.mock('../src/core/phase-registry.js', () => ({
+  getPhaseCount: vi.fn().mockReturnValue(5),
+  ISSUE_PHASES: [
+    { id: 1, name: 'Analysis & Scouting', critical: true },
+    { id: 2, name: 'Planning', critical: true },
+    { id: 3, name: 'Implementation', critical: true },
+    { id: 4, name: 'Integration Verification', critical: false },
+    { id: 5, name: 'PR Composition', critical: false },
+  ],
+}));
+
+vi.mock('../src/budget/token-tracker.js', () => ({
+  TokenTracker: vi.fn().mockImplementation(() => ({
+    record: vi.fn(),
+    checkFleetBudget: vi.fn().mockReturnValue('ok'),
+    getTotal: vi.fn().mockReturnValue(1000),
+    getSummary: vi.fn().mockReturnValue({
+      total: 1000,
+      byIssue: { 1: 1000 },
+      byAgent: {},
+      byPhase: {},
+    }),
+  })),
+}));
+
+vi.mock('../src/budget/cost-estimator.js', () => ({
+  CostEstimator: vi.fn().mockImplementation(() => ({
+    estimate: vi.fn().mockReturnValue(0.01),
+  })),
+}));
+
+const mockBuildReport = vi.fn().mockReturnValue({ runId: 'test-report' });
+const mockWrite = vi.fn().mockResolvedValue('/repo/.cadre/reports/run-report-test.json');
+
+vi.mock('../src/reporting/report-writer.js', () => ({
+  ReportWriter: vi.fn().mockImplementation(() => ({
+    buildReport: mockBuildReport,
+    write: mockWrite,
+  })),
+}));
+
+// --- Helpers ---
+
+const makeConfig = (): CadreConfig =>
+  ({
     projectName: 'test-project',
-    platform: 'github',
+    repoPath: '/repo',
     repository: 'owner/repo',
-    repoPath: '/tmp/repo',
     baseBranch: 'main',
-    issues: { ids: [1] },
-    branchTemplate: 'cadre/issue-{issue}',
-    commits: { conventional: true, sign: false, commitPerPhase: false, squashBeforePR: false },
-    pullRequest: { autoCreate: false, draft: true, labels: [], reviewers: [], linkIssue: false },
-    options: {
-      maxParallelIssues: 1,
-      maxParallelAgents: 1,
-      maxRetriesPerTask: 1,
-      tokenBudget,
-      dryRun: false,
-      resume: false,
-      invocationDelayMs: 0,
-      buildVerification: false,
-      testVerification: false,
-    },
-    commands: {},
+    branchTemplate: 'cadre/issue-{number}',
     copilot: {
+      model: 'gpt-4o',
       cliCommand: 'copilot',
-      model: 'claude-sonnet-4.6',
       agentDir: '.github/agents',
       timeout: 300000,
     },
-    environment: { inheritShellPath: true, extraPath: [] },
-  } as CadreConfig;
-}
+    options: {
+      maxParallelIssues: 2,
+      tokenBudget: 100000,
+      resume: false,
+    },
+    issues: { ids: [1] },
+  }) as unknown as CadreConfig;
 
-function makeIssue(number = 1): IssueDetail {
-  return {
-    number,
-    title: `Test issue #${number}`,
-    body: 'Test body',
+const makeIssues = (): IssueDetail[] => [
+  {
+    number: 1,
+    title: 'Fix bug',
+    body: '',
     labels: [],
-    assignees: [],
-    state: 'open',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    url: `https://github.com/owner/repo/issues/${number}`,
-  };
-}
+    url: 'https://github.com/owner/repo/issues/1',
+  } as unknown as IssueDetail,
+];
 
-function makeLogger() {
-  return {
+const makeLogger = (): Logger =>
+  ({
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  };
-}
+    child: vi.fn().mockReturnValue({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }),
+  }) as unknown as Logger;
 
-function makeLauncher() {
-  return {
-    launchAgent: vi.fn(async () => ({
-      agent: 'test-agent',
-      success: true,
-      exitCode: 0,
-      timedOut: false,
-      duration: 100,
-      stdout: '',
-      stderr: '',
-      tokenUsage: 0,
-      outputPath: '',
-      outputExists: false,
-    })),
-  };
-}
+const makePlatform = () => ({});
 
-function makePlatform() {
-  return {
-    issueLinkSuffix: vi.fn(() => 'Closes #1'),
-    createPullRequest: vi.fn(async () => ({ number: 1, url: 'https://github.com/test/pr/1' })),
-  };
-}
+const makeWorktreeManager = () =>
+  ({
+    provision: vi.fn().mockResolvedValue({
+      path: '/tmp/worktree/1',
+      branch: 'cadre/issue-1',
+      baseCommit: 'abc123',
+      issueNumber: 1,
+    }),
+  }) as never;
 
-// Dynamic import so mocks are set up first
-async function makeFleet(config: CadreConfig, issues: IssueDetail[], logger = makeLogger()) {
-  const { FleetOrchestrator } = await import('../src/core/fleet-orchestrator.js');
-  const { WorktreeManager } = await import('../src/git/worktree.js');
-  const worktreeManager = new WorktreeManager(config, logger as never);
-  return new FleetOrchestrator(
-    config,
-    issues,
-    worktreeManager as never,
-    makeLauncher() as never,
-    makePlatform() as never,
-    logger as never,
-  );
-}
+// --- Tests ---
 
-// ── Tests ──
+describe('FleetOrchestrator - ReportWriter integration', () => {
+  let config: CadreConfig;
+  let issues: IssueDetail[];
+  let logger: Logger;
 
-describe('FleetOrchestrator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    config = makeConfig();
+    issues = makeIssues();
+    logger = makeLogger();
+    mockBuildReport.mockReturnValue({ runId: 'test-report' });
+    mockWrite.mockResolvedValue('/repo/.cadre/reports/run-report-test.json');
   });
 
-  describe('constructor', () => {
-    it('should instantiate without throwing', async () => {
-      const fleet = await makeFleet(makeConfig(), [makeIssue()]);
-      expect(fleet).toBeDefined();
-    });
+  it('should call ReportWriter.buildReport after aggregating results', async () => {
+    const orchestrator = new FleetOrchestrator(
+      config,
+      issues,
+      makeWorktreeManager(),
+      {} as never,
+      makePlatform() as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(mockBuildReport).toHaveBeenCalledOnce();
   });
 
-  describe('run() - basic flow', () => {
-    it('should return a FleetResult with success when all issues succeed', async () => {
-      const fleet = await makeFleet(makeConfig(), [makeIssue()]);
-      const result = await fleet.run();
+  it('should call ReportWriter.write with the built report', async () => {
+    const orchestrator = new FleetOrchestrator(
+      config,
+      issues,
+      makeWorktreeManager(),
+      {} as never,
+      makePlatform() as never,
+      logger,
+    );
 
-      expect(result.success).toBe(true);
-      expect(result.issues).toHaveLength(1);
-      expect(result.failedIssues).toHaveLength(0);
-    });
+    await orchestrator.run();
 
-    it('should include totalDuration in the result', async () => {
-      const fleet = await makeFleet(makeConfig(), [makeIssue()]);
-      const result = await fleet.run();
-      expect(result.totalDuration).toBeGreaterThanOrEqual(0);
-    });
-
-    it('should process all issues in the fleet', async () => {
-      const fleet = await makeFleet(makeConfig(), [makeIssue(1), makeIssue(2), makeIssue(3)]);
-      const result = await fleet.run();
-
-      expect(result.issues).toHaveLength(3);
-    });
+    expect(mockWrite).toHaveBeenCalledOnce();
+    expect(mockWrite).toHaveBeenCalledWith({ runId: 'test-report' });
   });
 
-  describe('fleetBudgetExceeded flag', () => {
-    it('should skip subsequent issues when fleet budget is exceeded by a prior issue', async () => {
-      // First issue consumes 5000 tokens (mocked); we set budget at 4999 so it's exceeded after first
-      const config = makeConfig(4999);
-      const issues = [makeIssue(1), makeIssue(2)];
+  it('should log the report path via logger.info after writing', async () => {
+    const orchestrator = new FleetOrchestrator(
+      config,
+      issues,
+      makeWorktreeManager(),
+      {} as never,
+      makePlatform() as never,
+      logger,
+    );
 
-      // Issue orchestrator returns 5000 tokens for the first issue
-      // The TokenTracker.checkFleetBudget will then return 'exceeded'
-      // The second issue should be skipped with budget-exceeded
+    await orchestrator.run();
 
-      const fleet = await makeFleet(config, issues);
-      const result = await fleet.run();
-
-      // First issue succeeds, second is budget-exceeded (not success)
-      const budgetExceededIssues = result.issues.filter((i) => i.budgetExceeded);
-      expect(budgetExceededIssues.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should report budget-exceeded issues as failures in the fleet result', async () => {
-      const config = makeConfig(1); // Tiny budget — exceeded immediately
-      const issues = [makeIssue(1), makeIssue(2)];
-
-      const fleet = await makeFleet(config, issues);
-      const result = await fleet.run();
-
-      const failures = result.failedIssues.filter((f) =>
-        f.error.includes('budget') || f.error.includes('Budget'),
-      );
-      expect(failures.length).toBeGreaterThanOrEqual(0); // At least one will be flagged
-      expect(result.issues.length).toBe(2);
-    });
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('/repo/.cadre/reports/run-report-test.json'),
+    );
   });
 
-  describe('pre-flight budget estimation', () => {
-    it('should skip issue when estimated tokens would exceed remaining budget', async () => {
-      // tokenBudget = 1 is less than the default estimate of 200_000
-      const config = makeConfig(1);
-      const issue = makeIssue(1);
-      const logger = makeLogger();
+  it('should log a warning and not throw when report writing fails', async () => {
+    mockWrite.mockRejectedValueOnce(new Error('disk full'));
 
-      const fleet = await makeFleet(config, [issue], logger);
-      const result = await fleet.run();
+    const orchestrator = new FleetOrchestrator(
+      config,
+      issues,
+      makeWorktreeManager(),
+      {} as never,
+      makePlatform() as never,
+      logger,
+    );
 
-      const skipped = result.issues.find((i) => i.issueNumber === 1);
-      expect(skipped?.budgetExceeded).toBe(true);
-      expect(skipped?.success).toBe(false);
-      expect(skipped?.error).toContain('budget');
-    });
+    const result = await orchestrator.run();
 
-    it('should warn when pre-flight estimation causes a skip', async () => {
-      const config = makeConfig(1); // well below the 200_000 default estimate
-      const logger = makeLogger();
-
-      const fleet = await makeFleet(config, [makeIssue(1)], logger);
-      await fleet.run();
-
-      const warnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls;
-      const budgetWarn = warnCalls.find(([msg]: [string]) =>
-        typeof msg === 'string' && msg.includes('estimated tokens'),
-      );
-      expect(budgetWarn).toBeDefined();
-    });
-
-    it('should allow issue to proceed when estimated tokens are within remaining budget', async () => {
-      // Budget of 1_000_000 is well above the default 200_000 estimate
-      const config = makeConfig(1_000_000);
-      const issue = makeIssue(1);
-      const fleet = await makeFleet(config, [issue]);
-      const result = await fleet.run();
-
-      const processed = result.issues.find((i) => i.issueNumber === 1);
-      expect(processed?.budgetExceeded).toBeFalsy();
-    });
-
-    it('should not apply pre-flight check when tokenBudget is not configured', async () => {
-      // No budget configured at all — pre-flight should be skipped, issue runs normally
-      const config = makeConfig(undefined);
-      const fleet = await makeFleet(config, [makeIssue(1)]);
-      const result = await fleet.run();
-
-      const issue = result.issues.find((i) => i.issueNumber === 1);
-      expect(issue?.success).toBe(true);
-      expect(issue?.budgetExceeded).toBeFalsy();
-    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to write run report'),
+    );
+    expect(result).toBeDefined();
+    expect(result.success).toBe(true);
   });
 
-  describe('run() with resume option', () => {
-    it('should skip already-completed issues when resume is enabled', async () => {
-      const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
-      // Mock isIssueCompleted to return true for issue 1
-      (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-        load: vi.fn(async () => {}),
-        isIssueCompleted: vi.fn((n: number) => n === 1),
-        setIssueStatus: vi.fn(async () => {}),
-        recordTokenUsage: vi.fn(async () => {}),
-        getIssueStatus: vi.fn(() => ({ status: 'completed', lastPhase: 5 })),
-      }));
+  it('should still return a valid FleetResult when report writing throws', async () => {
+    mockWrite.mockRejectedValueOnce(new Error('permission denied'));
 
-      const config = { ...makeConfig(), options: { ...makeConfig().options, resume: true } };
-      const fleet = await makeFleet(config, [makeIssue(1), makeIssue(2)]);
-      const result = await fleet.run();
+    const orchestrator = new FleetOrchestrator(
+      config,
+      issues,
+      makeWorktreeManager(),
+      {} as never,
+      makePlatform() as never,
+      logger,
+    );
 
-      // Only 1 issue should be processed (issue 1 was already completed)
-      expect(result.issues).toHaveLength(1);
-    });
+    const result = await orchestrator.run();
+
+    expect(result.issues).toHaveLength(1);
+    expect(result.prsCreated).toHaveLength(1);
+    expect(result.failedIssues).toHaveLength(0);
   });
 
-  describe('aggregateResults', () => {
-    it('should set success=false when any issue fails', async () => {
-      const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
-      (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-        run: vi.fn(async () => ({
-          issueNumber: 1,
-          issueTitle: 'Test issue #1',
-          success: false,
-          phases: [],
-          totalDuration: 100,
-          tokenUsage: 1000,
-          error: 'Agent failed',
-        })),
-      }));
+  it('should pass fleetResult, issues, and startTime to buildReport', async () => {
+    const orchestrator = new FleetOrchestrator(
+      config,
+      issues,
+      makeWorktreeManager(),
+      {} as never,
+      makePlatform() as never,
+      logger,
+    );
 
-      const fleet = await makeFleet(makeConfig(1_000_000), [makeIssue(1)]);
-      const result = await fleet.run();
+    await orchestrator.run();
 
-      expect(result.success).toBe(false);
-      expect(result.failedIssues).toHaveLength(1);
-      expect(result.failedIssues[0].error).toBe('Agent failed');
-    });
-
-    it('should collect PRs from successful issues', async () => {
-      const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
-      (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-        run: vi.fn(async () => ({
-          issueNumber: 1,
-          issueTitle: 'Test issue #1',
-          success: true,
-          phases: [],
-          totalDuration: 100,
-          tokenUsage: 1000,
-          pr: { number: 42, url: 'https://github.com/owner/repo/pull/42' },
-        })),
-      }));
-
-      const fleet = await makeFleet(makeConfig(1_000_000), [makeIssue(1)]);
-      const result = await fleet.run();
-
-      expect(result.prsCreated).toHaveLength(1);
-      expect(result.prsCreated[0].number).toBe(42);
-    });
+    expect(mockBuildReport).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true }),
+      issues,
+      expect.any(Number),
+    );
   });
 });

@@ -86,6 +86,25 @@ program
     }
   });
 
+// ─── report ───────────────────────────────────────────
+program
+  .command('report')
+  .description('Show a summary report of pipeline runs')
+  .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
+  .option('-f, --format <format>', 'Output format (json for raw JSON)', 'human')
+  .option('--history', 'List all historical run reports')
+  .action(async (opts) => {
+    try {
+      const config = await loadConfig(opts.config);
+      const runtime = new CadreRuntime(config);
+      await runtime.report({ format: opts.format, history: opts.history });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(chalk.red(`Error: ${msg}`));
+      process.exit(1);
+    }
+  });
+
 // ─── worktrees ────────────────────────────────────────
 program
   .command('worktrees')

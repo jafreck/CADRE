@@ -1,7 +1,7 @@
-# Task Result: task-006 - Tests for per-issue budget enforcement
+# Task Result: task-006 - Tests for ReportWriter
 
 ## Changes Made
-- `tests/issue-orchestrator.test.ts`: File already existed with complete test coverage (14 tests)
+- `tests/report-writer.test.ts`: Already exists and is complete with full test coverage
 
 ## Files Modified
 - (none)
@@ -10,7 +10,6 @@
 - (none)
 
 ## Notes
-- The test file was already fully implemented and passing before this task ran
-- All 14 tests pass with `npx vitest run tests/issue-orchestrator.test.ts`
-- Coverage includes: BudgetExceededError class, IssueResult interface, success path (all phases completed), budget-exceeded abort with checkpoint persistence, resume guidance logging, re-throw of non-budget errors, and buildResult integration
-- Tests use vi.fn() mocks to isolate IssueOrchestrator from real agent execution, filesystem, and network calls
+- All 19 tests pass with `npx vitest run`
+- Tests cover `buildReport()`, `write()`, `listReports()`, and `readReport()` per acceptance criteria
+- The implementation in `src/reporting/report-writer.ts` already satisfies all test assertions

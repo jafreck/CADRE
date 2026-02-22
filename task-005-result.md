@@ -1,23 +1,15 @@
-# Task Result: task-005 - Enforce fleet budget cancellation in `FleetOrchestrator`
+# Task Result: task-005 - Add `cadre report` CLI Command
 
 ## Changes Made
-- `src/budget/cost-estimator.ts`: Re-added `estimateIssueTokens(historicalAvgTokens?: number): number` method (was accidentally removed by task-004's commit)
-- `src/core/fleet-orchestrator.ts`:
-  - Added `CostEstimator` import
-  - Added `private costEstimator: CostEstimator` field and instantiated in constructor
-  - Added `private fleetBudgetExceeded = false` flag
-  - In `processIssue()`: added early return with `budget-exceeded` status when `fleetBudgetExceeded` is set
-  - In `processIssue()`: added pre-flight estimation check — skips issue with warning if `currentTotal + estimate > tokenBudget`
-  - In budget check block: sets `this.fleetBudgetExceeded = true` when `checkFleetBudget` returns `'exceeded'`
+- `src/index.ts`: Added `cadre report` command with `--format <format>` and `--history` options, following the same pattern as `status` and `reset`. The action handler loads config, creates a `CadreRuntime`, and calls `runtime.report({ format: opts.format, history: opts.history })`.
 
 ## Files Modified
-- src/budget/cost-estimator.ts
-- src/core/fleet-orchestrator.ts
+- src/index.ts
 
 ## Files Created
 - (none)
 
 ## Notes
-- The `estimateIssueTokens` method had been removed by task-004's commit; it was restored as part of this task since task-005 depends on task-003
-- In-progress issues are not affected by `fleetBudgetExceeded` — only issues that haven't started yet are skipped
-- TypeScript compiles without errors
+- Default format is `'human'`; passing `--format json` sets it to `'json'`
+- `--history` is a boolean flag (defaults to `false` when omitted)
+- File compiles cleanly with `npm run build`

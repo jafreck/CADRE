@@ -12,6 +12,7 @@ import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { killAllTrackedProcesses } from '../util/process.js';
 import { FleetProgressWriter } from './progress.js';
+import { ReportWriter } from '../reporting/report-writer.js';
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
@@ -161,6 +162,52 @@ export class CadreRuntime {
       }
       console.log('Reset all issues');
     }
+  }
+
+  /**
+   * Print a report of the most recent run, all run history, or raw JSON.
+   */
+  async report(options: { format?: 'json'; history?: boolean } = {}): Promise<void> {
+    const paths = await ReportWriter.listReports(this.cadreDir);
+
+    if (options.history) {
+      if (paths.length === 0) {
+        console.log('No reports found.');
+        return;
+      }
+      for (const p of paths) {
+        console.log(p);
+      }
+      return;
+    }
+
+    if (paths.length === 0) {
+      console.log('No reports found.');
+      return;
+    }
+
+    const mostRecent = paths[paths.length - 1];
+    const run = await ReportWriter.readReport(mostRecent);
+
+    if (options.format === 'json') {
+      console.log(JSON.stringify(run));
+      return;
+    }
+
+    const duration = (run.duration / 1000).toFixed(1);
+    const estimator = new CostEstimator(this.config.copilot);
+    const costStr = estimator.format(estimator.estimate(run.totalTokens, this.config.copilot.model));
+
+    console.log('\n=== CADRE Run Report ===\n');
+    console.log(`  Run ID:   ${run.runId}`);
+    console.log(`  Project:  ${run.project}`);
+    console.log(`  Duration: ${duration}s`);
+    console.log(`  Issues:   ${run.totals.issues}`);
+    console.log(`  PRs:      ${run.totals.prsCreated}`);
+    console.log(`  Failures: ${run.totals.failures}`);
+    console.log(`  Tokens:   ${run.totalTokens.toLocaleString()}`);
+    console.log(`  Cost:     ${costStr}`);
+    console.log('');
   }
 
   /**
