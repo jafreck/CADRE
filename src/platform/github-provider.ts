@@ -11,6 +11,22 @@ import { GitHubMCPClient, type MCPServerConfig } from '../github/mcp-client.js';
 import { GitHubAPI } from '../github/api.js';
 import { Logger } from '../logging/logger.js';
 
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' ? value : fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 /**
  * GitHub implementation of PlatformProvider.
  *
@@ -64,7 +80,7 @@ export class GitHubProvider implements PlatformProvider {
     const issues: IssueDetail[] = [];
 
     for (const raw of rawIssues) {
-      const issueNumber = raw.number as number;
+      const issueNumber = asNumber(raw.number);
       try {
         const detail = await this.getIssue(issueNumber);
         issues.push(detail);
@@ -87,9 +103,9 @@ export class GitHubProvider implements PlatformProvider {
   async createPullRequest(params: CreatePullRequestParams): Promise<PullRequestInfo> {
     const result = await this.getAPI().createPullRequest(params);
     return {
-      number: result.number as number,
-      url: (result.html_url as string) ?? (result.url as string) ?? '',
-      title: (result.title as string) ?? params.title,
+      number: asNumber(result.number),
+      url: asString(result.html_url) || asString(result.url),
+      title: asString(result.title) || params.title,
       headBranch: params.head,
       baseBranch: params.base,
     };
@@ -98,11 +114,11 @@ export class GitHubProvider implements PlatformProvider {
   async getPullRequest(prNumber: number): Promise<PullRequestInfo> {
     const result = await this.getAPI().getPullRequest(prNumber);
     return {
-      number: result.number as number,
-      url: (result.html_url as string) ?? (result.url as string) ?? '',
-      title: (result.title as string) ?? '',
-      headBranch: ((result.head as Record<string, unknown>)?.ref as string) ?? '',
-      baseBranch: ((result.base as Record<string, unknown>)?.ref as string) ?? '',
+      number: asNumber(result.number),
+      url: asString(result.html_url) || asString(result.url),
+      title: asString(result.title),
+      headBranch: asString(asRecord(result.head).ref),
+      baseBranch: asString(asRecord(result.base).ref),
     };
   }
 
@@ -117,11 +133,11 @@ export class GitHubProvider implements PlatformProvider {
     // Adjust head filter — GitHubAPI prefixes with "owner:"
     const result = await this.getAPI().listPullRequests(filters);
     return result.map((pr) => ({
-      number: pr.number as number,
-      url: (pr.html_url as string) ?? (pr.url as string) ?? '',
-      title: (pr.title as string) ?? '',
-      headBranch: ((pr.head as Record<string, unknown>)?.ref as string) ?? '',
-      baseBranch: ((pr.base as Record<string, unknown>)?.ref as string) ?? '',
+      number: asNumber(pr.number),
+      url: asString(pr.html_url) || asString(pr.url),
+      title: asString(pr.title),
+      headBranch: asString(asRecord(pr.head).ref),
+      baseBranch: asString(asRecord(pr.base).ref),
     }));
   }
 
@@ -141,33 +157,31 @@ export class GitHubProvider implements PlatformProvider {
   }
 
   private parseIssue(raw: Record<string, unknown>): IssueDetail {
-    const labels =
-      (raw.labels as Array<{ name: string }> | undefined)?.map((l) => l.name) ?? [];
-    const assignees =
-      (raw.assignees as Array<{ login: string }> | undefined)?.map((a) => a.login) ?? [];
-    const rawComments = (raw.comments as Array<Record<string, unknown>>) ?? [];
+    const labels = asArray(raw.labels).map((l) => asString(asRecord(l).name));
+    const assignees = asArray(raw.assignees).map((a) => asString(asRecord(a).login));
+    const rawComments = asArray(raw.comments);
 
     const comments: IssueComment[] = rawComments.map((c) => ({
-      author: ((c.author as Record<string, unknown>)?.login as string) ?? 'unknown',
-      body: (c.body as string) ?? '',
-      createdAt: (c.createdAt as string) ?? '',
+      author: asString(asRecord(asRecord(c).author).login, 'unknown'),
+      body: asString(asRecord(c).body),
+      createdAt: asString(asRecord(c).createdAt),
     }));
 
     const milestone = raw.milestone
-      ? ((raw.milestone as Record<string, unknown>).title as string)
+      ? asString(asRecord(raw.milestone).title)
       : undefined;
 
     return {
-      number: raw.number as number,
-      title: (raw.title as string) ?? '',
-      body: (raw.body as string) ?? '',
+      number: asNumber(raw.number),
+      title: asString(raw.title),
+      body: asString(raw.body),
       labels,
       assignees,
       milestone,
       comments,
-      state: (raw.state as 'open' | 'closed') ?? 'open',
-      createdAt: (raw.createdAt as string) ?? '',
-      updatedAt: (raw.updatedAt as string) ?? '',
+      state: raw.state === 'closed' ? 'closed' : 'open',
+      createdAt: asString(raw.createdAt),
+      updatedAt: asString(raw.updatedAt),
       linkedPRs: [],
     };
   }

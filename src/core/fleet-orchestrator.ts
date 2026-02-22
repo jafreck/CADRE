@@ -8,7 +8,7 @@ import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from './progress.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
-import { TokenTracker } from '../budget/token-tracker.js';
+import { TokenTracker, type TokenSummary } from '../budget/token-tracker.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { getPhaseCount } from './phase-registry.js';
@@ -25,11 +25,7 @@ export interface FleetResult {
   /** Total duration across all pipelines. */
   totalDuration: number;
   /** Aggregate token usage. */
-  tokenUsage: {
-    total: number;
-    byIssue: Record<number, number>;
-    byAgent: Record<string, number>;
-  };
+  tokenUsage: TokenSummary;
 }
 
 /**
@@ -228,8 +224,10 @@ export class FleetOrchestrator {
       );
 
       // 8. Record token usage
-      this.tokenTracker.record(issue.number, 'total', 0, result.tokenUsage);
-      await this.fleetCheckpoint.recordTokenUsage(issue.number, result.tokenUsage);
+      if (result.tokenUsage !== null) {
+        this.tokenTracker.record(issue.number, 'total', 0, result.tokenUsage);
+        await this.fleetCheckpoint.recordTokenUsage(issue.number, result.tokenUsage);
+      }
 
       // 9. Check budget
       const budgetStatus = this.tokenTracker.checkFleetBudget(
