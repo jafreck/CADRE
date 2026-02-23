@@ -16,6 +16,17 @@ function makeMockLogger(): Logger {
   } as unknown as Logger;
 }
 
+function makePhaseResult(overrides: Partial<PhaseResult> = {}): PhaseResult {
+  return {
+    phase: 1,
+    phaseName: 'Analysis & Scouting',
+    success: true,
+    duration: 5000,
+    tokenUsage: 100,
+    ...overrides,
+  };
+}
+
 describe('FleetProgressWriter', () => {
   let tempDir: string;
   let logger: Logger;
@@ -168,5 +179,182 @@ describe('IssueProgressInfo status type', () => {
       totalPhases: 5,
     };
     expect(info.status).toBe('budget-exceeded');
+  });
+});
+
+describe('IssueProgressWriter – Gate Results section', () => {
+  let tempDir: string;
+  let writer: IssueProgressWriter;
+  let mockLogger: Logger;
+
+  beforeEach(async () => {
+    mockLogger = makeMockLogger();
+    tempDir = join(tmpdir(), `cadre-progress-gate-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    writer = new IssueProgressWriter(tempDir, 42, 'Test Issue', mockLogger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  async function readProgress(): Promise<string> {
+    return readFile(join(tempDir, 'progress.md'), 'utf-8');
+  }
+
+  it('should NOT include a Gate Results section when no phases have gateResult', async () => {
+    const phases = [makePhaseResult({ gateResult: undefined })];
+    await writer.write(phases, 1, [], 0);
+
+    const content = await readProgress();
+    expect(content).not.toContain('## Gate Results');
+  });
+
+  it('should include a Gate Results section when a phase has gateResult', async () => {
+    const phases = [
+      makePhaseResult({
+        gateResult: { status: 'pass', warnings: [], errors: [] },
+      }),
+    ];
+    await writer.write(phases, 1, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('## Gate Results');
+  });
+
+  it('should render ✅ emoji for a passing gate', async () => {
+    const phases = [
+      makePhaseResult({
+        phase: 1,
+        phaseName: 'Analysis & Scouting',
+        gateResult: { status: 'pass', warnings: [], errors: [] },
+      }),
+    ];
+    await writer.write(phases, 1, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('✅ pass');
+    expect(content).toContain('Phase 1: Analysis & Scouting');
+  });
+
+  it('should render ⚠️ emoji for a warning gate', async () => {
+    const phases = [
+      makePhaseResult({
+        phase: 2,
+        phaseName: 'Planning',
+        gateResult: { status: 'warn', warnings: ['low coverage'], errors: [] },
+      }),
+    ];
+    await writer.write(phases, 2, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('⚠️ warn');
+    expect(content).toContain('Phase 2: Planning');
+  });
+
+  it('should render ❌ emoji for a failing gate', async () => {
+    const phases = [
+      makePhaseResult({
+        phase: 3,
+        phaseName: 'Implementation',
+        gateResult: { status: 'fail', warnings: [], errors: ['build failed'] },
+      }),
+    ];
+    await writer.write(phases, 3, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('❌ fail');
+    expect(content).toContain('Phase 3: Implementation');
+  });
+
+  it('should list errors prefixed with ❌ under the phase', async () => {
+    const phases = [
+      makePhaseResult({
+        gateResult: {
+          status: 'fail',
+          warnings: [],
+          errors: ['build failed', 'type error in foo.ts'],
+        },
+      }),
+    ];
+    await writer.write(phases, 1, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('- ❌ build failed');
+    expect(content).toContain('- ❌ type error in foo.ts');
+  });
+
+  it('should list warnings prefixed with ⚠️ under the phase', async () => {
+    const phases = [
+      makePhaseResult({
+        gateResult: {
+          status: 'warn',
+          warnings: ['low coverage', 'slow test detected'],
+          errors: [],
+        },
+      }),
+    ];
+    await writer.write(phases, 1, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('- ⚠️ low coverage');
+    expect(content).toContain('- ⚠️ slow test detected');
+  });
+
+  it('should render gate results for multiple phases', async () => {
+    const phases = [
+      makePhaseResult({
+        phase: 1,
+        phaseName: 'Analysis & Scouting',
+        gateResult: { status: 'pass', warnings: [], errors: [] },
+      }),
+      makePhaseResult({
+        phase: 2,
+        phaseName: 'Planning',
+        gateResult: { status: 'warn', warnings: ['missing test'], errors: [] },
+      }),
+    ];
+    await writer.write(phases, 2, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('Phase 1: Analysis & Scouting');
+    expect(content).toContain('Phase 2: Planning');
+    expect(content).toContain('✅ pass');
+    expect(content).toContain('⚠️ warn');
+    expect(content).toContain('- ⚠️ missing test');
+  });
+
+  it('should render both errors and warnings in the same phase section', async () => {
+    const phases = [
+      makePhaseResult({
+        gateResult: {
+          status: 'fail',
+          warnings: ['coverage below threshold'],
+          errors: ['lint failed'],
+        },
+      }),
+    ];
+    await writer.write(phases, 1, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('- ❌ lint failed');
+    expect(content).toContain('- ⚠️ coverage below threshold');
+  });
+
+  it('should omit Gate Results section for phases without gateResult even when other phases have it', async () => {
+    const phases = [
+      makePhaseResult({ phase: 1, phaseName: 'Analysis & Scouting', gateResult: undefined }),
+      makePhaseResult({
+        phase: 2,
+        phaseName: 'Planning',
+        gateResult: { status: 'pass', warnings: [], errors: [] },
+      }),
+    ];
+    await writer.write(phases, 2, [], 0);
+
+    const content = await readProgress();
+    expect(content).toContain('Phase 2: Planning');
+    // Phase 1 should not appear in Gate Results since it has no gateResult
+    expect(content).not.toContain('Phase 1: Analysis & Scouting — ');
   });
 });

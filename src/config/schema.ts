@@ -1,5 +1,31 @@
 import { z } from 'zod';
 
+const NotificationsProviderSchema = z.object({
+  /** Provider type. */
+  type: z.enum(['webhook', 'slack', 'log']),
+  /** Webhook URL (webhook/slack providers). Supports ${ENV_VAR} syntax. */
+  url: z.string().optional(),
+  /** Webhook URL alias (webhook provider). Supports ${ENV_VAR} syntax. */
+  webhookUrl: z.string().optional(),
+  /** Slack channel (slack provider). */
+  channel: z.string().optional(),
+  /** Log file path (log provider). */
+  logFile: z.string().optional(),
+  /** Event types to include. Omit to receive all events. */
+  events: z.array(z.string()).optional(),
+});
+
+const NotificationsConfigSchema = z
+  .object({
+    /** Enable notifications. */
+    enabled: z.boolean().default(false),
+    /** Notification providers. */
+    providers: z.array(NotificationsProviderSchema).default([]),
+  })
+  .default({ enabled: false, providers: [] });
+
+export type NotificationsConfig = z.infer<typeof NotificationsConfigSchema>;
+
 export const CadreConfigSchema = z.object({
   /** Human-readable project name, used for directory naming. */
   projectName: z.string().min(1).regex(/^[a-z0-9-]+$/),
@@ -222,6 +248,9 @@ export const CadreConfigSchema = z.object({
       }),
     })
     .optional(),
+
+  /** Notification provider configuration. Optional; defaults to disabled. */
+  notifications: NotificationsConfigSchema,
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;

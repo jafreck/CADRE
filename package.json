@@ -21,7 +21,8 @@
     "p-limit": "^6",
     "p-queue": "^8",
     "date-fns": "^3",
-    "simple-git": "^3.27"
+    "simple-git": "^3.27",
+    "@inquirer/prompts": "^7"
   },
   "devDependencies": {
     "typescript": "^5.5",

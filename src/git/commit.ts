@@ -26,6 +26,11 @@ export class CommitManager {
     // Stage all changes
     await this.git.add(['-A']);
 
+    // Unstage cadre-internal artifacts so they never appear in commits.
+    // .gitignore handles this in fresh worktrees, but this is a belt-and-suspenders
+    // guard for any artifacts that slipped through (e.g. before .gitignore was written).
+    await this.unstageArtifacts(issueNumber);
+
     // Check if there's anything to commit
     const status = await this.git.status();
     if (status.staged.length === 0) {
@@ -54,6 +59,21 @@ export class CommitManager {
     });
 
     return sha;
+  }
+
+  /**
+   * Unstage any cadre internal artifact files that should never be committed.
+   * Covers the `.cadre/` directory and common top-level scratch patterns.
+   */
+  private async unstageArtifacts(issueNumber: number): Promise<void> {
+    const artifactPatterns = ['.cadre/', 'task-*.md'];
+    try {
+      // `git restore --staged` silently succeeds even if the path doesn't exist
+      await this.git.raw(['restore', '--staged', '--', ...artifactPatterns]);
+    } catch {
+      // Non-fatal: if restore fails (e.g. old git version), log and continue
+      this.logger.debug('Could not unstage artifact patterns; continuing', { issueNumber });
+    }
   }
 
   /**

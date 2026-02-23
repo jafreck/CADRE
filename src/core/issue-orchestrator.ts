@@ -10,6 +10,7 @@ import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';
 import { PhaseRegistry, getPhase, type PhaseDefinition } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
+import { NotificationManager } from '../notifications/manager.js';
 import { IssueProgressWriter } from './progress.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { ContextBuilder } from '../agents/context-builder.js';
@@ -67,6 +68,7 @@ export class IssueOrchestrator {
     private readonly launcher: AgentLauncher,
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
+    private readonly notificationManager?: NotificationManager,
   ) {
     this.progressDir = join(
       worktree.path,
@@ -110,6 +112,13 @@ export class IssueOrchestrator {
     });
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
+
+    await this.notificationManager?.dispatch({
+      type: 'issue-started',
+      issueNumber: this.issue.number,
+      issueTitle: this.issue.title,
+      worktreePath: this.worktree.path,
+    });
 
     for (const executor of this.registry.getAll()) {
       // Skip completed phases on resume
@@ -161,6 +170,43 @@ export class IssueOrchestrator {
       if (phaseResult.success) {
         await this.checkpoint.completePhase(executor.phaseId, phaseResult.outputPath ?? '');
 
+        // Run gate validators after phases 1–4
+        if (phase.id >= 1 && phase.id <= 4) {
+          const gateStatus = await this.runGate(phase.id);
+          if (gateStatus === 'fail') {
+            this.logger.warn(`Gate failed for phase ${phase.id}; retrying`, {
+              issueNumber: this.issue.number,
+              phase: phase.id,
+            });
+            await this.progressWriter.appendEvent(`Phase ${phase.id} gate failed; retrying phase`);
+
+            const retryResult = await this.executePhase(phase);
+            this.phases[this.phases.length - 1] = retryResult;
+
+            if (!retryResult.success) {
+              await this.progressWriter.appendEvent(`Pipeline aborted: phase ${phase.id} retry failed`);
+              return this.buildResult(false, retryResult.error, startTime);
+            }
+
+            await this.checkpoint.completePhase(phase.id, retryResult.outputPath ?? '');
+            const retryGateStatus = await this.runGate(phase.id);
+            if (retryGateStatus === 'fail') {
+              this.logger.error(`Gate still failing for phase ${phase.id} after retry; aborting`, {
+                issueNumber: this.issue.number,
+                phase: phase.id,
+              });
+              await this.progressWriter.appendEvent(
+                `Pipeline aborted: gate still failing for phase ${phase.id} after retry`,
+              );
+              return this.buildResult(
+                false,
+                `Gate validation failed for phase ${phase.id} after retry`,
+                startTime,
+              );
+            }
+          }
+        }
+
         // Commit after phase if configured
         if (this.config.commits.commitPerPhase) {
           await this.commitPhase(phaseDef);
@@ -173,12 +219,26 @@ export class IssueOrchestrator {
           phase: executor.phaseId,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} failed`);
+        await this.notificationManager?.dispatch({
+          type: 'issue-failed',
+          issueNumber: this.issue.number,
+          error: phaseResult.error ?? `Phase ${executor.phaseId} failed`,
+          phase: executor.phaseId,
+        });
         return this.buildResult(false, phaseResult.error, startTime);
       }
     }
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
-    return this.buildResult(true, undefined, startTime);
+    const successResult = this.buildResult(true, undefined, startTime);
+    await this.notificationManager?.dispatch({
+      type: 'issue-completed',
+      issueNumber: successResult.issueNumber,
+      success: successResult.success,
+      duration: successResult.totalDuration,
+      tokenUsage: successResult.tokenUsage ?? 0,
+    });
+    return successResult;
   }
 
   /**
