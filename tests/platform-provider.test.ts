@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { GitHubProvider } from '../src/platform/github-provider.js';
 import { AzureDevOpsProvider } from '../src/platform/azure-devops-provider.js';
