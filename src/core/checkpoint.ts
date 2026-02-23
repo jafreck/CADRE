@@ -41,6 +41,7 @@ export interface CheckpointState {
 
 export interface FleetIssueStatus {
   status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded';
+  issueTitle: string;
   worktreePath: string;
   branchName: string;
   lastPhase: number;
@@ -375,11 +376,13 @@ export class FleetCheckpointManager {
     worktreePath: string,
     branchName: string,
     lastPhase: number,
+    issueTitle: string,
     error?: string,
   ): Promise<void> {
     if (!this.state) throw new Error('Fleet checkpoint not loaded');
     this.state.issues[issueNumber] = {
       status,
+      issueTitle,
       worktreePath,
       branchName,
       lastPhase,

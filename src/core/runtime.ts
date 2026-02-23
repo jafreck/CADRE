@@ -191,13 +191,13 @@ export class CadreRuntime {
         issueNumber,
         data: { fromPhase },
       });
-      await checkpointManager.setIssueStatus(issueNumber, 'not-started', '', '', 0);
+      await checkpointManager.setIssueStatus(issueNumber, 'not-started', '', '', 0, state.issues[issueNumber]?.issueTitle ?? '');
       console.log(`Reset issue #${issueNumber}`);
     } else {
       this.logger.info('Resetting entire fleet');
       // Clear all issue statuses
       for (const num of Object.keys(state.issues)) {
-        await checkpointManager.setIssueStatus(Number(num), 'not-started', '', '', 0);
+        await checkpointManager.setIssueStatus(Number(num), 'not-started', '', '', 0, state.issues[Number(num)]?.issueTitle ?? '');
       }
       console.log('Reset all issues');
     }
