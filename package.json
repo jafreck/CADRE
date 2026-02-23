@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "postbuild": "mkdir -p dist/agents && rm -rf dist/agents/templates && cp -r src/agents/templates dist/agents/templates",
     "dev": "tsx src/index.ts",
     "test": "vitest",
     "test:e2e": "CADRE_E2E=1 vitest run tests/e2e-*.test.ts"
