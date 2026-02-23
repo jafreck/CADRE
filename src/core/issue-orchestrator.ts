@@ -110,6 +110,7 @@ export class IssueOrchestrator {
   async run(): Promise<IssueResult> {
     const startTime = Date.now();
     const resumePoint = this.checkpoint.getResumePoint();
+    this.tokenTracker.importRecords(this.checkpoint.getTokenRecords());
 
     this.logger.info(`Starting pipeline for issue #${this.issue.number}: ${this.issue.title}`, {
       issueNumber: this.issue.number,
