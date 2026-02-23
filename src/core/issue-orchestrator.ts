@@ -918,7 +918,8 @@ export class IssueOrchestrator {
     }
     if (
       !this.budgetExceeded &&
-      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'exceeded'
+      this.config.options.perIssueTokenBudget &&
+      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.perIssueTokenBudget) === 'exceeded'
     ) {
       this.budgetExceeded = true;
     }
