@@ -1,8 +1,9 @@
 import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { ImplementationTask } from '../agents/types.js';
 import { execShell } from '../util/process.js';
+import type { BaselineResults } from '../agents/schemas/index.js';
 
 export class IntegrationPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 4;
