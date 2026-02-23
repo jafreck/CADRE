@@ -3,7 +3,7 @@ import type { CadreConfig } from '../config/schema.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
-import { FleetCheckpointManager } from './checkpoint.js';
+import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
@@ -189,13 +189,37 @@ export class CadreRuntime {
         issueNumber,
         data: { fromPhase },
       });
-      await checkpointManager.setIssueStatus(issueNumber, 'not-started', '', '', 0);
+      if (fromPhase !== undefined) {
+        const issueStatus = state.issues[issueNumber];
+        if (issueStatus?.worktreePath) {
+          const progressDir = join(issueStatus.worktreePath, '.cadre', 'issues', String(issueNumber));
+          const issueCheckpoint = new CheckpointManager(progressDir, this.logger);
+          await issueCheckpoint.load(String(issueNumber));
+          await issueCheckpoint.resetFromPhase(fromPhase);
+        }
+      }
+      const existing = state.issues[issueNumber];
+      await checkpointManager.setIssueStatus(
+        issueNumber,
+        'not-started',
+        existing?.worktreePath ?? '',
+        existing?.branchName ?? '',
+        fromPhase ?? 0,
+      );
       console.log(`Reset issue #${issueNumber}`);
     } else {
       this.logger.info('Resetting entire fleet');
       // Clear all issue statuses
       for (const num of Object.keys(state.issues)) {
-        await checkpointManager.setIssueStatus(Number(num), 'not-started', '', '', 0);
+        const issueNum = Number(num);
+        const issueStatus = state.issues[issueNum];
+        if (fromPhase !== undefined && issueStatus?.worktreePath) {
+          const progressDir = join(issueStatus.worktreePath, '.cadre', 'issues', num);
+          const issueCheckpoint = new CheckpointManager(progressDir, this.logger);
+          await issueCheckpoint.load(num);
+          await issueCheckpoint.resetFromPhase(fromPhase);
+        }
+        await checkpointManager.setIssueStatus(issueNum, 'not-started', '', '', fromPhase ?? 0);
       }
       console.log('Reset all issues');
     }
