@@ -112,7 +112,7 @@ export class FleetOrchestrator {
     // Write final progress
     await this.writeFleetProgress(fleetResult);
     await this.fleetProgress.appendEvent(
-      `Fleet completed: ${fleetResult.prsCreated.length} PRs, ${fleetResult.failedIssues.length} failures`,
+      `Fleet completed: ${fleetResult.prsCreated.length} PRs, ${fleetResult.codeDoneNoPR.length} code-done-no-pr, ${fleetResult.failedIssues.length} failures`,
     );
     await this.notifications.dispatch({
       type: 'fleet-completed',
