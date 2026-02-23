@@ -22,6 +22,8 @@ export interface FleetResult {
   issues: IssueResult[];
   /** Issues that completed and had PRs opened. */
   prsCreated: PullRequestInfo[];
+  /** Issues where code is complete but no PR was created. */
+  codeDoneNoPR: Array<{ issueNumber: number; issueTitle: string }>;
   /** Issues that failed or were blocked. */
   failedIssues: Array<{ issueNumber: number; error: string }>;
   /** Total duration across all pipelines. */
@@ -299,17 +301,21 @@ export class FleetOrchestrator {
   ): FleetResult {
     const issueResults: IssueResult[] = [];
     const prsCreated: PullRequestInfo[] = [];
+    const codeDoneNoPR: Array<{ issueNumber: number; issueTitle: string }> = [];
     const failedIssues: Array<{ issueNumber: number; error: string }> = [];
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
         issueResults.push(result.value);
 
-        if (result.value.pr) {
+        if (result.value.prCreated === true && result.value.pr) {
           prsCreated.push(result.value.pr);
-        }
-
-        if (!result.value.success) {
+        } else if (result.value.codeComplete === true && result.value.prCreated === false) {
+          codeDoneNoPR.push({
+            issueNumber: result.value.issueNumber,
+            issueTitle: result.value.issueTitle,
+          });
+        } else if (!result.value.success) {
           failedIssues.push({
             issueNumber: result.value.issueNumber,
             error: result.value.error ?? 'Unknown error',
@@ -330,6 +336,7 @@ export class FleetOrchestrator {
       success,
       issues: issueResults,
       prsCreated,
+      codeDoneNoPR,
       failedIssues,
       totalDuration: Date.now() - startTime,
       tokenUsage: this.tokenTracker.getSummary(),
