@@ -503,3 +503,102 @@ describe('CadreRuntime.status() — with issueNumber, CheckpointManager.load() t
     expect(mockRenderFleetStatus).not.toHaveBeenCalled();
   });
 });
+
+describe('CadreRuntime.reset() — setIssueStatus call-sites pass issueTitle', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let mockSetIssueStatus: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    mockSetIssueStatus = vi.fn().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+  });
+
+  function setUpCheckpoint(issues: Record<number, { status: string; issueTitle?: string }>) {
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({ issues }),
+      setIssueStatus: mockSetIssueStatus,
+    }));
+  }
+
+  it('calls setIssueStatus with not-started and issueTitle when resetting a single issue', async () => {
+    setUpCheckpoint({
+      42: { status: 'in-progress', issueTitle: 'Fix the login bug' },
+    });
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset(42);
+
+    expect(mockSetIssueStatus).toHaveBeenCalledOnce();
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(42, 'not-started', '', '', 0, 'Fix the login bug');
+  });
+
+  it('falls back to empty string issueTitle when issue has no title in state', async () => {
+    setUpCheckpoint({
+      7: { status: 'failed' },
+    });
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset(7);
+
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(7, 'not-started', '', '', 0, '');
+  });
+
+  it('passes empty worktreePath, branchName, and lastPhase=0 when resetting a single issue', async () => {
+    setUpCheckpoint({
+      10: { status: 'completed', issueTitle: 'Refactor auth' },
+    });
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset(10);
+
+    const [, status, worktreePath, branchName, lastPhase] = mockSetIssueStatus.mock.calls[0];
+    expect(status).toBe('not-started');
+    expect(worktreePath).toBe('');
+    expect(branchName).toBe('');
+    expect(lastPhase).toBe(0);
+  });
+
+  it('calls setIssueStatus for every issue when resetting the whole fleet', async () => {
+    setUpCheckpoint({
+      1: { status: 'completed', issueTitle: 'Issue one' },
+      2: { status: 'failed', issueTitle: 'Issue two' },
+      3: { status: 'in-progress', issueTitle: 'Issue three' },
+    });
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset();
+
+    expect(mockSetIssueStatus).toHaveBeenCalledTimes(3);
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(1, 'not-started', '', '', 0, 'Issue one');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(2, 'not-started', '', '', 0, 'Issue two');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(3, 'not-started', '', '', 0, 'Issue three');
+  });
+
+  it('does not call setIssueStatus when resetting fleet with no issues', async () => {
+    setUpCheckpoint({});
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset();
+
+    expect(mockSetIssueStatus).not.toHaveBeenCalled();
+  });
+
+  it('passes issueTitle from existing state when resetting all issues in fleet', async () => {
+    setUpCheckpoint({
+      100: { status: 'completed', issueTitle: 'Add dark mode' },
+      200: { status: 'failed', issueTitle: 'Fix crash on startup' },
+    });
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset();
+
+    const titles = mockSetIssueStatus.mock.calls.map(([, , , , , title]) => title);
+    expect(titles).toContain('Add dark mode');
+    expect(titles).toContain('Fix crash on startup');
+  });
+});
