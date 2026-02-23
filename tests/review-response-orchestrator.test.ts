@@ -348,6 +348,9 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
       exitCode: 0,
       timedOut: false,
       duration: 100,
+      outputExists: true,
+      stdout: '',
+      stderr: '',
     });
     (launcher as any).launchAgent = launchAgent;
 
@@ -377,7 +380,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
       conflictedFiles: ['src/foo.ts'],
       worktreePath: '/tmp/worktree/1',
     });
-    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver' });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver', outputExists: true, stdout: '', stderr: '' });
 
     const orchestrator = new ReviewResponseOrchestrator(
       config,
@@ -402,7 +405,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
       conflictedFiles: ['src/foo.ts'],
       worktreePath: '/tmp/worktree/1',
     });
-    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: false, exitCode: 1, timedOut: false, duration: 100, agent: 'conflict-resolver' });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: false, exitCode: 1, timedOut: false, duration: 100, agent: 'conflict-resolver', outputExists: false, stdout: '', stderr: 'build error' });
 
     const orchestrator = new ReviewResponseOrchestrator(
       config,
@@ -417,6 +420,81 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
     expect(worktreeManager.rebaseAbort).toHaveBeenCalledWith(1);
     expect(result.failed).toBe(1);
     expect(result.processed).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('exit 1'),
+      expect.objectContaining({ issueNumber: 1 }),
+    );
+  });
+
+  it('aborts the rebase and fails the issue when conflict-resolver agent times out', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({
+      status: 'conflict',
+      conflictedFiles: ['src/foo.ts'],
+      worktreePath: '/tmp/worktree/1',
+    });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: false, exitCode: null, timedOut: true, duration: 300000, agent: 'conflict-resolver', outputExists: false, stdout: '', stderr: '' });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(worktreeManager.rebaseAbort).toHaveBeenCalledWith(1);
+    expect(result.failed).toBe(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('timed out after 300000ms'),
+      expect.objectContaining({ issueNumber: 1 }),
+    );
+  });
+
+  it('aborts the rebase and fails the issue when conflict-resolver exits 0 but produces no output', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({
+      status: 'conflict',
+      conflictedFiles: ['src/foo.ts'],
+      worktreePath: '/tmp/worktree/1',
+    });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({
+      success: true,
+      exitCode: 0,
+      timedOut: false,
+      duration: 100,
+      agent: 'conflict-resolver',
+      outputExists: false,
+      outputPath: '/tmp/issues/1/conflict-resolution-report.md',
+      stdout: '',
+      stderr: '',
+    });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(worktreeManager.rebaseAbort).toHaveBeenCalledWith(1);
+    expect(result.failed).toBe(1);
+    expect(result.processed).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('produced no output'),
+      expect.objectContaining({ issueNumber: 1 }),
+    );
   });
 
   it('aborts the rebase and fails the issue when rebaseContinue fails', async () => {
@@ -429,8 +507,8 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
       conflictedFiles: ['src/foo.ts'],
       worktreePath: '/tmp/worktree/1',
     });
-    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver' });
-    worktreeManager.rebaseContinue.mockResolvedValue({ success: false, error: 'still conflicted' });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver', outputExists: true, stdout: '', stderr: '' });
+    worktreeManager.rebaseContinue.mockResolvedValue({ success: false, error: 'Conflicts remain after resolution attempt: src/foo.ts', conflictedFiles: ['src/foo.ts'] });
 
     const orchestrator = new ReviewResponseOrchestrator(
       config,
@@ -445,6 +523,10 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
     expect(worktreeManager.rebaseAbort).toHaveBeenCalledWith(1);
     expect(result.failed).toBe(1);
     expect(result.processed).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Rebase --continue failed'),
+      expect.objectContaining({ issueNumber: 1, data: expect.objectContaining({ conflictedFiles: ['src/foo.ts'] }) }),
+    );
   });
 
   it('proceeds with the pipeline after successful conflict resolution', async () => {
@@ -457,7 +539,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
       conflictedFiles: ['src/foo.ts'],
       worktreePath: '/tmp/worktree/1',
     });
-    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver' });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver', outputExists: true, stdout: '', stderr: '' });
     worktreeManager.rebaseContinue.mockResolvedValue({ success: true });
 
     const orchestrator = new ReviewResponseOrchestrator(

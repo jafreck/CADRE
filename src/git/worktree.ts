@@ -325,6 +325,29 @@ export class WorktreeManager {
     const worktreePath = this.getWorktreePath(issueNumber);
     const worktreeGit = simpleGit(worktreePath);
 
+    // Detect if a rebase from a previous run is already paused in this worktree.
+    // `git rev-parse --git-dir` returns the worktree-specific git directory
+    // (e.g. /repo/.git/worktrees/issue-47). We check for rebase-merge / rebase-apply
+    // to short-circuit the fetch + rebase and resume from the existing state.
+    // Without this check, calling `git rebase` while a rebase is already in
+    // progress throws immediately with "A rebase operation is in progress", which
+    // the catch block would silently absorb while the branch is NOT brought up to
+    // date with the base branch.
+    const rawGitDir = (await worktreeGit.raw(['rev-parse', '--git-dir'])).trim();
+    const gitDir = rawGitDir.startsWith('/') ? rawGitDir : join(worktreePath, rawGitDir);
+    const alreadyPaused =
+      (await exists(join(gitDir, 'rebase-merge'))) ||
+      (await exists(join(gitDir, 'rebase-apply')));
+
+    if (alreadyPaused) {
+      const conflictedFiles = await this.getConflictedFiles(worktreePath);
+      this.logger.warn(
+        `Issue #${issueNumber}: rebase is already paused from a previous run — resuming with ${conflictedFiles.length} conflicted file(s) (fetch skipped)`,
+        { issueNumber, data: { conflictedFiles, gitDir } },
+      );
+      return { status: 'conflict', conflictedFiles, worktreePath };
+    }
+
     await worktreeGit.fetch('origin', this.baseBranch);
 
     try {
@@ -346,7 +369,9 @@ export class WorktreeManager {
    * Stage all changes and continue a paused rebase.
    * Call this after an agent has resolved the conflicted files left by rebaseStart().
    */
-  async rebaseContinue(issueNumber: number): Promise<{ success: boolean; error?: string }> {
+  async rebaseContinue(
+    issueNumber: number,
+  ): Promise<{ success: boolean; error?: string; conflictedFiles?: string[] }> {
     const worktreePath = this.getWorktreePath(issueNumber);
     const worktreeGit = simpleGit(worktreePath);
 
@@ -360,11 +385,23 @@ export class WorktreeManager {
       // Check whether there are still unresolved conflict markers remaining.
       const stillConflicted = await this.getConflictedFiles(worktreePath);
       if (stillConflicted.length > 0) {
+        // Log at error level — a silent return here would cause the orchestrator
+        // to see only the generic error string with no file context.
+        this.logger.error(
+          `Rebase --continue failed for issue #${issueNumber}: ${stillConflicted.length} file(s) still have conflict markers: ${stillConflicted.join(', ')}`,
+          { issueNumber, data: { conflictedFiles: stillConflicted } },
+        );
         return {
           success: false,
           error: `Conflicts remain after resolution attempt: ${stillConflicted.join(', ')}`,
+          conflictedFiles: stillConflicted,
         };
       }
+      // Unexpected git error (e.g. new conflicts on the next commit in the rebase queue).
+      this.logger.error(
+        `Rebase --continue failed for issue #${issueNumber}: ${err}`,
+        { issueNumber },
+      );
       return { success: false, error: String(err) };
     }
   }

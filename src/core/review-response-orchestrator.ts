@@ -160,15 +160,59 @@ export class ReviewResponseOrchestrator {
           );
 
           if (!resolverResult.success) {
+            // Build a human-readable detail string for the log and thrown error
+            // so timeouts are clearly distinguishable from non-zero exit codes.
+            const detail = resolverResult.timedOut
+              ? `timed out after ${resolverResult.duration}ms`
+              : `exit ${resolverResult.exitCode}`;
+            this.logger.error(
+              `Conflict-resolver agent failed for PR #${pr.number} (${detail})`,
+              {
+                issueNumber,
+                data: {
+                  timedOut: resolverResult.timedOut,
+                  exitCode: resolverResult.exitCode,
+                  stderr: resolverResult.stderr?.slice(-500) ?? '',
+                },
+              },
+            );
+            await this.worktreeManager.rebaseAbort(issueNumber);
+            throw new Error(`Conflict-resolver agent failed for PR #${pr.number} (${detail})`);
+          }
+
+          // Agent exited 0 but may not have written its resolution report.
+          // This happens when the process is killed mid-turn (e.g. timeout fires
+          // after conflict markers are cleared but before the report is written),
+          // or when the agent crashes without producing output.  Without this guard
+          // a successful-looking exit would allow rebaseContinue to run on files
+          // that may still contain unresolved markers.
+          if (!resolverResult.outputExists) {
+            this.logger.error(
+              `Conflict-resolver agent for PR #${pr.number} exited successfully but produced no output at ${resolverResult.outputPath}`,
+              {
+                issueNumber,
+                data: {
+                  outputPath: resolverResult.outputPath,
+                  stderr: resolverResult.stderr?.slice(-300) ?? '',
+                },
+              },
+            );
             await this.worktreeManager.rebaseAbort(issueNumber);
             throw new Error(
-              `Conflict-resolver agent failed for PR #${pr.number} (exit ${resolverResult.exitCode})`,
+              `Conflict-resolver agent produced no output for PR #${pr.number} — resolution report missing at ${resolverResult.outputPath}`,
             );
           }
 
           // Stage all resolved files and finish the rebase.
           const continueResult = await this.worktreeManager.rebaseContinue(issueNumber);
           if (!continueResult.success) {
+            // rebaseContinue already logs which files still have markers at the git
+            // layer; log here as well so the orchestrator's issue-level log captures
+            // the full context (including which files are still conflicted).
+            this.logger.error(
+              `Rebase --continue failed for PR #${pr.number}: ${continueResult.error ?? 'unknown error'}`,
+              { issueNumber, data: { conflictedFiles: continueResult.conflictedFiles } },
+            );
             await this.worktreeManager.rebaseAbort(issueNumber);
             throw new Error(
               `Rebase --continue failed after conflict resolution for PR #${pr.number}: ${continueResult.error ?? 'unknown error'}`,
