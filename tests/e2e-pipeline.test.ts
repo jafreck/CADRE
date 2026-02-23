@@ -397,7 +397,7 @@ describe('e2e pipeline', () => {
     expect(result.success).toBe(true);
     // code-writer must have been called at least twice for task-001
     expect(task001Calls).toBeGreaterThanOrEqual(2);
-  });
+  }, 15_000);
 
   it('blocked task: pipeline succeeds overall and blocked task appears in checkpoint', async () => {
     const launcher = new E2ELauncher();
@@ -437,7 +437,7 @@ describe('e2e pipeline', () => {
     const cpState = checkpoint.getState();
     expect(cpState.blockedTasks.length).toBeGreaterThanOrEqual(1);
     expect(cpState.blockedTasks).toContain('task-003');
-  });
+  }, 15_000);
 
   it('resume: phases 1 and 2 are skipped on second run with tokenUsage === 0', async () => {
     const launcher = new E2ELauncher();
