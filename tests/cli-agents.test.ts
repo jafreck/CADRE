@@ -244,6 +244,24 @@ describe('registerAgentsCommand', () => {
       expect(mkdir).toHaveBeenCalledWith('/mock/agents', { recursive: true });
     });
 
+    it('should resolve template dir using ../agents/templates (not ../../src/agents/templates)', async () => {
+      const capturedPaths: string[] = [];
+      vi.mocked(exists).mockImplementation(async (path: string) => {
+        capturedPaths.push(path as string);
+        return (path as string).includes('templates');
+      });
+
+      const program = makeProgram();
+      await program.parseAsync(['agents', 'scaffold', '--agent', 'code-writer'], { from: 'user' });
+
+      const templatePaths = capturedPaths.filter((p) => p.includes('templates'));
+      expect(templatePaths.length).toBeGreaterThan(0);
+      for (const p of templatePaths) {
+        // The old (broken) dist branch used ../../src/agents/templates; verify that pattern is absent
+        expect(p).not.toMatch(/[/\\]\.\.[/\\]\.\.[/\\]src[/\\]/);
+      }
+    });
+
     it('should exit 1 when loadConfig fails', async () => {
       vi.mocked(loadConfig).mockRejectedValue(new Error('bad config'));
 

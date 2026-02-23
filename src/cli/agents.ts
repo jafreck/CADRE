@@ -13,7 +13,7 @@ const __dirname = dirname(__filename);
 /** Resolve the bundled templates directory whether running from src/ or dist/. */
 function getTemplateDir(): string {
   if (__filename.includes(`${sep}dist${sep}`)) {
-    return resolve(__dirname, '../../src/agents/templates');
+    return resolve(__dirname, '../agents/templates');
   }
   return resolve(__dirname, '../agents/templates');
 }
