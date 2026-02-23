@@ -154,6 +154,86 @@ Set `agent.backend` to `"claude"` in `cadre.config.json`:
 | `agent.timeout` | number (ms) | backend default | Timeout in milliseconds for agent invocations |
 | `agent.claude.cliCommand` | string | `"claude"` | Path or name of the `claude` CLI executable |
 
+## CI Usage
+
+You can run CADRE in GitHub Actions using the example workflow at [`.github/workflows/cadre-example.yml`](.github/workflows/cadre-example.yml).
+
+### Authentication Options
+
+**Option 1 — PAT Token**
+
+Use a personal access token stored as a repository secret:
+
+```json
+{
+  "github": {
+    "auth": {
+      "token": "${GITHUB_TOKEN}"
+    }
+  }
+}
+```
+
+```yaml
+- name: Run CADRE
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: npx cadre run -c cadre.config.json
+```
+
+**Option 2 — GitHub App**
+
+Use a registered GitHub App for authentication:
+
+```json
+{
+  "github": {
+    "auth": {
+      "appId": "${CADRE_GITHUB_APP_ID}",
+      "installationId": "${CADRE_GITHUB_INSTALLATION_ID}",
+      "privateKeyFile": "${CADRE_GITHUB_PRIVATE_KEY_FILE}"
+    }
+  }
+}
+```
+
+```yaml
+- name: Run CADRE
+  env:
+    CADRE_GITHUB_APP_ID: ${{ secrets.CADRE_GITHUB_APP_ID }}
+    CADRE_GITHUB_INSTALLATION_ID: ${{ secrets.CADRE_GITHUB_INSTALLATION_ID }}
+    CADRE_GITHUB_PRIVATE_KEY_FILE: ${{ secrets.CADRE_GITHUB_PRIVATE_KEY_FILE }}
+  run: npx cadre run -c cadre.config.json
+```
+
+**Required GitHub App permissions:**
+
+| Permission | Access |
+|------------|--------|
+| Issues | Read |
+| Pull Requests | Write |
+| Contents | Write |
+
+### `repoPath` in CI
+
+Set `repoPath` to the GitHub Actions workspace so CADRE uses the checked-out repository:
+
+```json
+{
+  "repoPath": "${GITHUB_WORKSPACE}"
+}
+```
+
+Or inline in the workflow:
+
+```yaml
+- name: Configure CADRE
+  run: |
+    jq '.repoPath = env.GITHUB_WORKSPACE' cadre.config.json > tmp.json && mv tmp.json cadre.config.json
+```
+
+See [`.github/workflows/cadre-example.yml`](.github/workflows/cadre-example.yml) for a complete end-to-end example.
+
 ## Architecture
 
 CADRE processes issues through a 5-phase pipeline:
