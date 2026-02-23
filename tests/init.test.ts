@@ -438,6 +438,25 @@ describe('runInit', () => {
       const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
       expect(logCalls).not.toContain('cadre agents scaffold');
     });
+
+    it('should show scaffold confirm prompt with recommended message when --yes is false', async () => {
+      setupHappyPath();
+      mockConfirm.mockResolvedValue(true);
+
+      await runInit({ yes: false, repoPath: REPO_PATH });
+
+      expect(mockConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('Scaffold built-in agent templates') }),
+      );
+    });
+
+    it('should complete init normally when user declines scaffold prompt', async () => {
+      setupHappyPath();
+      mockConfirm.mockResolvedValue(false);
+
+      await expect(runInit({ yes: false, repoPath: REPO_PATH })).resolves.toBeUndefined();
+      expect(mockAtomicWriteJSON).toHaveBeenCalled();
+    });
   });
 
   describe('success output', () => {
