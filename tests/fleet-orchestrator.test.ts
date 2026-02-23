@@ -515,3 +515,133 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
     });
   });
 });
+
+describe('FleetOrchestrator — runReviewResponse', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns a FleetResult with correct shape', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.runReviewResponse();
+
+    expect(result).toMatchObject({
+      success: expect.any(Boolean),
+      issues: expect.any(Array),
+      prsCreated: expect.any(Array),
+      failedIssues: expect.any(Array),
+      totalDuration: expect.any(Number),
+      tokenUsage: expect.objectContaining({
+        total: expect.any(Number),
+      }),
+    });
+  });
+
+  it('delegates to ReviewResponseOrchestrator.run() with provided issueNumbers', async () => {
+    const { ReviewResponseOrchestrator } = await import('../src/core/review-response-orchestrator.js');
+    const runMock = vi.fn().mockResolvedValue({
+      processed: 0,
+      skipped: 0,
+      succeeded: 0,
+      failed: 0,
+      issues: [],
+    });
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: runMock,
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.runReviewResponse([42, 43]);
+
+    expect(runMock).toHaveBeenCalledWith([42, 43]);
+  });
+
+  it('maps succeeded issue results into FleetResult.issues', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.runReviewResponse();
+
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toMatchObject({ issueNumber: 1, success: true });
+    expect(result.success).toBe(true);
+    expect(result.failedIssues).toHaveLength(0);
+  });
+
+  it('marks result as failed when ReviewResponseOrchestrator reports failures', async () => {
+    const { ReviewResponseOrchestrator } = await import('../src/core/review-response-orchestrator.js');
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        processed: 1,
+        skipped: 0,
+        succeeded: 0,
+        failed: 1,
+        issues: [
+          { issueNumber: 5, skipped: false, result: undefined },
+        ],
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(5)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.runReviewResponse([5]);
+
+    expect(result.success).toBe(false);
+    expect(result.failedIssues).toHaveLength(1);
+    expect(result.failedIssues[0].issueNumber).toBe(5);
+  });
+});
+
