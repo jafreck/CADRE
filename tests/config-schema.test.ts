@@ -99,6 +99,64 @@ describe('CadreConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  describe('maxIntegrationFixRounds', () => {
+    it('should default maxIntegrationFixRounds to 1 when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.maxIntegrationFixRounds).toBe(1);
+    });
+
+    it('should accept maxIntegrationFixRounds of 1 (min boundary)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxIntegrationFixRounds: 1 },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept maxIntegrationFixRounds of 5 (max boundary)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxIntegrationFixRounds: 5 },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept maxIntegrationFixRounds of 3 (mid-range)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxIntegrationFixRounds: 3 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.maxIntegrationFixRounds).toBe(3);
+      }
+    });
+
+    it('should reject maxIntegrationFixRounds of 0 (below min)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxIntegrationFixRounds: 0 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject maxIntegrationFixRounds of 6 (above max)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxIntegrationFixRounds: 6 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject non-integer maxIntegrationFixRounds', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxIntegrationFixRounds: 1.5 },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   it('should accept full config with all fields', () => {
     const result = CadreConfigSchema.safeParse({
       ...validConfig,
