@@ -3,7 +3,7 @@ import { ContextBuilder } from '../src/agents/context-builder.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
 import { Logger } from '../src/logging/logger.js';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 
 vi.mock('node:fs/promises');
 
@@ -61,7 +61,15 @@ describe('ContextBuilder', () => {
 
     vi.mocked(mkdir).mockResolvedValue(undefined);
     vi.mocked(writeFile).mockResolvedValue(undefined);
+    vi.mocked(rename).mockResolvedValue(undefined);
   });
+
+  /** Helper: returns the context object written by the last writeFile call. */
+  function captureWrittenContext(): Record<string, unknown> {
+    const calls = vi.mocked(writeFile).mock.calls;
+    const lastCall = calls[calls.length - 1];
+    return JSON.parse(lastCall[1] as string) as Record<string, unknown>;
+  }
 
   it('should build context for issue-analyst', async () => {
     const ctx = await builder.buildForIssueAnalyst(
@@ -163,5 +171,84 @@ describe('ContextBuilder', () => {
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
+  });
+
+  describe('outputSchema inclusion', () => {
+    const task = {
+      id: 'task-001',
+      name: 'Fix login',
+      description: 'Fix the login handler',
+      files: ['src/auth/login.ts'],
+      dependencies: [],
+      complexity: 'simple' as const,
+      acceptanceCriteria: ['Login works'],
+    };
+
+    it('should include outputSchema for issue-analyst', async () => {
+      await builder.buildForIssueAnalyst(42, '/tmp/worktree', '/tmp/issue.json', '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeDefined();
+      expect(typeof ctx.outputSchema).toBe('object');
+    });
+
+    it('should include outputSchema for codebase-scout', async () => {
+      await builder.buildForCodebaseScout(42, '/tmp/worktree', '/tmp/analysis.md', '/tmp/file-tree.txt', '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeDefined();
+      expect(typeof ctx.outputSchema).toBe('object');
+    });
+
+    it('should include outputSchema for implementation-planner', async () => {
+      await builder.buildForImplementationPlanner(42, '/tmp/worktree', '/tmp/analysis.md', '/tmp/scout.md', '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeDefined();
+      expect(typeof ctx.outputSchema).toBe('object');
+    });
+
+    it('should include outputSchema for adjudicator', async () => {
+      await builder.buildForAdjudicator(42, '/tmp/worktree', ['/tmp/plan1.md'], '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeDefined();
+      expect(typeof ctx.outputSchema).toBe('object');
+    });
+
+    it('should include outputSchema for code-reviewer', async () => {
+      await builder.buildForCodeReviewer(42, '/tmp/worktree', task, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeDefined();
+      expect(typeof ctx.outputSchema).toBe('object');
+    });
+
+    it('should include outputSchema for integration-checker', async () => {
+      await builder.buildForIntegrationChecker(42, '/tmp/worktree', '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeDefined();
+      expect(typeof ctx.outputSchema).toBe('object');
+    });
+
+    it('should include outputSchema for pr-composer', async () => {
+      await builder.buildForPRComposer(42, '/tmp/worktree', mockIssue, '/tmp/analysis.md', '/tmp/plan.md', '/tmp/integration.md', '/tmp/diff.patch', '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeDefined();
+      expect(typeof ctx.outputSchema).toBe('object');
+    });
+
+    it('should NOT include outputSchema for code-writer', async () => {
+      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeUndefined();
+    });
+
+    it('should NOT include outputSchema for test-writer', async () => {
+      await builder.buildForTestWriter(42, '/tmp/worktree', task, [], '/tmp/task-plan.md', '/tmp/progress');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeUndefined();
+    });
+
+    it('should NOT include outputSchema for fix-surgeon', async () => {
+      await builder.buildForFixSurgeon(42, '/tmp/worktree', task, '/tmp/feedback.md', [], '/tmp/progress', 'review');
+      const ctx = captureWrittenContext();
+      expect(ctx.outputSchema).toBeUndefined();
+    });
   });
 });

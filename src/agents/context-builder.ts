@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { atomicWriteJSON, ensureDir } from '../util/fs.js';
 import type { CadreConfig } from '../config/schema.js';
 import type {
@@ -8,6 +9,14 @@ import type {
 } from './types.js';
 import type { IssueDetail } from '../platform/provider.js';
 import { Logger } from '../logging/logger.js';
+import {
+  analysisSchema,
+  scoutReportSchema,
+  implementationPlanSchema,
+  reviewSchema,
+  integrationReportSchema,
+  prContentSchema,
+} from './schemas/index.js';
 
 /**
  * Builds per-agent context files.
@@ -38,6 +47,7 @@ export class ContextBuilder {
       config: { commands: this.config.commands },
       inputFiles: [issueJsonPath],
       outputPath: join(progressDir, 'analysis.md'),
+      outputSchema: zodToJsonSchema(analysisSchema) as Record<string, unknown>,
     });
   }
 
@@ -61,6 +71,7 @@ export class ContextBuilder {
       config: { commands: this.config.commands },
       inputFiles: [analysisPath, fileTreePath],
       outputPath: join(progressDir, 'scout-report.md'),
+      outputSchema: zodToJsonSchema(scoutReportSchema) as Record<string, unknown>,
     });
   }
 
@@ -84,6 +95,7 @@ export class ContextBuilder {
       config: { commands: this.config.commands },
       inputFiles: [analysisPath, scoutReportPath],
       outputPath: join(progressDir, 'implementation-plan.md'),
+      outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
     });
   }
 
@@ -107,6 +119,7 @@ export class ContextBuilder {
       inputFiles: planPaths,
       outputPath: join(progressDir, 'adjudication.md'),
       payload: { decisionType: 'implementation-strategy' },
+      outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
     });
   }
 
@@ -195,6 +208,7 @@ export class ContextBuilder {
         taskId: task.id,
         acceptanceCriteria: task.acceptanceCriteria,
       },
+      outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
     });
   }
 
@@ -253,6 +267,7 @@ export class ContextBuilder {
           lint: this.config.commands.lint,
         },
       },
+      outputSchema: zodToJsonSchema(integrationReportSchema) as Record<string, unknown>,
     });
   }
 
@@ -283,6 +298,7 @@ export class ContextBuilder {
         issueTitle: issue.title,
         issueBody: issue.body,
       },
+      outputSchema: zodToJsonSchema(prContentSchema) as Record<string, unknown>,
     });
   }
 

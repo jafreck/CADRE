@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ZodError } from 'zod';
 import { readFile } from 'node:fs/promises';
 import { ResultParser } from '../src/agents/result-parser.js';
 import { Logger } from '../src/logging/logger.js';
@@ -7,15 +8,16 @@ vi.mock('node:fs/promises');
 
 describe('ResultParser', () => {
   let parser: ResultParser;
+  let mockLogger: { debug: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    const mockLogger = {
+    mockLogger = {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
-    } as unknown as Logger;
-    parser = new ResultParser(mockLogger);
+    };
+    parser = new ResultParser(mockLogger as unknown as Logger);
   });
 
   describe('parseImplementationPlan', () => {
@@ -74,6 +76,40 @@ Fix the login timeout handling.
       const tasks = await parser.parseImplementationPlan('/tmp/plan.md');
       expect(tasks).toHaveLength(0);
     });
+
+    it('should use cadre-json block when present and skip regex', async () => {
+      const task = { id: 'task-001', name: 'My Task', description: 'Do stuff', files: ['src/foo.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['Does stuff'] };
+      const content = `# Plan\n\n\`\`\`cadre-json\n${JSON.stringify([task])}\n\`\`\`\n`;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const tasks = await parser.parseImplementationPlan('/tmp/plan.md');
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].id).toBe('task-001');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should emit deprecation warn when falling back to regex parsing', async () => {
+      vi.mocked(readFile).mockResolvedValue('# Plan\n\nNo cadre-json block here.');
+
+      await parser.parseImplementationPlan('/tmp/plan.md');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[deprecated]'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('parseImplementationPlan'));
+    });
+
+    it('should throw ZodError when cadre-json block fails schema validation', async () => {
+      const invalid = [{ id: 'task-001', name: 'Bad', complexity: 'invalid-level' }];
+      const content = `\`\`\`cadre-json\n${JSON.stringify(invalid)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parseImplementationPlan('/tmp/plan.md')).rejects.toBeInstanceOf(ZodError);
+    });
+
+    it('should throw when cadre-json block contains invalid JSON', async () => {
+      const content = '```cadre-json\n{ not valid json }\n```';
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parseImplementationPlan('/tmp/plan.md')).rejects.toThrow(SyntaxError);
+    });
   });
 
   describe('parseReview', () => {
@@ -109,6 +145,33 @@ One issue found that should be fixed.
       const result = await parser.parseReview('/tmp/review.md');
       expect(result.verdict).toBe('needs-fixes');
     });
+
+    it('should use cadre-json block for review when present', async () => {
+      const review = { verdict: 'pass', issues: [], summary: 'Looks good' };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(review)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parseReview('/tmp/review.md');
+      expect(result.verdict).toBe('pass');
+      expect(result.summary).toBe('Looks good');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should emit deprecation warn for review regex fallback', async () => {
+      vi.mocked(readFile).mockResolvedValue('## Verdict: pass\n\n## Summary\nok');
+
+      await parser.parseReview('/tmp/review.md');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[deprecated]'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('parseReview'));
+    });
+
+    it('should throw ZodError for review cadre-json with invalid verdict', async () => {
+      const invalid = { verdict: 'unknown', issues: [], summary: 'x' };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(invalid)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parseReview('/tmp/review.md')).rejects.toBeInstanceOf(ZodError);
+    });
   });
 
   describe('parsePRContent', () => {
@@ -140,6 +203,33 @@ Closes #42
       expect(result.title).toBe('');
       expect(result.labels).toEqual([]);
       expect(result.body).toBe('Just a body\n\nWith some paragraphs.');
+    });
+
+    it('should use cadre-json block for PR content when present', async () => {
+      const pr = { title: 'feat: add thing', body: 'Does something', labels: ['enhancement'] };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(pr)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parsePRContent('/tmp/pr-content.md');
+      expect(result.title).toBe('feat: add thing');
+      expect(result.labels).toContain('enhancement');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should emit deprecation warn for PR content regex fallback', async () => {
+      vi.mocked(readFile).mockResolvedValue('Just a body');
+
+      await parser.parsePRContent('/tmp/pr-content.md');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[deprecated]'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('parsePRContent'));
+    });
+
+    it('should throw ZodError for PR cadre-json missing required fields', async () => {
+      const invalid = { title: 'x' }; // missing body and labels
+      const content = `\`\`\`cadre-json\n${JSON.stringify(invalid)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parsePRContent('/tmp/pr-content.md')).rejects.toBeInstanceOf(ZodError);
     });
   });
 
@@ -173,6 +263,33 @@ medium
       expect(result.affectedAreas).toHaveLength(2);
       expect(result.ambiguities).toHaveLength(1);
     });
+
+    it('should use cadre-json block for analysis when present', async () => {
+      const analysis = { requirements: ['req1'], changeType: 'feature', scope: 'small', affectedAreas: ['area1'], ambiguities: [] };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(analysis)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parseAnalysis('/tmp/analysis.md');
+      expect(result.changeType).toBe('feature');
+      expect(result.scope).toBe('small');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should emit deprecation warn for analysis regex fallback', async () => {
+      vi.mocked(readFile).mockResolvedValue('# Analysis\n\n## Requirements\n- Something');
+
+      await parser.parseAnalysis('/tmp/analysis.md');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[deprecated]'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('parseAnalysis'));
+    });
+
+    it('should throw ZodError for analysis cadre-json with invalid changeType', async () => {
+      const invalid = { requirements: [], changeType: 'invalid', scope: 'small', affectedAreas: [], ambiguities: [] };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(invalid)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parseAnalysis('/tmp/analysis.md')).rejects.toBeInstanceOf(ZodError);
+    });
   });
 
   describe('parseScoutReport', () => {
@@ -195,6 +312,33 @@ medium
       expect(result.relevantFiles).toHaveLength(2);
       expect(result.relevantFiles[0].path).toBe('src/auth/login.ts');
       expect(result.testFiles).toContain('src/auth/login.test.ts');
+    });
+
+    it('should use cadre-json block for scout report when present', async () => {
+      const scout = { relevantFiles: [{ path: 'src/foo.ts', reason: 'core logic' }], dependencyMap: {}, testFiles: ['src/foo.test.ts'], estimatedChanges: [{ path: 'src/foo.ts', linesEstimate: 20 }] };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(scout)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parseScoutReport('/tmp/scout.md');
+      expect(result.relevantFiles[0].path).toBe('src/foo.ts');
+      expect(result.testFiles).toContain('src/foo.test.ts');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should emit deprecation warn for scout report regex fallback', async () => {
+      vi.mocked(readFile).mockResolvedValue('# Scout Report\n\n## Relevant Files\n- `src/a.ts` - reason');
+
+      await parser.parseScoutReport('/tmp/scout.md');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[deprecated]'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('parseScoutReport'));
+    });
+
+    it('should throw ZodError for scout report cadre-json with invalid structure', async () => {
+      const invalid = { relevantFiles: 'not-an-array' };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(invalid)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parseScoutReport('/tmp/scout.md')).rejects.toBeInstanceOf(ZodError);
     });
   });
 
@@ -243,6 +387,37 @@ medium
       const result = await parser.parseIntegrationReport('/tmp/integration.md');
       expect(result.overallPass).toBe(false);
       expect(result.testResult.pass).toBe(false);
+    });
+
+    it('should use cadre-json block for integration report when present', async () => {
+      const report = {
+        buildResult: { command: 'npm run build', exitCode: 0, output: '', pass: true },
+        testResult: { command: 'npm test', exitCode: 0, output: '', pass: true },
+        overallPass: true,
+      };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(report)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parseIntegrationReport('/tmp/integration.md');
+      expect(result.overallPass).toBe(true);
+      expect(result.buildResult.command).toBe('npm run build');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should emit deprecation warn for integration report regex fallback', async () => {
+      vi.mocked(readFile).mockResolvedValue('# Integration Report\n\n## Build\n**Exit Code:** 0\n\n## Test\n**Exit Code:** 0');
+
+      await parser.parseIntegrationReport('/tmp/integration.md');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[deprecated]'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('parseIntegrationReport'));
+    });
+
+    it('should throw ZodError for integration report cadre-json with invalid structure', async () => {
+      const invalid = { overallPass: 'yes' }; // wrong type, missing required fields
+      const content = `\`\`\`cadre-json\n${JSON.stringify(invalid)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parseIntegrationReport('/tmp/integration.md')).rejects.toBeInstanceOf(ZodError);
     });
   });
 });

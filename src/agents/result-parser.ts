@@ -8,6 +8,14 @@ import type {
   IntegrationReport,
   PRContent,
 } from './types.js';
+import {
+  analysisSchema,
+  scoutReportSchema,
+  implementationPlanSchema,
+  reviewSchema,
+  integrationReportSchema,
+  prContentSchema,
+} from './schemas/index.js';
 import { Logger } from '../logging/logger.js';
 
 /**
@@ -17,10 +25,27 @@ export class ResultParser {
   constructor(private readonly logger: Logger) {}
 
   /**
+   * Extract and JSON-parse the first ```cadre-json``` fenced block in content.
+   * Returns the parsed value, or null if no such block exists.
+   */
+  private extractCadreJson(content: string): unknown | null {
+    const match = content.match(/```cadre-json\s*\n([\s\S]*?)```/);
+    if (!match) return null;
+    return JSON.parse(match[1].trim());
+  }
+
+  /**
    * Parse an implementation plan markdown into a list of ImplementationTasks.
    */
   async parseImplementationPlan(planPath: string): Promise<ImplementationTask[]> {
     const content = await readFile(planPath, 'utf-8');
+
+    const parsed = this.extractCadreJson(content);
+    if (parsed !== null) {
+      return implementationPlanSchema.parse(parsed);
+    }
+
+    this.logger.warn(`[deprecated] parseImplementationPlan: no cadre-json block found in ${planPath}; falling back to regex parsing`);
     const tasks: ImplementationTask[] = [];
 
     // Split into task blocks: ## Task: task-xxx - Name  or  ### Task: task-xxx - Name
@@ -105,6 +130,13 @@ export class ResultParser {
   async parseReview(reviewPath: string): Promise<ReviewResult> {
     const content = await readFile(reviewPath, 'utf-8');
 
+    const parsed = this.extractCadreJson(content);
+    if (parsed !== null) {
+      return reviewSchema.parse(parsed);
+    }
+
+    this.logger.warn(`[deprecated] parseReview: no cadre-json block found in ${reviewPath}; falling back to regex parsing`);
+
     // Find verdict
     const verdictMatch = content.match(/\*\*Verdict:\*\*\s*(pass|needs-fixes)/i)
       ?? content.match(/##\s*Verdict\s*:\s*(pass|needs-fixes)/i)
@@ -145,6 +177,13 @@ export class ResultParser {
    */
   async parseIntegrationReport(reportPath: string): Promise<IntegrationReport> {
     const content = await readFile(reportPath, 'utf-8');
+
+    const parsed = this.extractCadreJson(content);
+    if (parsed !== null) {
+      return integrationReportSchema.parse(parsed);
+    }
+
+    this.logger.warn(`[deprecated] parseIntegrationReport: no cadre-json block found in ${reportPath}; falling back to regex parsing`);
 
     const buildResult = this.parseCommandResult(content, 'Build');
     const testResult = this.parseCommandResult(content, 'Test');
@@ -189,6 +228,13 @@ export class ResultParser {
   async parsePRContent(contentPath: string): Promise<PRContent> {
     const content = await readFile(contentPath, 'utf-8');
 
+    const parsed = this.extractCadreJson(content);
+    if (parsed !== null) {
+      return prContentSchema.parse(parsed);
+    }
+
+    this.logger.warn(`[deprecated] parsePRContent: no cadre-json block found in ${contentPath}; falling back to regex parsing`);
+
     // Parse YAML frontmatter
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     let title = '';
@@ -221,6 +267,13 @@ export class ResultParser {
    */
   async parseScoutReport(reportPath: string): Promise<ScoutReport> {
     const content = await readFile(reportPath, 'utf-8');
+
+    const parsed = this.extractCadreJson(content);
+    if (parsed !== null) {
+      return scoutReportSchema.parse(parsed);
+    }
+
+    this.logger.warn(`[deprecated] parseScoutReport: no cadre-json block found in ${reportPath}; falling back to regex parsing`);
 
     // Parse relevant files
     const filesSection = content.match(/##\s*Relevant Files\s*\n([\s\S]*?)(?=\n##|$)/i);
@@ -260,6 +313,13 @@ export class ResultParser {
    */
   async parseAnalysis(analysisPath: string): Promise<AnalysisResult> {
     const content = await readFile(analysisPath, 'utf-8');
+
+    const parsed = this.extractCadreJson(content);
+    if (parsed !== null) {
+      return analysisSchema.parse(parsed);
+    }
+
+    this.logger.warn(`[deprecated] parseAnalysis: no cadre-json block found in ${analysisPath}; falling back to regex parsing`);
 
     // Parse requirements
     const reqSection = content.match(/##\s*Requirements\s*\n([\s\S]*?)(?=\n##|$)/i);
