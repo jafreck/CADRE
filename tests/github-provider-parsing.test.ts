@@ -360,4 +360,56 @@ describe('GitHubProvider – listPullRequests type guards', () => {
     expect(prs[0].headBranch).toBe('');
     expect(prs[0].baseBranch).toBe('');
   });
+
+  it('should populate state for each PR from the API response', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { number: 20, title: 'Open PR', head: { ref: 'a' }, base: { ref: 'main' }, state: 'open' },
+      { number: 21, title: 'Closed PR', head: { ref: 'b' }, base: { ref: 'main' }, state: 'closed' },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].state).toBe('open');
+    expect(prs[1].state).toBe('closed');
+  });
+
+  it('should default state to "open" when state is absent for a PR in the list', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { number: 22, title: 'PR no state', head: { ref: 'c' }, base: { ref: 'main' } },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].state).toBe('open');
+  });
+
+  it('should set merged to true when PR in list has merged: true', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { number: 30, title: 'Merged PR', head: { ref: 'feature' }, base: { ref: 'main' }, state: 'closed', merged: true },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].merged).toBe(true);
+  });
+
+  it('should set merged to true when PR in list has merged_at set', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { number: 31, title: 'Merged via merged_at', head: { ref: 'feature' }, base: { ref: 'main' }, merged_at: '2024-06-01T12:00:00Z' },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].merged).toBe(true);
+  });
+
+  it('should set merged to false when neither merged nor merged_at are present for a PR in the list', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { number: 32, title: 'Open PR', head: { ref: 'feature' }, base: { ref: 'main' }, state: 'open' },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].merged).toBe(false);
+  });
 });
