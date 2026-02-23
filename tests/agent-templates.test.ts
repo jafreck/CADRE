@@ -3,6 +3,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { AGENT_DEFINITIONS } from '../src/agents/types.js';
 
+const AGENT_DEFINITIONS_DIR = resolve(__dirname, '../.github/agents');
+
 const TEMPLATES_DIR = resolve(__dirname, '../src/agents/templates');
 
 describe('Agent Template Files', () => {

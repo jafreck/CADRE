@@ -5,7 +5,7 @@ import { CostEstimator } from '../src/budget/cost-estimator.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { FleetResult } from '../src/core/fleet-orchestrator.js';
 import type { IssueDetail } from '../src/platform/provider.js';
-import type { RunReport } from '../src/reporting/types.js';
+import type { RunReport, CostReport } from '../src/reporting/types.js';
 import { ISSUE_PHASES } from '../src/core/phase-registry.js';
 
 vi.mock('../src/util/fs.js', () => ({
@@ -356,8 +356,77 @@ describe('ReportWriter', () => {
     });
   });
 
-  describe('readReport (static)', () => {
-    it('should return parsed RunReport from file', async () => {
+  describe('writeIssueCostReport', () => {
+    const makeCostReport = (overrides: Partial<CostReport> = {}): CostReport => ({
+      issueNumber: 7,
+      generatedAt: '2024-06-01T12:00:00.000Z',
+      totalTokens: 1000,
+      inputTokens: 750,
+      outputTokens: 250,
+      estimatedCost: 0.05,
+      model: 'gpt-4o',
+      byAgent: [{ agent: 'issue-analyst', tokens: 1000, inputTokens: 750, outputTokens: 250, estimatedCost: 0.05 }],
+      byPhase: [{ phase: 1, phaseName: 'Analysis', tokens: 1000, estimatedCost: 0.05 }],
+      ...overrides,
+    });
+
+    it('should call ensureDir with the reports directory', async () => {
+      const report = makeCostReport();
+      await writer.writeIssueCostReport(report);
+
+      const expectedDir = join('/repo', '.cadre', 'reports');
+      expect(fsUtil.ensureDir).toHaveBeenCalledWith(expectedDir);
+    });
+
+    it('should call atomicWriteJSON with the correct path and report data', async () => {
+      const report = makeCostReport();
+      const filePath = await writer.writeIssueCostReport(report);
+
+      expect(fsUtil.atomicWriteJSON).toHaveBeenCalledWith(filePath, report);
+    });
+
+    it('should write to issue-<issueNumber>-cost.json filename', async () => {
+      const report = makeCostReport({ issueNumber: 42 });
+      const filePath = await writer.writeIssueCostReport(report);
+
+      expect(filePath).toContain('issue-42-cost.json');
+    });
+
+    it('should return the full path under .cadre/reports/', async () => {
+      const report = makeCostReport({ issueNumber: 7 });
+      const filePath = await writer.writeIssueCostReport(report);
+
+      const expectedDir = join('/repo', '.cadre', 'reports');
+      expect(filePath).toContain(expectedDir);
+    });
+
+    it('should use issueNumber from the report in the filename', async () => {
+      const report1 = makeCostReport({ issueNumber: 1 });
+      const report2 = makeCostReport({ issueNumber: 99 });
+
+      const path1 = await writer.writeIssueCostReport(report1);
+      const path2 = await writer.writeIssueCostReport(report2);
+
+      expect(path1).toContain('issue-1-cost.json');
+      expect(path2).toContain('issue-99-cost.json');
+    });
+
+    it('should propagate ensureDir errors', async () => {
+      vi.mocked(fsUtil.ensureDir).mockRejectedValueOnce(new Error('Permission denied'));
+      const report = makeCostReport();
+
+      await expect(writer.writeIssueCostReport(report)).rejects.toThrow('Permission denied');
+    });
+
+    it('should propagate atomicWriteJSON errors', async () => {
+      vi.mocked(fsUtil.atomicWriteJSON).mockRejectedValueOnce(new Error('Disk full'));
+      const report = makeCostReport();
+
+      await expect(writer.writeIssueCostReport(report)).rejects.toThrow('Disk full');
+    });
+  });
+
+  describe('readReport (static)', () => {    it('should return parsed RunReport from file', async () => {
       const fakeReport: RunReport = {
         runId: 'r1',
         project: 'my-project',
