@@ -237,6 +237,109 @@ describe('PlatformProvider interface shape', () => {
     );
     expect(typeof provider.listPRReviewComments).toBe('function');
   });
+
+  it('GitHubProvider.listPRReviewComments should throw not yet implemented', async () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    await expect(provider.listPRReviewComments(1)).rejects.toThrow('listPRReviewComments: not yet implemented');
+  });
+
+  it('AzureDevOpsProvider.listPRReviewComments should throw not yet implemented', async () => {
+    const provider = new AzureDevOpsProvider(
+      {
+        organization: 'my-org',
+        project: 'my-project',
+        auth: { pat: 'token' },
+      },
+      mockLogger,
+    );
+    await expect(provider.listPRReviewComments(1)).rejects.toThrow('listPRReviewComments: not yet implemented');
+  });
+});
+
+describe('ReviewComment and ReviewThread interface shapes', () => {
+  it('ReviewComment should accept a valid object with all required fields', () => {
+    const comment: ReviewComment = {
+      id: 'c1',
+      author: 'alice',
+      body: 'Looks good',
+      createdAt: '2024-01-01T00:00:00Z',
+      path: 'src/index.ts',
+    };
+    expect(comment.id).toBe('c1');
+    expect(comment.author).toBe('alice');
+    expect(comment.body).toBe('Looks good');
+    expect(comment.createdAt).toBe('2024-01-01T00:00:00Z');
+    expect(comment.path).toBe('src/index.ts');
+    expect(comment.line).toBeUndefined();
+  });
+
+  it('ReviewComment should accept an optional line field', () => {
+    const comment: ReviewComment = {
+      id: 'c2',
+      author: 'bob',
+      body: 'Fix this',
+      createdAt: '2024-01-02T00:00:00Z',
+      path: 'src/util.ts',
+      line: 42,
+    };
+    expect(comment.line).toBe(42);
+  });
+
+  it('ReviewThread should accept a valid object with all required fields', () => {
+    const comment: ReviewComment = {
+      id: 'c1',
+      author: 'alice',
+      body: 'LGTM',
+      createdAt: '2024-01-01T00:00:00Z',
+      path: 'src/index.ts',
+    };
+    const thread: ReviewThread = {
+      id: 't1',
+      prNumber: 7,
+      isResolved: false,
+      isOutdated: false,
+      comments: [comment],
+    };
+    expect(thread.id).toBe('t1');
+    expect(thread.prNumber).toBe(7);
+    expect(thread.isResolved).toBe(false);
+    expect(thread.isOutdated).toBe(false);
+    expect(thread.comments).toHaveLength(1);
+    expect(thread.comments[0]).toEqual(comment);
+  });
+
+  it('ReviewThread should support resolved and outdated state', () => {
+    const thread: ReviewThread = {
+      id: 't2',
+      prNumber: 8,
+      isResolved: true,
+      isOutdated: true,
+      comments: [],
+    };
+    expect(thread.isResolved).toBe(true);
+    expect(thread.isOutdated).toBe(true);
+    expect(thread.comments).toHaveLength(0);
+  });
+
+  it('ReviewThread should support multiple comments', () => {
+    const comments: ReviewComment[] = [
+      { id: 'c1', author: 'alice', body: 'first', createdAt: '2024-01-01T00:00:00Z', path: 'a.ts' },
+      { id: 'c2', author: 'bob', body: 'second', createdAt: '2024-01-02T00:00:00Z', path: 'a.ts', line: 10 },
+    ];
+    const thread: ReviewThread = {
+      id: 't3',
+      prNumber: 9,
+      isResolved: false,
+      isOutdated: false,
+      comments,
+    };
+    expect(thread.comments).toHaveLength(2);
+    expect(thread.comments[1].line).toBe(10);
+  });
 });
 
 describe('GitHubProvider', () => {
