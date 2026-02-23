@@ -53,6 +53,14 @@ vi.mock('../src/core/fleet-orchestrator.js', () => ({
       totalDuration: 100,
       tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
     }),
+    runReviewResponse: vi.fn().mockResolvedValue({
+      success: true,
+      issues: [],
+      prsCreated: [],
+      failedIssues: [],
+      totalDuration: 100,
+      tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+    }),
   })),
 }));
 
@@ -230,6 +238,83 @@ describe('CadreRuntime — NotificationManager wiring', () => {
 
 /** Flush all pending microtasks and a macrotask so async fire-and-forget handlers complete. */
 const flushAsync = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+describe('CadreRuntime — review-response routing', () => {
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+
+    MockCreateNotificationManager.mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    });
+
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      getIssue: vi.fn().mockResolvedValue({
+        number: 1,
+        title: 'Test issue',
+        body: '',
+        labels: [],
+        state: 'open',
+        url: 'https://github.com/owner/repo/issues/1',
+        author: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+      }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+      }),
+      runReviewResponse: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    processOnSpy.mockRestore();
+  });
+
+  it('calls fleet.runReviewResponse() when respondToReviews is true', async () => {
+    const config = { ...makeConfig([1]), options: { ...makeConfig([1]).options, respondToReviews: true } } as unknown as CadreConfig;
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    const fleetInstance = MockFleetOrchestrator.mock.results[0].value;
+    expect(fleetInstance.runReviewResponse).toHaveBeenCalledOnce();
+    expect(fleetInstance.run).not.toHaveBeenCalled();
+  });
+
+  it('calls fleet.run() when respondToReviews is false (default)', async () => {
+    const config = makeConfig([1]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    const fleetInstance = MockFleetOrchestrator.mock.results[0].value;
+    expect(fleetInstance.run).toHaveBeenCalledOnce();
+    expect(fleetInstance.runReviewResponse).not.toHaveBeenCalled();
+  });
+});
 
 describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () => {
   let processOnSpy: ReturnType<typeof vi.spyOn>;
