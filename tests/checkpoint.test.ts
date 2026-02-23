@@ -258,6 +258,127 @@ describe('CheckpointManager', () => {
 
     await expect(manager.recordGateResult(1, result)).rejects.toThrow('Checkpoint not loaded');
   });
+
+  describe('resetFromPhase', () => {
+    it('should throw if called before load', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await expect(manager.resetFromPhase(2)).rejects.toThrow('Checkpoint not loaded');
+    });
+
+    it('should remove completedPhases >= fromPhase and keep those before', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.completePhase(1, 'out1.md');
+      await manager.completePhase(2, 'out2.md');
+      await manager.completePhase(3, 'out3.md');
+
+      await manager.resetFromPhase(2);
+
+      const state = manager.getState();
+      expect(state.completedPhases).toEqual([1]);
+    });
+
+    it('should preserve phaseOutputs keys < fromPhase and delete keys >= fromPhase', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.completePhase(1, 'out1.md');
+      await manager.completePhase(2, 'out2.md');
+      await manager.completePhase(3, 'out3.md');
+
+      await manager.resetFromPhase(2);
+
+      const state = manager.getState();
+      expect(state.phaseOutputs[1]).toBe('out1.md');
+      expect(state.phaseOutputs[2]).toBeUndefined();
+      expect(state.phaseOutputs[3]).toBeUndefined();
+    });
+
+    it('should preserve gateResults keys < fromPhase and delete keys >= fromPhase', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.recordGateResult(1, { status: 'pass', warnings: [], errors: [] });
+      await manager.recordGateResult(2, { status: 'warn', warnings: ['slow'], errors: [] });
+      await manager.recordGateResult(3, { status: 'fail', warnings: [], errors: ['bad'] });
+
+      await manager.resetFromPhase(2);
+
+      const state = manager.getState();
+      expect(state.gateResults?.[1]?.status).toBe('pass');
+      expect(state.gateResults?.[2]).toBeUndefined();
+      expect(state.gateResults?.[3]).toBeUndefined();
+    });
+
+    it('should clear completedTasks when fromPhase <= 3', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.startPhase(3);
+      await manager.completeTask('task-001');
+      await manager.completeTask('task-002');
+
+      await manager.resetFromPhase(3);
+
+      const state = manager.getState();
+      expect(state.completedTasks).toEqual([]);
+    });
+
+    it('should preserve completedTasks when fromPhase > 3', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.startPhase(3);
+      await manager.completeTask('task-001');
+      await manager.completeTask('task-002');
+
+      await manager.resetFromPhase(4);
+
+      const state = manager.getState();
+      expect(state.completedTasks).toContain('task-001');
+      expect(state.completedTasks).toContain('task-002');
+    });
+
+    it('should set currentPhase to fromPhase and currentTask to null', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.startPhase(3);
+      await manager.startTask('task-001');
+
+      await manager.resetFromPhase(2);
+
+      const state = manager.getState();
+      expect(state.currentPhase).toBe(2);
+      expect(state.currentTask).toBeNull();
+    });
+
+    it('should persist reset state to disk', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.completePhase(1, 'out1.md');
+      await manager.completePhase(2, 'out2.md');
+      await manager.completePhase(3, 'out3.md');
+      await manager.startTask('task-001');
+
+      await manager.resetFromPhase(2);
+
+      const manager2 = new CheckpointManager(tempDir, mockLogger);
+      const state2 = await manager2.load('42');
+      expect(state2.completedPhases).toEqual([1]);
+      expect(state2.currentPhase).toBe(2);
+      expect(state2.currentTask).toBeNull();
+      expect(state2.phaseOutputs[2]).toBeUndefined();
+    });
+
+    it('should handle resetFromPhase(1) removing all completed phases', async () => {
+      const manager = new CheckpointManager(tempDir, mockLogger);
+      await manager.load('42');
+      await manager.completePhase(1, 'out1.md');
+      await manager.completePhase(2, 'out2.md');
+
+      await manager.resetFromPhase(1);
+
+      const state = manager.getState();
+      expect(state.completedPhases).toEqual([]);
+      expect(state.completedTasks).toEqual([]);
+    });
+  });
 });
 
 describe('FleetCheckpointManager', () => {

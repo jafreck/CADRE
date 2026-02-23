@@ -275,6 +275,35 @@ export class CheckpointManager {
   }
 
   /**
+   * Reset checkpoint state from a given phase onward.
+   * Phases < fromPhase are preserved; fromPhase and later are removed.
+   */
+  async resetFromPhase(fromPhase: number): Promise<void> {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+
+    this.state.completedPhases = this.state.completedPhases.filter((p) => p < fromPhase);
+
+    for (const key of Object.keys(this.state.phaseOutputs)) {
+      if (Number(key) >= fromPhase) delete this.state.phaseOutputs[Number(key)];
+    }
+
+    if (this.state.gateResults) {
+      for (const key of Object.keys(this.state.gateResults)) {
+        if (Number(key) >= fromPhase) delete this.state.gateResults![Number(key)];
+      }
+    }
+
+    if (fromPhase <= 3) {
+      this.state.completedTasks = [];
+    }
+
+    this.state.currentPhase = fromPhase;
+    this.state.currentTask = null;
+
+    await this.save();
+  }
+
+  /**
    * Check if a phase was already completed.
    */
   isPhaseCompleted(phaseId: number): boolean {
