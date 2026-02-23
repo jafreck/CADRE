@@ -10,6 +10,7 @@ import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
+import { Logger } from '../logging/logger.js';
 import { killAllTrackedProcesses } from '../util/process.js';
 import { FleetProgressWriter } from './progress.js';
 import {
@@ -22,8 +23,6 @@ import {
 } from '../validation/index.js';
 import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
-
-
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
