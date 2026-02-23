@@ -247,7 +247,7 @@ describe('PlatformProvider interface shape', () => {
     await expect(provider.listPRReviewComments(1)).rejects.toThrow('listPRReviewComments: not yet implemented');
   });
 
-  it('AzureDevOpsProvider.listPRReviewComments should throw not yet implemented', async () => {
+  it('AzureDevOpsProvider.listPRReviewComments should return empty array', async () => {
     const provider = new AzureDevOpsProvider(
       {
         organization: 'my-org',
@@ -256,7 +256,7 @@ describe('PlatformProvider interface shape', () => {
       },
       mockLogger,
     );
-    await expect(provider.listPRReviewComments(1)).rejects.toThrow('listPRReviewComments: not yet implemented');
+    await expect(provider.listPRReviewComments(1)).resolves.toEqual([]);
   });
 });
 
