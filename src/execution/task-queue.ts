@@ -192,6 +192,37 @@ export class TaskQueue {
   }
 
   /**
+   * Detect file-path collisions across a completed batch.
+   * Returns one description per colliding pair, e.g.
+   *   "File src/foo.ts claimed by both task-001 and task-003"
+   */
+  static detectBatchCollisions(tasks: ImplementationTask[]): string[] {
+    const fileToTasks = new Map<string, string[]>();
+
+    for (const task of tasks) {
+      for (const file of task.files) {
+        const owners = fileToTasks.get(file) ?? [];
+        owners.push(task.id);
+        fileToTasks.set(file, owners);
+      }
+    }
+
+    const collisions: string[] = [];
+    for (const [file, owners] of fileToTasks) {
+      if (owners.length < 2) continue;
+      for (let i = 0; i < owners.length - 1; i++) {
+        for (let j = i + 1; j < owners.length; j++) {
+          collisions.push(
+            `File ${file} claimed by both ${owners[i]} and ${owners[j]}`,
+          );
+        }
+      }
+    }
+
+    return collisions;
+  }
+
+  /**
    * Select a batch of non-overlapping ready tasks.
    * Tasks that modify the same files cannot run in the same batch.
    */
