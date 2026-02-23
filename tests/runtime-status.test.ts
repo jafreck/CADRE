@@ -55,6 +55,12 @@ vi.mock('../src/reporting/report-writer.js', () => ({
   ReportWriter: { listReports: vi.fn().mockResolvedValue([]), readReport: vi.fn() },
 }));
 
+vi.mock('../src/core/progress.js', () => ({
+  FleetProgressWriter: vi.fn().mockImplementation(() => ({
+    appendEvent: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 // Mocks under test for status()
 vi.mock('../src/util/fs.js', () => ({
   exists: vi.fn(),
@@ -78,21 +84,21 @@ vi.mock('../src/core/checkpoint.js', () => ({
     load: vi.fn().mockResolvedValue({
       issueNumber: 1,
       version: 1,
-      currentPhase: 2,
+      currentPhase: 1,
       currentTask: null,
-      completedPhases: [1],
+      completedPhases: [],
       completedTasks: [],
       failedTasks: [],
       blockedTasks: [],
       phaseOutputs: {},
       gateResults: {},
-      tokenUsage: { total: 500, byPhase: { 1: 500 }, byAgent: {} },
-      worktreePath: '/tmp/worktrees/issue-1',
-      branchName: 'cadre/issue-1',
-      baseCommit: 'abc123',
+      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+      worktreePath: '',
+      branchName: '',
+      baseCommit: '',
       startedAt: new Date().toISOString(),
       lastCheckpoint: new Date().toISOString(),
-      resumeCount: 1,
+      resumeCount: 0,
     }),
   })),
 }));
@@ -154,7 +160,7 @@ describe('CadreRuntime.status() — no fleet checkpoint', () => {
     consoleSpy.mockRestore();
   });
 
-  it('prints friendly message and returns when fleet checkpoint does not exist', async () => {
+  it('prints "No fleet checkpoint found." and returns without loading checkpoint', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status();
 
@@ -168,6 +174,15 @@ describe('CadreRuntime.status() — no fleet checkpoint', () => {
 
     expect(mockRenderFleetStatus).not.toHaveBeenCalled();
   });
+
+  it('returns without printing fleet status even when issueNumber is provided', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(42);
+
+    expect(consoleSpy).toHaveBeenCalledWith('No fleet checkpoint found.');
+    expect(mockRenderFleetStatus).not.toHaveBeenCalled();
+    expect(mockRenderIssueDetail).not.toHaveBeenCalled();
+  });
 });
 
 describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', () => {
@@ -176,7 +191,14 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
   const fleetState = {
     projectName: 'test-project',
     issues: {
-      42: { status: 'completed', issueTitle: 'Fix bug', worktreePath: '', branchName: 'cadre/issue-42', lastPhase: 5, updatedAt: new Date().toISOString() },
+      42: {
+        status: 'completed' as const,
+        issueTitle: 'Fix bug',
+        worktreePath: '',
+        branchName: 'cadre/issue-42',
+        lastPhase: 5,
+        updatedAt: new Date().toISOString(),
+      },
     },
     tokenUsage: { total: 1000, byIssue: { 42: 1000 } },
     lastCheckpoint: new Date().toISOString(),
@@ -186,15 +208,11 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
   beforeEach(() => {
     vi.clearAllMocks();
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    // Fleet checkpoint exists; issue checkpoint does not matter for no-issue-filter case
     mockExists.mockResolvedValue(true);
-
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(fleetState),
       setIssueStatus: vi.fn().mockResolvedValue(undefined),
     }));
-
     mockRenderFleetStatus.mockReturnValue('fleet status table');
   });
 
@@ -202,20 +220,19 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
     consoleSpy.mockRestore();
   });
 
-  it('loads the fleet checkpoint and renders the fleet status table', async () => {
+  it('calls renderFleetStatus with the loaded fleet state and copilot config', async () => {
     const config = makeConfig();
     const runtime = new CadreRuntime(config);
     await runtime.status();
 
-    expect(MockFleetCheckpointManager).toHaveBeenCalledOnce();
     expect(mockRenderFleetStatus).toHaveBeenCalledWith(fleetState, config.copilot.model, config.copilot);
   });
 
-  it('prints the rendered fleet status table to console', async () => {
+  it('prints the rendered fleet status table', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status();
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('fleet status table'));
+    expect(consoleSpy).toHaveBeenCalledWith('fleet status table');
   });
 
   it('does not render issue detail when no issueNumber is provided', async () => {
@@ -227,7 +244,114 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
   });
 });
 
-describe('CadreRuntime.status() — with issueNumber, issue present in fleet', () => {
+describe('CadreRuntime.status() — with issueNumber, issue NOT in fleet checkpoint', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  const fleetState = {
+    projectName: 'test-project',
+    issues: {},
+    tokenUsage: { total: 0, byIssue: {} },
+    lastCheckpoint: new Date().toISOString(),
+    resumeCount: 0,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    mockExists.mockResolvedValue(true);
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue(fleetState),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+  });
+
+  it('prints "Issue #n not found in fleet checkpoint." message', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(99);
+
+    expect(consoleSpy).toHaveBeenCalledWith('Issue #99 not found in fleet checkpoint.');
+  });
+
+  it('does not attempt to load per-issue checkpoint or render issue detail', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(99);
+
+    expect(MockCheckpointManager).not.toHaveBeenCalled();
+    expect(mockRenderIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('does not render fleet status table in the issue-filter path', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(99);
+
+    expect(mockRenderFleetStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint missing', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  const issueStatus = {
+    status: 'in-progress' as const,
+    issueTitle: 'My issue',
+    worktreePath: '',
+    branchName: 'cadre/issue-5',
+    lastPhase: 1,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const fleetState = {
+    projectName: 'test-project',
+    issues: { 5: issueStatus },
+    tokenUsage: { total: 0, byIssue: {} },
+    lastCheckpoint: new Date().toISOString(),
+    resumeCount: 0,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    // Fleet checkpoint exists; per-issue checkpoint does not
+    mockExists
+      .mockResolvedValueOnce(true)   // fleet-checkpoint.json exists
+      .mockResolvedValueOnce(false); // per-issue checkpoint.json does not exist
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue(fleetState),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+  });
+
+  it('prints "No per-issue checkpoint found for issue #n" message', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(5);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No per-issue checkpoint found for issue #5'));
+  });
+
+  it('does not call renderIssueDetail when per-issue checkpoint is missing', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(5);
+
+    expect(mockRenderIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('does not instantiate CheckpointManager when per-issue checkpoint file is absent', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(5);
+
+    expect(MockCheckpointManager).not.toHaveBeenCalled();
+  });
+});
+
+describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint present', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
 
   const issueStatus = {
@@ -270,20 +394,15 @@ describe('CadreRuntime.status() — with issueNumber, issue present in fleet', (
   beforeEach(() => {
     vi.clearAllMocks();
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
     // Both fleet and issue checkpoints exist
     mockExists.mockResolvedValue(true);
-
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(fleetState),
       setIssueStatus: vi.fn().mockResolvedValue(undefined),
     }));
-
     MockCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(issueCheckpointState),
     }));
-
-    mockRenderFleetStatus.mockReturnValue('fleet status table');
     mockRenderIssueDetail.mockReturnValue('issue detail table');
   });
 
@@ -291,7 +410,7 @@ describe('CadreRuntime.status() — with issueNumber, issue present in fleet', (
     consoleSpy.mockRestore();
   });
 
-  it('loads the per-issue checkpoint from the correct directory', async () => {
+  it('instantiates CheckpointManager with the correct per-issue directory', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(7);
 
@@ -300,129 +419,23 @@ describe('CadreRuntime.status() — with issueNumber, issue present in fleet', (
     expect(progressDir).toMatch(/issues[/\\]7$/);
   });
 
-  it('calls renderIssueDetail with correct arguments', async () => {
+  it('calls renderIssueDetail with the issue number, fleet status, and checkpoint state', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(7);
 
     expect(mockRenderIssueDetail).toHaveBeenCalledWith(7, issueStatus, issueCheckpointState);
   });
 
-  it('prints the rendered issue detail to console', async () => {
+  it('prints the rendered issue detail', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(7);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('issue detail table'));
+    expect(consoleSpy).toHaveBeenCalledWith('issue detail table');
   });
 
-  it('does not render the fleet status table when issueNumber is provided', async () => {
+  it('does not call renderFleetStatus in the issue-filter path', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(7);
-
-    expect(mockRenderFleetStatus).not.toHaveBeenCalled();
-    expect(mockRenderIssueDetail).toHaveBeenCalledOnce();
-  });
-});
-
-describe('CadreRuntime.status() — with issueNumber, issue NOT in fleet checkpoint', () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
-
-  const fleetState = {
-    projectName: 'test-project',
-    issues: {},
-    tokenUsage: { total: 0, byIssue: {} },
-    lastCheckpoint: new Date().toISOString(),
-    resumeCount: 0,
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    mockExists.mockResolvedValue(true);
-
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(fleetState),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
-    }));
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
-  it('prints "Issue #n not found in fleet checkpoint" message', async () => {
-    const runtime = new CadreRuntime(makeConfig());
-    await runtime.status(99);
-
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Issue #99 not found in fleet checkpoint'));
-  });
-
-  it('does not attempt to load per-issue checkpoint', async () => {
-    const runtime = new CadreRuntime(makeConfig());
-    await runtime.status(99);
-
-    expect(MockCheckpointManager).not.toHaveBeenCalled();
-    expect(mockRenderIssueDetail).not.toHaveBeenCalled();
-  });
-});
-
-describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint missing', () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
-
-  const issueStatus = {
-    status: 'in-progress' as const,
-    issueTitle: 'My issue',
-    worktreePath: '',
-    branchName: 'cadre/issue-5',
-    lastPhase: 1,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const fleetState = {
-    projectName: 'test-project',
-    issues: { 5: issueStatus },
-    tokenUsage: { total: 0, byIssue: {} },
-    lastCheckpoint: new Date().toISOString(),
-    resumeCount: 0,
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    // Fleet checkpoint exists; per-issue checkpoint does not
-    mockExists
-      .mockResolvedValueOnce(true)  // fleet-checkpoint.json exists
-      .mockResolvedValueOnce(false); // per-issue checkpoint.json does not exist
-
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(fleetState),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
-    }));
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
-  it('prints "No per-issue checkpoint found for #n" message', async () => {
-    const runtime = new CadreRuntime(makeConfig());
-    await runtime.status(5);
-
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No per-issue checkpoint found for issue #5'));
-  });
-
-  it('does not call renderIssueDetail when per-issue checkpoint is missing', async () => {
-    const runtime = new CadreRuntime(makeConfig());
-    await runtime.status(5);
-
-    expect(mockRenderIssueDetail).not.toHaveBeenCalled();
-    expect(MockCheckpointManager).not.toHaveBeenCalled();
-  });
-
-  it('does not render the fleet status table when per-issue checkpoint is missing', async () => {
-    const runtime = new CadreRuntime(makeConfig());
-    await runtime.status(5);
 
     expect(mockRenderFleetStatus).not.toHaveBeenCalled();
   });
