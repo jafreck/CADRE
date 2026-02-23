@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { CheckpointManager, FleetCheckpointManager } from '../src/core/checkpoint.js';
 import type { CheckpointState, FleetIssueStatus } from '../src/core/checkpoint.js';
 import { Logger } from '../src/logging/logger.js';
+import type { GateResult } from '../src/agents/types.js';
 
 describe('CheckpointManager', () => {
   let mockLogger: Logger;
@@ -131,6 +132,69 @@ describe('CheckpointManager', () => {
 
     const withFlag: CheckpointState = { ...base, budgetExceeded: true };
     expect(withFlag.budgetExceeded).toBe(true);
+  });
+
+  it('should initialise gateResults to empty object on fresh checkpoint', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    const state = await manager.load('42');
+
+    expect(state.gateResults).toEqual({});
+  });
+
+  it('should record a gate result and persist it', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    const result: GateResult = { status: 'pass', warnings: [], errors: [] };
+    await manager.recordGateResult(2, result);
+
+    const state = manager.getState();
+    expect(state.gateResults?.[2]).toEqual(result);
+  });
+
+  it('should persist gate result across reload', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    const result: GateResult = { status: 'warn', warnings: ['low coverage'], errors: [] };
+    await manager.recordGateResult(3, result);
+
+    const manager2 = new CheckpointManager(tempDir, mockLogger);
+    const state2 = await manager2.load('42');
+
+    expect(state2.gateResults?.[3]).toEqual(result);
+  });
+
+  it('should overwrite existing gate result for the same phase', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordGateResult(1, { status: 'fail', warnings: [], errors: ['build failed'] });
+    await manager.recordGateResult(1, { status: 'pass', warnings: [], errors: [] });
+
+    const state = manager.getState();
+    expect(state.gateResults?.[1]).toEqual({ status: 'pass', warnings: [], errors: [] });
+  });
+
+  it('should record gate results for multiple phases independently', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    const r1: GateResult = { status: 'pass', warnings: [], errors: [] };
+    const r2: GateResult = { status: 'warn', warnings: ['slow test'], errors: [] };
+    await manager.recordGateResult(1, r1);
+    await manager.recordGateResult(2, r2);
+
+    const state = manager.getState();
+    expect(state.gateResults?.[1]).toEqual(r1);
+    expect(state.gateResults?.[2]).toEqual(r2);
+  });
+
+  it('should throw when recording gate result before loading', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    const result: GateResult = { status: 'pass', warnings: [], errors: [] };
+
+    await expect(manager.recordGateResult(1, result)).rejects.toThrow('Checkpoint not loaded');
   });
 });
 

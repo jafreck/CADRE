@@ -242,6 +242,13 @@ export interface PRContent {
   labels: string[];
 }
 
+/** Result of a quality gate evaluation. */
+export interface GateResult {
+  status: 'pass' | 'warn' | 'fail';
+  warnings: string[];
+  errors: string[];
+}
+
 /** Phase result. */
 export interface PhaseResult {
   phase: number;
@@ -251,6 +258,7 @@ export interface PhaseResult {
   tokenUsage: number | null;
   outputPath?: string;
   error?: string;
+  gateResult?: GateResult;
 }
 
 /** Agent context file structure written before launching an agent. */

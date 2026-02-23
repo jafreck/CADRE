@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CadreConfigSchema } from '../src/config/schema.js';
+import type { NotificationsConfig } from '../src/config/schema.js';
 
 describe('CadreConfigSchema', () => {
   const validConfig = {
@@ -252,61 +253,159 @@ describe('CadreConfigSchema', () => {
     }
   });
 
-  describe('issueUpdates', () => {
-    it('should apply correct defaults when issueUpdates is omitted', () => {
+  describe('notifications', () => {
+    it('should default notifications to disabled when omitted', () => {
       const result = CadreConfigSchema.parse(validConfig);
-      expect(result.issueUpdates.enabled).toBe(true);
-      expect(result.issueUpdates.onStart).toBe(true);
-      expect(result.issueUpdates.onPhaseComplete).toBe(false);
-      expect(result.issueUpdates.onComplete).toBe(true);
-      expect(result.issueUpdates.onFailed).toBe(true);
-      expect(result.issueUpdates.onBudgetWarning).toBe(true);
+      expect(result.notifications.enabled).toBe(false);
+      expect(result.notifications.providers).toEqual([]);
     });
 
-    it('should validate when issueUpdates is omitted entirely', () => {
-      const result = CadreConfigSchema.safeParse(validConfig);
-      expect(result.success).toBe(true);
-    });
-
-    it('should accept explicit issueUpdates values', () => {
-      const result = CadreConfigSchema.parse({
-        ...validConfig,
-        issueUpdates: {
-          enabled: false,
-          onStart: false,
-          onPhaseComplete: true,
-          onComplete: false,
-          onFailed: false,
-          onBudgetWarning: false,
-        },
-      });
-      expect(result.issueUpdates.enabled).toBe(false);
-      expect(result.issueUpdates.onStart).toBe(false);
-      expect(result.issueUpdates.onPhaseComplete).toBe(true);
-      expect(result.issueUpdates.onComplete).toBe(false);
-      expect(result.issueUpdates.onFailed).toBe(false);
-      expect(result.issueUpdates.onBudgetWarning).toBe(false);
-    });
-
-    it('should apply defaults for unspecified issueUpdates sub-fields', () => {
-      const result = CadreConfigSchema.parse({
-        ...validConfig,
-        issueUpdates: { enabled: false },
-      });
-      expect(result.issueUpdates.enabled).toBe(false);
-      expect(result.issueUpdates.onStart).toBe(true);
-      expect(result.issueUpdates.onPhaseComplete).toBe(false);
-      expect(result.issueUpdates.onComplete).toBe(true);
-      expect(result.issueUpdates.onFailed).toBe(true);
-      expect(result.issueUpdates.onBudgetWarning).toBe(true);
-    });
-
-    it('should reject non-boolean issueUpdates.enabled', () => {
+    it('should accept a valid notifications section with webhook provider', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
-        issueUpdates: { enabled: 'yes' },
+        notifications: {
+          enabled: true,
+          providers: [
+            { type: 'webhook', url: 'https://example.com/hook' },
+          ],
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.notifications.enabled).toBe(true);
+        expect(result.data.notifications.providers).toHaveLength(1);
+        expect(result.data.notifications.providers[0].type).toBe('webhook');
+        expect(result.data.notifications.providers[0].url).toBe('https://example.com/hook');
+      }
+    });
+
+    it('should accept a slack provider with channel', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: {
+          enabled: true,
+          providers: [
+            { type: 'slack', webhookUrl: 'https://hooks.slack.com/xxx', channel: '#alerts' },
+          ],
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const p = result.data.notifications.providers[0];
+        expect(p.type).toBe('slack');
+        expect(p.webhookUrl).toBe('https://hooks.slack.com/xxx');
+        expect(p.channel).toBe('#alerts');
+      }
+    });
+
+    it('should accept a log provider with logFile', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: {
+          enabled: true,
+          providers: [
+            { type: 'log', logFile: '/var/log/cadre.log' },
+          ],
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const p = result.data.notifications.providers[0];
+        expect(p.type).toBe('log');
+        expect(p.logFile).toBe('/var/log/cadre.log');
+      }
+    });
+
+    it('should accept multiple providers', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: {
+          enabled: true,
+          providers: [
+            { type: 'webhook', url: 'https://example.com/hook' },
+            { type: 'log', logFile: '/tmp/cadre.log' },
+          ],
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.notifications.providers).toHaveLength(2);
+      }
+    });
+
+    it('should accept ${ENV_VAR} syntax in url and webhookUrl', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: {
+          enabled: true,
+          providers: [
+            { type: 'webhook', url: '${WEBHOOK_URL}' },
+            { type: 'slack', webhookUrl: '${SLACK_WEBHOOK}' },
+          ],
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.notifications.providers[0].url).toBe('${WEBHOOK_URL}');
+        expect(result.data.notifications.providers[1].webhookUrl).toBe('${SLACK_WEBHOOK}');
+      }
+    });
+
+    it('should accept a provider with an events filter array', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: {
+          enabled: true,
+          providers: [
+            { type: 'log', events: ['issue-completed', 'issue-failed'] },
+          ],
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.notifications.providers[0].events).toEqual(['issue-completed', 'issue-failed']);
+      }
+    });
+
+    it('should default enabled to false when not specified inside notifications', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: { providers: [{ type: 'log' }] },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.notifications.enabled).toBe(false);
+      }
+    });
+
+    it('should default providers to [] when not specified inside notifications', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: { enabled: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.notifications.providers).toEqual([]);
+      }
+    });
+
+    it('should reject an invalid provider type', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        notifications: {
+          enabled: true,
+          providers: [{ type: 'email', url: 'https://example.com' }],
+        },
       });
       expect(result.success).toBe(false);
+    });
+
+    it('NotificationsConfig type alias should satisfy the inferred shape', () => {
+      // Compile-time check: assign a parse result to NotificationsConfig
+      const result = CadreConfigSchema.parse(validConfig);
+      const nc: NotificationsConfig = result.notifications;
+      expect(nc.enabled).toBe(false);
+      expect(nc.providers).toEqual([]);
     });
   });
 });
