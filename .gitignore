@@ -3,3 +3,6 @@ dist/
 .cadre/
 *.log
 .DS_Store
+
+# Agent files are auto-scaffolded by cadre on first run
+.github/agents/*.agent.md
