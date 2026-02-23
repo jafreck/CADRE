@@ -202,6 +202,14 @@ function makeConfig(tokenBudget?: number): CadreConfig {
       inheritShellPath: true,
       extraPath: [],
     },
+    issueUpdates: {
+      enabled: false,
+      onStart: false,
+      onPhaseComplete: false,
+      onComplete: false,
+      onFailed: false,
+      onBudgetWarning: false,
+    },
   } as CadreConfig;
 }
 

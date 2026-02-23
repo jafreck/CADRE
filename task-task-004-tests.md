@@ -1,43 +1,54 @@
-# Test Result: task-004 - Replace `as` casts in GitHubProvider.parseIssue with type guards
+# Test Result: task-004 - Write Unit Tests for `IssueNotifier`
 
 ## Tests Written
-- `tests/github-provider-parsing.test.ts`: 20 new test cases
+- `tests/issue-notifier.test.ts`: 27 test cases (pre-existing, verified passing)
 
-  **GitHubProvider – parseIssue type guards (10)**
-  - should parse a fully-populated issue
-  - should fall back to defaults when numeric fields are missing
-  - should fall back to empty string when string fields are absent
-  - should fall back to empty string when string fields have wrong type
-  - should default to "open" when state is not "closed"
-  - should parse state "closed" correctly
-  - should produce empty arrays when labels/assignees are absent
-  - should omit milestone when raw.milestone is falsy
-  - should use "unknown" as comment author fallback when author is absent
-  - should handle label objects with non-string name gracefully
+  **notifyStart (4)**
+  - should post a comment when enabled and onStart is true
+  - should not post when enabled is false
+  - should not post when onStart is false
+  - should resolve without throwing when addIssueComment rejects
 
-  **GitHubProvider – createPullRequest type guards (4)**
-  - should parse a full createPullRequest response
-  - should fall back to params.title when response title is absent
-  - should fall back to url when html_url is absent
-  - should default number to 0 when absent from response
+  **notifyPhaseComplete (4)**
+  - should post a comment with phase info and duration
+  - should not post when enabled is false
+  - should not post when onPhaseComplete is false
+  - should resolve without throwing when addIssueComment rejects
 
-  **GitHubProvider – getPullRequest type guards (3)**
-  - should parse a full getPullRequest response
-  - should default branch refs to empty string when head/base are absent
-  - should default branch refs to empty string when head/base are not objects
+  **notifyComplete (8)**
+  - should post a comment with issue number and title
+  - should include PR URL when provided
+  - should omit PR URL section when not provided
+  - should include token usage when provided
+  - should omit token usage section when not provided
+  - should not post when enabled is false
+  - should not post when onComplete is false
+  - should resolve without throwing when addIssueComment rejects
 
-  **GitHubProvider – listPullRequests type guards (3)**
-  - should parse a list of pull requests
-  - should produce empty list when API returns empty array
-  - should default missing fields to empty string and 0 for each PR
+  **notifyFailed (7)**
+  - should post a comment with issue number and title
+  - should include phase info when provided
+  - should include failed task when provided
+  - should include error message when provided
+  - should not post when enabled is false
+  - should not post when onFailed is false
+  - should resolve without throwing when addIssueComment rejects
+
+  **notifyBudgetWarning (4)**
+  - should post a comment with token counts and percentage
+  - should not post when enabled is false
+  - should not post when onBudgetWarning is false
+  - should resolve without throwing when addIssueComment rejects
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/github-provider-parsing.test.ts
+- (none — tests/issue-notifier.test.ts was already fully implemented)
 
 ## Coverage Notes
-- The `asRecord`, `asString`, `asNumber`, and `asArray` helpers are module-private; they are tested indirectly through the public `getIssue`, `createPullRequest`, `getPullRequest`, and `listPullRequests` methods.
-- The mock MCP client's `callTool` is wired through a real `GitHubAPI` instance so the full parsing pipeline is exercised end-to-end without actual network calls.
-- Comment-level parsing (author fallback, body, createdAt) is covered by the `parseIssue` suite.
+- All five `IssueNotifier` methods are covered: `notifyStart`, `notifyPhaseComplete`, `notifyComplete`, `notifyFailed`, `notifyBudgetWarning`.
+- Each method has at least three test cases: enabled+flag=true posts comment, enabled=false skips, specific flag=false skips.
+- Error resilience is verified: `addIssueComment` rejection does not propagate and `logger.warn` is called.
+- `notifyComplete` PR URL presence/absence is explicitly tested.
+- `notifyFailed` phase, task, and error info in comment body are explicitly tested.

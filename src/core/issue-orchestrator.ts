@@ -20,6 +20,7 @@ import { TaskQueue } from '../execution/task-queue.js';
 import { RetryExecutor } from '../execution/retry.js';
 import { TokenTracker } from '../budget/token-tracker.js';
 import { Logger } from '../logging/logger.js';
+import { IssueNotifier } from './issue-notifier.js';
 import { atomicWriteJSON, ensureDir, exists, listFilesRecursive } from '../util/fs.js';
 import { execShell } from '../util/process.js';
 
@@ -53,8 +54,10 @@ export class IssueOrchestrator {
   private readonly retryExecutor: RetryExecutor;
   private readonly progressWriter: IssueProgressWriter;
   private readonly tokenTracker: TokenTracker;
+  private readonly notifier: IssueNotifier;
   private readonly phases: PhaseResult[] = [];
   private budgetExceeded = false;
+  private budgetWarningSent = false;
   private createdPR: PullRequestInfo | undefined;
 
   constructor(
@@ -87,6 +90,7 @@ export class IssueOrchestrator {
       logger,
     );
     this.tokenTracker = new TokenTracker();
+    this.notifier = new IssueNotifier(config, platform, logger);
   }
 
   /**
@@ -102,6 +106,7 @@ export class IssueOrchestrator {
     });
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
+    void this.notifier.notifyStart(this.issue.number, this.issue.title);
 
     for (const phase of ISSUE_PHASES) {
       // Skip completed phases on resume
@@ -143,6 +148,7 @@ export class IssueOrchestrator {
             { issueNumber: this.issue.number },
           );
           await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
+          void this.notifier.notifyFailed(this.issue.number, this.issue.title, undefined, undefined, 'Per-issue token budget exceeded');
           return this.buildResult(false, 'Per-issue token budget exceeded', startTime, true);
         }
         throw err;
@@ -158,17 +164,20 @@ export class IssueOrchestrator {
         }
 
         await this.updateProgress();
+        void this.notifier.notifyPhaseComplete(this.issue.number, phase.id, phase.name, phaseResult.duration);
       } else if (phase.critical) {
         this.logger.error(`Critical phase ${phase.id} failed, aborting pipeline`, {
           issueNumber: this.issue.number,
           phase: phase.id,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${phase.id} failed`);
+        void this.notifier.notifyFailed(this.issue.number, this.issue.title, { id: phase.id, name: phase.name }, undefined, phaseResult.error);
         return this.buildResult(false, phaseResult.error, startTime);
       }
     }
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
+    void this.notifier.notifyComplete(this.issue.number, this.issue.title, this.createdPR?.url, this.tokenTracker.getTotal() ?? undefined);
     return this.buildResult(true, undefined, startTime);
   }
 
@@ -839,6 +848,18 @@ export class IssueOrchestrator {
       this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'exceeded'
     ) {
       this.budgetExceeded = true;
+    }
+    if (
+      !this.budgetWarningSent &&
+      !this.budgetExceeded &&
+      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'warning'
+    ) {
+      this.budgetWarningSent = true;
+      void this.notifier.notifyBudgetWarning(
+        this.issue.number,
+        this.tokenTracker.getTotal() ?? 0,
+        this.config.options.tokenBudget ?? 0,
+      );
     }
   }
 
