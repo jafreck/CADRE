@@ -134,24 +134,32 @@ vi.mock('../src/execution/retry.js', () => ({
   })),
 }));
 
-vi.mock('../src/execution/task-queue.js', () => ({
-  TaskQueue: vi.fn(() => ({
-    topologicalSort: vi.fn().mockReturnValue([]),
-    isComplete: mockIsComplete,
-    getReady: mockGetReady,
-    getCounts: vi.fn().mockReturnValue({ total: 1, completed: 0, blocked: 0 }),
-    restoreState: vi.fn(),
-    start: vi.fn(),
-    complete: vi.fn(),
-    block: vi.fn(),
-  })),
-  selectNonOverlappingBatch: mockSelectNonOverlappingBatch,
-}));
+vi.mock('../src/execution/task-queue.js', () => {
+  // selectNonOverlappingBatch is a static method on the TaskQueue class, so it must be
+  // attached to the mock constructor function itself (not as a module-level export).
+  const TaskQueueMock = Object.assign(
+    vi.fn(() => ({
+      topologicalSort: vi.fn().mockReturnValue([]),
+      isComplete: mockIsComplete,
+      getReady: mockGetReady,
+      getCounts: vi.fn().mockReturnValue({ total: 1, completed: 0, blocked: 0 }),
+      restoreState: vi.fn(),
+      start: vi.fn(),
+      complete: vi.fn(),
+      block: vi.fn(),
+    })),
+    { selectNonOverlappingBatch: mockSelectNonOverlappingBatch },
+  );
+  return { TaskQueue: TaskQueueMock };
+});
 
 vi.mock('../src/budget/token-tracker.js', () => ({
   TokenTracker: vi.fn(() => ({
     record: vi.fn(),
     getTotal: mockTokenTrackerGetTotal,
+    checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    getSummary: vi.fn().mockReturnValue({}),
+    exportRecords: vi.fn().mockReturnValue([]),
   })),
 }));
 
