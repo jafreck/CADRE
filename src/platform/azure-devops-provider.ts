@@ -238,6 +238,48 @@ export class AzureDevOpsProvider implements PlatformProvider {
       data: { prId, webUrl },
     });
 
+    // Set labels (non-critical — log warnings on failure)
+    if (params.labels && params.labels.length > 0) {
+      const labelsUrl =
+        `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/git/repositories/${repoName}/pullrequests/${prId}/labels?api-version=${this.apiVersion}`;
+      for (const label of params.labels) {
+        try {
+          await this.fetch(labelsUrl, {
+            method: 'POST',
+            body: JSON.stringify({ name: label }),
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to set label "${label}" on PR #${prId}: ${(err as Error).message}`);
+        }
+      }
+    }
+
+    // Add reviewers (non-critical — log warnings on failure)
+    if (params.reviewers && params.reviewers.length > 0) {
+      for (const reviewer of params.reviewers) {
+        try {
+          // Resolve reviewer identity GUID from unique name (email/alias)
+          const identityUrl =
+            `https://vssps.dev.azure.com/${this.adoConfig.organization}/_apis/identities?searchFilter=AccountName&filterValue=${encodeURIComponent(reviewer)}&api-version=${this.apiVersion}`;
+          const identityResult = await this.fetch(identityUrl);
+          const identities = (identityResult.value ?? []) as Array<Record<string, unknown>>;
+          if (identities.length === 0) {
+            this.logger.warn(`Could not resolve reviewer "${reviewer}" on PR #${prId}: no matching identity found`);
+            continue;
+          }
+          const reviewerId = identities[0].id as string;
+          const reviewerUrl =
+            `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/git/repositories/${repoName}/pullrequests/${prId}/reviewers/${reviewerId}?api-version=${this.apiVersion}`;
+          await this.fetch(reviewerUrl, {
+            method: 'PUT',
+            body: JSON.stringify({ id: reviewerId, vote: 0 }),
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to add reviewer "${reviewer}" to PR #${prId}: ${(err as Error).message}`);
+        }
+      }
+    }
+
     return {
       number: prId,
       url: webUrl,

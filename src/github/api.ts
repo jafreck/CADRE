@@ -124,8 +124,10 @@ export class GitHubAPI {
     head: string;
     base: string;
     draft?: boolean;
+    labels?: string[];
+    reviewers?: string[];
   }): Promise<Record<string, unknown>> {
-    return this.mcp.callTool<Record<string, unknown>>('create_pull_request', {
+    const args: Record<string, unknown> = {
       owner: this.owner,
       repo: this.repo,
       title: params.title,
@@ -133,7 +135,16 @@ export class GitHubAPI {
       head: params.head,
       base: params.base,
       draft: params.draft ?? false,
-    });
+    };
+
+    if (params.labels && params.labels.length > 0) {
+      args.labels = params.labels;
+    }
+    if (params.reviewers && params.reviewers.length > 0) {
+      args.reviewers = params.reviewers;
+    }
+
+    return this.mcp.callTool<Record<string, unknown>>('create_pull_request', args);
   }
 
   /**

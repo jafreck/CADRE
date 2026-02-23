@@ -138,5 +138,100 @@ describe('GitHubAPI', () => {
         draft: true,
       });
     });
+
+    it('should include labels in MCP call when labels are provided', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 88 });
+
+      await api.createPullRequest({
+        title: 'Add feature',
+        body: 'Adds a feature',
+        head: 'feature-branch',
+        base: 'main',
+        labels: ['enhancement', 'cadre-generated'],
+      });
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.objectContaining({
+        labels: ['enhancement', 'cadre-generated'],
+      }));
+    });
+
+    it('should include reviewers in MCP call when reviewers are provided', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 89 });
+
+      await api.createPullRequest({
+        title: 'Add feature',
+        body: 'Adds a feature',
+        head: 'feature-branch',
+        base: 'main',
+        reviewers: ['alice', 'bob'],
+      });
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.objectContaining({
+        reviewers: ['alice', 'bob'],
+      }));
+    });
+
+    it('should include both labels and reviewers in MCP call when both are provided', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 90 });
+
+      await api.createPullRequest({
+        title: 'Refactor module',
+        body: 'Refactors the module',
+        head: 'refactor-branch',
+        base: 'main',
+        labels: ['refactor'],
+        reviewers: ['charlie'],
+      });
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.objectContaining({
+        labels: ['refactor'],
+        reviewers: ['charlie'],
+      }));
+    });
+
+    it('should omit labels from MCP call when labels array is empty', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 91 });
+
+      await api.createPullRequest({
+        title: 'Fix bug',
+        body: 'Fixes the bug',
+        head: 'fix-branch',
+        base: 'main',
+        labels: [],
+      });
+
+      const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0][1] as Record<string, unknown>;
+      expect(callArgs).not.toHaveProperty('labels');
+    });
+
+    it('should omit reviewers from MCP call when reviewers array is empty', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 92 });
+
+      await api.createPullRequest({
+        title: 'Fix bug',
+        body: 'Fixes the bug',
+        head: 'fix-branch',
+        base: 'main',
+        reviewers: [],
+      });
+
+      const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0][1] as Record<string, unknown>;
+      expect(callArgs).not.toHaveProperty('reviewers');
+    });
+
+    it('should omit labels and reviewers from MCP call when neither is provided', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 93 });
+
+      await api.createPullRequest({
+        title: 'Fix bug',
+        body: 'Fixes the bug',
+        head: 'fix-branch',
+        base: 'main',
+      });
+
+      const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0][1] as Record<string, unknown>;
+      expect(callArgs).not.toHaveProperty('labels');
+      expect(callArgs).not.toHaveProperty('reviewers');
+    });
   });
 });

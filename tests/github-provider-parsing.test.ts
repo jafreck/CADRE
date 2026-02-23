@@ -244,6 +244,66 @@ describe('GitHubProvider – createPullRequest type guards', () => {
 
     expect(pr.number).toBe(0);
   });
+
+  it('should forward labels to the MCP create_pull_request call', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 60,
+      html_url: 'https://github.com/owner/repo/pull/60',
+      title: 'PR with labels',
+    });
+
+    await provider.createPullRequest({
+      title: 'PR with labels',
+      body: 'body',
+      head: 'branch',
+      base: 'main',
+      labels: ['bug', 'enhancement'],
+    });
+
+    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+    expect(callArgs[0]).toBe('create_pull_request');
+    expect((callArgs[1] as Record<string, unknown>).labels).toEqual(['bug', 'enhancement']);
+  });
+
+  it('should forward reviewers to the MCP create_pull_request call', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 61,
+      html_url: 'https://github.com/owner/repo/pull/61',
+      title: 'PR with reviewers',
+    });
+
+    await provider.createPullRequest({
+      title: 'PR with reviewers',
+      body: 'body',
+      head: 'branch',
+      base: 'main',
+      reviewers: ['alice', 'bob'],
+    });
+
+    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+    expect(callArgs[0]).toBe('create_pull_request');
+    expect((callArgs[1] as Record<string, unknown>).reviewers).toEqual(['alice', 'bob']);
+  });
+
+  it('should not include labels or reviewers in MCP call when they are omitted', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 62,
+      html_url: 'https://github.com/owner/repo/pull/62',
+      title: 'Plain PR',
+    });
+
+    await provider.createPullRequest({
+      title: 'Plain PR',
+      body: 'body',
+      head: 'branch',
+      base: 'main',
+    });
+
+    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+    const payload = callArgs[1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('labels');
+    expect(payload).not.toHaveProperty('reviewers');
+  });
 });
 
 describe('GitHubProvider – getPullRequest type guards', () => {

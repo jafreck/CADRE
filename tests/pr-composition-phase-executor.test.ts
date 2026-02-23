@@ -348,6 +348,84 @@ describe('PRCompositionPhaseExecutor', () => {
       ).not.toHaveBeenCalled();
     });
 
+    it('should pass labels from config to createPullRequest', async () => {
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: ['cadre-generated', 'bug'], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: ['cadre-generated', 'bug'],
+        }),
+      );
+    });
+
+    it('should pass reviewers from config to createPullRequest', async () => {
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: [], reviewers: ['alice', 'bob'] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reviewers: ['alice', 'bob'],
+        }),
+      );
+    });
+
+    it('should pass both labels and reviewers when both are configured', async () => {
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: ['cadre-generated'], reviewers: ['reviewer1'] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: ['cadre-generated'],
+          reviewers: ['reviewer1'],
+        }),
+      );
+    });
+
+    it('should pass empty labels array when labels config is empty', async () => {
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: [], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: [],
+          reviewers: [],
+        }),
+      );
+    });
+
     it('should not throw when createPullRequest fails (non-critical)', async () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
