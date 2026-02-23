@@ -28,35 +28,47 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
 
     // Run build command
     if (ctx.config.commands.build && ctx.config.options.buildVerification) {
-      const buildResult = await execShell(ctx.config.commands.build, {
+      let buildResult = await execShell(ctx.config.commands.build, {
         cwd: ctx.worktree.path,
         timeout: 300_000,
       });
       report += `## Build\n\n**Command:** \`${ctx.config.commands.build}\`\n`;
+
+      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && buildResult.exitCode !== 0; round++) {
+        await this.tryFixIntegration(ctx, buildResult.stderr + buildResult.stdout, 'build');
+        buildResult = await execShell(ctx.config.commands.build, {
+          cwd: ctx.worktree.path,
+          timeout: 300_000,
+        });
+      }
+
       report += `**Exit Code:** ${buildResult.exitCode}\n`;
       report += `**Status:** ${buildResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (buildResult.exitCode !== 0) {
         report += `\`\`\`\n${buildResult.stderr}\n${buildResult.stdout}\n\`\`\`\n\n`;
-
-        // Try fix-surgeon for build failure
-        await this.tryFixIntegration(ctx, buildResult.stderr + buildResult.stdout, 'build');
       }
     }
 
     // Run test command
     if (ctx.config.commands.test && ctx.config.options.testVerification) {
-      const testResult = await execShell(ctx.config.commands.test, {
+      let testResult = await execShell(ctx.config.commands.test, {
         cwd: ctx.worktree.path,
         timeout: 300_000,
       });
       report += `## Test\n\n**Command:** \`${ctx.config.commands.test}\`\n`;
+
+      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && testResult.exitCode !== 0; round++) {
+        await this.tryFixIntegration(ctx, testResult.stderr + testResult.stdout, 'test');
+        testResult = await execShell(ctx.config.commands.test, {
+          cwd: ctx.worktree.path,
+          timeout: 300_000,
+        });
+      }
+
       report += `**Exit Code:** ${testResult.exitCode}\n`;
       report += `**Status:** ${testResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (testResult.exitCode !== 0) {
         report += `\`\`\`\n${testResult.stderr}\n${testResult.stdout}\n\`\`\`\n\n`;
-
-        // Try fix-surgeon for test failure
-        await this.tryFixIntegration(ctx, testResult.stderr + testResult.stdout, 'test');
       }
     }
 

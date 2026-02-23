@@ -79,6 +79,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
         buildVerification: true,
         testVerification: true,
         maxRetriesPerTask: 3,
+        maxIntegrationFixRounds: 3,
       },
     } as never,
     progressDir: '/tmp/progress',
@@ -246,7 +247,8 @@ describe('IntegrationPhaseExecutor', () => {
     it('should call tryFixIntegration (launch fix-surgeon) when build fails', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'build output', stderr: 'build error', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'build output', stderr: 'build error', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -265,7 +267,8 @@ describe('IntegrationPhaseExecutor', () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'test output', stderr: 'test error', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'test output', stderr: 'test error', signal: null, timedOut: false }) // test (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
       const ctx = makeCtx();
@@ -297,7 +300,8 @@ describe('IntegrationPhaseExecutor', () => {
     it('should write failure output to a file before launching fix-surgeon', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'build out', stderr: 'build err', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'build out', stderr: 'build err', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -314,7 +318,8 @@ describe('IntegrationPhaseExecutor', () => {
     it('should record tokens from fix-surgeon after launch', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'build fail', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'build fail', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -326,7 +331,8 @@ describe('IntegrationPhaseExecutor', () => {
     it('should call checkBudget after fix-surgeon launches', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'build fail', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'build fail', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -338,7 +344,10 @@ describe('IntegrationPhaseExecutor', () => {
     it('should include fail status in report for failed commands', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out', stderr: 'err', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out', stderr: 'err', signal: null, timedOut: false }) // build (fail round 1)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out2', stderr: 'err2', signal: null, timedOut: false }) // build re-run (fail round 2)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out3', stderr: 'err3', signal: null, timedOut: false }) // build re-run (fail round 3)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out4', stderr: 'err4', signal: null, timedOut: false }) // final re-run after max rounds
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -356,7 +365,8 @@ describe('IntegrationPhaseExecutor', () => {
     it('should build fix-surgeon context using buildForFixSurgeon', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -380,6 +390,7 @@ describe('IntegrationPhaseExecutor', () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false })
         .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false })
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false });
 
@@ -402,6 +413,147 @@ describe('IntegrationPhaseExecutor', () => {
         expect.anything(),
         expect.anything(),
       );
+    });
+  });
+
+  describe('execute() - retry loop re-runs command after fix-surgeon', () => {
+    it('should re-run build command after fix-surgeon and show pass when re-run succeeds', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'build err', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## Build');
+      expect(content).toContain('**Status:** pass');
+    });
+
+    it('should re-run build command after fix-surgeon and show fail when re-run also fails', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err1', signal: null, timedOut: false }) // build fail (round 1)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err2', signal: null, timedOut: false }) // re-run fail (round 2)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err3', signal: null, timedOut: false }) // re-run fail (round 3)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err4', signal: null, timedOut: false }) // final re-run after loop
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## Build');
+      expect(content).toContain('**Status:** fail');
+    });
+
+    it('should re-run test command after fix-surgeon and show pass when re-run succeeds', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'test err', signal: null, timedOut: false }) // test (fail)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test re-run (pass)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## Test');
+      expect(content).toContain('**Status:** pass');
+    });
+
+    it('should re-run test command after fix-surgeon and show fail when re-run also fails', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err1', signal: null, timedOut: false }) // test fail (round 1)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err2', signal: null, timedOut: false }) // re-run fail (round 2)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err3', signal: null, timedOut: false }) // re-run fail (round 3)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err4', signal: null, timedOut: false }) // final re-run after loop
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## Test');
+      expect(content).toContain('**Status:** fail');
+    });
+
+    it('should not exceed maxIntegrationFixRounds fix-surgeon invocations for build', async () => {
+      const maxRounds = 2;
+      // build fails every time: initial + 2 re-runs (after each fix) + final re-run check = 1 + 2 + 1 = 4 execShell calls for build
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }); // all build runs fail
+
+      const ctx = makeCtx({
+        config: {
+          commands: { install: 'npm install', build: 'npm run build', test: undefined, lint: undefined },
+          options: { buildVerification: true, testVerification: false, maxRetriesPerTask: 3, maxIntegrationFixRounds: maxRounds },
+        } as never,
+      });
+      await executor.execute(ctx);
+
+      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      expect(launchAgent).toHaveBeenCalledTimes(maxRounds);
+    });
+
+    it('should not exceed maxIntegrationFixRounds fix-surgeon invocations for test', async () => {
+      const maxRounds = 2;
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }); // all test runs fail
+
+      const ctx = makeCtx({
+        config: {
+          commands: { install: 'npm install', build: 'npm run build', test: 'npm test', lint: undefined },
+          options: { buildVerification: true, testVerification: true, maxRetriesPerTask: 3, maxIntegrationFixRounds: maxRounds },
+        } as never,
+      });
+      await executor.execute(ctx);
+
+      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      expect(launchAgent).toHaveBeenCalledTimes(maxRounds);
+    });
+
+    it('should exit retry loop early when build re-run passes', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }) // build fail
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run pass (exit early)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx({
+        config: {
+          commands: { install: 'npm install', build: 'npm run build', test: 'npm test', lint: undefined },
+          options: { buildVerification: true, testVerification: true, maxRetriesPerTask: 3, maxIntegrationFixRounds: 3 },
+        } as never,
+      });
+      await executor.execute(ctx);
+
+      // fix-surgeon should only be called once (loop exits early)
+      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      expect(launchAgent).toHaveBeenCalledTimes(1);
     });
   });
 });
