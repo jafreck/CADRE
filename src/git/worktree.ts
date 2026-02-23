@@ -41,13 +41,16 @@ export class WorktreeManager {
 
   /**
    * Create a worktree for an issue.
-   * If the worktree already exists (resume scenario), validate and return info.
+   * If the worktree already exists, validate and return info.
+   * When `resume` is true and the worktree is absent, check the remote branch and
+   * recreate the worktree from it; throws `RemoteBranchMissingError` if the remote
+   * branch does not exist.
    */
-  async provision(issueNumber: number, issueTitle: string): Promise<WorktreeInfo> {
+  async provision(issueNumber: number, issueTitle: string, resume?: boolean): Promise<WorktreeInfo> {
     const branch = this.resolveBranchName(issueNumber, issueTitle);
     const worktreePath = this.getWorktreePath(issueNumber);
 
-    // Check if worktree already exists (resume)
+    // Check if worktree already exists
     if (await exists(worktreePath)) {
       this.logger.info(`Worktree already exists for issue #${issueNumber}`, {
         issueNumber,
@@ -55,6 +58,37 @@ export class WorktreeManager {
       });
 
       const baseCommit = await this.getBaseCommit(worktreePath);
+      return {
+        issueNumber,
+        path: worktreePath,
+        branch,
+        exists: true,
+        baseCommit,
+      };
+    }
+
+    // Resume path: worktree is absent, re-create from remote branch
+    if (resume) {
+      const remoteRef = `refs/heads/${branch}`;
+      const lsRemoteOutput = await this.git.raw(['ls-remote', 'origin', remoteRef]);
+
+      if (!lsRemoteOutput.trim()) {
+        throw new RemoteBranchMissingError(branch);
+      }
+
+      // Fetch the remote branch and create the worktree tracking it
+      await this.git.fetch('origin', branch);
+      await ensureDir(this.worktreeRoot);
+      await this.git.raw(['worktree', 'add', worktreePath, branch]);
+
+      await this.initCadreDir(worktreePath, issueNumber);
+
+      const baseCommit = await this.getBaseCommit(worktreePath);
+      this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
+        issueNumber,
+        data: { path: worktreePath, branch },
+      });
+
       return {
         issueNumber,
         path: worktreePath,
