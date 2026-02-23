@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import { ImplementationPhaseExecutor } from '../src/executors/implementation-phase-executor.js';
+import { BudgetExceededError } from '../src/core/issue-orchestrator.js';
 import type { PhaseContext } from '../src/core/phase-executor.js';
 import type { AgentResult, ImplementationTask } from '../src/agents/types.js';
 
@@ -386,6 +387,26 @@ describe('ImplementationPhaseExecutor', () => {
       expect(
         (ctx.checkpoint as never as { blockTask: ReturnType<typeof vi.fn> }).blockTask,
       ).toHaveBeenCalledWith('task-001');
+    });
+
+    it('should propagate BudgetExceededError thrown inside the retry fn', async () => {
+      const budgetError = new BudgetExceededError();
+      const retryExecutor = {
+        execute: vi.fn(async ({ fn }: { fn: (attempt: number) => Promise<unknown> }) => {
+          try {
+            await fn(1);
+          } catch (err) {
+            if (err instanceof BudgetExceededError) throw err;
+            return { success: false, error: (err as Error).message };
+          }
+          return { success: true };
+        }),
+      };
+
+      const checkBudget = vi.fn().mockImplementationOnce(() => { throw budgetError; });
+      const ctx = makeCtx({ retryExecutor: retryExecutor as never, checkBudget });
+
+      await expect(executor.execute(ctx)).rejects.toThrow('Per-issue token budget exceeded');
     });
   });
 
