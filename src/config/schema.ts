@@ -125,6 +125,8 @@ export const CadreConfigSchema = z.object({
       testVerification: z.boolean().default(true),
       /** Skip pre-run validation checks. */
       skipValidation: z.boolean().default(false),
+      /** Post a cost summary comment on the GitHub issue after pipeline completion. */
+      postCostComment: z.boolean().default(false),
     })
     .default({}),
 

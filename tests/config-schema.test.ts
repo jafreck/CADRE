@@ -45,6 +45,49 @@ describe('CadreConfigSchema', () => {
     expect(auth.privateKeyFile).toBe('/path/to/key.pem');
   });
 
+  describe('options.postCostComment', () => {
+    it('should default postCostComment to false when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.postCostComment).toBe(false);
+    });
+
+    it('should accept postCostComment set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { postCostComment: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.postCostComment).toBe(true);
+      }
+    });
+
+    it('should accept postCostComment explicitly set to false', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { postCostComment: false },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.postCostComment).toBe(false);
+      }
+    });
+
+    it('should reject non-boolean postCostComment', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { postCostComment: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('postCostComment should be boolean in CadreConfig type', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      const flag: boolean = result.options.postCostComment;
+      expect(typeof flag).toBe('boolean');
+    });
+  });
+
   it('should reject invalid projectName', () => {
     const result = CadreConfigSchema.safeParse({
       ...validConfig,

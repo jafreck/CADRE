@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { atomicWriteJSON, readJSON, exists, ensureDir } from '../util/fs.js';
 import { Logger } from '../logging/logger.js';
 import { GateResult } from '../agents/types.js';
+import { type TokenRecord } from '../budget/token-tracker.js';
 
 // ── Per-Issue Checkpoint ──
 
@@ -27,6 +28,7 @@ export interface CheckpointState {
     total: number;
     byPhase: Record<number, number>;
     byAgent: Record<string, number>;
+    records: TokenRecord[];
   };
   budgetExceeded?: boolean;
   worktreePath: string;
@@ -51,7 +53,7 @@ export interface FleetCheckpointState {
   projectName: string;
   version: number;
   issues: Record<number, FleetIssueStatus>;
-  tokenUsage: { total: number; byIssue: Record<number, number> };
+  tokenUsage: { total: number; byIssue: Record<number, number>; records: TokenRecord[] };
   startedAt: string;
   lastCheckpoint: string;
   resumeCount: number;
@@ -83,6 +85,7 @@ export class CheckpointManager {
     if (await exists(this.checkpointPath)) {
       try {
         this.state = await readJSON<CheckpointState>(this.checkpointPath);
+        this.state.tokenUsage.records ??= [];
         this.state.resumeCount += 1;
         this.logger.info(`Loaded checkpoint for issue #${issueNumber}`, {
           issueNumber: Number(issueNumber),
@@ -103,6 +106,7 @@ export class CheckpointManager {
         if (await exists(this.backupPath)) {
           try {
             this.state = await readJSON<CheckpointState>(this.backupPath);
+            this.state.tokenUsage.records ??= [];
             this.state.resumeCount += 1;
             await this.save();
             return this.state;
@@ -133,7 +137,7 @@ export class CheckpointManager {
       blockedTasks: [],
       phaseOutputs: {},
       gateResults: {},
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+      tokenUsage: { total: 0, byPhase: {}, byAgent: {}, records: [] },
       worktreePath: '',
       branchName: '',
       baseCommit: '',
@@ -250,7 +254,22 @@ export class CheckpointManager {
       (this.state.tokenUsage.byPhase[phase] ?? 0) + tokens;
     this.state.tokenUsage.byAgent[agent] =
       (this.state.tokenUsage.byAgent[agent] ?? 0) + tokens;
+    this.state.tokenUsage.records.push({
+      issueNumber: this.state.issueNumber,
+      agent,
+      phase,
+      tokens,
+      timestamp: new Date().toISOString(),
+    });
     await this.save();
+  }
+
+  /**
+   * Return all token records stored in the checkpoint.
+   */
+  getTokenRecords(): TokenRecord[] {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+    return this.state.tokenUsage.records;
   }
 
   /**
@@ -337,6 +356,7 @@ export class FleetCheckpointManager {
     if (await exists(this.checkpointPath)) {
       try {
         this.state = await readJSON<FleetCheckpointState>(this.checkpointPath);
+        this.state.tokenUsage.records ??= [];
         this.state.resumeCount += 1;
         this.logger.info('Loaded fleet checkpoint', {
           data: {
@@ -355,7 +375,7 @@ export class FleetCheckpointManager {
       projectName: this.projectName,
       version: 1,
       issues: {},
-      tokenUsage: { total: 0, byIssue: {} },
+      tokenUsage: { total: 0, byIssue: {}, records: [] },
       startedAt: new Date().toISOString(),
       lastCheckpoint: new Date().toISOString(),
       resumeCount: 0,
@@ -393,6 +413,13 @@ export class FleetCheckpointManager {
     this.state.tokenUsage.total += tokens;
     this.state.tokenUsage.byIssue[issueNumber] =
       (this.state.tokenUsage.byIssue[issueNumber] ?? 0) + tokens;
+    this.state.tokenUsage.records.push({
+      issueNumber,
+      agent: '__fleet__',
+      phase: 0,
+      tokens,
+      timestamp: new Date().toISOString(),
+    });
     await this.save();
   }
 
