@@ -92,7 +92,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
 
   const commitManager = {
     getChangedFiles: vi.fn().mockResolvedValue([]),
-    getDiff: vi.fn().mockResolvedValue(''),
+    getTaskDiff: vi.fn().mockResolvedValue('task diff content'),
     commit: vi.fn().mockResolvedValue(undefined),
   };
 
@@ -248,12 +248,20 @@ describe('ImplementationPhaseExecutor', () => {
       );
     });
 
-    it('should commit the task on success', async () => {
+    it('should commit twice per successful task (intermediate + final)', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
         (ctx.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit,
-      ).toHaveBeenCalledWith('implement Task task-001', 42, 'feat');
+      ).toHaveBeenCalledTimes(2);
+    });
+
+    it('should make intermediate commit before final task commit', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+      const calls = (ctx.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
+      expect(calls[0][0]).toMatch(/^wip:/);
+      expect(calls[1][0]).toBe('implement Task task-001');
     });
 
     it('should mark task complete in checkpoint on success', async () => {
@@ -547,6 +555,187 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
       expect(secondTaskPlanContent).toBeDefined();
       expect(secondTaskPlanContent).toContain('**Dependencies:** task-001');
+    });
+  });
+
+  describe('getTaskDiff and intermediate commit', () => {
+    it('should call getTaskDiff() to capture the diff for the reviewer', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+      expect(
+        (ctx.commitManager as never as { getTaskDiff: ReturnType<typeof vi.fn> }).getTaskDiff,
+      ).toHaveBeenCalled();
+    });
+
+    it('should NOT call getDiff() for the reviewer diff', async () => {
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue('task diff'),
+        getDiff: vi.fn().mockResolvedValue('full diff'),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      expect(commitManager.getDiff).not.toHaveBeenCalled();
+    });
+
+    it('should write the result of getTaskDiff() to the diff patch file', async () => {
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue('my-task-specific-diff'),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      expect(writeFile).toHaveBeenCalledWith(
+        join('/tmp/progress', 'diff-task-001.patch'),
+        'my-task-specific-diff',
+        'utf-8',
+      );
+    });
+
+    it('should commit intermediate work before launching code-reviewer', async () => {
+      const callOrder: string[] = [];
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(''),
+        commit: vi.fn(async (msg: string) => { callOrder.push(`commit:${msg}`); }),
+      };
+      const launcher = {
+        launchAgent: vi.fn(async ({ agent }: { agent: string }) => {
+          callOrder.push(`launch:${agent}`);
+          return makeSuccessAgentResult(agent);
+        }),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never, launcher: launcher as never });
+      await executor.execute(ctx);
+
+      const reviewerIndex = callOrder.indexOf('launch:code-reviewer');
+      const intermediateCommitIndex = callOrder.findIndex((e) => e.startsWith('commit:wip:'));
+      expect(intermediateCommitIndex).toBeGreaterThanOrEqual(0);
+      expect(intermediateCommitIndex).toBeLessThan(reviewerIndex);
+    });
+
+    it('should use wip: prefix with task name and attempt number in intermediate commit message', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+      const calls = (ctx.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
+      const intermediateCall = calls.find(([msg]) => msg.startsWith('wip:'));
+      expect(intermediateCall).toBeDefined();
+      expect(intermediateCall![0]).toContain('Task task-001');
+      expect(intermediateCall![0]).toMatch(/attempt \d+/);
+      expect(intermediateCall![1]).toBe(42);
+      expect(intermediateCall![2]).toBe('feat');
+    });
+
+    it('should commit after test-writer and before code-reviewer', async () => {
+      const callOrder: string[] = [];
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(''),
+        commit: vi.fn(async (msg: string) => { callOrder.push(`commit:${msg}`); }),
+      };
+      const launcher = {
+        launchAgent: vi.fn(async ({ agent }: { agent: string }) => {
+          callOrder.push(`launch:${agent}`);
+          return makeSuccessAgentResult(agent);
+        }),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never, launcher: launcher as never });
+      await executor.execute(ctx);
+
+      const testWriterIndex = callOrder.indexOf('launch:test-writer');
+      const reviewerIndex = callOrder.indexOf('launch:code-reviewer');
+      const intermediateCommitIndex = callOrder.findIndex((e) => e.startsWith('commit:wip:'));
+      expect(intermediateCommitIndex).toBeGreaterThan(testWriterIndex);
+      expect(intermediateCommitIndex).toBeLessThan(reviewerIndex);
+    });
+  });
+
+  describe('truncateDiff integration', () => {
+    it('should write diff unchanged when diff is within 200,000 character limit', async () => {
+      const shortDiff = 'a'.repeat(100);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(shortDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      expect(writeFile).toHaveBeenCalledWith(
+        join('/tmp/progress', 'diff-task-001.patch'),
+        shortDiff,
+        'utf-8',
+      );
+    });
+
+    it('should write diff unchanged when diff is exactly 200,000 characters', async () => {
+      const exactDiff = 'x'.repeat(200_000);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(exactDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      expect(writeFile).toHaveBeenCalledWith(
+        join('/tmp/progress', 'diff-task-001.patch'),
+        exactDiff,
+        'utf-8',
+      );
+    });
+
+    it('should truncate diff to 200,000 chars when diff exceeds limit', async () => {
+      const largeDiff = 'y'.repeat(300_000);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      const patchCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+      );
+      expect(patchCall).toBeDefined();
+      const written = patchCall![1] as string;
+      expect(written.startsWith('y'.repeat(200_000))).toBe(true);
+      expect(written).toContain('[Diff truncated: exceeded 200,000 character limit]');
+    });
+
+    it('should append truncation notice when diff is truncated', async () => {
+      const largeDiff = 'z'.repeat(250_000);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      const patchCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+      );
+      const written = patchCall![1] as string;
+      expect(written).toMatch(/\[Diff truncated: exceeded 200,000 character limit\]/);
+    });
+
+    it('should not include characters beyond 200,000 from original diff when truncated', async () => {
+      const prefix = 'a'.repeat(200_000);
+      const suffix = 'b'.repeat(50_000);
+      const largeDiff = prefix + suffix;
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      const patchCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+      );
+      const written = patchCall![1] as string;
+      // The suffix characters should not appear in the written diff
+      expect(written).not.toContain('b');
     });
   });
 

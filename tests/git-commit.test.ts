@@ -79,6 +79,42 @@ describe('CommitManager', () => {
     expect(typeof manager.getDiff).toBe('function');
   });
 
+  it('should have getTaskDiff method', () => {
+    expect(typeof manager.getTaskDiff).toBe('function');
+  });
+
+  describe('getTaskDiff', () => {
+    it('should return diff of last commit using HEAD~1..HEAD', async () => {
+      const expectedDiff = 'diff --git a/src/foo.ts b/src/foo.ts\n+added line';
+      mockGit.diff.mockResolvedValueOnce(expectedDiff);
+
+      const result = await manager.getTaskDiff();
+
+      expect(mockGit.diff).toHaveBeenCalledWith(['HEAD~1..HEAD']);
+      expect(result).toBe(expectedDiff);
+    });
+
+    it('should fall back to git show HEAD when HEAD~1 does not exist', async () => {
+      const showOutput = 'commit abc123\n+first file content';
+      mockGit.diff.mockRejectedValueOnce(new Error('unknown revision HEAD~1'));
+      mockGit.raw.mockResolvedValueOnce(showOutput);
+
+      const result = await manager.getTaskDiff();
+
+      expect(mockGit.diff).toHaveBeenCalledWith(['HEAD~1..HEAD']);
+      expect(mockGit.raw).toHaveBeenCalledWith(['show', 'HEAD']);
+      expect(result).toBe(showOutput);
+    });
+
+    it('should return empty string when diff is empty', async () => {
+      mockGit.diff.mockResolvedValueOnce('');
+
+      const result = await manager.getTaskDiff();
+
+      expect(result).toBe('');
+    });
+  });
+
   describe('artifact filtering', () => {
     it('should call git restore --staged to unstage cadre artifacts after staging all', async () => {
       // Return staged files so commit proceeds

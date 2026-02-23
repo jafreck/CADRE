@@ -184,9 +184,17 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         ctx.recordTokens('test-writer', testResult.tokenUsage);
         ctx.checkBudget();
 
-        // 4. Launch code-reviewer
+        // 4. Commit code-writer + test-writer output so getTaskDiff() reflects this task's changes
+        await ctx.commitManager.commit(
+          `wip: ${task.name} (attempt ${attempt})`,
+          ctx.issue.number,
+          'feat',
+        );
+
+        // 5. Launch code-reviewer
         const diffPath = join(ctx.progressDir, `diff-${task.id}.patch`);
-        const diff = await ctx.commitManager.getDiff(ctx.worktree.baseCommit);
+        const rawDiff = await ctx.commitManager.getTaskDiff();
+        const diff = truncateDiff(rawDiff, 200_000);
         await writeFile(diffPath, diff, 'utf-8');
 
         const reviewerContextPath = await ctx.contextBuilder.buildForCodeReviewer(
@@ -213,7 +221,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         ctx.recordTokens('code-reviewer', reviewResult.tokenUsage);
         ctx.checkBudget();
 
-        // 5. Check review verdict
+        // 6. Check review verdict
         if (reviewResult.success) {
           const reviewPath = join(ctx.progressDir, `review-${task.id}.md`);
           if (await exists(reviewPath)) {
@@ -322,4 +330,11 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       ctx.tokenTracker.getTotal(),
     );
   }
+}
+
+function truncateDiff(diff: string, maxChars: number): string {
+  if (diff.length <= maxChars) {
+    return diff;
+  }
+  return diff.slice(0, maxChars) + '\n\n[Diff truncated: exceeded 200,000 character limit]\n';
 }
