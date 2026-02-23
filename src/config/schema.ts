@@ -154,6 +154,10 @@ export const CadreConfigSchema = z.object({
       buildVerification: z.boolean().default(true),
       /** Run test command after implementation to verify tests pass. */
       testVerification: z.boolean().default(true),
+      /** Run a build check after each task completes (within the issue pipeline). */
+      perTaskBuildCheck: z.boolean().default(true),
+      /** Max fix-surgeon rounds per failing per-task build check. */
+      maxBuildFixRounds: z.number().int().min(1).max(5).default(2),
       /** Skip pre-run validation checks. */
       skipValidation: z.boolean().default(false),
       /** Max fix-surgeon rounds per failing build/test command. */
