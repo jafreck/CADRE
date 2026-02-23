@@ -126,6 +126,33 @@ export class ReviewResponseOrchestrator {
         const reviewContext = this.contextBuilder.buildForReviewResponse(issue, activeThreads);
         await writeFile(join(progressDir, 'review-response.md'), reviewContext, 'utf-8');
 
+        // 7b. Synthesise an implementation plan from the review threads so that
+        //     Phase 3 (ImplementationPhaseExecutor) has the tasks it expects.
+        const planTasks = activeThreads.map((thread, idx) => {
+          const files = [...new Set(thread.comments.map((c) => c.path).filter(Boolean))];
+          const description = thread.comments.map((c) => c.body).join('\n\n');
+          return {
+            id: `task-${String(idx + 1).padStart(3, '0')}`,
+            name: `Address review comment${files.length ? ` in ${files[0]}` : ''}`,
+            description,
+            files: files.length ? files : [],
+            dependencies: [] as string[],
+            complexity: 'simple' as const,
+            acceptanceCriteria: [
+              'Review comment addressed as described',
+              'Existing tests continue to pass',
+            ],
+          };
+        });
+        const planContent = [
+          '# Review-Response Implementation Plan',
+          '',
+          '```cadre-json',
+          JSON.stringify(planTasks, null, 2),
+          '```',
+        ].join('\n');
+        await writeFile(join(progressDir, 'implementation-plan.md'), planContent, 'utf-8');
+
         // 8. Set up per-issue checkpoint and run the reduced pipeline (phases 3–5)
         const checkpoint = new CheckpointManager(progressDir, this.logger);
         await checkpoint.load(String(issueNumber));
