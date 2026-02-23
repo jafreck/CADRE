@@ -50,5 +50,25 @@
   "environment": {
     "inheritShellPath": true,
     "extraPath": []
+  },
+  "notifications": {
+    "enabled": false,
+    "providers": [
+      {
+        "type": "webhook",
+        "url": "${WEBHOOK_URL}",
+        "events": ["issue.completed", "issue.failed"]
+      },
+      {
+        "type": "slack",
+        "webhookUrl": "${SLACK_WEBHOOK_URL}",
+        "channel": "#cadre-notifications",
+        "events": ["fleet.completed", "issue.failed"]
+      },
+      {
+        "type": "log",
+        "logFile": ".cadre/notifications.log"
+      }
+    ]
   }
 }
