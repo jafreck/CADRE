@@ -550,4 +550,20 @@ describe('CadreRuntime — reset()', () => {
     expect(mockSetIssueStatus).toHaveBeenCalledWith(10, 'not-started', '', '', 0);
     expect(mockSetIssueStatus).toHaveBeenCalledWith(20, 'not-started', '', '', 0);
   });
+
+  it('calls resetFromPhase for each tracked issue on fleet-wide reset with fromPhase', async () => {
+    setupFleetWithIssues({
+      10: { worktreePath: '/wt/10', branchName: 'br-10' },
+      20: { worktreePath: '/wt/20', branchName: 'br-20' },
+    });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset(undefined, 2);
+
+    expect(MockCheckpointManager).toHaveBeenCalledTimes(2);
+    expect(mockResetFromPhase).toHaveBeenCalledTimes(2);
+    expect(mockResetFromPhase).toHaveBeenCalledWith(2);
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(10, 'not-started', '', '', 2);
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(20, 'not-started', '', '', 2);
+  });
 });
