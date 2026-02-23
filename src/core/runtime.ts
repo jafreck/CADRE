@@ -306,7 +306,7 @@ export class CadreRuntime {
       const cleanup = this.config.cleanup ?? { onMerged: true, onClosed: false, deleteRemoteBranch: true };
 
       for (const wt of worktrees) {
-        const prs = await this.provider.listPullRequests({ head: wt.branch });
+        const prs = await this.provider.listPullRequests({ head: wt.branch, state: 'all' });
         const pr = prs[0];
 
         if (!pr) {
