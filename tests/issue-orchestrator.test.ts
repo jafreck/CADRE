@@ -1,11 +1,42 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { IssueOrchestrator, BudgetExceededError } from '../src/core/issue-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
 import * as fsUtils from '../src/util/fs.js';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
+import type { CheckpointManager } from '../src/core/checkpoint.js';
+import type { AgentLauncher } from '../src/agents/types.js';
 import type { Logger } from '../src/logging/logger.js';
+
+// ── Mock IssueNotifier so we can spy on lifecycle calls ──
+const mockNotifierMethods = {
+  notifyStart: vi.fn().mockResolvedValue(undefined),
+  notifyPhaseComplete: vi.fn().mockResolvedValue(undefined),
+  notifyComplete: vi.fn().mockResolvedValue(undefined),
+  notifyFailed: vi.fn().mockResolvedValue(undefined),
+  notifyBudgetWarning: vi.fn().mockResolvedValue(undefined),
+};
+
+vi.mock('../src/core/issue-notifier.js', () => ({
+  IssueNotifier: vi.fn().mockImplementation(() => mockNotifierMethods),
+}));
+
+// Mock phase gates so they always pass
+vi.mock('../src/core/phase-gate.js', () => {
+  const makeGate = () => ({
+    validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })),
+  });
+  return {
+    AnalysisToPlanningGate: vi.fn(() => makeGate()),
+    PlanningToImplementationGate: vi.fn(() => makeGate()),
+    ImplementationToIntegrationGate: vi.fn(() => makeGate()),
+    IntegrationToPRGate: vi.fn(() => makeGate()),
+  };
+});
 
 // Mock heavy I/O and pipeline dependencies so unit tests stay fast and deterministic.
 vi.mock('../src/core/progress.js', () => ({
@@ -60,9 +91,13 @@ vi.mock('../src/util/process.js', () => ({
   execShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
 }));
 
-vi.mock('node:fs/promises', () => ({
-  writeFile: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    writeFile: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 // Default checkpoint mock – all phases are pre-completed so the phase loop skips everything.
 const makeCheckpointMock = (overrides: Record<string, unknown> = {}) => ({
@@ -85,11 +120,17 @@ const makeCheckpointMock = (overrides: Record<string, unknown> = {}) => ({
     tokenUsage: {},
   }),
   recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+  recordGateResult: vi.fn().mockResolvedValue(undefined),
   setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
   ...overrides,
 });
 
-function makeConfig(): CadreConfig {
+// Alias used by notifier integration tests
+function makeCheckpoint(overrides: Record<string, unknown> = {}): CheckpointManager {
+  return makeCheckpointMock(overrides) as unknown as CheckpointManager;
+}
+
+function makeConfig(tokenBudget?: number): CadreConfig {
   return {
     projectName: 'test-project',
     repository: 'owner/repo',
@@ -104,7 +145,7 @@ function makeConfig(): CadreConfig {
       resume: false,
       buildVerification: false,
       testVerification: false,
-      tokenBudget: undefined,
+      tokenBudget: tokenBudget ?? undefined,
     },
     commits: {
       commitPerPhase: false,
@@ -118,6 +159,14 @@ function makeConfig(): CadreConfig {
     commands: {},
     copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
     environment: { inheritShellPath: true, extraPath: [] },
+    issueUpdates: {
+      enabled: false,
+      onStart: false,
+      onPhaseComplete: false,
+      onComplete: false,
+      onFailed: false,
+      onBudgetWarning: false,
+    },
   } as unknown as CadreConfig;
 }
 
@@ -522,7 +571,7 @@ describe('IssueOrchestrator notifier integration', () => {
     await orchestrator.run();
 
     expect(mockNotifierMethods.notifyStart).toHaveBeenCalledOnce();
-    expect(mockNotifierMethods.notifyStart).toHaveBeenCalledWith(42, 'Test issue');
+    expect(mockNotifierMethods.notifyStart).toHaveBeenCalledWith(42, 'Test Issue');
   });
 
   it('should call notifyPhaseComplete for each successfully completed phase when all phases run', async () => {
@@ -561,7 +610,7 @@ describe('IssueOrchestrator notifier integration', () => {
     await orchestrator.run();
 
     expect(mockNotifierMethods.notifyComplete).toHaveBeenCalledOnce();
-    expect(mockNotifierMethods.notifyComplete).toHaveBeenCalledWith(42, 'Test issue', undefined, 0);
+    expect(mockNotifierMethods.notifyComplete).toHaveBeenCalledWith(42, 'Test Issue', undefined, 0);
   });
 
   it('should call notifyFailed when budget is exceeded', async () => {
@@ -576,7 +625,7 @@ describe('IssueOrchestrator notifier integration', () => {
     expect(mockNotifierMethods.notifyFailed).toHaveBeenCalledOnce();
     expect(mockNotifierMethods.notifyFailed).toHaveBeenCalledWith(
       42,
-      'Test issue',
+      'Test Issue',
       undefined,
       undefined,
       'Per-issue token budget exceeded',

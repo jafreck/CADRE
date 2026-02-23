@@ -14,7 +14,7 @@ export class IssueNotifier {
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
   ) {
-    this.updates = config.issueUpdates;
+    this.updates = config.issueUpdates ?? { enabled: false, onStart: false, onPhaseComplete: false, onComplete: false, onFailed: false, onBudgetWarning: false };
   }
 
   /** Post a comment when an issue pipeline starts. */

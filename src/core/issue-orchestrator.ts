@@ -225,6 +225,7 @@ export class IssueOrchestrator {
           phase: phase.id,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${phase.id} failed`);
+        void this.notifier.notifyFailed(this.issue.number, this.issue.title, { id: phase.id, name: phase.name }, undefined, phaseResult.error);
         await this.notificationManager?.dispatch({
           type: 'issue-failed',
           issueNumber: this.issue.number,
@@ -237,6 +238,7 @@ export class IssueOrchestrator {
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
     const successResult = this.buildResult(true, undefined, startTime);
+    void this.notifier.notifyComplete(this.issue.number, this.issue.title, undefined, successResult.tokenUsage ?? 0);
     await this.notificationManager?.dispatch({
       type: 'issue-completed',
       issueNumber: successResult.issueNumber,
