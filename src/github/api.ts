@@ -281,7 +281,7 @@ export class GitHubAPI {
       if (result && typeof result === 'object' && 'items' in result) {
         const envelope = result as { items: Record<string, unknown>[]; pageInfo?: { hasNextPage: boolean; endCursor?: string } };
         items = envelope.items ?? [];
-        hasNextPage = envelope.pageInfo?.hasNextPage ?? false;
+        hasNextPage = envelope.pageInfo ? (envelope.pageInfo.hasNextPage ?? false) : items.length >= perPage;
         after = envelope.pageInfo?.endCursor;
       } else {
         items = [];
