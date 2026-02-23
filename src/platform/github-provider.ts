@@ -6,6 +6,7 @@ import type {
   CreatePullRequestParams,
   ListPullRequestsParams,
   ListIssuesParams,
+  ReviewThread,
 } from './provider.js';
 import { GitHubMCPClient, type MCPServerConfig } from '../github/mcp-client.js';
 import { GitHubAPI } from '../github/api.js';
@@ -145,6 +146,10 @@ export class GitHubProvider implements PlatformProvider {
 
   issueLinkSuffix(issueNumber: number): string {
     return `Closes #${issueNumber}`;
+  }
+
+  async listPRReviewComments(_prNumber: number): Promise<ReviewThread[]> {
+    throw new Error('listPRReviewComments: not yet implemented');
   }
 
   // ── Helpers ──

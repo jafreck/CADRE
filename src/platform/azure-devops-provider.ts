@@ -6,6 +6,7 @@ import type {
   CreatePullRequestParams,
   ListPullRequestsParams,
   ListIssuesParams,
+  ReviewThread,
 } from './provider.js';
 import { Logger } from '../logging/logger.js';
 
@@ -382,6 +383,10 @@ export class AzureDevOpsProvider implements PlatformProvider {
 
   issueLinkSuffix(issueNumber: number): string {
     return `AB#${issueNumber}`;
+  }
+
+  async listPRReviewComments(_prNumber: number): Promise<ReviewThread[]> {
+    throw new Error('listPRReviewComments: not yet implemented');
   }
 
   // ── Helpers ──

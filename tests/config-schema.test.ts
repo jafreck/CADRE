@@ -644,6 +644,85 @@ describe('CadreConfigSchema', () => {
     });
   });
 
+  describe('respondToReviews', () => {
+    it('should default respondToReviews to false when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.respondToReviews).toBe(false);
+    });
+
+    it('should accept respondToReviews set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { respondToReviews: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.respondToReviews).toBe(true);
+      }
+    });
+
+    it('should accept respondToReviews set to false explicitly', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { respondToReviews: false },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.respondToReviews).toBe(false);
+      }
+    });
+
+    it('should reject a non-boolean respondToReviews', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { respondToReviews: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('reviewResponse', () => {
+    it('should default reviewResponse.autoReplyOnResolved to false when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.reviewResponse.autoReplyOnResolved).toBe(false);
+    });
+
+    it('should accept reviewResponse.autoReplyOnResolved set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        reviewResponse: { autoReplyOnResolved: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reviewResponse.autoReplyOnResolved).toBe(true);
+      }
+    });
+
+    it('should accept reviewResponse.autoReplyOnResolved set to false explicitly', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        reviewResponse: { autoReplyOnResolved: false },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reviewResponse.autoReplyOnResolved).toBe(false);
+      }
+    });
+
+    it('should reject a non-boolean reviewResponse.autoReplyOnResolved', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        reviewResponse: { autoReplyOnResolved: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should default reviewResponse to empty object when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.reviewResponse).toEqual({ autoReplyOnResolved: false });
+    });
+  });
+
   describe('ambiguityThreshold and haltOnAmbiguity together', () => {
     it('should accept both fields set explicitly alongside other options', () => {
       const result = CadreConfigSchema.safeParse({

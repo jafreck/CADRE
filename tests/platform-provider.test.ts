@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { GitHubProvider } from '../src/platform/github-provider.js';
 import { AzureDevOpsProvider } from '../src/platform/azure-devops-provider.js';
+import type { ReviewComment, ReviewThread } from '../src/platform/provider.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import { CadreConfigSchema } from '../src/config/schema.js';
 
