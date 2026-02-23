@@ -13,6 +13,21 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     const reportPath = join(ctx.progressDir, 'integration-report.md');
     let report = '';
 
+    // Read baseline results (null-safe: missing baseline treats all failures as regressions)
+    const baselineResultsPath = join(ctx.worktree.path, '.cadre', 'baseline-results.json');
+    let baseline: BaselineResults | null = null;
+    try {
+      const raw = await readFile(baselineResultsPath, 'utf-8');
+      baseline = JSON.parse(raw) as BaselineResults;
+    } catch {
+      // No baseline file; all current failures will be treated as regressions
+    }
+
+    const baselineBuildFailures = new Set<string>(baseline?.buildFailures ?? []);
+    const baselineTestFailures = new Set<string>(baseline?.testFailures ?? []);
+    const allBaselineFailures: string[] = [...baselineBuildFailures, ...baselineTestFailures];
+    const allRegressionFailures: string[] = [];
+
     // Run install command if configured
     if (ctx.config.commands.install) {
       const installResult = await execShell(ctx.config.commands.install, {
@@ -35,14 +50,23 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       });
       report += `## Build\n\n**Command:** \`${ctx.config.commands.build}\`\n`;
 
-      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && buildResult.exitCode !== 0; round++) {
+      let buildRegressions = this.computeRegressions(
+        this.extractFailures(buildResult.stderr + buildResult.stdout),
+        baselineBuildFailures,
+      );
+      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && buildRegressions.length > 0; round++) {
         await this.tryFixIntegration(ctx, buildResult.stderr + buildResult.stdout, 'build');
         buildResult = await execShell(ctx.config.commands.build, {
           cwd: ctx.worktree.path,
           timeout: 300_000,
         });
+        buildRegressions = this.computeRegressions(
+          this.extractFailures(buildResult.stderr + buildResult.stdout),
+          baselineBuildFailures,
+        );
       }
 
+      allRegressionFailures.push(...buildRegressions);
       report += `**Exit Code:** ${buildResult.exitCode}\n`;
       report += `**Status:** ${buildResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (buildResult.exitCode !== 0) {
@@ -58,14 +82,23 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       });
       report += `## Test\n\n**Command:** \`${ctx.config.commands.test}\`\n`;
 
-      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && testResult.exitCode !== 0; round++) {
+      let testRegressions = this.computeRegressions(
+        this.extractFailures(testResult.stderr + testResult.stdout),
+        baselineTestFailures,
+      );
+      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && testRegressions.length > 0; round++) {
         await this.tryFixIntegration(ctx, testResult.stderr + testResult.stdout, 'test');
         testResult = await execShell(ctx.config.commands.test, {
           cwd: ctx.worktree.path,
           timeout: 300_000,
         });
+        testRegressions = this.computeRegressions(
+          this.extractFailures(testResult.stderr + testResult.stdout),
+          baselineTestFailures,
+        );
       }
 
+      allRegressionFailures.push(...testRegressions);
       report += `**Exit Code:** ${testResult.exitCode}\n`;
       report += `**Status:** ${testResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (testResult.exitCode !== 0) {
@@ -87,6 +120,21 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       }
     }
 
+    // Pre-existing failures and new regressions sections
+    report += `## Pre-existing Failures\n\n`;
+    if (allBaselineFailures.length > 0) {
+      report += allBaselineFailures.map((f) => `- ${f}`).join('\n') + '\n\n';
+    } else {
+      report += '_None_\n\n';
+    }
+
+    report += `## New Regressions\n\n`;
+    if (allRegressionFailures.length > 0) {
+      report += allRegressionFailures.map((f) => `- ${f}`).join('\n') + '\n\n';
+    } else {
+      report += '_None_\n\n';
+    }
+
     // Write integration report
     const fullReport = `# Integration Report: Issue #${ctx.issue.number}\n\n${report}`;
     await writeFile(reportPath, fullReport, 'utf-8');
@@ -101,6 +149,26 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     }
 
     return reportPath;
+  }
+
+  private extractFailures(output: string): string[] {
+    const failures: string[] = [];
+    for (const line of output.split('\n')) {
+      const trimmed = line.trim();
+      // Match common test failure indicators (vitest/jest: × or ✕ prefix, or FAIL lines)
+      if (/^[×✕✗✘]\s/.test(trimmed) || /^\s*FAIL\s/.test(line)) {
+        failures.push(trimmed);
+      }
+      // Match TypeScript/build error lines
+      else if (/error TS\d+:/.test(trimmed)) {
+        failures.push(trimmed);
+      }
+    }
+    return failures;
+  }
+
+  private computeRegressions(currentFailures: string[], baselineFailures: Set<string>): string[] {
+    return currentFailures.filter((f) => !baselineFailures.has(f));
   }
 
   private async tryFixIntegration(ctx: PhaseContext, failureOutput: string, type: string): Promise<void> {
