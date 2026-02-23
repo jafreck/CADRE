@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
+import { TokenTracker } from '../src/budget/token-tracker.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { TokenRecord } from '../src/budget/token-tracker.js';
@@ -578,8 +579,7 @@ describe('FleetOrchestrator — importRecords wiring on resume (task-009)', () =
   });
 
   it('calls TokenTracker.importRecords() with checkpoint records when resume is true', async () => {
-    const { TokenTracker } = await import('../src/budget/token-tracker.js');
-    const TokenTrackerMock = TokenTracker as ReturnType<typeof vi.fn>;
+    const TokenTrackerMock = vi.mocked(TokenTracker);
 
     const config = makeConfig({ resume: true });
     const issues = [makeIssue(1)];
@@ -601,8 +601,7 @@ describe('FleetOrchestrator — importRecords wiring on resume (task-009)', () =
   });
 
   it('does not call TokenTracker.importRecords() when resume is false', async () => {
-    const { TokenTracker } = await import('../src/budget/token-tracker.js');
-    const TokenTrackerMock = TokenTracker as ReturnType<typeof vi.fn>;
+    const TokenTrackerMock = vi.mocked(TokenTracker);
 
     const config = makeConfig({ resume: false });
     const issues = [makeIssue(1)];

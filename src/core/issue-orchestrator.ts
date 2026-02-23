@@ -856,6 +856,24 @@ export class IssueOrchestrator {
           prBody += `\n\n${this.platform.issueLinkSuffix(this.issue.number)}`;
         }
 
+        // Append Token Usage section if cost report is available
+        if (this.costReport) {
+          const r = this.costReport;
+          prBody += [
+            '',
+            '',
+            '## Token Usage',
+            '',
+            `| | |`,
+            `|---|---|`,
+            `| **Total tokens** | ${r.totalTokens.toLocaleString()} |`,
+            `| **Input tokens** | ${r.inputTokens.toLocaleString()} |`,
+            `| **Output tokens** | ${r.outputTokens.toLocaleString()} |`,
+            `| **Estimated cost** | $${r.estimatedCost.toFixed(4)} |`,
+            `| **Model** | ${r.model} |`,
+          ].join('\n');
+        }
+
         const pr = await this.platform.createPullRequest({
           title: prTitle,
           body: prBody,
@@ -1077,6 +1095,30 @@ export class IssueOrchestrator {
   }
 
   private async writeCostReport(): Promise<void> {
+    const report = this.costReport ?? this.buildCostReportData();
+    this.costReport = report;
+
+    await ensureDir(this.progressDir);
+    await atomicWriteJSON(join(this.progressDir, 'cost-report.json'), report);
+
+    const reportWriter = new ReportWriter(this.config, this.costEstimator);
+    await reportWriter.writeIssueCostReport(report);
+
+    this.logger.info(`Cost report written: $${report.estimatedCost.toFixed(4)} (${report.totalTokens.toLocaleString()} tokens)`, {
+      issueNumber: this.issue.number,
+    });
+
+    if (this.config.options.postCostComment) {
+      const comment = this.formatCostComment(report);
+      try {
+        await this.platform.addIssueComment(this.issue.number, comment);
+      } catch (err) {
+        this.logger.warn(`Failed to post cost comment: ${err}`, { issueNumber: this.issue.number });
+      }
+    }
+  }
+
+  private buildCostReportData(): CostReport {
     const model = this.config.copilot.model;
     const records = this.tokenTracker.getRecords();
 
@@ -1146,7 +1188,7 @@ export class IssueOrchestrator {
       };
     });
 
-    const report: CostReport = {
+    return {
       issueNumber: this.issue.number,
       generatedAt: new Date().toISOString(),
       totalTokens: overallEstimate.totalTokens,
@@ -1157,25 +1199,6 @@ export class IssueOrchestrator {
       byAgent,
       byPhase,
     };
-
-    await ensureDir(this.progressDir);
-    await atomicWriteJSON(join(this.progressDir, 'cost-report.json'), report);
-
-    const reportWriter = new ReportWriter(this.config, this.costEstimator);
-    await reportWriter.writeIssueCostReport(report);
-
-    this.logger.info(`Cost report written: ${this.costEstimator.format(overallEstimate)}`, {
-      issueNumber: this.issue.number,
-    });
-
-    if (this.config.options.postCostComment) {
-      const comment = this.formatCostComment(report);
-      try {
-        await this.platform.addIssueComment(this.issue.number, comment);
-      } catch (err) {
-        this.logger.warn(`Failed to post cost comment: ${err}`, { issueNumber: this.issue.number });
-      }
-    }
   }
 
   private formatCostComment(report: CostReport): string {
