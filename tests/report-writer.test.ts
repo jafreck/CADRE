@@ -392,6 +392,13 @@ describe('ReportWriter', () => {
       expect(filePath).toContain('issue-42-cost.json');
     });
 
+    it('should write to issue-4-cost.json for issueNumber 4', async () => {
+      const report = makeCostReport({ issueNumber: 4 });
+      const filePath = await writer.writeIssueCostReport(report);
+
+      expect(filePath).toContain('issue-4-cost.json');
+    });
+
     it('should return the full path under .cadre/reports/', async () => {
       const report = makeCostReport({ issueNumber: 7 });
       const filePath = await writer.writeIssueCostReport(report);
@@ -426,7 +433,8 @@ describe('ReportWriter', () => {
     });
   });
 
-  describe('readReport (static)', () => {    it('should return parsed RunReport from file', async () => {
+  describe('readReport (static)', () => {
+    it('should return parsed RunReport from file', async () => {
       const fakeReport: RunReport = {
         runId: 'r1',
         project: 'my-project',

@@ -10,11 +10,14 @@ vi.mock('../src/budget/token-tracker.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/budget/token-tracker.js')>();
   return {
     ...actual,
-    TokenTracker: vi.fn().mockImplementation((...args: unknown[]) => {
-      const instance = new actual.TokenTracker(...(args as []));
-      vi.spyOn(instance, 'importRecords');
-      return instance;
-    }),
+    TokenTracker: vi.fn().mockImplementation(() => ({
+      record: vi.fn(),
+      importRecords: vi.fn(),
+      exportRecords: vi.fn().mockReturnValue([]),
+      getRecords: vi.fn().mockReturnValue([]),
+      getTotal: vi.fn().mockReturnValue(0),
+      getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, records: [], recordCount: 0 }),
+    })),
   };
 });
 vi.mock('../src/git/worktree.js', () => ({
@@ -63,6 +66,17 @@ vi.mock('../src/core/phase-registry.js', () => ({
 vi.mock('../src/logging/logger.js', () => ({
   Logger: vi.fn(),
 }));
+vi.mock('../src/budget/token-tracker.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/budget/token-tracker.js')>();
+  return {
+    ...actual,
+    TokenTracker: vi.fn().mockImplementation(() => {
+      const instance = new actual.TokenTracker();
+      vi.spyOn(instance, 'importRecords');
+      return instance;
+    }),
+  };
+});
 
 function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfig {
   return {
