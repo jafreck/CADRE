@@ -288,25 +288,29 @@ export class AnalysisAmbiguityGate implements PhaseGate {
       return pass(['analysis.md is missing; skipping ambiguity check']);
     }
 
-    // Extract the section that follows a "## Ambiguities" heading
-    const sectionMatch = analysisContent.match(
-      /^##\s+Ambiguities[^\n]*\n([\s\S]*?)(?=\n##\s|\s*$)/im,
-    );
+    // Walk lines to extract the ## Ambiguities section
+    const lines = analysisContent.split('\n');
+    let inAmbiguities = false;
+    const ambiguityLines: string[] = [];
 
-    if (!sectionMatch) {
+    for (const line of lines) {
+      if (/^##\s+Ambiguities/i.test(line)) {
+        inAmbiguities = true;
+        continue;
+      }
+      if (inAmbiguities && /^##\s/.test(line)) {
+        break;
+      }
+      if (inAmbiguities && line.trim()) {
+        ambiguityLines.push(line.trim());
+      }
+    }
+
+    if (!inAmbiguities || ambiguityLines.length === 0) {
       return pass();
     }
 
-    const sectionText = sectionMatch[1];
-    const count = sectionText
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean).length;
-
-    if (count === 0) {
-      return pass();
-    }
-
+    const count = ambiguityLines.length;
     const message = `${count} ambiguit${count === 1 ? 'y' : 'ies'} found in analysis.md (threshold: ${this.ambiguityThreshold})`;
 
     if (count > this.ambiguityThreshold && this.haltOnAmbiguity) {
