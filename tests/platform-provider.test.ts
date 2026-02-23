@@ -238,13 +238,13 @@ describe('PlatformProvider interface shape', () => {
     expect(typeof provider.listPRReviewComments).toBe('function');
   });
 
-  it('GitHubProvider.listPRReviewComments should throw not yet implemented', async () => {
+  it('GitHubProvider.listPRReviewComments should throw when not connected', async () => {
     const provider = new GitHubProvider(
       'owner/repo',
       { command: 'github-mcp-server', args: ['stdio'] },
       mockLogger,
     );
-    await expect(provider.listPRReviewComments(1)).rejects.toThrow('listPRReviewComments: not yet implemented');
+    await expect(provider.listPRReviewComments(1)).rejects.toThrow('GitHubProvider not connected');
   });
 
   it('AzureDevOpsProvider.listPRReviewComments should return empty array', async () => {
