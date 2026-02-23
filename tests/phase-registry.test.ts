@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   ISSUE_PHASES,
+  REVIEW_RESPONSE_PHASES,
   getPhase,
   getPhaseCount,
+  getPhaseSubset,
   isLastPhase,
   PhaseRegistry,
 } from '../src/core/phase-registry.js';
@@ -66,6 +68,45 @@ describe('PhaseRegistry', () => {
     it('should return false for other phases', () => {
       expect(isLastPhase(1)).toBe(false);
       expect(isLastPhase(3)).toBe(false);
+    });
+  });
+
+  describe('REVIEW_RESPONSE_PHASES', () => {
+    it('should equal [3, 4, 5]', () => {
+      expect(REVIEW_RESPONSE_PHASES).toEqual([3, 4, 5]);
+    });
+
+    it('should be readonly', () => {
+      expect(Object.isFrozen(REVIEW_RESPONSE_PHASES) || Array.isArray(REVIEW_RESPONSE_PHASES)).toBe(true);
+    });
+  });
+
+  describe('getPhaseSubset', () => {
+    it('should return phases matching the given IDs in phase-ID order', () => {
+      const subset = getPhaseSubset([3, 4, 5]);
+      expect(subset).toHaveLength(3);
+      expect(subset.map((p) => p.id)).toEqual([3, 4, 5]);
+    });
+
+    it('should return phases in phase-ID order regardless of input order', () => {
+      const subset = getPhaseSubset([5, 3]);
+      expect(subset.map((p) => p.id)).toEqual([3, 5]);
+    });
+
+    it('should return an empty array for unknown IDs', () => {
+      expect(getPhaseSubset([99, 100])).toEqual([]);
+    });
+
+    it('should return only matching phases when given a mixed list', () => {
+      const subset = getPhaseSubset([2, 99]);
+      expect(subset).toHaveLength(1);
+      expect(subset[0].id).toBe(2);
+    });
+
+    it('should return PhaseDefinition objects with correct names', () => {
+      const subset = getPhaseSubset([3, 5]);
+      expect(subset[0].name).toBe('Implementation');
+      expect(subset[1].name).toBe('PR Composition');
     });
   });
 });

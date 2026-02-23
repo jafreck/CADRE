@@ -25,6 +25,16 @@ export const ISSUE_PHASES: PhaseDefinition[] = [
   { id: 5, name: 'PR Composition', critical: false, commitType: 'chore', commitMessage: 'compose PR for #{issueNumber}' },
 ];
 
+/** Phase IDs used by the review-response pipeline (implementation, integration-verification, PR composition). */
+export const REVIEW_RESPONSE_PHASES: readonly number[] = [3, 4, 5];
+
+/**
+ * Get a subset of phase definitions by ID, returned in phase-ID order.
+ */
+export function getPhaseSubset(ids: number[]): PhaseDefinition[] {
+  return ISSUE_PHASES.filter((p) => ids.includes(p.id));
+}
+
 /**
  * Get a phase definition by ID.
  */

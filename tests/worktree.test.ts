@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { simpleGit } from 'simple-git';
 import { WorktreeManager } from '../src/git/worktree.js';
 import { Logger } from '../src/logging/logger.js';
+import * as fsUtils from '../src/util/fs.js';
 
 // Mock simple-git
 vi.mock('simple-git', () => {
@@ -11,12 +12,21 @@ vi.mock('simple-git', () => {
     checkout: vi.fn().mockResolvedValue(undefined),
     revparse: vi.fn().mockResolvedValue('abc123'),
     branch: vi.fn().mockResolvedValue(undefined),
+    branchLocal: vi.fn().mockResolvedValue({ all: [] }),
   };
   return {
     simpleGit: vi.fn(() => mockGit),
     default: vi.fn(() => mockGit),
   };
 });
+
+// Mock fs utilities
+vi.mock('../src/util/fs.js', () => ({
+  exists: vi.fn().mockResolvedValue(false),
+  ensureDir: vi.fn().mockResolvedValue(undefined),
+  readFileOrNull: vi.fn().mockResolvedValue(null),
+  atomicWriteFile: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe('WorktreeManager', () => {
   let manager: WorktreeManager;

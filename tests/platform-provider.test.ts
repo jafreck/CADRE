@@ -215,6 +215,29 @@ describe('Platform Provider Factory', () => {
   });
 });
 
+describe('PlatformProvider interface shape', () => {
+  it('GitHubProvider should expose listPRReviewComments method', () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    expect(typeof provider.listPRReviewComments).toBe('function');
+  });
+
+  it('AzureDevOpsProvider should expose listPRReviewComments method', () => {
+    const provider = new AzureDevOpsProvider(
+      {
+        organization: 'my-org',
+        project: 'my-project',
+        auth: { pat: 'token' },
+      },
+      mockLogger,
+    );
+    expect(typeof provider.listPRReviewComments).toBe('function');
+  });
+});
+
 describe('GitHubProvider', () => {
   it('should have correct name', () => {
     const provider = new GitHubProvider(

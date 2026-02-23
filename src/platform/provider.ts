@@ -51,6 +51,29 @@ export interface CreatePullRequestParams {
 }
 
 /**
+ * A single comment within a pull request review thread.
+ */
+export interface ReviewComment {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  path: string;
+  line?: number;
+}
+
+/**
+ * A pull request review thread, grouping one or more comments on the same code location.
+ */
+export interface ReviewThread {
+  id: string;
+  prNumber: number;
+  isResolved: boolean;
+  isOutdated: boolean;
+  comments: ReviewComment[];
+}
+
+/**
  * Parameters for listing pull requests.
  */
 export interface ListPullRequestsParams {
@@ -115,6 +138,9 @@ export interface PlatformProvider {
 
   /** List pull requests matching optional filters. */
   listPullRequests(filters?: ListPullRequestsParams): Promise<PullRequestInfo[]>;
+
+  /** List review threads (with comments) for a pull request. */
+  listPRReviewComments(prNumber: number): Promise<ReviewThread[]>;
 
   // ── Issue Linking ──
 
