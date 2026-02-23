@@ -224,6 +224,54 @@ describe('IssueNotifier', () => {
     });
   });
 
+  describe('notifyAmbiguities', () => {
+    it('should post a comment containing each ambiguity item', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(12, ['Ambiguity one', 'Ambiguity two']);
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(12);
+      expect(body).toContain('Ambiguity one');
+      expect(body).toContain('Ambiguity two');
+    });
+
+    it('should format ambiguities as a markdown list', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(12, ['Item A', 'Item B']);
+      const [, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(body).toContain('- Item A');
+      expect(body).toContain('- Item B');
+    });
+
+    it('should request clarification in the comment body', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(12, ['Something unclear']);
+      const [, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(body.toLowerCase()).toContain('clarification');
+    });
+
+    it('should reference the issue number in the comment body', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(99, ['Some ambiguity']);
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(99);
+      expect(body).toContain('#99');
+    });
+
+    it('should not post when enabled is false', async () => {
+      const notifier = new IssueNotifier(makeConfig({ enabled: false }), platform, logger);
+      await notifier.notifyAmbiguities(1, ['Ambiguity']);
+      expect(platform.addIssueComment).not.toHaveBeenCalled();
+    });
+
+    it('should resolve without throwing when addIssueComment rejects', async () => {
+      (platform.addIssueComment as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'));
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await expect(notifier.notifyAmbiguities(1, ['Some ambiguity'])).resolves.toBeUndefined();
+      expect(logger.warn).toHaveBeenCalled();
+    });
+  });
+
   describe('notifyBudgetWarning', () => {
     it('should post a comment with token counts and percentage', async () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
