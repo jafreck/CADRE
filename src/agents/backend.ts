@@ -189,7 +189,12 @@ export class CopilotBackend implements AgentBackend {
     const tokenUsage = parseTokenUsage(processResult);
     const outputExists = await exists(invocation.outputPath);
     const duration = Date.now() - startTime;
-    const success = processResult.exitCode === 0 && !processResult.timedOut;
+
+    // The Copilot CLI exits 0 but writes "No such agent: <name>" to stderr when the
+    // agent instruction file is missing.  Treat this as a hard failure so callers
+    // are not misled into thinking the agent ran successfully.
+    const noSuchAgent = processResult.stderr.includes('No such agent:');
+    const success = processResult.exitCode === 0 && !processResult.timedOut && !noSuchAgent;
 
     if (success) {
       this.logger.info(`Agent ${invocation.agent} completed in ${duration}ms`, {
@@ -199,12 +204,17 @@ export class CopilotBackend implements AgentBackend {
         data: { tokenUsage, outputExists },
       });
     } else {
-      this.logger.error(`Agent ${invocation.agent} failed (exit: ${processResult.exitCode}, timeout: ${processResult.timedOut})`, {
-        issueNumber: invocation.issueNumber,
-        phase: invocation.phase,
-        taskId: invocation.taskId,
-        data: { stderr: processResult.stderr.slice(0, 500) },
-      });
+      this.logger.error(
+        noSuchAgent
+          ? `Agent ${invocation.agent} not found in Copilot agent directory — run 'cadre agents scaffold' or check agentDir config`
+          : `Agent ${invocation.agent} failed (exit: ${processResult.exitCode}, timeout: ${processResult.timedOut})`,
+        {
+          issueNumber: invocation.issueNumber,
+          phase: invocation.phase,
+          taskId: invocation.taskId,
+          data: { stderr: processResult.stderr.slice(0, 500) },
+        },
+      );
     }
 
     return {
@@ -218,7 +228,11 @@ export class CopilotBackend implements AgentBackend {
       tokenUsage,
       outputPath: invocation.outputPath,
       outputExists,
-      error: success ? undefined : processResult.stderr || `Exit code: ${processResult.exitCode}`,
+      error: success
+        ? undefined
+        : noSuchAgent
+          ? processResult.stderr.trim()
+          : processResult.stderr || `Exit code: ${processResult.exitCode}`,
     };
   }
 }
