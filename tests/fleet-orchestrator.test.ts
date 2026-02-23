@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
-import { TokenTracker } from '../src/budget/token-tracker.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { TokenRecord } from '../src/budget/token-tracker.js';
