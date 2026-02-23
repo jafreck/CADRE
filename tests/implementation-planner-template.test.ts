@@ -61,9 +61,31 @@ describe('implementation-planner.md template', () => {
     });
   });
 
+  describe('rules section', () => {
+    it('should contain a Rules section', () => {
+      expect(content).toMatch(/###?\s*Rules/);
+    });
+
+    it('should require the agent to read source files before referencing them', () => {
+      expect(content).toMatch(/MUST read every source file/);
+    });
+
+    it('should state the file-read rule applies before making claims about contents or structure', () => {
+      expect(content).toMatch(/before making any claims about its contents or structure/);
+    });
+  });
+
   describe('tool permissions', () => {
     it('should mention read files permission', () => {
       expect(content).toMatch(/[Rr]ead files?/);
+    });
+
+    it('should mark reading source files as required', () => {
+      expect(content).toMatch(/[Rr]ead.*required/);
+    });
+
+    it('should require reading source files before referencing them in tool permissions', () => {
+      expect(content).toMatch(/source file.*reference|reference.*source file/);
     });
   });
 
@@ -82,6 +104,24 @@ describe('implementation-planner.md template', () => {
       expect(content).toMatch(/\*\*Dependencies:\*\*|\*\*Dependencies\*\*:/);
       expect(content).toMatch(/\*\*Complexity:\*\*|\*\*Complexity\*\*:/);
       expect(content).toMatch(/\*\*Acceptance Criteria:\*\*|\*\*Acceptance Criteria\*\*:/);
+    });
+
+    it('example should include at least one test file path in a Files list', () => {
+      expect(content).toMatch(/tests\/[^\s,]+\.test\.ts/);
+    });
+  });
+
+  describe('test file inclusion rule', () => {
+    it('should explicitly instruct that test files must be listed in the files array', () => {
+      expect(content).toMatch(/test file/i);
+    });
+
+    it('should reference tests/*.test.ts pattern or equivalent in the rules', () => {
+      expect(content).toMatch(/tests\/\*\.test\.ts|tests\/.*\.test\.ts/);
+    });
+
+    it('should clarify that files includes test files, not just source files', () => {
+      expect(content).toMatch(/not just source files|test files.*creates or modifies|creates or modifies.*test/i);
     });
   });
 });

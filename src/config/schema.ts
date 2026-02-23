@@ -162,6 +162,10 @@ export const CadreConfigSchema = z.object({
       skipValidation: z.boolean().default(false),
       /** Max fix-surgeon rounds per failing build/test command. */
       maxIntegrationFixRounds: z.number().int().min(1).max(5).default(1),
+      /** Number of ambiguous tasks that triggers the ambiguity gate. */
+      ambiguityThreshold: z.number().int().min(0).default(5),
+      /** Halt the pipeline when the ambiguity gate fires instead of continuing. */
+      haltOnAmbiguity: z.boolean().default(false),
     })
     .default({}),
 

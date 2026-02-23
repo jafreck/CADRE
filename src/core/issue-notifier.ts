@@ -128,6 +128,22 @@ export class IssueNotifier {
     await this.post(issueNumber, body);
   }
 
+  /** Post a comment listing ambiguities and requesting clarification. */
+  async notifyAmbiguities(issueNumber: number, ambiguities: string[]): Promise<void> {
+    if (!this.updates.enabled) return;
+
+    const list = ambiguities.map((a) => `- ${a}`).join('\n');
+    const body = [
+      `## ❓ Clarification Needed`,
+      ``,
+      `CADRE identified the following ambiguities in **#${issueNumber}** that require clarification before proceeding:`,
+      ``,
+      list,
+    ].join('\n');
+
+    await this.post(issueNumber, body);
+  }
+
   private async post(issueNumber: number, body: string): Promise<void> {
     try {
       await this.platform.addIssueComment(issueNumber, body);

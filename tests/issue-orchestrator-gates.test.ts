@@ -39,6 +39,8 @@ const {
   mockExists,
   mockExecShell,
   mockFsWriteFile,
+  mockFsReadFile,
+  mockNotifyAmbiguities,
 } = vi.hoisted(() => ({
   mockAnalysisGateValidate: vi.fn(),
   mockPlanningGateValidate: vi.fn(),
@@ -69,15 +71,29 @@ const {
   mockExists: vi.fn().mockResolvedValue(false),
   mockExecShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
   mockFsWriteFile: vi.fn().mockResolvedValue(undefined),
+  mockFsReadFile: vi.fn().mockResolvedValue(''),
+  mockNotifyAmbiguities: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
+
+vi.mock('../src/core/issue-notifier.js', () => ({
+  IssueNotifier: vi.fn().mockImplementation(() => ({
+    notifyStart: vi.fn().mockResolvedValue(undefined),
+    notifyPhaseComplete: vi.fn().mockResolvedValue(undefined),
+    notifyComplete: vi.fn().mockResolvedValue(undefined),
+    notifyFailed: vi.fn().mockResolvedValue(undefined),
+    notifyBudgetWarning: vi.fn().mockResolvedValue(undefined),
+    notifyAmbiguities: mockNotifyAmbiguities,
+  })),
+}));
 
 vi.mock('../src/core/phase-gate.js', () => ({
   AnalysisToPlanningGate: vi.fn(() => ({ validate: mockAnalysisGateValidate })),
   PlanningToImplementationGate: vi.fn(() => ({ validate: mockPlanningGateValidate })),
   ImplementationToIntegrationGate: vi.fn(() => ({ validate: mockImplGateValidate })),
   IntegrationToPRGate: vi.fn(() => ({ validate: mockIntegrationGateValidate })),
+  AnalysisAmbiguityGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
 }));
 
 vi.mock('../src/core/progress.js', () => ({
@@ -159,7 +175,7 @@ vi.mock('../src/util/process.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   writeFile: mockFsWriteFile,
-  readFile: vi.fn().mockResolvedValue(''),
+  readFile: mockFsReadFile,
   mkdir: vi.fn().mockResolvedValue(undefined),
   access: vi.fn().mockResolvedValue(undefined),
   rename: vi.fn().mockResolvedValue(undefined),
@@ -354,6 +370,9 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     mockPlanningGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
     mockImplGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
     mockIntegrationGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
+
+    // Default: analysis.md has no ambiguities
+    mockFsReadFile.mockResolvedValue('');
   });
 
   // ── runGate called for correct phases ──────────────────────────────────────
@@ -764,5 +783,121 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     // progressDir is derived from worktree.path + '.cadre/issues/<issueNumber>'
     expect(context.progressDir).toContain('42');
     expect(context.progressDir).toContain('.cadre');
+  });
+});
+
+// ── Ambiguity gating tests ────────────────────────────────────────────────────
+
+describe('IssueOrchestrator – Ambiguity Gating', () => {
+  /** Build an analysis.md string with ambiguity items under "## Ambiguities". */
+  function buildAnalysisMd(ambiguities: string[]): string {
+    return [
+      '# Analysis',
+      '',
+      '## Ambiguities',
+      ...ambiguities,
+      '',
+      '## Next Section',
+      'Other content.',
+    ].join('\n');
+  }
+
+  /** Config with haltOnAmbiguity enabled and a small threshold. */
+  function makeHaltConfig(): CadreConfig {
+    return {
+      ...makeConfig(),
+      options: {
+        ...(makeConfig() as any).options,
+        haltOnAmbiguity: true,
+        ambiguityThreshold: 0,
+      },
+    } as unknown as CadreConfig;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockRetryExecutorExecute.mockImplementation(async ({ fn }: { fn: (attempt: number) => Promise<any> }) => {
+      try {
+        const result = await fn(1);
+        return { success: true, result, attempts: 1, recoveryUsed: false };
+      } catch (err) {
+        return { success: false, error: String(err), attempts: 1, recoveryUsed: false };
+      }
+    });
+
+    mockAnalysisGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
+    mockPlanningGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
+    mockImplGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
+    mockIntegrationGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
+
+    mockFsReadFile.mockResolvedValue('');
+  });
+
+  it('should call logger.warn for each ambiguity after Phase 1 succeeds', async () => {
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- Ambiguity one', '- Ambiguity two']));
+
+    const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint,
+      makeMockLauncher(),
+      makeMockPlatform(),
+      mockLogger as any,
+    );
+
+    await orchestrator.run();
+
+    const warnMessages = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls.map(([m]: [string]) => m);
+    expect(warnMessages.some((m) => m.includes('Ambiguity one'))).toBe(true);
+    expect(warnMessages.some((m) => m.includes('Ambiguity two'))).toBe(true);
+  });
+
+  it('should invoke notifyAmbiguities when analysis contains ambiguities', async () => {
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- Unclear requirement']));
+
+    const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
+    const orchestrator = makeOrchestrator(checkpoint);
+
+    await orchestrator.run();
+
+    expect(mockNotifyAmbiguities).toHaveBeenCalledTimes(1);
+    expect(mockNotifyAmbiguities.mock.calls[0][0]).toBe(42);
+  });
+
+  it('should return failure without running Phase 2 when haltOnAmbiguity is true and threshold is exceeded', async () => {
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- A', '- B']));
+
+    const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
+    const orchestrator = new IssueOrchestrator(
+      makeHaltConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint,
+      makeMockLauncher(),
+      makeMockPlatform(),
+      { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/ambiguit/i);
+    // Phase 2 gate should not be reached
+    expect(mockPlanningGateValidate).not.toHaveBeenCalled();
+  });
+
+  it('should continue normally when haltOnAmbiguity is false even if threshold is exceeded', async () => {
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- A', '- B']));
+
+    const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
+    const orchestrator = makeOrchestrator(checkpoint); // haltOnAmbiguity defaults to false
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(true);
   });
 });

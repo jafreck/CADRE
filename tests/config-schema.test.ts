@@ -562,6 +562,102 @@ describe('CadreConfigSchema', () => {
     });
   });
 
+  describe('ambiguityThreshold', () => {
+    it('should default ambiguityThreshold to 5 when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.ambiguityThreshold).toBe(5);
+    });
+
+    it('should accept an explicit ambiguityThreshold value', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 10 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.ambiguityThreshold).toBe(10);
+      }
+    });
+
+    it('should accept ambiguityThreshold of 0 (min boundary)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 0 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.ambiguityThreshold).toBe(0);
+      }
+    });
+
+    it('should reject non-integer ambiguityThreshold', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 2.5 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject negative ambiguityThreshold', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: -1 },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('haltOnAmbiguity', () => {
+    it('should default haltOnAmbiguity to false when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.haltOnAmbiguity).toBe(false);
+    });
+
+    it('should accept haltOnAmbiguity set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { haltOnAmbiguity: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.haltOnAmbiguity).toBe(true);
+      }
+    });
+
+    it('should accept haltOnAmbiguity set to false explicitly', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { haltOnAmbiguity: false },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.haltOnAmbiguity).toBe(false);
+      }
+    });
+
+    it('should reject a non-boolean haltOnAmbiguity', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { haltOnAmbiguity: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('ambiguityThreshold and haltOnAmbiguity together', () => {
+    it('should accept both fields set explicitly alongside other options', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 3, haltOnAmbiguity: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.ambiguityThreshold).toBe(3);
+        expect(result.data.options.haltOnAmbiguity).toBe(true);
+      }
+    });
+  });
+
   describe('agent field', () => {
     it('should accept a config without an agent field (backward compat)', () => {
       const result = CadreConfigSchema.safeParse(validConfig);

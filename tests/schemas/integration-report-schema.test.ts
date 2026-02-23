@@ -85,4 +85,77 @@ describe('integrationReportSchema', () => {
       expect(Object.keys(result.data)).not.toContain('unexpectedField');
     }
   });
+
+  it('should accept a valid IntegrationReport without baselineFailures or regressionFailures', () => {
+    const result = integrationReportSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.baselineFailures).toBeUndefined();
+      expect(result.data.regressionFailures).toBeUndefined();
+    }
+  });
+
+  it('should accept baselineFailures as an array of strings', () => {
+    const result = integrationReportSchema.safeParse({
+      ...valid,
+      baselineFailures: ['build', 'test-suite-A'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.baselineFailures).toEqual(['build', 'test-suite-A']);
+    }
+  });
+
+  it('should accept regressionFailures as an array of strings', () => {
+    const result = integrationReportSchema.safeParse({
+      ...valid,
+      regressionFailures: ['test-suite-B'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.regressionFailures).toEqual(['test-suite-B']);
+    }
+  });
+
+  it('should accept both baselineFailures and regressionFailures together', () => {
+    const result = integrationReportSchema.safeParse({
+      ...valid,
+      baselineFailures: ['build'],
+      regressionFailures: ['test-suite-C'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.baselineFailures).toEqual(['build']);
+      expect(result.data.regressionFailures).toEqual(['test-suite-C']);
+    }
+  });
+
+  it('should accept empty arrays for baselineFailures and regressionFailures', () => {
+    const result = integrationReportSchema.safeParse({
+      ...valid,
+      baselineFailures: [],
+      regressionFailures: [],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.baselineFailures).toEqual([]);
+      expect(result.data.regressionFailures).toEqual([]);
+    }
+  });
+
+  it('should reject baselineFailures when it contains non-string elements', () => {
+    const result = integrationReportSchema.safeParse({
+      ...valid,
+      baselineFailures: [123, 'valid'],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject regressionFailures when it is not an array', () => {
+    const result = integrationReportSchema.safeParse({
+      ...valid,
+      regressionFailures: 'not-an-array',
+    });
+    expect(result.success).toBe(false);
+  });
 });

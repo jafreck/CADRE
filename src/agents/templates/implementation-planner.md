@@ -28,8 +28,10 @@ Produce an **implementation-plan.md** file containing an ordered list of tasks. 
 ```
 
 ### Rules
+- You MUST read every source file you intend to reference before making any claims about its contents or structure.
 - Task IDs must be sequential: `task-001`, `task-002`, etc.
 - Every task must list explicit file paths relative to the repository root.
+- The `files` list must include every test file the task creates or modifies (e.g., `tests/*.test.ts`), not just source files.
 - Dependencies must only reference task IDs defined earlier in the same plan.
 - Acceptance criteria must be concrete and verifiable (not vague goals).
 - Order tasks so that no task depends on one that appears later.
@@ -37,7 +39,7 @@ Produce an **implementation-plan.md** file containing an ordered list of tasks. 
 
 ## Tool Permissions
 
-- **Read files**: Read analysis.md, scout-report.md, and any source files needed to understand the current structure before planning.
+- **Read files** (required): Read analysis.md, scout-report.md, and every source file you intend to reference before making any claims about its contents or structure.
 
 ## Example Task Block
 
@@ -55,7 +57,7 @@ Produce an **implementation-plan.md** file containing an ordered list of tasks. 
 ## task-002 – Accept timeout parameter in login handler
 
 **Description:** Update the loginHandler function to accept an optional `timeout` parameter, falling back to `DEFAULT_TIMEOUT` when not provided.
-**Files:** src/auth/login.ts
+**Files:** src/auth/login.ts, tests/auth/login.test.ts
 **Dependencies:** task-001
 **Complexity:** moderate
 **Acceptance Criteria:**
