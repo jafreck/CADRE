@@ -285,6 +285,80 @@ describe('PlanningToImplementationGate', () => {
     expect(result.status).toBe('pass');
     expect(result.errors).toHaveLength(0);
   });
+
+  it('should warn (not fail) when a referenced file does not exist', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), VALID_PLAN);
+    // Do NOT create src/core/first.ts in worktreeDir
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('task-001') && w.includes('src/core/first.ts'))).toBe(true);
+  });
+
+  it('should warn for every missing file across all tasks', async () => {
+    const plan = `# Plan
+## Task: task-001 - First
+**Description:** Do first.
+**Files:** src/first.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+- Works
+
+## Task: task-002 - Second
+**Description:** Do second.
+**Files:** src/second.ts
+**Dependencies:** task-001
+**Acceptance Criteria:**
+- Also works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+    // Create worktreeDir but no source files
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('task-001') && w.includes('src/first.ts'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('task-002') && w.includes('src/second.ts'))).toBe(true);
+  });
+
+  it('should warn only for missing files when some exist and some do not', async () => {
+    const plan = `# Plan
+## Task: task-001 - First
+**Description:** Do first.
+**Files:** src/exists.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+- Works
+
+## Task: task-002 - Second
+**Description:** Do second.
+**Files:** src/missing.ts
+**Dependencies:** task-001
+**Acceptance Criteria:**
+- Also works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+    await mkdir(join(worktreeDir, 'src'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/exists.ts'), '');
+    // Do NOT create src/missing.ts
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('warn');
+    expect(result.warnings.some((w) => w.includes('src/missing.ts'))).toBe(true);
+    expect(result.warnings.every((w) => !w.includes('src/exists.ts'))).toBe(true);
+  });
+
+  it('should pass with no warnings when all referenced files exist', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), VALID_PLAN);
+    await mkdir(join(worktreeDir, 'src/core'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/core/first.ts'), '');
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('pass');
+    expect(result.warnings).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
 });
 
 // ── ImplementationToIntegrationGate ──────────────────────────────────────────
