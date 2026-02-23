@@ -137,14 +137,45 @@ export class GitHubAPI {
       draft: params.draft ?? false,
     };
 
-    if (params.labels && params.labels.length > 0) {
-      args.labels = params.labels;
-    }
-    if (params.reviewers && params.reviewers.length > 0) {
-      args.reviewers = params.reviewers;
+    // Note: the create_pull_request MCP tool does not accept `labels` or
+    // `reviewers` — those fields are not in its input schema and are silently
+    // dropped.  We apply them in separate calls after the PR is created.
+
+    const result = await this.mcp.callTool<Record<string, unknown>>('create_pull_request', args);
+
+    const prNumber = result.number as number | undefined;
+    if (prNumber) {
+      // Add labels via the Issues API (PRs are a type of issue in GitHub).
+      if (params.labels && params.labels.length > 0) {
+        try {
+          await this.mcp.callTool('issue_write', {
+            method: 'update',
+            owner: this.owner,
+            repo: this.repo,
+            issue_number: prNumber,
+            labels: params.labels,
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to set labels on PR #${prNumber}: ${err}`);
+        }
+      }
+
+      // Request reviewers via the PR update endpoint.
+      if (params.reviewers && params.reviewers.length > 0) {
+        try {
+          await this.mcp.callTool('update_pull_request', {
+            owner: this.owner,
+            repo: this.repo,
+            pullNumber: prNumber,
+            reviewers: params.reviewers,
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to set reviewers on PR #${prNumber}: ${err}`);
+        }
+      }
     }
 
-    return this.mcp.callTool<Record<string, unknown>>('create_pull_request', args);
+    return result;
   }
 
   /**
