@@ -245,12 +245,14 @@ describe('GitHubProvider – createPullRequest type guards', () => {
     expect(pr.number).toBe(0);
   });
 
-  it('should forward labels to the MCP create_pull_request call', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
-      number: 60,
-      html_url: 'https://github.com/owner/repo/pull/60',
-      title: 'PR with labels',
-    });
+  it('should forward labels via a separate issue_write call after PR creation', async () => {
+    vi.mocked(mockMCP.callTool)
+      .mockResolvedValueOnce({
+        number: 60,
+        html_url: 'https://github.com/owner/repo/pull/60',
+        title: 'PR with labels',
+      })
+      .mockResolvedValueOnce({}); // issue_write response
 
     await provider.createPullRequest({
       title: 'PR with labels',
@@ -260,17 +262,26 @@ describe('GitHubProvider – createPullRequest type guards', () => {
       labels: ['bug', 'enhancement'],
     });
 
-    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-    expect(callArgs[0]).toBe('create_pull_request');
-    expect((callArgs[1] as Record<string, unknown>).labels).toEqual(['bug', 'enhancement']);
+    // create_pull_request does NOT receive labels (MCP tool schema does not support it)
+    const createCallArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+    expect(createCallArgs[0]).toBe('create_pull_request');
+    expect((createCallArgs[1] as Record<string, unknown>)).not.toHaveProperty('labels');
+
+    // Labels are applied via a follow-up issue_write call
+    const labelCallArgs = vi.mocked(mockMCP.callTool).mock.calls[1];
+    expect(labelCallArgs[0]).toBe('issue_write');
+    expect((labelCallArgs[1] as Record<string, unknown>).labels).toEqual(['bug', 'enhancement']);
+    expect((labelCallArgs[1] as Record<string, unknown>).issue_number).toBe(60);
   });
 
-  it('should forward reviewers to the MCP create_pull_request call', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
-      number: 61,
-      html_url: 'https://github.com/owner/repo/pull/61',
-      title: 'PR with reviewers',
-    });
+  it('should forward reviewers via a separate update_pull_request call after PR creation', async () => {
+    vi.mocked(mockMCP.callTool)
+      .mockResolvedValueOnce({
+        number: 61,
+        html_url: 'https://github.com/owner/repo/pull/61',
+        title: 'PR with reviewers',
+      })
+      .mockResolvedValueOnce({}); // update_pull_request response
 
     await provider.createPullRequest({
       title: 'PR with reviewers',
@@ -280,9 +291,16 @@ describe('GitHubProvider – createPullRequest type guards', () => {
       reviewers: ['alice', 'bob'],
     });
 
-    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-    expect(callArgs[0]).toBe('create_pull_request');
-    expect((callArgs[1] as Record<string, unknown>).reviewers).toEqual(['alice', 'bob']);
+    // create_pull_request does NOT receive reviewers (MCP tool schema does not support it)
+    const createCallArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+    expect(createCallArgs[0]).toBe('create_pull_request');
+    expect((createCallArgs[1] as Record<string, unknown>)).not.toHaveProperty('reviewers');
+
+    // Reviewers are requested via a follow-up update_pull_request call
+    const reviewerCallArgs = vi.mocked(mockMCP.callTool).mock.calls[1];
+    expect(reviewerCallArgs[0]).toBe('update_pull_request');
+    expect((reviewerCallArgs[1] as Record<string, unknown>).reviewers).toEqual(['alice', 'bob']);
+    expect((reviewerCallArgs[1] as Record<string, unknown>).pullNumber).toBe(61);
   });
 
   it('should not include labels or reviewers in MCP call when they are omitted', async () => {
