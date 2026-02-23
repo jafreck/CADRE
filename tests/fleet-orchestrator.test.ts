@@ -97,6 +97,7 @@ function makeIssue(number = 1): IssueDetail {
 
 function makeMockDeps() {
   const worktreeManager = {
+    prefetch: vi.fn().mockResolvedValue(undefined),
     provision: vi.fn().mockResolvedValue({
       path: '/tmp/worktree/1',
       branch: 'cadre/issue-1',
@@ -114,6 +115,125 @@ function makeMockDeps() {
   };
   return { worktreeManager, launcher, platform, logger };
 }
+
+describe('FleetOrchestrator — prefetch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls worktreeManager.prefetch() exactly once during run()', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1), makeIssue(2)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.prefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls prefetch() before any worktree is provisioned', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const callOrder: string[] = [];
+    worktreeManager.prefetch.mockImplementation(async () => { callOrder.push('prefetch'); });
+    worktreeManager.provision.mockImplementation(async () => {
+      callOrder.push('provision');
+      return { path: '/tmp/worktree/1', branch: 'cadre/issue-1', baseCommit: 'abc123' };
+    });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(callOrder.indexOf('prefetch')).toBeLessThan(callOrder.indexOf('provision'));
+  });
+
+  it('propagates error thrown by prefetch() without running any issue', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.prefetch.mockRejectedValue(new Error('network failure'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await expect(fleet.run()).rejects.toThrow('network failure');
+    expect(worktreeManager.provision).not.toHaveBeenCalled();
+  });
+
+  it('calls prefetch() exactly once when maxParallelIssues: 3 and 3 issues run concurrently', async () => {
+    const config = makeConfig({ maxParallelIssues: 3 });
+    const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.prefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still calls prefetch() once when issue list is empty', async () => {
+    const config = makeConfig();
+    const issues: IssueDetail[] = [];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.prefetch).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('FleetOrchestrator — NotificationManager integration', () => {
   let dispatchSpy: ReturnType<typeof vi.fn>;
