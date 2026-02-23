@@ -546,6 +546,7 @@ describe('IssueOrchestrator – cost report', () => {
     vi.mocked(TokenTracker).mockImplementationOnce(() => ({
       getTotal: vi.fn().mockReturnValue(1000),
       record: vi.fn(),
+      importRecords: vi.fn(),
       getRecords: vi.fn().mockReturnValue([
         { issueNumber: 42, agent: 'issue-analyst', phase: 1, tokens: 1000, input: 750, output: 250, timestamp: '2024-01-01T00:00:00Z' },
       ]),
@@ -627,6 +628,7 @@ describe('IssueOrchestrator – cost report', () => {
     vi.mocked(TokenTracker).mockImplementationOnce(() => ({
       getTotal: vi.fn().mockReturnValue(2000),
       record: vi.fn(),
+      importRecords: vi.fn(),
       getRecords: vi.fn().mockReturnValue([
         { issueNumber: 42, agent: 'test-agent', phase: 1, tokens: 2000, input: 1500, output: 500, timestamp: '2024-01-01T00:00:00Z' },
       ]),
@@ -663,6 +665,7 @@ describe('IssueOrchestrator – cost report', () => {
     vi.mocked(TokenTracker).mockImplementationOnce(() => ({
       getTotal: vi.fn().mockReturnValue(4000),
       record: vi.fn(),
+      importRecords: vi.fn(),
       getRecords: vi.fn().mockReturnValue([
         { issueNumber: 42, agent: 'test-agent', phase: 1, tokens: 4000, timestamp: '2024-01-01T00:00:00Z' },
       ]),
@@ -699,6 +702,7 @@ describe('IssueOrchestrator – cost report', () => {
     vi.mocked(TokenTracker).mockImplementationOnce(() => ({
       getTotal: vi.fn().mockReturnValue(1500),
       record: vi.fn(),
+      importRecords: vi.fn(),
       getRecords: vi.fn().mockReturnValue([
         { issueNumber: 42, agent: 'issue-analyst', phase: 1, tokens: 1000, input: 750, output: 250, timestamp: '2024-01-01T00:00:00Z' },
         { issueNumber: 42, agent: 'codebase-scout', phase: 1, tokens: 500, input: 375, output: 125, timestamp: '2024-01-01T00:00:01Z' },
@@ -739,6 +743,7 @@ describe('IssueOrchestrator – cost report', () => {
     vi.mocked(TokenTracker).mockImplementationOnce(() => ({
       getTotal: vi.fn().mockReturnValue(500),
       record: vi.fn(),
+      importRecords: vi.fn(),
       getRecords: vi.fn().mockReturnValue([
         { issueNumber: 42, agent: 'pr-composer', phase: 5, tokens: 500, input: 375, output: 125, timestamp: '2024-01-01T00:00:00Z' },
       ]),

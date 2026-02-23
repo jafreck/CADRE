@@ -7,7 +7,7 @@ import type { IssueDetail } from '../platform/provider.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { ISSUE_PHASES } from '../core/phase-registry.js';
 import { atomicWriteJSON, ensureDir, readJSON } from '../util/fs.js';
-import type { RunReport, RunIssueSummary, RunPhaseSummary, RunTotals } from './types.js';
+import type { RunReport, RunIssueSummary, RunPhaseSummary, RunTotals, CostReport } from './types.js';
 
 export class ReportWriter {
   constructor(
@@ -92,6 +92,21 @@ export class ReportWriter {
 
     const timestamp = report.startTime.replace(/[:.]/g, '-');
     const fileName = `run-report-${timestamp}.json`;
+    const filePath = join(reportsDir, fileName);
+
+    await atomicWriteJSON(filePath, report);
+    return filePath;
+  }
+
+  /**
+   * Write a per-issue CostReport to `.cadre/reports/issue-<issueNumber>-cost.json`.
+   * Returns the path of the written file.
+   */
+  async writeIssueCostReport(report: CostReport): Promise<string> {
+    const reportsDir = join(this.config.repoPath, '.cadre', 'reports');
+    await ensureDir(reportsDir);
+
+    const fileName = `issue-${report.issueNumber}-cost.json`;
     const filePath = join(reportsDir, fileName);
 
     await atomicWriteJSON(filePath, report);
