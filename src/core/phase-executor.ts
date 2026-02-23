@@ -1,0 +1,46 @@
+import type { CadreConfig } from '../config/schema.js';
+import type { IssueDetail, PlatformProvider } from '../platform/provider.js';
+import type { WorktreeInfo } from '../git/worktree.js';
+import type { CheckpointManager } from './checkpoint.js';
+import type { IssueProgressWriter } from './progress.js';
+import type { AgentLauncher } from './agent-launcher.js';
+import type { ContextBuilder } from '../agents/context-builder.js';
+import type { ResultParser } from '../agents/result-parser.js';
+import type { CommitManager } from '../git/commit.js';
+import type { RetryExecutor } from '../execution/retry.js';
+import type { TokenTracker } from '../budget/token-tracker.js';
+import type { Logger } from '../logging/logger.js';
+
+/**
+ * All dependencies and shared state needed by a phase during execution.
+ */
+export type PhaseContext = {
+  issue: IssueDetail;
+  worktree: WorktreeInfo;
+  config: CadreConfig;
+  progressDir: string;
+  contextBuilder: ContextBuilder;
+  launcher: AgentLauncher;
+  resultParser: ResultParser;
+  checkpoint: CheckpointManager;
+  commitManager: CommitManager;
+  retryExecutor: RetryExecutor;
+  tokenTracker: TokenTracker;
+  progressWriter: IssueProgressWriter;
+  platform: PlatformProvider;
+  recordTokens: (agent: string, tokens: number | null) => void;
+  checkBudget: () => void;
+  logger: Logger;
+};
+
+/**
+ * Contract for a single phase in the CADRE per-issue pipeline.
+ */
+export interface PhaseExecutor {
+  /** Pipeline phase number (1-based). */
+  phaseId: number;
+  /** Human-readable phase name. */
+  name: string;
+  /** Execute the phase and return the path to the primary output file. */
+  execute(ctx: PhaseContext): Promise<string>;
+}

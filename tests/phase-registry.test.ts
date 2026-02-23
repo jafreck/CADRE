@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   ISSUE_PHASES,
   getPhase,
   getPhaseCount,
   isLastPhase,
+  PhaseRegistry,
 } from '../src/core/phase-registry.js';
+import type { PhaseExecutor } from '../src/core/phase-executor.js';
 
 describe('PhaseRegistry', () => {
   describe('ISSUE_PHASES', () => {
@@ -65,5 +67,61 @@ describe('PhaseRegistry', () => {
       expect(isLastPhase(1)).toBe(false);
       expect(isLastPhase(3)).toBe(false);
     });
+  });
+});
+
+function makeExecutor(phaseId: number, name: string): PhaseExecutor {
+  return { phaseId, name, execute: vi.fn().mockResolvedValue(`/output/${phaseId}.md`) };
+}
+
+describe('PhaseRegistry class', () => {
+  it('should start empty', () => {
+    const registry = new PhaseRegistry();
+    expect(registry.getAll()).toEqual([]);
+  });
+
+  it('should return a registered executor', () => {
+    const registry = new PhaseRegistry();
+    const executor = makeExecutor(1, 'Phase One');
+    registry.register(executor);
+    expect(registry.getAll()).toHaveLength(1);
+    expect(registry.getAll()[0]).toBe(executor);
+  });
+
+  it('should preserve registration order', () => {
+    const registry = new PhaseRegistry();
+    const e1 = makeExecutor(1, 'Phase One');
+    const e2 = makeExecutor(2, 'Phase Two');
+    const e3 = makeExecutor(3, 'Phase Three');
+    registry.register(e1);
+    registry.register(e2);
+    registry.register(e3);
+    const all = registry.getAll();
+    expect(all).toHaveLength(3);
+    expect(all[0]).toBe(e1);
+    expect(all[1]).toBe(e2);
+    expect(all[2]).toBe(e3);
+  });
+
+  it('should allow registering the same executor multiple times', () => {
+    const registry = new PhaseRegistry();
+    const executor = makeExecutor(1, 'Phase One');
+    registry.register(executor);
+    registry.register(executor);
+    expect(registry.getAll()).toHaveLength(2);
+  });
+
+  it('getAll should return the same array reference on repeated calls', () => {
+    const registry = new PhaseRegistry();
+    registry.register(makeExecutor(1, 'Phase One'));
+    expect(registry.getAll()).toBe(registry.getAll());
+  });
+
+  it('each PhaseRegistry instance should have independent state', () => {
+    const r1 = new PhaseRegistry();
+    const r2 = new PhaseRegistry();
+    r1.register(makeExecutor(1, 'Phase One'));
+    expect(r1.getAll()).toHaveLength(1);
+    expect(r2.getAll()).toHaveLength(0);
   });
 });

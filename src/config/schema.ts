@@ -226,6 +226,24 @@ export const CadreConfigSchema = z.object({
     })
     .optional(),
 
+  /** Controls which lifecycle events post comments to the issue. */
+  issueUpdates: z
+    .object({
+      /** Master switch — disable all issue comments at once. */
+      enabled: z.boolean().default(true),
+      /** Post a comment when an issue pipeline starts. */
+      onStart: z.boolean().default(true),
+      /** Post a comment when each phase completes. */
+      onPhaseComplete: z.boolean().default(false),
+      /** Post a comment when the pipeline completes successfully. */
+      onComplete: z.boolean().default(true),
+      /** Post a comment when the pipeline fails. */
+      onFailed: z.boolean().default(true),
+      /** Post a comment when approaching the token budget limit. */
+      onBudgetWarning: z.boolean().default(true),
+    })
+    .default({}),
+
   /**
    * Azure DevOps configuration.
    * Required when platform is "azure-devops".
