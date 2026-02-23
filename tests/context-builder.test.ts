@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContextBuilder } from '../src/agents/context-builder.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
+import type { ReviewThread } from '../src/platform/provider.js';
 import { Logger } from '../src/logging/logger.js';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 
@@ -304,6 +305,76 @@ describe('ContextBuilder', () => {
       await builder.buildForFixSurgeon(42, '/tmp/worktree', task.id, '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
+    });
+  });
+
+  describe('buildForReviewResponse', () => {
+    const makeThread = (overrides: Partial<ReviewThread> = {}): ReviewThread => ({
+      id: 'thread-1',
+      prNumber: 10,
+      isResolved: false,
+      isOutdated: false,
+      comments: [
+        {
+          id: 'comment-1',
+          author: 'alice',
+          body: 'Please fix this.',
+          createdAt: '2024-01-01',
+          path: 'src/auth/login.ts',
+          line: 42,
+        },
+      ],
+      ...overrides,
+    });
+
+    it('should return a string with ## Review Comments section', () => {
+      const result = builder.buildForReviewResponse(mockIssue, [makeThread()]);
+      expect(result).toContain('## Review Comments');
+    });
+
+    it('should include file path, author, and body for unresolved threads', () => {
+      const result = builder.buildForReviewResponse(mockIssue, [makeThread()]);
+      expect(result).toContain('src/auth/login.ts');
+      expect(result).toContain('alice');
+      expect(result).toContain('Please fix this.');
+    });
+
+    it('should omit resolved threads', () => {
+      const result = builder.buildForReviewResponse(mockIssue, [makeThread({ isResolved: true })]);
+      expect(result).not.toContain('alice');
+      expect(result).not.toContain('Please fix this.');
+    });
+
+    it('should omit outdated threads', () => {
+      const result = builder.buildForReviewResponse(mockIssue, [makeThread({ isOutdated: true })]);
+      expect(result).not.toContain('alice');
+      expect(result).not.toContain('Please fix this.');
+    });
+
+    it('should handle empty thread list', () => {
+      const result = builder.buildForReviewResponse(mockIssue, []);
+      expect(result).toContain('## Review Comments');
+      expect(result).not.toContain('alice');
+    });
+
+    it('should include multiple active threads', () => {
+      const thread2 = makeThread({
+        id: 'thread-2',
+        comments: [
+          {
+            id: 'comment-2',
+            author: 'bob',
+            body: 'Another issue here.',
+            createdAt: '2024-01-02',
+            path: 'src/config.ts',
+          },
+        ],
+      });
+      const result = builder.buildForReviewResponse(mockIssue, [makeThread(), thread2]);
+      expect(result).toContain('alice');
+      expect(result).toContain('bob');
+      expect(result).toContain('src/auth/login.ts');
+      expect(result).toContain('src/config.ts');
     });
   });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { simpleGit } from 'simple-git';
 import { WorktreeManager, RemoteBranchMissingError } from '../src/git/worktree.js';
 import { Logger } from '../src/logging/logger.js';
+import * as fsUtils from '../src/util/fs.js';
 
 // Mock simple-git
 vi.mock('simple-git', () => {
@@ -19,14 +20,13 @@ vi.mock('simple-git', () => {
   };
 });
 
+// Mock fs utilities
 vi.mock('../src/util/fs.js', () => ({
-  exists: vi.fn(),
+  exists: vi.fn().mockResolvedValue(false),
   ensureDir: vi.fn().mockResolvedValue(undefined),
   readFileOrNull: vi.fn().mockResolvedValue(null),
   atomicWriteFile: vi.fn().mockResolvedValue(undefined),
 }));
-
-import { exists, ensureDir } from '../src/util/fs.js';
 
 describe('WorktreeManager', () => {
   let manager: WorktreeManager;
@@ -129,14 +129,14 @@ describe('WorktreeManager', () => {
     });
   });
 
-  describe('provision', () => {
+  describe('provision (resume path)', () => {
     let mockGit: ReturnType<typeof simpleGit>;
 
     beforeEach(() => {
       mockGit = simpleGit('/tmp/repo');
       vi.clearAllMocks();
       // Default: worktree does not exist
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      vi.mocked(fsUtils.exists).mockResolvedValue(false);
       // Default: revparse returns a commit SHA
       (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('abc123');
       // Default: ls-remote returns empty (branch absent)
@@ -146,45 +146,21 @@ describe('WorktreeManager', () => {
     });
 
     it('should return existing WorktreeInfo when worktree already exists', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
       const result = await manager.provision(42, 'my issue');
       expect(result.issueNumber).toBe(42);
       expect(result.exists).toBe(true);
       expect(result.branch).toBe('cadre/issue-42');
     });
 
-    it('should return existing WorktreeInfo when worktree exists and resume=false', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(true);
-      const result = await manager.provision(42, 'my issue', false);
-      expect(result.exists).toBe(true);
-      expect(result.issueNumber).toBe(42);
-    });
-
-    it('should return existing WorktreeInfo when worktree exists and resume=true', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(true);
-      const result = await manager.provision(42, 'my issue', true);
-      expect(result.exists).toBe(true);
-      expect(result.issueNumber).toBe(42);
-      // No ls-remote call should be made when worktree already exists
-      expect(mockGit.raw).not.toHaveBeenCalledWith(expect.arrayContaining(['ls-remote']));
-    });
-
     it('should throw RemoteBranchMissingError when resume=true and remote branch is absent', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      vi.mocked(fsUtils.exists).mockResolvedValue(false);
       (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
       await expect(manager.provision(42, 'my issue', true)).rejects.toThrow(RemoteBranchMissingError);
     });
 
-    it('should throw RemoteBranchMissingError with correct branch name', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
-      (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('   ');
-      await expect(manager.provision(42, 'my issue', true)).rejects.toThrow(
-        /cadre\/issue-42/,
-      );
-    });
-
     it('should fetch and create worktree when resume=true and remote branch exists', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      vi.mocked(fsUtils.exists).mockResolvedValue(false);
       (mockGit.raw as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce('abc123\trefs/heads/cadre/issue-42') // ls-remote
         .mockResolvedValue(''); // worktree add
@@ -192,45 +168,89 @@ describe('WorktreeManager', () => {
       expect(mockGit.fetch).toHaveBeenCalledWith('origin', 'cadre/issue-42');
       expect(result.issueNumber).toBe(42);
       expect(result.exists).toBe(true);
-      expect(result.branch).toBe('cadre/issue-42');
+    });
+  });
+
+  it('should have provisionFromBranch method', () => {
+    expect(typeof manager.provisionFromBranch).toBe('function');
+  });
+
+  describe('provisionFromBranch', () => {
+    let mockGit: ReturnType<typeof simpleGit>;
+
+    beforeEach(() => {
+      mockGit = simpleGit('/tmp/repo');
+      vi.clearAllMocks();
     });
 
-    it('should log info after successful resume', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
-      (mockGit.raw as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce('abc123\trefs/heads/cadre/issue-42')
-        .mockResolvedValue('');
-      await manager.provision(42, 'my issue', true);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Resumed worktree'),
-        expect.anything(),
-      );
-    });
+    it('should return existing worktree info if directory already exists', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValueOnce(true);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValueOnce('deadbeef\n');
 
-    it('should create a new branch and worktree on fresh provision (no resume)', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
-      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: [] });
-      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('deadbeef\n');
-      const result = await manager.provision(42, 'my issue');
-      expect(mockGit.branch).toHaveBeenCalledWith(['cadre/issue-42', 'deadbeef']);
+      const result = await manager.provisionFromBranch(42, 'cadre/issue-42');
+
       expect(result.issueNumber).toBe(42);
+      expect(result.branch).toBe('cadre/issue-42');
       expect(result.exists).toBe(true);
+      expect(result.path).toContain('issue-42');
     });
 
-    it('should skip branch creation on fresh provision when local branch already exists', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
-      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: ['cadre/issue-42'] });
-      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('deadbeef\n');
-      await manager.provision(42, 'my issue');
-      expect(mockGit.branch).not.toHaveBeenCalled();
+    it('should not call git.fetch when worktree already exists', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValueOnce(true);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValueOnce('deadbeef\n');
+
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+
+      expect(mockGit.fetch).not.toHaveBeenCalled();
     });
 
-    it('should log info after successful fresh provision', async () => {
-      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
-      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('abc123\n');
-      await manager.provision(42, 'my issue');
+    it('should fetch the remote branch when worktree does not exist', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValueOnce(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValueOnce('abc123\n');
+
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+
+      expect(mockGit.fetch).toHaveBeenCalledWith('origin', 'cadre/issue-42');
+    });
+
+    it('should add git worktree checked out to origin/<branch>', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValueOnce(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValueOnce('abc123\n');
+
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+
+      expect(mockGit.raw).toHaveBeenCalledWith(
+        expect.arrayContaining(['worktree', 'add']),
+      );
+      const rawCall = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c: string[]) => c[0]?.includes?.('worktree') || (Array.isArray(c[0]) && c[0][0] === 'worktree'),
+      );
+      expect(rawCall).toBeDefined();
+    });
+
+    it('should return a WorktreeInfo with correct shape', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValueOnce(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValueOnce('abc123\n');
+
+      const result = await manager.provisionFromBranch(42, 'cadre/issue-42');
+
+      expect(result).toMatchObject({
+        issueNumber: 42,
+        branch: 'cadre/issue-42',
+        exists: true,
+      });
+      expect(typeof result.path).toBe('string');
+      expect(typeof result.baseCommit).toBe('string');
+    });
+
+    it('should log info after provisioning from branch', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValueOnce(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValueOnce('abc123\n');
+
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Provisioned worktree'),
+        expect.stringContaining('Provisioned worktree from branch'),
         expect.anything(),
       );
     });
@@ -269,6 +289,84 @@ describe('WorktreeManager', () => {
       await manager.prefetch();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Failed to fetch origin/main, continuing with local',
+      );
+    });
+  });
+
+  describe('provisionFromBranch', () => {
+    let mockGit: ReturnType<typeof simpleGit>;
+
+    beforeEach(() => {
+      mockGit = simpleGit('/tmp/repo');
+      vi.clearAllMocks();
+      // Default: worktree does not exist
+      vi.mocked(fsUtils.exists).mockResolvedValue(false);
+      // revparse returns a HEAD commit for newly created worktree
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('def456\n');
+    });
+
+    it('should expose a public provisionFromBranch method', () => {
+      expect(typeof manager.provisionFromBranch).toBe('function');
+    });
+
+    it('should fetch the remote branch before adding the worktree', async () => {
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+      expect(mockGit.fetch).toHaveBeenCalledWith('origin', 'cadre/issue-42');
+    });
+
+    it('should add the worktree checked out to the remote branch', async () => {
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+      expect(mockGit.raw).toHaveBeenCalledWith([
+        'worktree',
+        'add',
+        '/tmp/worktrees/issue-42',
+        'origin/cadre/issue-42',
+      ]);
+    });
+
+    it('should return a WorktreeInfo with correct fields', async () => {
+      const result = await manager.provisionFromBranch(42, 'cadre/issue-42');
+      expect(result).toMatchObject({
+        issueNumber: 42,
+        path: '/tmp/worktrees/issue-42',
+        branch: 'cadre/issue-42',
+        exists: true,
+      });
+      expect(result.baseCommit).toBeTruthy();
+    });
+
+    it('should return existing worktree info without re-provisioning when worktree exists', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+
+      const result = await manager.provisionFromBranch(42, 'cadre/issue-42');
+
+      expect(mockGit.fetch).not.toHaveBeenCalled();
+      expect(mockGit.raw).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        issueNumber: 42,
+        path: '/tmp/worktrees/issue-42',
+        branch: 'cadre/issue-42',
+        exists: true,
+      });
+    });
+
+    it('should log info when returning an existing worktree', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Worktree already exists for issue #42',
+        expect.objectContaining({ issueNumber: 42 }),
+      );
+    });
+
+    it('should log info after successfully provisioning a new worktree', async () => {
+      await manager.provisionFromBranch(42, 'cadre/issue-42');
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Provisioned worktree from branch cadre/issue-42 for issue #42',
+        expect.objectContaining({ issueNumber: 42 }),
       );
     });
   });

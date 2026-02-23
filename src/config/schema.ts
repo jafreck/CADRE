@@ -166,6 +166,8 @@ export const CadreConfigSchema = z.object({
       ambiguityThreshold: z.number().int().min(0).default(5),
       /** Halt the pipeline when the ambiguity gate fires instead of continuing. */
       haltOnAmbiguity: z.boolean().default(false),
+      /** Enable automatic reply comments on resolved review threads. */
+      respondToReviews: z.boolean().default(false),
     })
     .default({}),
 
@@ -313,6 +315,14 @@ export const CadreConfigSchema = z.object({
 
   /** Agent backend configuration. Optional; uses copilot defaults when omitted. */
   agent: AgentConfigSchema.optional(),
+
+  /** Review response configuration. */
+  reviewResponse: z
+    .object({
+      /** Automatically post a reply comment when a review thread is resolved. */
+      autoReplyOnResolved: z.boolean().default(false),
+    })
+    .default({}),
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;

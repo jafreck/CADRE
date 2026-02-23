@@ -111,6 +111,23 @@ describe('GitHubAPI', () => {
     });
   });
 
+  describe('getPRReviewComments', () => {
+    it('should call pull_request_read with get_review_comments method', async () => {
+      const mockComments = [{ id: 1, body: 'Looks good' }];
+      vi.mocked(mockMCP.callTool).mockResolvedValue(mockComments);
+
+      const result = await api.getPRReviewComments(42);
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('pull_request_read', {
+        method: 'get_review_comments',
+        owner: 'owner',
+        repo: 'repo',
+        pullNumber: 42,
+      });
+      expect(result).toBe(mockComments);
+    });
+  });
+
   describe('createPullRequest', () => {
     it('should create a PR via MCP', async () => {
       vi.mocked(mockMCP.callTool).mockResolvedValue({

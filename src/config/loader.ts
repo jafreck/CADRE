@@ -100,6 +100,7 @@ export function applyOverrides(
     issueIds?: number[];
     skipValidation?: boolean;
     noPr?: boolean;
+    respondToReviews?: boolean;
   },
 ): CadreConfig {
   const merged = { ...config };
@@ -130,6 +131,10 @@ export function applyOverrides(
 
   if (overrides.noPr != null) {
     merged.pullRequest = { ...merged.pullRequest, autoCreate: !overrides.noPr };
+  }
+
+  if (overrides.respondToReviews != null) {
+    merged.options = { ...merged.options, respondToReviews: overrides.respondToReviews };
   }
 
   return Object.freeze(merged);

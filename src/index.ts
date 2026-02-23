@@ -27,6 +27,7 @@ program
   .option('--no-pr', 'Skip PR creation')
   .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
   .option('--skip-validation', 'Skip pre-run validation checks')
+  .option('--respond-to-reviews', 'Respond to pull request reviews instead of processing new issues')
   .action(async (opts) => {
     try {
       let config = await loadConfig(opts.config);
@@ -37,7 +38,12 @@ program
         maxParallelIssues: opts.parallel,
         skipValidation: opts.skipValidation,
         noPr: !opts.pr,
+        respondToReviews: opts.respondToReviews,
       });
+
+      if (opts.respondToReviews) {
+        console.log(chalk.cyan('🔁 Review-response mode active'));
+      }
 
       if (opts.dryRun) {
         console.log(chalk.green('✓ Configuration is valid'));

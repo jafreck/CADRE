@@ -7,7 +7,7 @@ import type {
   AgentContext,
   ImplementationTask,
 } from './types.js';
-import type { IssueDetail } from '../platform/provider.js';
+import type { IssueDetail, ReviewThread } from '../platform/provider.js';
 import { Logger } from '../logging/logger.js';
 import {
   analysisSchema,
@@ -275,6 +275,36 @@ export class ContextBuilder {
       },
       outputSchema: zodToJsonSchema(integrationReportSchema) as Record<string, unknown>,
     });
+  }
+
+  /**
+   * Build a Markdown prompt section summarising unresolved, non-outdated review threads.
+   */
+  buildForReviewResponse(issue: IssueDetail, reviewThreads: ReviewThread[]): string {
+    const active = reviewThreads.filter((t) => !t.isResolved && !t.isOutdated);
+
+    const lines: string[] = [
+      `## Review Comments`,
+      ``,
+      `Issue: #${issue.number} – ${issue.title}`,
+      ``,
+    ];
+
+    if (active.length === 0) {
+      lines.push('_No unresolved review comments._');
+    } else {
+      for (const thread of active) {
+        for (const comment of thread.comments) {
+          lines.push(`### ${comment.path}`);
+          lines.push(`**Author:** ${comment.author}`);
+          lines.push(``);
+          lines.push(comment.body);
+          lines.push(``);
+        }
+      }
+    }
+
+    return lines.join('\n');
   }
 
   /**

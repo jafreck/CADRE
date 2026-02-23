@@ -87,6 +87,7 @@ export class IssueOrchestrator {
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
     notificationManager?: NotificationManager,
+    phaseSubset?: number[],
   ) {
     this.progressDir = join(
       worktree.path,
@@ -119,11 +120,12 @@ export class IssueOrchestrator {
     this.notificationManager.addProvider(notifier);
 
     this.registry = new PhaseRegistry();
-    this.registry.register(new AnalysisPhaseExecutor());
-    this.registry.register(new PlanningPhaseExecutor());
-    this.registry.register(new ImplementationPhaseExecutor());
-    this.registry.register(new IntegrationPhaseExecutor());
-    this.registry.register(new PRCompositionPhaseExecutor());
+    const activePhases = phaseSubset ?? [1, 2, 3, 4, 5];
+    if (activePhases.includes(1)) this.registry.register(new AnalysisPhaseExecutor());
+    if (activePhases.includes(2)) this.registry.register(new PlanningPhaseExecutor());
+    if (activePhases.includes(3)) this.registry.register(new ImplementationPhaseExecutor());
+    if (activePhases.includes(4)) this.registry.register(new IntegrationPhaseExecutor());
+    if (activePhases.includes(5)) this.registry.register(new PRCompositionPhaseExecutor());
   }
 
   /**

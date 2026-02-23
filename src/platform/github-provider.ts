@@ -6,6 +6,7 @@ import type {
   CreatePullRequestParams,
   ListPullRequestsParams,
   ListIssuesParams,
+  ReviewThread,
 } from './provider.js';
 import { GitHubMCPClient, type MCPServerConfig } from '../github/mcp-client.js';
 import { GitHubAPI } from '../github/api.js';
@@ -147,6 +148,11 @@ export class GitHubProvider implements PlatformProvider {
     return `Closes #${issueNumber}`;
   }
 
+  async listPRReviewComments(prNumber: number): Promise<ReviewThread[]> {
+    const raw = await this.getAPI().getPRReviewComments(prNumber);
+    return this.parseReviewThreads(prNumber, raw);
+  }
+
   // ── Helpers ──
 
   private getAPI(): GitHubAPI {
@@ -154,6 +160,44 @@ export class GitHubProvider implements PlatformProvider {
       throw new Error('GitHubProvider not connected — call connect() first');
     }
     return this.api;
+  }
+
+  private parseReviewThreads(prNumber: number, raw: unknown): ReviewThread[] {
+    // The MCP response may be an array of threads or wrapped in an envelope
+    let threads: unknown[];
+    if (Array.isArray(raw)) {
+      threads = raw;
+    } else if (raw !== null && typeof raw === 'object' && 'threads' in (raw as object)) {
+      threads = asArray((raw as Record<string, unknown>).threads);
+    } else {
+      return [];
+    }
+
+    return threads.map((t) => {
+      const thread = asRecord(t);
+      const rawComments = asArray(thread.comments);
+
+      const comments = rawComments.map((c) => {
+        const comment = asRecord(c);
+        const author = asRecord(comment.author);
+        return {
+          id: asString(comment.id),
+          author: asString(author.login, 'unknown'),
+          body: asString(comment.body),
+          createdAt: asString(comment.createdAt),
+          path: asString(comment.path),
+          line: typeof comment.line === 'number' ? comment.line : undefined,
+        };
+      });
+
+      return {
+        id: asString(thread.id),
+        prNumber,
+        isResolved: thread.isResolved === true,
+        isOutdated: thread.isOutdated === true,
+        comments,
+      };
+    });
   }
 
   private parseIssue(raw: Record<string, unknown>): IssueDetail {

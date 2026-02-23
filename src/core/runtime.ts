@@ -131,7 +131,9 @@ export class CadreRuntime {
       this.notifications,
     );
 
-    const result = await fleet.run();
+    const result = this.config.options.respondToReviews
+      ? await fleet.runReviewResponse(this.activeIssueNumbers)
+      : await fleet.run();
 
     // 5. Disconnect platform provider
     await this.provider.disconnect();

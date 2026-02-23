@@ -23,6 +23,7 @@ const baseConfig: CadreConfig = {
     buildVerification: true,
     testVerification: true,
     skipValidation: false,
+    respondToReviews: false,
   },
   commands: {},
   copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4.6', agentDir: '.github/agents', timeout: 300_000 },
@@ -96,6 +97,36 @@ describe('applyOverrides – skipValidation', () => {
 
   it('should return a frozen object', () => {
     const result = applyOverrides(baseConfig, { skipValidation: true });
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+});
+
+describe('applyOverrides – respondToReviews', () => {
+  it('should set respondToReviews to true when override is true', () => {
+    const result = applyOverrides(baseConfig, { respondToReviews: true });
+    expect(result.options.respondToReviews).toBe(true);
+  });
+
+  it('should set respondToReviews to false when override is false', () => {
+    const config = applyOverrides(baseConfig, { respondToReviews: true });
+    const result = applyOverrides(config, { respondToReviews: false });
+    expect(result.options.respondToReviews).toBe(false);
+  });
+
+  it('should not change respondToReviews when override is undefined', () => {
+    const result = applyOverrides(baseConfig, {});
+    expect(result.options.respondToReviews).toBe(false);
+  });
+
+  it('should preserve other options when applying respondToReviews override', () => {
+    const result = applyOverrides(baseConfig, { respondToReviews: true });
+    expect(result.options.dryRun).toBe(false);
+    expect(result.options.resume).toBe(false);
+    expect(result.options.maxParallelIssues).toBe(3);
+  });
+
+  it('should return a frozen object', () => {
+    const result = applyOverrides(baseConfig, { respondToReviews: true });
     expect(Object.isFrozen(result)).toBe(true);
   });
 });

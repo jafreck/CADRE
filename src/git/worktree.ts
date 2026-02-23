@@ -135,6 +135,58 @@ export class WorktreeManager {
   }
 
   /**
+   * Create a worktree from an existing remote branch (e.g. resumed from another machine).
+   * Fetches the remote branch, adds a git worktree checked out to it, and returns a WorktreeInfo.
+   * If the worktree directory already exists and is valid, returns it without re-provisioning.
+   */
+  async provisionFromBranch(issueNumber: number, branch: string): Promise<WorktreeInfo> {
+    const worktreePath = this.getWorktreePath(issueNumber);
+
+    // Return existing worktree if already on disk
+    if (await exists(worktreePath)) {
+      this.logger.info(`Worktree already exists for issue #${issueNumber}`, {
+        issueNumber,
+        data: { path: worktreePath, branch },
+      });
+
+      const baseCommit = await this.getBaseCommit(worktreePath);
+      return {
+        issueNumber,
+        path: worktreePath,
+        branch,
+        exists: true,
+        baseCommit,
+      };
+    }
+
+    // Fetch the remote branch so it's available locally
+    await this.git.fetch('origin', branch);
+    this.logger.debug(`Fetched origin/${branch}`, { issueNumber });
+
+    // Add the worktree checked out to the remote branch
+    await ensureDir(this.worktreeRoot);
+    await this.git.raw(['worktree', 'add', worktreePath, `origin/${branch}`]);
+
+    // Bootstrap the worktree's .cadre/ directory
+    await this.initCadreDir(worktreePath, issueNumber);
+
+    const baseCommit = await this.getBaseCommit(worktreePath);
+
+    this.logger.info(`Provisioned worktree from branch ${branch} for issue #${issueNumber}`, {
+      issueNumber,
+      data: { path: worktreePath, branch, baseCommit: baseCommit.slice(0, 8) },
+    });
+
+    return {
+      issueNumber,
+      path: worktreePath,
+      branch,
+      exists: true,
+      baseCommit,
+    };
+  }
+
+  /**
    * Fetch the latest base branch from origin.
    * Call this before `provision()` to ensure the remote ref is up to date.
    */

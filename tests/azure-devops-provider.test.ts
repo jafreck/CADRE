@@ -489,6 +489,22 @@ describe('AzureDevOpsProvider.createPullRequest()', () => {
     });
   });
 
+  describe('listPRReviewComments()', () => {
+    it('should return an empty array (stub)', async () => {
+      const provider = await makeConnectedProvider(fetchStub);
+      const result = await provider.listPRReviewComments(1);
+      expect(result).toEqual([]);
+    });
+
+    it('should log a warning when called', async () => {
+      const provider = await makeConnectedProvider(fetchStub);
+      await provider.listPRReviewComments(1);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('not yet supported on Azure DevOps'),
+      );
+    });
+  });
+
   describe('combined labels and reviewers', () => {
     it('should set labels and add reviewers when both are provided', async () => {
       const provider = await makeConnectedProvider(fetchStub);
