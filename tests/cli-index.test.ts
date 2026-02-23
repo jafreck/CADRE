@@ -84,4 +84,42 @@ describe('src/index.ts command registration', () => {
     const optionNames = runCmd!.options.map((o) => o.long);
     expect(optionNames).toContain('--skip-agent-validation');
   });
+
+  it('should register --no-pr option on the run command', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run');
+    expect(runCmd).toBeDefined();
+    const optionNames = runCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain('--no-pr');
+  });
+
+  it('should default pr to true when --no-pr is not provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions([]);
+    expect(runCmd.opts().pr).toBe(true);
+  });
+
+  it('should set pr to false when --no-pr is provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions(['--no-pr']);
+    expect(runCmd.opts().pr).toBe(false);
+  });
+
+  it('noPr value (!opts.pr) should be true when --no-pr is provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions(['--no-pr']);
+    const opts = runCmd.opts();
+    expect(!opts.pr).toBe(true);
+  });
+
+  it('noPr value (!opts.pr) should be false when --no-pr is not provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions([]);
+    const opts = runCmd.opts();
+    expect(!opts.pr).toBe(false);
+  });
 });
