@@ -1,5 +1,5 @@
-import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { writeFile, copyFile } from 'node:fs/promises';
 import type { CadreConfig } from '../config/schema.js';
 import type { AgentInvocation, AgentResult } from './types.js';
 import { spawnProcess, stripVSCodeEnv, trackProcess, type ProcessResult } from '../util/process.js';

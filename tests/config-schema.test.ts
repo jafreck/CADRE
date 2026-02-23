@@ -34,7 +34,7 @@ describe('CadreConfigSchema', () => {
     expect(result.pullRequest.draft).toBe(true);
     expect(result.pullRequest.labels).toEqual(['cadre-generated']);
     expect(result.copilot.cliCommand).toBe('copilot');
-    expect(result.copilot.agentDir).toBe('.github/agents');
+    expect(result.copilot.agentDir).toBe('.cadre/agents');
     expect(result.copilot.timeout).toBe(300_000);
     expect(result.github?.mcpServer.command).toBe('github-mcp-server');
     expect(result.github?.mcpServer.args).toEqual(['stdio']);
@@ -869,9 +869,9 @@ describe('AgentConfigSchema', () => {
     expect(result.copilot.cliCommand).toBe('copilot');
   });
 
-  it('should default copilot.agentDir to .github/agents', () => {
+  it('should default copilot.agentDir to .cadre/agents', () => {
     const result = AgentConfigSchema.parse({});
-    expect(result.copilot.agentDir).toBe('.github/agents');
+    expect(result.copilot.agentDir).toBe('.cadre/agents');
   });
 
   it('should default claude.cliCommand to claude', () => {
