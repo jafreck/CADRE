@@ -547,7 +547,94 @@ describe('IssueOrchestrator – notification dispatch', () => {
   });
 });
 
-// ── IssueNotifier integration ──
+// ── phaseSubset ──
+
+describe('IssueOrchestrator – phaseSubset', () => {
+  let config: CadreConfig;
+  let issue: IssueDetail;
+  let worktree: WorktreeInfo;
+  let logger: Logger;
+  let platform: ReturnType<typeof makePlatform>;
+  let launcher: ReturnType<typeof makeLauncher>;
+
+  beforeEach(() => {
+    config = makeConfig();
+    issue = makeIssue();
+    worktree = makeWorktree();
+    logger = makeLogger();
+    platform = makePlatform();
+    launcher = makeLauncher();
+    vi.clearAllMocks();
+  });
+
+  it('should only execute phases in the subset when phaseSubset = [3, 4, 5]', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn(() => false),
+    });
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+      undefined,
+      [3, 4, 5],
+    );
+
+    const executePhase = vi.spyOn(
+      orchestrator as unknown as { executePhase: (executor: { phaseId: number; name: string }) => Promise<unknown> },
+      'executePhase',
+    ).mockResolvedValue({
+      phase: 3,
+      phaseName: 'Implementation',
+      success: true,
+      duration: 100,
+      tokenUsage: 0,
+      outputPath: '/output/phase.md',
+    });
+
+    await orchestrator.run();
+
+    expect(executePhase).toHaveBeenCalledTimes(3);
+    const phaseIds = executePhase.mock.calls.map((args) => (args[0] as { phaseId: number }).phaseId);
+    expect(phaseIds).toEqual([3, 4, 5]);
+  });
+
+  it('should execute all 5 phases when phaseSubset is not provided', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn(() => false),
+    });
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    const executePhase = vi.spyOn(
+      orchestrator as unknown as { executePhase: (executor: { phaseId: number; name: string }) => Promise<unknown> },
+      'executePhase',
+    ).mockResolvedValue({
+      phase: 1,
+      phaseName: 'Analysis & Scouting',
+      success: true,
+      duration: 100,
+      tokenUsage: 0,
+      outputPath: '/output/phase.md',
+    });
+
+    await orchestrator.run();
+
+    expect(executePhase).toHaveBeenCalledTimes(5);
+  });
+});
 
 describe('IssueOrchestrator notifier integration', () => {
   let tempDir: string;
