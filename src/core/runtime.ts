@@ -303,21 +303,26 @@ export class CadreRuntime {
       const worktrees = await worktreeManager.listActive();
       let pruned = 0;
 
+      const cleanup = this.config.cleanup ?? { onMerged: true, onClosed: false, deleteRemoteBranch: true };
+
       for (const wt of worktrees) {
         const prs = await this.provider.listPullRequests({ head: wt.branch });
         const pr = prs[0];
 
-        if (!pr) continue;
+        if (!pr) {
+          this.logger.warn(`No PR found for worktree branch ${wt.branch} (issue #${wt.issueNumber}), skipping`);
+          continue;
+        }
 
-        const shouldCleanMerged = pr.merged && this.config.cleanup?.onMerged;
-        const shouldCleanClosed = !pr.merged && pr.state === 'closed' && this.config.cleanup?.onClosed;
+        const shouldCleanMerged = pr.merged && cleanup.onMerged;
+        const shouldCleanClosed = !pr.merged && pr.state === 'closed' && cleanup.onClosed;
 
         if (shouldCleanMerged || shouldCleanClosed) {
           if (!dryRun) {
             await worktreeManager.remove(wt.issueNumber);
             if (shouldCleanMerged) {
               await branchManager.deleteLocal(wt.branch);
-              if (this.config.cleanup?.deleteRemoteBranch) {
+              if (cleanup.deleteRemoteBranch) {
                 await branchManager.deleteRemote(wt.branch);
               }
             }
