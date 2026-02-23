@@ -390,4 +390,88 @@ describe('IntegrationToPRGate', () => {
     expect(result.status).not.toBe('fail');
     expect(result.warnings.length).toBe(2);
   });
+
+  it('should fail when New Regressions section contains failures', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## New Regressions
+- test-foo: AssertionError
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('new regression failures'))).toBe(true);
+  });
+
+  it('should pass when New Regressions section is _none_', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## New Regressions
+_none_
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should warn but not fail when only Pre-existing Failures are present', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## Pre-existing Failures
+- test-legacy: known failure
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).not.toBe('fail');
+    expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should pass without warning when Pre-existing Failures section is _none_', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## Pre-existing Failures
+_none_
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(false);
+  });
+
+  it('should fail with errors and include pre-existing warning when both sections have content', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## New Regressions
+- test-new: broken
+## Pre-existing Failures
+- test-old: known issue
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('new regression failures'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(true);
+  });
 });

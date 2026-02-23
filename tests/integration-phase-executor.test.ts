@@ -713,6 +713,37 @@ describe('IntegrationPhaseExecutor', () => {
       const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
       expect(launchAgent).toHaveBeenCalledTimes(1);
     });
+
+    it('should apply maxIntegrationFixRounds to regression rounds only, not pre-existing failures', async () => {
+      // baseline has 1 pre-existing test failure; a new regression also appears and never gets fixed
+      // maxRounds=1 → fix-surgeon called exactly 1 time (for the regression round),
+      // even though the pre-existing failure persists throughout
+      const maxRounds = 1;
+      const baseline = {
+        buildExitCode: 0,
+        testExitCode: 1,
+        buildFailures: [],
+        testFailures: ['pre-existing test'],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValue({ exitCode: 1, stdout: '× pre-existing test\n× new regression test', stderr: '', signal: null, timedOut: false }); // all test runs fail with both
+
+      const ctx = makeCtx({
+        config: {
+          commands: { install: 'npm install', build: 'npm run build', test: 'npm test', lint: undefined },
+          options: { buildVerification: true, testVerification: true, maxRetriesPerTask: 3, maxIntegrationFixRounds: maxRounds },
+        } as never,
+      });
+      await executor.execute(ctx);
+
+      // fix-surgeon called exactly maxRounds times (rounds applied to regression attempts, not pre-existing)
+      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      expect(launchAgent).toHaveBeenCalledTimes(maxRounds);
+    });
   });
 
   describe('report - Pre-existing Failures and New Regressions sections', () => {
