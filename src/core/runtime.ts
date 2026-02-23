@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { CadreConfig } from '../config/schema.js';
 import { WorktreeManager } from '../git/worktree.js';
+import { BranchManager } from '../git/branch.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
 import { FleetCheckpointManager } from './checkpoint.js';
@@ -279,7 +280,7 @@ export class CadreRuntime {
   /**
    * Prune worktrees for completed/merged issues.
    */
-  async pruneWorktrees(): Promise<void> {
+  async pruneWorktrees(dryRun = false): Promise<void> {
     const worktreeManager = new WorktreeManager(
       this.config.repoPath,
       this.config.worktreeRoot ?? join(this.cadreDir, 'worktrees'),
@@ -293,21 +294,44 @@ export class CadreRuntime {
       this.config.projectName,
       this.logger,
     );
-    const state = await checkpointManager.load();
 
-    const worktrees = await worktreeManager.listActive();
-    let pruned = 0;
+    const branchManager = new BranchManager(this.config.repoPath, this.logger);
 
-    for (const wt of worktrees) {
-      const issueStatus = state.issues[wt.issueNumber];
-      if (issueStatus?.status === 'completed') {
-        await worktreeManager.remove(wt.issueNumber);
-        pruned++;
-        console.log(`  Pruned: issue #${wt.issueNumber}`);
+    await this.provider.connect();
+
+    try {
+      const worktrees = await worktreeManager.listActive();
+      let pruned = 0;
+
+      for (const wt of worktrees) {
+        const prs = await this.provider.listPullRequests({ head: wt.branch });
+        const pr = prs[0];
+
+        if (!pr) continue;
+
+        const shouldCleanMerged = pr.merged && this.config.cleanup?.onMerged;
+        const shouldCleanClosed = !pr.merged && pr.state === 'closed' && this.config.cleanup?.onClosed;
+
+        if (shouldCleanMerged || shouldCleanClosed) {
+          if (!dryRun) {
+            await worktreeManager.remove(wt.issueNumber);
+            if (shouldCleanMerged) {
+              await branchManager.deleteLocal(wt.branch);
+              if (this.config.cleanup?.deleteRemoteBranch) {
+                await branchManager.deleteRemote(wt.branch);
+              }
+            }
+            await checkpointManager.pruneIssue(wt.issueNumber);
+          }
+          pruned++;
+          this.logger.info(`${dryRun ? '[dry-run] Would prune' : 'Pruned'}: issue #${wt.issueNumber}`);
+        }
       }
-    }
 
-    console.log(`\nPruned ${pruned} worktrees`);
+      this.logger.info(`${dryRun ? '[dry-run] Would prune' : 'Pruned'} ${pruned} worktrees`);
+    } finally {
+      await this.provider.disconnect();
+    }
   }
 
   /**

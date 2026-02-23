@@ -36,7 +36,7 @@ export interface PullRequestInfo {
   headBranch: string;
   baseBranch: string;
   state: 'open' | 'closed';
-  merged?: boolean;
+  merged: boolean;
 }
 
 /**

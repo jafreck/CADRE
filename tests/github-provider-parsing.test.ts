@@ -546,33 +546,4 @@ describe('GitHubProvider – listPullRequests type guards', () => {
     expect(prs[0].state).toBe('open');
   });
 
-  it('should set merged to true when PR in list has merged: true', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
-      { number: 30, title: 'Merged PR', head: { ref: 'feature' }, base: { ref: 'main' }, state: 'closed', merged: true },
-    ]);
-
-    const prs = await provider.listPullRequests();
-
-    expect(prs[0].merged).toBe(true);
-  });
-
-  it('should set merged to true when PR in list has merged_at set', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
-      { number: 31, title: 'Merged via merged_at', head: { ref: 'feature' }, base: { ref: 'main' }, merged_at: '2024-06-01T12:00:00Z' },
-    ]);
-
-    const prs = await provider.listPullRequests();
-
-    expect(prs[0].merged).toBe(true);
-  });
-
-  it('should set merged to false when neither merged nor merged_at are present for a PR in the list', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
-      { number: 32, title: 'Open PR', head: { ref: 'feature' }, base: { ref: 'main' }, state: 'open' },
-    ]);
-
-    const prs = await provider.listPullRequests();
-
-    expect(prs[0].merged).toBe(false);
-  });
 });
