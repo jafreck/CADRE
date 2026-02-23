@@ -32,6 +32,19 @@ vi.mock('../src/executors/pr-composition-phase-executor.js', () => ({
   PRCompositionPhaseExecutor: vi.fn(),
 }));
 
+// Mock phase gates so they always pass
+vi.mock('../src/core/phase-gate.js', () => {
+  const makeGate = () => ({
+    validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })),
+  });
+  return {
+    AnalysisToPlanningGate: vi.fn(() => makeGate()),
+    PlanningToImplementationGate: vi.fn(() => makeGate()),
+    ImplementationToIntegrationGate: vi.fn(() => makeGate()),
+    IntegrationToPRGate: vi.fn(() => makeGate()),
+  };
+});
+
 import { AnalysisPhaseExecutor } from '../src/executors/analysis-phase-executor.js';
 import { PlanningPhaseExecutor } from '../src/executors/planning-phase-executor.js';
 import { ImplementationPhaseExecutor } from '../src/executors/implementation-phase-executor.js';
@@ -93,6 +106,7 @@ function makeCheckpoint(worktreePath: string, overrides: Partial<CheckpointManag
     blockTask: vi.fn(async () => {}),
     failTask: vi.fn(async () => {}),
     recordTokenUsage: vi.fn(async () => {}),
+    recordGateResult: vi.fn(async () => {}),
     ...overrides,
   } as unknown as CheckpointManager;
 }

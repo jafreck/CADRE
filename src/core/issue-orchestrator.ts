@@ -10,6 +10,14 @@ import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';
 import { PhaseRegistry, getPhase, type PhaseDefinition } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
+import {
+  AnalysisToPlanningGate,
+  ImplementationToIntegrationGate,
+  IntegrationToPRGate,
+  PlanningToImplementationGate,
+  type GateContext,
+  type PhaseGate,
+} from './phase-gate.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { IssueProgressWriter } from './progress.js';
 import { AgentLauncher } from './agent-launcher.js';
@@ -171,36 +179,36 @@ export class IssueOrchestrator {
         await this.checkpoint.completePhase(executor.phaseId, phaseResult.outputPath ?? '');
 
         // Run gate validators after phases 1–4
-        if (phase.id >= 1 && phase.id <= 4) {
-          const gateStatus = await this.runGate(phase.id);
+        if (executor.phaseId >= 1 && executor.phaseId <= 4) {
+          const gateStatus = await this.runGate(executor.phaseId);
           if (gateStatus === 'fail') {
-            this.logger.warn(`Gate failed for phase ${phase.id}; retrying`, {
+            this.logger.warn(`Gate failed for phase ${executor.phaseId}; retrying`, {
               issueNumber: this.issue.number,
-              phase: phase.id,
+              phase: executor.phaseId,
             });
-            await this.progressWriter.appendEvent(`Phase ${phase.id} gate failed; retrying phase`);
+            await this.progressWriter.appendEvent(`Phase ${executor.phaseId} gate failed; retrying phase`);
 
-            const retryResult = await this.executePhase(phase);
+            const retryResult = await this.executePhase(executor);
             this.phases[this.phases.length - 1] = retryResult;
 
             if (!retryResult.success) {
-              await this.progressWriter.appendEvent(`Pipeline aborted: phase ${phase.id} retry failed`);
+              await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} retry failed`);
               return this.buildResult(false, retryResult.error, startTime);
             }
 
-            await this.checkpoint.completePhase(phase.id, retryResult.outputPath ?? '');
-            const retryGateStatus = await this.runGate(phase.id);
+            await this.checkpoint.completePhase(executor.phaseId, retryResult.outputPath ?? '');
+            const retryGateStatus = await this.runGate(executor.phaseId);
             if (retryGateStatus === 'fail') {
-              this.logger.error(`Gate still failing for phase ${phase.id} after retry; aborting`, {
+              this.logger.error(`Gate still failing for phase ${executor.phaseId} after retry; aborting`, {
                 issueNumber: this.issue.number,
-                phase: phase.id,
+                phase: executor.phaseId,
               });
               await this.progressWriter.appendEvent(
-                `Pipeline aborted: gate still failing for phase ${phase.id} after retry`,
+                `Pipeline aborted: gate still failing for phase ${executor.phaseId} after retry`,
               );
               return this.buildResult(
                 false,
-                `Gate validation failed for phase ${phase.id} after retry`,
+                `Gate validation failed for phase ${executor.phaseId} after retry`,
                 startTime,
               );
             }
@@ -417,6 +425,50 @@ export class IssueOrchestrator {
       taskStatuses,
       this.tokenTracker.getTotal(),
     );
+  }
+
+  private async runGate(phaseId: number): Promise<'pass' | 'warn' | 'fail'> {
+    const gateMap: Record<number, PhaseGate> = {
+      1: new AnalysisToPlanningGate(),
+      2: new PlanningToImplementationGate(),
+      3: new ImplementationToIntegrationGate(),
+      4: new IntegrationToPRGate(),
+    };
+
+    const gate = gateMap[phaseId];
+    if (!gate) return 'pass';
+
+    const context: GateContext = {
+      progressDir: this.progressDir,
+      worktreePath: this.worktree.path,
+      baseCommit: this.worktree.baseCommit,
+    };
+
+    const result = await gate.validate(context);
+    await this.checkpoint.recordGateResult(phaseId, result);
+
+    this.phases[this.phases.length - 1] = {
+      ...this.phases[this.phases.length - 1],
+      gateResult: result,
+    };
+
+    if (result.status === 'warn') {
+      for (const w of result.warnings) {
+        this.logger.warn(`Gate phase ${phaseId}: ${w}`, { issueNumber: this.issue.number, phase: phaseId });
+      }
+      await this.progressWriter.appendEvent(
+        `Gate phase ${phaseId}: passed with ${result.warnings.length} warning(s)`,
+      );
+    } else if (result.status === 'fail') {
+      for (const e of result.errors) {
+        this.logger.error(`Gate phase ${phaseId}: ${e}`, { issueNumber: this.issue.number, phase: phaseId });
+      }
+      await this.progressWriter.appendEvent(`Gate phase ${phaseId} failed: ${result.errors.join('; ')}`);
+    } else {
+      await this.progressWriter.appendEvent(`Gate phase ${phaseId}: passed`);
+    }
+
+    return result.status;
   }
 
   private buildResult(success: boolean, error?: string, startTime?: number, budgetExceeded?: boolean): IssueResult {
