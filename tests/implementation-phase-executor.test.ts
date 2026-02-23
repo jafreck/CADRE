@@ -13,8 +13,13 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../src/util/process.js', () => ({
+  execShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+}));
+
 import { exists } from '../src/util/fs.js';
 import { writeFile } from 'node:fs/promises';
+import { execShell } from '../src/util/process.js';
 
 function makeTask(id: string, deps: string[] = [], files: string[] = []): ImplementationTask {
   return {
@@ -577,6 +582,237 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(descriptions.some((d) => d.includes('task-001') && d.includes('Task task-001'))).toBe(true);
+    });
+  });
+
+  describe('per-task build check', () => {
+    function makeCtxWithBuild(overrides: Partial<PhaseContext> = {}): PhaseContext {
+      const base = makeCtx(overrides);
+      return {
+        ...base,
+        config: {
+          commands: { build: 'npm run build' },
+          options: {
+            maxParallelAgents: 2,
+            maxRetriesPerTask: 3,
+            perTaskBuildCheck: true,
+            maxBuildFixRounds: 2,
+          },
+        } as never,
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      vi.mocked(execShell).mockResolvedValue({ exitCode: 0, stdout: 'Build succeeded', stderr: '' });
+    });
+
+    it('should skip build check when perTaskBuildCheck is false', async () => {
+      const ctx = makeCtx({
+        config: {
+          commands: { build: 'npm run build' },
+          options: { maxParallelAgents: 2, maxRetriesPerTask: 3, perTaskBuildCheck: false, maxBuildFixRounds: 2 },
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).not.toHaveBeenCalled();
+    });
+
+    it('should skip build check when build command is not configured', async () => {
+      const ctx = makeCtx({
+        config: {
+          commands: {},
+          options: { maxParallelAgents: 2, maxRetriesPerTask: 3, perTaskBuildCheck: true, maxBuildFixRounds: 2 },
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).not.toHaveBeenCalled();
+    });
+
+    it('should run build command when perTaskBuildCheck and build command are configured', async () => {
+      const ctx = makeCtxWithBuild();
+      await executor.execute(ctx);
+      expect(execShell).toHaveBeenCalledWith('npm run build', expect.objectContaining({ cwd: '/tmp/worktree' }));
+    });
+
+    it('should launch test-writer after build succeeds', async () => {
+      const ctx = makeCtxWithBuild();
+      await executor.execute(ctx);
+      const launchCalls = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent.mock.calls;
+      const agents = launchCalls.map((c: [{ agent: string }]) => c[0].agent);
+      expect(agents).toContain('test-writer');
+    });
+
+    it('should launch fix-surgeon when build fails', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'TS error' })
+        .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      await executor.execute(ctx);
+
+      const launchCalls = launcher.launchAgent.mock.calls;
+      const agents = launchCalls.map((c: [{ agent: string }]) => c[0].agent);
+      expect(agents).toContain('fix-surgeon');
+    });
+
+    it('should invoke fix-surgeon with issueType build', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'TS error' })
+        .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'build',
+      );
+    });
+
+    it('should write build failure output to a file', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'build output', stderr: 'TS error' })
+        .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      await executor.execute(ctx);
+
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('build-failure-task-001'),
+        expect.stringContaining('TS error'),
+        'utf-8',
+      );
+    });
+
+    it('should record tokens for fix-surgeon during build fix round', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'TS error' })
+        .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      await executor.execute(ctx);
+
+      expect(ctx.recordTokens).toHaveBeenCalledWith('fix-surgeon', 50);
+    });
+
+    it('should re-run build after each fix-surgeon invocation', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error round 0' })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      await executor.execute(ctx);
+
+      // execShell called twice: initial build (fail) + re-run after fix (pass)
+      expect(execShell).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw an error when build still fails after maxBuildFixRounds', async () => {
+      // Build always fails
+      vi.mocked(execShell).mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'always fails' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValue(makeSuccessAgentResult('fix-surgeon')),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
+    });
+
+    it('should throw containing maxBuildFixRounds in message after exhausting retries', async () => {
+      vi.mocked(execShell).mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'always fails' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValue(makeSuccessAgentResult('fix-surgeon')),
+      };
+
+      // Use retryExecutor that propagates the error
+      const retryExecutor = {
+        execute: vi.fn(async ({ fn }: { fn: (attempt: number) => Promise<unknown> }) => {
+          try {
+            await fn(1);
+            return { success: true };
+          } catch (err) {
+            return { success: false, error: (err as Error).message };
+          }
+        }),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never, retryExecutor: retryExecutor as never });
+      await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
+      // Verify the inner error references the build fix rounds
+      const lastCall = retryExecutor.execute.mock.results[0];
+      expect(lastCall).toBeDefined();
+    });
+
+    it('should invoke fix-surgeon up to maxBuildFixRounds times', async () => {
+      vi.mocked(execShell).mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'always fails' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValue(makeSuccessAgentResult('fix-surgeon')),
+      };
+
+      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      await expect(executor.execute(ctx)).rejects.toThrow();
+
+      const launchCalls = launcher.launchAgent.mock.calls;
+      const fixSurgeonCalls = launchCalls.filter((c: [{ agent: string }]) => c[0].agent === 'fix-surgeon');
+      // maxBuildFixRounds is 2
+      expect(fixSurgeonCalls).toHaveLength(2);
     });
   });
 });
