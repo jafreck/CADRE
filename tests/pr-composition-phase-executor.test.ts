@@ -264,6 +264,23 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(ctx.setPR).not.toHaveBeenCalled();
     });
 
+    it('should call ctx.setPRFailed when createPullRequest fails', async () => {
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
+        createPullRequest: vi.fn().mockRejectedValue(new Error('API rate limit')),
+      };
+      const setPRFailed = vi.fn();
+      const ctx = makeAutoCreateCtx({ platform: platform as never, setPRFailed });
+      await executor.execute(ctx);
+      expect(setPRFailed).toHaveBeenCalledOnce();
+    });
+
+    it('should not call ctx.setPRFailed when createPullRequest succeeds', async () => {
+      const ctx = makeAutoCreateCtx();
+      await executor.execute(ctx);
+      expect(ctx.setPRFailed).not.toHaveBeenCalled();
+    });
+
     it('should parse PR content from pr-content.md', async () => {
       const ctx = makeAutoCreateCtx();
       await executor.execute(ctx);

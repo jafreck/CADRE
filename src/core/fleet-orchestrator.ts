@@ -211,9 +211,11 @@ export class FleetOrchestrator {
       // 7. Update fleet checkpoint
       const status = result.budgetExceeded
         ? 'budget-exceeded'
-        : result.success
-          ? 'completed'
-          : 'failed';
+        : result.codeComplete && !result.prCreated
+          ? 'code-complete-no-pr'
+          : result.success
+            ? 'completed'
+            : 'failed';
       await this.fleetCheckpoint.setIssueStatus(
         issue.number,
         status,
