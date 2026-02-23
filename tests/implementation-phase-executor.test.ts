@@ -646,6 +646,93 @@ describe('ImplementationPhaseExecutor', () => {
     });
   });
 
+  describe('truncateDiff integration', () => {
+    it('should write diff unchanged when diff is within 200,000 character limit', async () => {
+      const shortDiff = 'a'.repeat(100);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(shortDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      expect(writeFile).toHaveBeenCalledWith(
+        join('/tmp/progress', 'diff-task-001.patch'),
+        shortDiff,
+        'utf-8',
+      );
+    });
+
+    it('should write diff unchanged when diff is exactly 200,000 characters', async () => {
+      const exactDiff = 'x'.repeat(200_000);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(exactDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      expect(writeFile).toHaveBeenCalledWith(
+        join('/tmp/progress', 'diff-task-001.patch'),
+        exactDiff,
+        'utf-8',
+      );
+    });
+
+    it('should truncate diff to 200,000 chars when diff exceeds limit', async () => {
+      const largeDiff = 'y'.repeat(300_000);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      const patchCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+      );
+      expect(patchCall).toBeDefined();
+      const written = patchCall![1] as string;
+      expect(written.startsWith('y'.repeat(200_000))).toBe(true);
+      expect(written).toContain('[Diff truncated: exceeded 200,000 character limit]');
+    });
+
+    it('should append truncation notice when diff is truncated', async () => {
+      const largeDiff = 'z'.repeat(250_000);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      const patchCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+      );
+      const written = patchCall![1] as string;
+      expect(written).toMatch(/\[Diff truncated: exceeded 200,000 character limit\]/);
+    });
+
+    it('should not include characters beyond 200,000 from original diff when truncated', async () => {
+      const prefix = 'a'.repeat(200_000);
+      const suffix = 'b'.repeat(50_000);
+      const largeDiff = prefix + suffix;
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({ commitManager: commitManager as never });
+      await executor.execute(ctx);
+      const patchCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+      );
+      const written = patchCall![1] as string;
+      // The suffix characters should not appear in the written diff
+      expect(written).not.toContain('b');
+    });
+  });
+
   describe('retryExecutor integration', () => {
     it('should pass maxRetriesPerTask from config as maxAttempts', async () => {
       const retryExecutor = {
