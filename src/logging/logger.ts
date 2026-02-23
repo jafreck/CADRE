@@ -1,6 +1,5 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { format } from 'date-fns';
 import type { LogLevel, LogEntry, CadreEvent } from './events.js';
 
 export interface LoggerOptions {
