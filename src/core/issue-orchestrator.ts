@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CadreConfig } from '../config/schema.js';
 import type {
@@ -11,6 +12,7 @@ import { CheckpointManager } from './checkpoint.js';
 import { PhaseRegistry, getPhase, type PhaseDefinition } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
 import {
+  AnalysisAmbiguityGate,
   AnalysisToPlanningGate,
   ImplementationToIntegrationGate,
   IntegrationToPRGate,
@@ -183,6 +185,25 @@ export class IssueOrchestrator {
 
       if (phaseResult.success) {
         await this.checkpoint.completePhase(executor.phaseId, phaseResult.outputPath ?? '');
+
+        // After Phase 1, log ambiguities and notify; halt pipeline if configured
+        if (executor.phaseId === 1) {
+          const ambiguities = await this.readAmbiguitiesFromAnalysis();
+          for (const a of ambiguities) {
+            this.logger.warn(`Ambiguity in issue #${this.issue.number}: ${a}`, { issueNumber: this.issue.number });
+          }
+          if (ambiguities.length > 0) {
+            void this.notifier.notifyAmbiguities(this.issue.number, ambiguities);
+          }
+          if (
+            this.config.options.haltOnAmbiguity &&
+            ambiguities.length > this.config.options.ambiguityThreshold
+          ) {
+            const msg = `Analysis identified ${ambiguities.length} ambiguities (threshold: ${this.config.options.ambiguityThreshold})`;
+            await this.progressWriter.appendEvent(`Pipeline halted: ${msg}`);
+            return this.buildResult(false, msg, startTime);
+          }
+        }
 
         // Run gate validators after phases 1–4
         if (executor.phaseId >= 1 && executor.phaseId <= 4) {
@@ -466,7 +487,21 @@ export class IssueOrchestrator {
       baseCommit: this.worktree.baseCommit,
     };
 
-    const result = await gate.validate(context);
+    let result = await gate.validate(context);
+
+    // For phase 1, also run the ambiguity gate and merge results
+    if (phaseId === 1) {
+      const ambiguityGate = new AnalysisAmbiguityGate({
+        ambiguityThreshold: this.config.options.ambiguityThreshold,
+        haltOnAmbiguity: this.config.options.haltOnAmbiguity,
+      });
+      const ambiguityResult = await ambiguityGate.validate(context);
+      const mergedErrors = [...result.errors, ...ambiguityResult.errors];
+      const mergedWarnings = [...result.warnings, ...ambiguityResult.warnings];
+      const mergedStatus = mergedErrors.length > 0 ? 'fail' : mergedWarnings.length > 0 ? 'warn' : 'pass';
+      result = { status: mergedStatus, errors: mergedErrors, warnings: mergedWarnings };
+    }
+
     await this.checkpoint.recordGateResult(phaseId, result);
 
     this.phases[this.phases.length - 1] = {
@@ -491,6 +526,33 @@ export class IssueOrchestrator {
     }
 
     return result.status;
+  }
+
+  private async readAmbiguitiesFromAnalysis(): Promise<string[]> {
+    const analysisPath = join(this.progressDir, 'analysis.md');
+    let content: string;
+    try {
+      content = await readFile(analysisPath, 'utf-8');
+    } catch {
+      return [];
+    }
+
+    const lines = content.split('\n');
+    let inAmbiguities = false;
+    const ambiguityLines: string[] = [];
+
+    for (const line of lines) {
+      if (/^##\s+Ambiguities/i.test(line)) {
+        inAmbiguities = true;
+        continue;
+      }
+      if (inAmbiguities && /^##\s/.test(line)) break;
+      if (inAmbiguities && line.trim()) {
+        ambiguityLines.push(line.trim());
+      }
+    }
+
+    return ambiguityLines;
   }
 
   private buildResult(success: boolean, error?: string, startTime?: number, budgetExceeded?: boolean): IssueResult {

@@ -5,6 +5,7 @@ import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { ImplementationTask } from '../agents/types.js';
 import { TaskQueue } from '../execution/task-queue.js';
 import { exists } from '../util/fs.js';
+import { execShell } from '../util/process.js';
 
 export class ImplementationPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 3;
@@ -104,6 +105,57 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
         if (!writerResult.success) {
           throw new Error(`Code writer failed: ${writerResult.error}`);
+        }
+
+        // 2.5. Per-task build check (optional)
+        if (ctx.config.commands.build && ctx.config.options.perTaskBuildCheck) {
+          let buildResult = await execShell(ctx.config.commands.build, {
+            cwd: ctx.worktree.path,
+            timeout: 300_000,
+          });
+
+          for (
+            let round = 0;
+            round < ctx.config.options.maxBuildFixRounds && buildResult.exitCode !== 0;
+            round++
+          ) {
+            const buildFailurePath = join(ctx.progressDir, `build-failure-${task.id}-${round}.txt`);
+            await writeFile(buildFailurePath, buildResult.stderr + buildResult.stdout, 'utf-8');
+
+            const buildFixContextPath = await ctx.contextBuilder.buildForFixSurgeon(
+              ctx.issue.number,
+              ctx.worktree.path,
+              task,
+              buildFailurePath,
+              task.files.map((f) => join(ctx.worktree.path, f)),
+              ctx.progressDir,
+              'build',
+            );
+
+            const buildFixResult = await ctx.launcher.launchAgent(
+              {
+                agent: 'fix-surgeon',
+                issueNumber: ctx.issue.number,
+                phase: 3,
+                taskId: task.id,
+                contextPath: buildFixContextPath,
+                outputPath: ctx.worktree.path,
+              },
+              ctx.worktree.path,
+            );
+
+            ctx.recordTokens('fix-surgeon', buildFixResult.tokenUsage);
+            ctx.checkBudget();
+
+            buildResult = await execShell(ctx.config.commands.build, {
+              cwd: ctx.worktree.path,
+              timeout: 300_000,
+            });
+          }
+
+          if (buildResult.exitCode !== 0) {
+            throw new Error(`Build failed after ${ctx.config.options.maxBuildFixRounds} fix rounds`);
+          }
         }
 
         // 3. Launch test-writer

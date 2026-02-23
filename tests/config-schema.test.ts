@@ -99,6 +99,101 @@ describe('CadreConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  describe('perTaskBuildCheck', () => {
+    it('should default perTaskBuildCheck to true when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.perTaskBuildCheck).toBe(true);
+    });
+
+    it('should accept perTaskBuildCheck set to false', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { perTaskBuildCheck: false },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.perTaskBuildCheck).toBe(false);
+      }
+    });
+
+    it('should accept perTaskBuildCheck set to true explicitly', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { perTaskBuildCheck: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.perTaskBuildCheck).toBe(true);
+      }
+    });
+
+    it('should reject a non-boolean perTaskBuildCheck', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { perTaskBuildCheck: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('maxBuildFixRounds', () => {
+    it('should default maxBuildFixRounds to 2 when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.maxBuildFixRounds).toBe(2);
+    });
+
+    it('should accept maxBuildFixRounds of 1 (min boundary)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxBuildFixRounds: 1 },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept maxBuildFixRounds of 5 (max boundary)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxBuildFixRounds: 5 },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept maxBuildFixRounds of 3 (mid-range)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxBuildFixRounds: 3 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.maxBuildFixRounds).toBe(3);
+      }
+    });
+
+    it('should reject maxBuildFixRounds of 0 (below min)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxBuildFixRounds: 0 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject maxBuildFixRounds of 6 (above max)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxBuildFixRounds: 6 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject non-integer maxBuildFixRounds', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { maxBuildFixRounds: 1.5 },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe('maxIntegrationFixRounds', () => {
     it('should default maxIntegrationFixRounds to 1 when omitted', () => {
       const result = CadreConfigSchema.parse(validConfig);
@@ -464,6 +559,102 @@ describe('CadreConfigSchema', () => {
       const nc: NotificationsConfig = result.notifications;
       expect(nc.enabled).toBe(false);
       expect(nc.providers).toEqual([]);
+    });
+  });
+
+  describe('ambiguityThreshold', () => {
+    it('should default ambiguityThreshold to 5 when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.ambiguityThreshold).toBe(5);
+    });
+
+    it('should accept an explicit ambiguityThreshold value', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 10 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.ambiguityThreshold).toBe(10);
+      }
+    });
+
+    it('should accept ambiguityThreshold of 0 (min boundary)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 0 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.ambiguityThreshold).toBe(0);
+      }
+    });
+
+    it('should reject non-integer ambiguityThreshold', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 2.5 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject negative ambiguityThreshold', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: -1 },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('haltOnAmbiguity', () => {
+    it('should default haltOnAmbiguity to false when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.haltOnAmbiguity).toBe(false);
+    });
+
+    it('should accept haltOnAmbiguity set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { haltOnAmbiguity: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.haltOnAmbiguity).toBe(true);
+      }
+    });
+
+    it('should accept haltOnAmbiguity set to false explicitly', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { haltOnAmbiguity: false },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.haltOnAmbiguity).toBe(false);
+      }
+    });
+
+    it('should reject a non-boolean haltOnAmbiguity', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { haltOnAmbiguity: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('ambiguityThreshold and haltOnAmbiguity together', () => {
+    it('should accept both fields set explicitly alongside other options', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { ambiguityThreshold: 3, haltOnAmbiguity: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.ambiguityThreshold).toBe(3);
+        expect(result.data.options.haltOnAmbiguity).toBe(true);
+      }
     });
   });
 

@@ -133,7 +133,16 @@ export class ContextBuilder {
     taskPlanPath: string,
     relevantFiles: string[],
     progressDir: string,
+    siblingFiles?: string[],
   ): Promise<string> {
+    const payload: Record<string, unknown> = {
+      taskId: task.id,
+      files: task.files,
+      acceptanceCriteria: task.acceptanceCriteria,
+    };
+    if (siblingFiles && siblingFiles.length > 0) {
+      payload.siblingFiles = siblingFiles;
+    }
     return this.writeContext(progressDir, 'code-writer', issueNumber, {
       agent: 'code-writer',
       issueNumber,
@@ -145,11 +154,7 @@ export class ContextBuilder {
       config: { commands: this.config.commands },
       inputFiles: [taskPlanPath, ...relevantFiles],
       outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
-      payload: {
-        taskId: task.id,
-        files: task.files,
-        acceptanceCriteria: task.acceptanceCriteria,
-      },
+      payload,
     });
   }
 
@@ -222,7 +227,7 @@ export class ContextBuilder {
     feedbackPath: string,
     changedFiles: string[],
     progressDir: string,
-    issueType: 'review' | 'test-failure',
+    issueType: 'review' | 'test-failure' | 'build',
   ): Promise<string> {
     return this.writeContext(progressDir, 'fix-surgeon', issueNumber, {
       agent: 'fix-surgeon',

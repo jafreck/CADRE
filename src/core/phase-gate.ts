@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
 import type { GateResult, ImplementationTask } from '../agents/types.js';
@@ -186,6 +186,18 @@ export class PlanningToImplementationGate implements PhaseGate {
       errors.push(`Implementation plan has a dependency cycle: ${String(err)}`);
     }
 
+    // Check that each file referenced in the plan exists under the worktree
+    for (const task of tasks) {
+      for (const filePath of task.files) {
+        const resolvedPath = join(context.worktreePath, filePath);
+        try {
+          await access(resolvedPath);
+        } catch {
+          warnings.push(`Task ${task.id}: file does not exist: ${filePath}`);
+        }
+      }
+    }
+
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);
   }
 }
@@ -253,6 +265,91 @@ export class IntegrationToPRGate implements PhaseGate {
       warnings.push('integration-report.md does not contain a test result section');
     }
 
+    // Check for new regressions — only these should fail the gate
+    const regressionsMatch = reportContent.match(/##\s*New Regressions\s*\n+([\s\S]*?)(?=\n##|$)/i);
+    if (regressionsMatch) {
+      const regressionsBody = regressionsMatch[1].trim();
+      const hasRegressions = regressionsBody !== '' && !/^_none_$/i.test(regressionsBody);
+      if (hasRegressions) {
+        errors.push('integration-report.md contains new regression failures');
+      }
+    }
+
+    // Warn (but do not fail) if there are pre-existing baseline failures
+    const preExistingMatch = reportContent.match(/##\s*Pre-existing Failures\s*\n+([\s\S]*?)(?=\n##|$)/i);
+    if (preExistingMatch) {
+      const preExistingBody = preExistingMatch[1].trim();
+      const hasPreExisting = preExistingBody !== '' && !/^_none_$/i.test(preExistingBody);
+      if (hasPreExisting) {
+        warnings.push('integration-report.md contains pre-existing failures (not caused by these changes)');
+      }
+    }
+
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);
   }
 }
+
+// ── Gate: Analysis Ambiguity Check ───────────────────────────────────────────
+
+/**
+ * Validates that the number of ambiguities identified in `analysis.md` does
+ * not exceed a configured threshold before the pipeline proceeds.
+ *
+ * Checks:
+ * - Extracts lines under the `## Ambiguities` heading in `analysis.md`.
+ * - Returns `warn` when ambiguity count > 0 but ≤ threshold.
+ * - Returns `fail` when count > threshold and `haltOnAmbiguity` is true.
+ * - Returns `warn` when count > threshold but `haltOnAmbiguity` is false.
+ * - Returns `pass` when there is no ambiguities section or it is empty.
+ * - Warns (does not fail) when `analysis.md` is missing.
+ */
+export class AnalysisAmbiguityGate implements PhaseGate {
+  private readonly ambiguityThreshold: number;
+  private readonly haltOnAmbiguity: boolean;
+
+  constructor(options?: { ambiguityThreshold?: number; haltOnAmbiguity?: boolean }) {
+    this.ambiguityThreshold = options?.ambiguityThreshold ?? 5;
+    this.haltOnAmbiguity = options?.haltOnAmbiguity ?? false;
+  }
+
+  async validate(context: GateContext): Promise<GateResult> {
+    const analysisPath = join(context.progressDir, 'analysis.md');
+    const analysisContent = await readFileSafe(analysisPath);
+
+    if (analysisContent === null) {
+      return pass(['analysis.md is missing; skipping ambiguity check']);
+    }
+
+    // Walk lines to extract the ## Ambiguities section
+    const lines = analysisContent.split('\n');
+    let inAmbiguities = false;
+    const ambiguityLines: string[] = [];
+
+    for (const line of lines) {
+      if (/^##\s+Ambiguities/i.test(line)) {
+        inAmbiguities = true;
+        continue;
+      }
+      if (inAmbiguities && /^##\s/.test(line)) {
+        break;
+      }
+      if (inAmbiguities && line.trim()) {
+        ambiguityLines.push(line.trim());
+      }
+    }
+
+    if (!inAmbiguities || ambiguityLines.length === 0) {
+      return pass();
+    }
+
+    const count = ambiguityLines.length;
+    const message = `${count} ambiguit${count === 1 ? 'y' : 'ies'} found in analysis.md (threshold: ${this.ambiguityThreshold})`;
+
+    if (count > this.ambiguityThreshold && this.haltOnAmbiguity) {
+      return fail([message]);
+    }
+
+    return pass([message]);
+  }
+}
+
