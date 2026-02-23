@@ -46,6 +46,7 @@ export interface FleetIssueStatus {
   branchName: string;
   lastPhase: number;
   error?: string;
+  updatedAt?: string;
 }
 
 export interface FleetCheckpointState {
@@ -387,6 +388,7 @@ export class FleetCheckpointManager {
       branchName,
       lastPhase,
       error,
+      updatedAt: new Date().toISOString(),
     };
     await this.save();
   }

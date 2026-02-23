@@ -413,4 +413,59 @@ describe('FleetCheckpointManager', () => {
 
     expect(manager.getIssueStatus(15)?.issueTitle).toBe('');
   });
+
+  it('should set updatedAt to an ISO timestamp when setIssueStatus is called', async () => {
+    const before = new Date().toISOString();
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(20, 'in-progress', '/worktree/20', 'issue-20', 1, 'Some issue');
+    const after = new Date().toISOString();
+
+    const status = manager.getIssueStatus(20);
+    expect(status?.updatedAt).toBeDefined();
+    expect(status!.updatedAt! >= before).toBe(true);
+    expect(status!.updatedAt! <= after).toBe(true);
+  });
+
+  it('should update updatedAt on every setIssueStatus call', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(21, 'in-progress', '/worktree/21', 'issue-21', 1, 'Issue');
+    const first = manager.getIssueStatus(21)?.updatedAt;
+
+    await new Promise((r) => setTimeout(r, 5));
+    await manager.setIssueStatus(21, 'completed', '/worktree/21', 'issue-21', 5, 'Issue');
+    const second = manager.getIssueStatus(21)?.updatedAt;
+
+    expect(second).toBeDefined();
+    expect(second! >= first!).toBe(true);
+  });
+
+  it('should persist updatedAt across reload', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(22, 'completed', '/worktree/22', 'issue-22', 5, 'Persist test');
+    const original = manager.getIssueStatus(22)?.updatedAt;
+
+    const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager2.load();
+    expect(manager2.getIssueStatus(22)?.updatedAt).toBe(original);
+  });
+
+  it('FleetIssueStatus should accept updatedAt as an optional field', () => {
+    const withoutUpdatedAt: FleetIssueStatus = {
+      status: 'not-started',
+      issueTitle: 'No timestamp',
+      worktreePath: '/path',
+      branchName: 'branch',
+      lastPhase: 0,
+    };
+    expect(withoutUpdatedAt.updatedAt).toBeUndefined();
+
+    const withUpdatedAt: FleetIssueStatus = {
+      ...withoutUpdatedAt,
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    expect(withUpdatedAt.updatedAt).toBe('2024-01-01T00:00:00.000Z');
+  });
 });
