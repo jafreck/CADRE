@@ -222,7 +222,7 @@ export class ContextBuilder {
     feedbackPath: string,
     changedFiles: string[],
     progressDir: string,
-    issueType: 'review' | 'test-failure',
+    issueType: 'review' | 'test-failure' | 'build',
   ): Promise<string> {
     return this.writeContext(progressDir, 'fix-surgeon', issueNumber, {
       agent: 'fix-surgeon',
