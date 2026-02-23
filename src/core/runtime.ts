@@ -22,6 +22,32 @@ import {
 } from '../validation/index.js';
 import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
+import { ISSUE_PHASES } from './phase-registry.js';
+
+/** Format an ISO timestamp as elapsed time (e.g. "2m ago"). */
+function formatElapsed(isoString: string): string {
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  if (diffMs < 0) return 'just now';
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/** Map a fleet issue status to an emoji. */
+function statusToEmoji(status: string): string {
+  switch (status) {
+    case 'completed': return '✅';
+    case 'in-progress': return '🔄';
+    case 'failed': return '❌';
+    case 'blocked': return '🚫';
+    case 'budget-exceeded': return '💸';
+    default: return '⏳';
+  }
+}
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
@@ -155,19 +181,71 @@ export class CadreRuntime {
     );
 
     const state = await checkpointManager.load();
+    const estimator = new CostEstimator(this.config.copilot);
+
+    // Header block
+    const totalCost = estimator.estimate(state.tokenUsage.total, this.config.copilot.model);
+    const checkpointAge = formatElapsed(state.lastCheckpoint);
 
     console.log('\n=== CADRE Fleet Status ===\n');
-    console.log(`Project: ${state.projectName}`);
-    console.log(`Issues tracked: ${Object.keys(state.issues).length}`);
-    console.log(`Total tokens: ${state.tokenUsage.total.toLocaleString()}`);
-    console.log(`Last checkpoint: ${state.lastCheckpoint}`);
-    console.log(`Resume count: ${state.resumeCount}\n`);
+    console.log(`  Project:         ${state.projectName}`);
+    console.log(`  Total tokens:    ${state.tokenUsage.total.toLocaleString()}`);
+    console.log(`  Estimated cost:  ${estimator.format(totalCost)}`);
+    console.log(`  Last checkpoint: ${checkpointAge}`);
+    console.log('');
 
-    for (const [num, issue] of Object.entries(state.issues)) {
-      if (issueNumber && Number(num) !== issueNumber) continue;
-      console.log(`  #${num}: ${issue.status} (phase ${issue.lastPhase})`);
+    // Filter issues by issueNumber if provided
+    const issueEntries = Object.entries(state.issues).filter(
+      ([num]) => !issueNumber || Number(num) === issueNumber,
+    );
+
+    if (issueEntries.length === 0) {
+      console.log('  No issues tracked.\n');
+      return;
+    }
+
+    // Build table rows
+    const headers = ['Issue', 'Title', 'Status', 'Phase', 'Tokens', 'Cost', 'Branch', 'Updated'];
+    const rows: string[][] = issueEntries.map(([num, issue]) => {
+      const issueTokens = state.tokenUsage.byIssue[Number(num)] ?? 0;
+      const issueCost = estimator.estimate(issueTokens, this.config.copilot.model);
+      const phaseDef = ISSUE_PHASES.find((p) => p.id === issue.lastPhase);
+      const phaseName = phaseDef ? phaseDef.name : issue.lastPhase ? `Phase ${issue.lastPhase}` : '—';
+      const statusEmoji = statusToEmoji(issue.status);
+      const branch = issue.branchName || '—';
+      const updated = issue.updatedAt ? formatElapsed(issue.updatedAt) : '—';
+      const title = issue.issueTitle ? issue.issueTitle.slice(0, 40) : '—';
+      const costStr = `$${issueCost.totalCost.toFixed(4)}`;
+
+      return [
+        `#${num}`,
+        title,
+        `${statusEmoji} ${issue.status}`,
+        phaseName,
+        issueTokens.toLocaleString(),
+        costStr,
+        branch,
+        updated,
+      ];
+    });
+
+    // Calculate column widths
+    const widths = headers.map((h, i) =>
+      Math.max(h.length, ...rows.map((r) => r[i].length)),
+    );
+    const formatRow = (cells: string[]) =>
+      cells.map((cell, i) => cell.padEnd(widths[i])).join('  ');
+
+    console.log('  ' + formatRow(headers));
+    console.log('  ' + widths.map((w) => '─'.repeat(w)).join('  '));
+    for (const row of rows) {
+      console.log('  ' + formatRow(row));
+    }
+
+    // Print errors for any failed issues
+    for (const [num, issue] of issueEntries) {
       if (issue.error) {
-        console.log(`    Error: ${issue.error}`);
+        console.log(`\n  #${num} error: ${issue.error}`);
       }
     }
 
