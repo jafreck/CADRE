@@ -240,6 +240,25 @@ describe('TaskQueue', () => {
       expect(collisions).toEqual([]);
     });
 
+    it('should return empty array for a single-task batch', () => {
+      const tasks = [makeTask('task-001', [], ['src/a.ts'])];
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toEqual([]);
+    });
+
+    it('should detect collision when two tasks share a test file', () => {
+      const tasks = [
+        makeTask('task-001', [], ['src/a.ts', 'tests/foo.test.ts']),
+        makeTask('task-002', [], ['src/b.ts', 'tests/foo.test.ts']),
+      ];
+
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toHaveLength(1);
+      expect(collisions[0]).toContain('tests/foo.test.ts');
+      expect(collisions[0]).toContain('task-001');
+      expect(collisions[0]).toContain('task-002');
+    });
+
     it('should not report a collision for a task that owns a file exclusively', () => {
       const tasks = [
         makeTask('task-001', [], ['src/a.ts', 'src/b.ts']),
