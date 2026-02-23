@@ -287,7 +287,7 @@ describe('renderIssueDetail', () => {
         1: { status: 'pass', errors: [], warnings: [] },
       },
     });
-    const output = renderIssueDetail(1, issueStatus, checkpoint);
+    const output = renderIssueDetail(1, issueStatus, checkpoint, true);
     expect(output).toContain('Gate Results');
     expect(output).toContain('✅');
   });
@@ -299,7 +299,7 @@ describe('renderIssueDetail', () => {
         2: { status: 'warn', errors: [], warnings: ['low coverage'] },
       },
     });
-    const output = renderIssueDetail(1, issueStatus, checkpoint);
+    const output = renderIssueDetail(1, issueStatus, checkpoint, true);
     expect(output).toContain('warn');
     expect(output).toContain('low coverage');
   });
@@ -311,7 +311,7 @@ describe('renderIssueDetail', () => {
         3: { status: 'fail', errors: ['build failed'], warnings: [] },
       },
     });
-    const output = renderIssueDetail(1, issueStatus, checkpoint);
+    const output = renderIssueDetail(1, issueStatus, checkpoint, true);
     expect(output).toContain('fail');
     expect(output).toContain('build failed');
   });
@@ -330,7 +330,7 @@ describe('renderIssueDetail', () => {
         2: { status: 'pass', errors: [], warnings: [] },
       },
     });
-    const output = renderIssueDetail(1, issueStatus, checkpoint);
+    const output = renderIssueDetail(1, issueStatus, checkpoint, true);
     expect(output).toContain('Planning');
   });
 });
