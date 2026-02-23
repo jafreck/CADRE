@@ -86,6 +86,9 @@ export class FleetOrchestrator {
       this.logger.info(`Resume: skipping ${skipped} already-completed issues`);
     }
 
+    // Pre-fetch remote refs once before any per-issue pipeline starts
+    await this.worktreeManager.prefetch();
+
     // Run with bounded parallelism
     const limit = pLimit(this.config.options.maxParallelIssues);
     const results = await Promise.allSettled(
