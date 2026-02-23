@@ -8,46 +8,80 @@ import { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { AgentInvocation } from '../src/agents/types.js';
 
-describe('AgentLauncher', () => {
-  let mockLogger: Logger;
-  let mockConfig: CadreConfig;
+vi.mock('../src/agents/backend-factory.js', () => ({
+  createAgentBackend: vi.fn(),
+}));
 
-  beforeEach(() => {
-    mockLogger = {
+import { createAgentBackend } from '../src/agents/backend-factory.js';
+const mockCreateAgentBackend = vi.mocked(createAgentBackend);
+
+function makeConfig(): CadreConfig {
+  return {
+    projectName: 'test-project',
+    repository: 'owner/repo',
+    repoPath: '/tmp/repo',
+    baseBranch: 'main',
+    issues: { ids: [42] },
+    copilot: {
+      cliCommand: 'copilot',
+      agentDir: '.github/agents',
+      timeout: 300000,
+    },
+    environment: {
+      inheritShellPath: true,
+      extraPath: [],
+    },
+  } as CadreConfig;
+}
+
+function makeLogger(): Logger {
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn().mockReturnValue({
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
-      child: vi.fn().mockReturnValue({
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      }),
-      agentLogger: vi.fn().mockReturnValue({
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      }),
-    } as unknown as Logger;
+    }),
+    agentLogger: vi.fn().mockReturnValue({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }),
+  } as unknown as Logger;
+}
 
-    mockConfig = {
-      projectName: 'test-project',
-      repository: 'owner/repo',
-      repoPath: '/tmp/repo',
-      baseBranch: 'main',
-      issues: { ids: [42] },
-      copilot: {
-        cliCommand: 'copilot',
-        agentDir: '.github/agents',
-        timeout: 300000,
-      },
-      environment: {
-        inheritShellPath: true,
-        extraPath: [],
-      },
-    } as CadreConfig;
+function makeInvocation(overrides: Partial<AgentInvocation> = {}): AgentInvocation {
+  return {
+    agent: 'code-writer',
+    issueNumber: 42,
+    phase: 3,
+    taskId: 'task-001',
+    contextPath: '/tmp/worktree/.cadre/issues/42/contexts/ctx.json',
+    outputPath: '/tmp/worktree/.cadre/issues/42/outputs/result.md',
+    ...overrides,
+  };
+}
+
+describe('AgentLauncher', () => {
+  let mockLogger: Logger;
+  let mockConfig: CadreConfig;
+  let mockBackend: { name: string; init: ReturnType<typeof vi.fn>; invoke: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLogger = makeLogger();
+    mockConfig = makeConfig();
+    mockBackend = {
+      name: 'copilot',
+      init: vi.fn().mockResolvedValue(undefined),
+      invoke: vi.fn().mockResolvedValue({ success: true, agent: 'code-writer', tokenUsage: 0, outputExists: true }),
+    };
+    mockCreateAgentBackend.mockReturnValue(mockBackend as never);
   });
 
   it('should be constructable', () => {
@@ -63,6 +97,60 @@ describe('AgentLauncher', () => {
   it('should have launchAgent method', () => {
     const launcher = new AgentLauncher(mockConfig, mockLogger);
     expect(typeof launcher.launchAgent).toBe('function');
+  });
+
+  it('should call createAgentBackend with config and logger on construction', () => {
+    new AgentLauncher(mockConfig, mockLogger);
+    expect(mockCreateAgentBackend).toHaveBeenCalledOnce();
+    expect(mockCreateAgentBackend).toHaveBeenCalledWith(mockConfig, mockLogger);
+  });
+
+  it('should delegate init() to backend.init()', async () => {
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    await launcher.init();
+    expect(mockBackend.init).toHaveBeenCalledOnce();
+  });
+
+  it('should return the result of backend.init()', async () => {
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    await expect(launcher.init()).resolves.toBeUndefined();
+  });
+
+  it('should delegate launchAgent() to backend.invoke() with invocation and worktreePath', async () => {
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    const invocation = makeInvocation();
+    await launcher.launchAgent(invocation, '/tmp/worktree');
+    expect(mockBackend.invoke).toHaveBeenCalledOnce();
+    expect(mockBackend.invoke).toHaveBeenCalledWith(invocation, '/tmp/worktree');
+  });
+
+  it('should return the result from backend.invoke()', async () => {
+    const expectedResult = { success: true, agent: 'code-writer', tokenUsage: 100, outputExists: true };
+    mockBackend.invoke.mockResolvedValue(expectedResult);
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    const result = await launcher.launchAgent(makeInvocation(), '/tmp/worktree');
+    expect(result).toEqual(expectedResult);
+  });
+
+  it('should propagate failure result from backend.invoke()', async () => {
+    const failResult = { success: false, agent: 'code-writer', tokenUsage: 0, outputExists: false, error: 'agent failed' };
+    mockBackend.invoke.mockResolvedValue(failResult);
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    const result = await launcher.launchAgent(makeInvocation(), '/tmp/worktree');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('agent failed');
+  });
+
+  it('should propagate errors thrown by backend.init()', async () => {
+    mockBackend.init.mockRejectedValue(new Error('backend unavailable'));
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    await expect(launcher.init()).rejects.toThrow('backend unavailable');
+  });
+
+  it('should propagate errors thrown by backend.invoke()', async () => {
+    mockBackend.invoke.mockRejectedValue(new Error('invoke failed'));
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    await expect(launcher.launchAgent(makeInvocation(), '/tmp/worktree')).rejects.toThrow('invoke failed');
   });
 });
 

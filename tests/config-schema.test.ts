@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CadreConfigSchema } from '../src/config/schema.js';
+import { CadreConfigSchema, AgentConfigSchema } from '../src/config/schema.js';
 import type { NotificationsConfig } from '../src/config/schema.js';
 
 describe('CadreConfigSchema', () => {
@@ -407,5 +407,173 @@ describe('CadreConfigSchema', () => {
       expect(nc.enabled).toBe(false);
       expect(nc.providers).toEqual([]);
     });
+  });
+
+  describe('agent field', () => {
+    it('should accept a config without an agent field (backward compat)', () => {
+      const result = CadreConfigSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.agent).toBeUndefined();
+      }
+    });
+
+    it('should accept a config with a minimal agent section (backend only)', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: { backend: 'copilot' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.agent?.backend).toBe('copilot');
+      }
+    });
+
+    it('should accept agent backend set to claude', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: { backend: 'claude' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.agent?.backend).toBe('claude');
+      }
+    });
+
+    it('should accept agent with model and timeout', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: { backend: 'copilot', model: 'claude-sonnet-4.6', timeout: 60000 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.agent?.model).toBe('claude-sonnet-4.6');
+        expect(result.data.agent?.timeout).toBe(60000);
+      }
+    });
+
+    it('should accept agent with copilot sub-options', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: {
+          backend: 'copilot',
+          copilot: { cliCommand: 'gh copilot', agentDir: '.github/agents' },
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.agent?.copilot.cliCommand).toBe('gh copilot');
+        expect(result.data.agent?.copilot.agentDir).toBe('.github/agents');
+      }
+    });
+
+    it('should accept agent with claude sub-options', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: { backend: 'claude', claude: { cliCommand: 'claude' } },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.agent?.claude.cliCommand).toBe('claude');
+      }
+    });
+
+    it('should accept agent with copilot costOverrides', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: {
+          backend: 'copilot',
+          copilot: {
+            costOverrides: {
+              'claude-sonnet-4.6': { input: 3.0, output: 15.0 },
+            },
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.agent?.copilot.costOverrides?.['claude-sonnet-4.6']).toEqual({
+          input: 3.0,
+          output: 15.0,
+        });
+      }
+    });
+
+    it('should reject an invalid agent backend value', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: { backend: 'openai' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject a non-integer timeout in agent', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: { backend: 'copilot', timeout: 1.5 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject negative costOverride values', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        agent: {
+          backend: 'copilot',
+          copilot: {
+            costOverrides: { 'some-model': { input: -1, output: 5 } },
+          },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe('AgentConfigSchema', () => {
+  it('should default backend to copilot', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.backend).toBe('copilot');
+  });
+
+  it('should default copilot.cliCommand to copilot', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.copilot.cliCommand).toBe('copilot');
+  });
+
+  it('should default copilot.agentDir to .github/agents', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.copilot.agentDir).toBe('.github/agents');
+  });
+
+  it('should default claude.cliCommand to claude', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.claude.cliCommand).toBe('claude');
+  });
+
+  it('should leave model undefined by default', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.model).toBeUndefined();
+  });
+
+  it('should leave timeout undefined by default', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.timeout).toBeUndefined();
+  });
+
+  it('should accept backend claude with custom cliCommand', () => {
+    const result = AgentConfigSchema.parse({ backend: 'claude', claude: { cliCommand: '/usr/local/bin/claude' } });
+    expect(result.backend).toBe('claude');
+    expect(result.claude.cliCommand).toBe('/usr/local/bin/claude');
+  });
+
+  it('should leave costOverrides undefined by default', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.copilot.costOverrides).toBeUndefined();
+  });
+
+  it('should reject unknown backend values', () => {
+    const result = AgentConfigSchema.safeParse({ backend: 'gemini' });
+    expect(result.success).toBe(false);
   });
 });
