@@ -28,6 +28,7 @@ Produce an **implementation-plan.md** file containing an ordered list of tasks. 
 ```
 
 ### Rules
+- You MUST read every source file you intend to reference before making any claims about its contents or structure.
 - Task IDs must be sequential: `task-001`, `task-002`, etc.
 - Every task must list explicit file paths relative to the repository root.
 - Dependencies must only reference task IDs defined earlier in the same plan.
@@ -37,7 +38,7 @@ Produce an **implementation-plan.md** file containing an ordered list of tasks. 
 
 ## Tool Permissions
 
-- **Read files**: Read analysis.md, scout-report.md, and any source files needed to understand the current structure before planning.
+- **Read files** (required): Read analysis.md, scout-report.md, and every source file you intend to reference before making any claims about its contents or structure.
 
 ## Example Task Block
 

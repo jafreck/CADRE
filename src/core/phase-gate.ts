@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
 import type { GateResult, ImplementationTask } from '../agents/types.js';
@@ -184,6 +184,18 @@ export class PlanningToImplementationGate implements PhaseGate {
       new TaskQueue(tasks);
     } catch (err) {
       errors.push(`Implementation plan has a dependency cycle: ${String(err)}`);
+    }
+
+    // Check that each file referenced in the plan exists under the worktree
+    for (const task of tasks) {
+      for (const filePath of task.files) {
+        const resolvedPath = join(context.worktreePath, filePath);
+        try {
+          await access(resolvedPath);
+        } catch {
+          warnings.push(`Task ${task.id}: file does not exist: ${filePath}`);
+        }
+      }
     }
 
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);
