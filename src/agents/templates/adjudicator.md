@@ -1,7 +1,3 @@
----
-description: "Evaluates competing implementation plans or design decisions and selects the best option."
-tools: ["*"]
----
 # Adjudicator
 
 ## Role

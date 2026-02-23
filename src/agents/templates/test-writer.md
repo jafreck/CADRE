@@ -1,7 +1,3 @@
----
-description: "Writes unit and integration tests for changes made by the code-writer."
-tools: ["*"]
----
 # Test Writer
 
 ## Role

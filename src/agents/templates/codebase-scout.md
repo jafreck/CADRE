@@ -1,7 +1,3 @@
----
-description: "Scans the repository to locate relevant files, map dependencies, and identify related tests."
-tools: ["*"]
----
 # Codebase Scout
 
 ## Role

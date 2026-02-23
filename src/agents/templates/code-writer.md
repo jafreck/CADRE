@@ -1,7 +1,3 @@
----
-description: "Implements a single task from the implementation plan by modifying or creating source files."
-tools: ["*"]
----
 # Code Writer
 
 ## Role

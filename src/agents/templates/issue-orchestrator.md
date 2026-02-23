@@ -1,7 +1,3 @@
----
-description: "Reference agent describing the per-issue 5-phase development pipeline."
-tools: ["*"]
----
 # Issue Orchestrator
 
 ## Role
