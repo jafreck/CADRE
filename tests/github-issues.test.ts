@@ -95,6 +95,147 @@ describe('GitHubAPI', () => {
       }));
     });
 
+    describe('searchIssuesWithFilters cursor-based pagination', () => {
+      it('should make first search_issues call without an after parameter', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [{ number: 1 }],
+          pageInfo: { hasNextPage: false },
+        });
+
+        await api.listIssues({ milestone: 'v1.0' });
+
+        expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.not.objectContaining({
+          after: expect.anything(),
+        }));
+      });
+
+      it('should pass endCursor as after on subsequent search_issues pages', async () => {
+        vi.mocked(mockMCP.callTool)
+          .mockResolvedValueOnce({
+            items: [{ number: 1 }],
+            pageInfo: { hasNextPage: true, endCursor: 'cursor-xyz' },
+          })
+          .mockResolvedValueOnce({
+            items: [{ number: 2 }],
+            pageInfo: { hasNextPage: false },
+          });
+
+        await api.listIssues({ milestone: 'v1.0' });
+
+        expect(mockMCP.callTool).toHaveBeenNthCalledWith(2, 'search_issues', expect.objectContaining({
+          after: 'cursor-xyz',
+        }));
+      });
+
+      it('should stop when pageInfo.hasNextPage is false', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [{ number: 1 }, { number: 2 }],
+          pageInfo: { hasNextPage: false, endCursor: 'cursor-end' },
+        });
+
+        const issues = await api.listIssues({ milestone: 'v1.0' });
+
+        expect(issues).toHaveLength(2);
+        expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+      });
+
+      it('should paginate through multiple pages using cursors', async () => {
+        vi.mocked(mockMCP.callTool)
+          .mockResolvedValueOnce({
+            items: [{ number: 1 }, { number: 2 }],
+            pageInfo: { hasNextPage: true, endCursor: 'c1' },
+          })
+          .mockResolvedValueOnce({
+            items: [{ number: 3 }, { number: 4 }],
+            pageInfo: { hasNextPage: true, endCursor: 'c2' },
+          })
+          .mockResolvedValueOnce({
+            items: [{ number: 5 }],
+            pageInfo: { hasNextPage: false },
+          });
+
+        const issues = await api.listIssues({ assignee: 'dev1' });
+
+        expect(issues).toHaveLength(5);
+        expect(mockMCP.callTool).toHaveBeenCalledTimes(3);
+      });
+
+      it('should stop when accumulated length reaches limit even if hasNextPage is true', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [{ number: 1 }, { number: 2 }],
+          pageInfo: { hasNextPage: true, endCursor: 'c1' },
+        });
+
+        const issues = await api.listIssues({ assignee: 'dev1', limit: 2 });
+
+        expect(issues).toHaveLength(2);
+        expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+      });
+
+      it('should truncate results to limit when page returns more items than needed', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [{ number: 1 }, { number: 2 }, { number: 3 }, { number: 4 }, { number: 5 }],
+          pageInfo: { hasNextPage: false },
+        });
+
+        const issues = await api.listIssues({ milestone: 'v1.0', limit: 3 });
+
+        expect(issues).toHaveLength(3);
+        expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+      });
+
+      it('should use perPage equal to remaining when limit is less than 100', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [{ number: 1 }, { number: 2 }],
+          pageInfo: { hasNextPage: false },
+        });
+
+        await api.listIssues({ milestone: 'v1.0', limit: 25 });
+
+        expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
+          perPage: 25,
+        }));
+      });
+
+      it('should fall back to legacy termination when pageInfo is absent and items < perPage', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [{ number: 1 }, { number: 2 }],
+          // no pageInfo
+        });
+
+        const issues = await api.listIssues({ assignee: 'dev1' });
+
+        expect(issues).toHaveLength(2);
+        expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+      });
+
+      it('should build query with state filter for search_issues', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [],
+          pageInfo: { hasNextPage: false },
+        });
+
+        await api.listIssues({ milestone: 'v2.0', state: 'open' });
+
+        expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
+          query: expect.stringContaining('is:open'),
+        }));
+      });
+
+      it('should build query with label filters for search_issues', async () => {
+        vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+          items: [],
+          pageInfo: { hasNextPage: false },
+        });
+
+        await api.listIssues({ assignee: 'dev1', labels: ['bug', 'enhancement'] });
+
+        const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0][1] as Record<string, unknown>;
+        expect(callArgs.query).toContain('label:"bug"');
+        expect(callArgs.query).toContain('label:"enhancement"');
+      });
+    });
+
     // Pagination tests
 
     it('should make only one MCP call when pageInfo.hasNextPage is false', async () => {
@@ -223,6 +364,144 @@ describe('GitHubAPI', () => {
       const issues = await api.listIssues({});
       expect(issues).toHaveLength(2);
       expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('searchIssuesWithFilters (via listIssues with milestone/assignee)', () => {
+    it('should make first call without an after parameter', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        items: [{ number: 1, title: 'Issue 1' }],
+        pageInfo: { hasNextPage: false },
+      });
+
+      await api.listIssues({ milestone: 'v1.0' });
+
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+      expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.not.objectContaining({
+        after: expect.anything(),
+      }));
+    });
+
+    it('should pass endCursor as after on subsequent calls', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({
+          items: [{ number: 1 }],
+          pageInfo: { hasNextPage: true, endCursor: 'search-cursor-abc' },
+        })
+        .mockResolvedValueOnce({
+          items: [{ number: 2 }],
+          pageInfo: { hasNextPage: false },
+        });
+
+      await api.listIssues({ assignee: 'dev1' });
+
+      expect(mockMCP.callTool).toHaveBeenNthCalledWith(2, 'search_issues', expect.objectContaining({
+        after: 'search-cursor-abc',
+      }));
+    });
+
+    it('should terminate when pageInfo.hasNextPage is false', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({
+          items: [{ number: 1 }, { number: 2 }],
+          pageInfo: { hasNextPage: false, endCursor: 'cursor-x' },
+        });
+
+      const issues = await api.listIssues({ milestone: 'v2.0' });
+      expect(issues).toHaveLength(2);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should accumulate results across multiple pages', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({
+          items: [{ number: 1 }, { number: 2 }],
+          pageInfo: { hasNextPage: true, endCursor: 'c1' },
+        })
+        .mockResolvedValueOnce({
+          items: [{ number: 3 }, { number: 4 }],
+          pageInfo: { hasNextPage: true, endCursor: 'c2' },
+        })
+        .mockResolvedValueOnce({
+          items: [{ number: 5 }],
+          pageInfo: { hasNextPage: false },
+        });
+
+      const issues = await api.listIssues({ assignee: 'dev1' });
+      expect(issues).toHaveLength(5);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(3);
+    });
+
+    it('should terminate when pageInfo is absent in response (legacy fallback)', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        items: [{ number: 1 }, { number: 2 }],
+        // no pageInfo
+      });
+
+      const issues = await api.listIssues({ milestone: 'v1.0' });
+      expect(issues).toHaveLength(2);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not make an extra call when accumulated length reaches limit at page boundary', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        items: [{ number: 1 }, { number: 2 }],
+        pageInfo: { hasNextPage: true, endCursor: 'c1' },
+      });
+
+      const issues = await api.listIssues({ assignee: 'dev1', limit: 2 });
+      expect(issues).toHaveLength(2);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should truncate results to filters.limit', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        items: [{ number: 1 }, { number: 2 }, { number: 3 }, { number: 4 }, { number: 5 }],
+        pageInfo: { hasNextPage: false },
+      });
+
+      const issues = await api.listIssues({ milestone: 'v1.0', limit: 3 });
+      expect(issues).toHaveLength(3);
+    });
+
+    it('should build search query with all filter types', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        items: [],
+        pageInfo: { hasNextPage: false },
+      });
+
+      await api.listIssues({
+        milestone: 'v2.0',
+        assignee: 'octocat',
+        labels: ['bug', 'urgent'],
+        state: 'open',
+      });
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
+        query: expect.stringContaining('milestone:"v2.0"'),
+      }));
+      expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
+        query: expect.stringContaining('assignee:octocat'),
+      }));
+      expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
+        query: expect.stringContaining('label:"bug"'),
+      }));
+      expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
+        query: expect.stringContaining('is:open'),
+      }));
+    });
+
+    it('should set perPage to remaining count when limit is less than 100', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        items: [{ number: 1 }, { number: 2 }],
+        pageInfo: { hasNextPage: false },
+      });
+
+      await api.listIssues({ milestone: 'v1.0', limit: 25 });
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
+        perPage: 25,
+      }));
     });
   });
 
