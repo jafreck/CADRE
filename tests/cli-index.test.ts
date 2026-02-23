@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { createRequire } from 'module';
 import { Command } from 'commander';
 import { registerAgentsCommand } from '../src/cli/agents.js';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
 
 /**
  * Build a minimal program that mirrors what src/index.ts does:

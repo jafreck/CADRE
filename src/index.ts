@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'module';
 import { Command } from 'commander';
 import chalk from 'chalk';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
 import { runInit } from './cli/init.js';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
@@ -13,7 +17,7 @@ const program = new Command();
 program
   .name('cadre')
   .description('Coordinated Agent Development Runtime Engine')
-  .version('0.1.0');
+  .version(version);
 
 // ─── run ──────────────────────────────────────────────
 program
