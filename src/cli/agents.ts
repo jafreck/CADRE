@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve, dirname, join, sep } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import chalk from 'chalk';
@@ -10,11 +10,8 @@ import { exists, statOrNull } from '../util/fs.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** Resolve the bundled templates directory whether running from src/ or dist/. */
+/** Resolve the bundled templates directory. */
 function getTemplateDir(): string {
-  if (__filename.includes(`${sep}dist${sep}`)) {
-    return resolve(__dirname, '../agents/templates');
-  }
   return resolve(__dirname, '../agents/templates');
 }
 
