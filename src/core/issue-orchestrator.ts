@@ -29,6 +29,8 @@ import { CommitManager } from '../git/commit.js';
 import { TaskQueue } from '../execution/task-queue.js';
 import { RetryExecutor } from '../execution/retry.js';
 import { TokenTracker } from '../budget/token-tracker.js';
+import { CostEstimator } from '../budget/cost-estimator.js';
+import type { CostReport, CostReportAgentEntry, CostReportPhaseEntry } from '../reporting/types.js';
 import { Logger } from '../logging/logger.js';
 import { atomicWriteJSON, ensureDir, exists, listFilesRecursive } from '../util/fs.js';
 import { execShell } from '../util/process.js';
@@ -63,6 +65,7 @@ export class IssueOrchestrator {
   private readonly retryExecutor: RetryExecutor;
   private readonly progressWriter: IssueProgressWriter;
   private readonly tokenTracker: TokenTracker;
+  private readonly costEstimator: CostEstimator;
   private readonly phases: PhaseResult[] = [];
   private budgetExceeded = false;
   private createdPR: PullRequestInfo | undefined;
@@ -98,6 +101,7 @@ export class IssueOrchestrator {
       logger,
     );
     this.tokenTracker = new TokenTracker();
+    this.costEstimator = new CostEstimator(config.copilot);
   }
 
   /**
@@ -120,6 +124,23 @@ export class IssueOrchestrator {
       issueTitle: this.issue.title,
       worktreePath: this.worktree.path,
     });
+
+    let result: IssueResult;
+    try {
+      result = await this.runPipeline(startTime);
+    } finally {
+      await this.writeCostReport().catch((err) => {
+        this.logger.warn(`Failed to write cost report: ${err}`, { issueNumber: this.issue.number });
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Execute the 5-phase pipeline and return the result.
+   */
+  private async runPipeline(startTime: number): Promise<IssueResult> {
 
     for (const phase of ISSUE_PHASES) {
       // Skip completed phases on resume
@@ -1030,5 +1051,131 @@ export class IssueOrchestrator {
       error,
       budgetExceeded,
     };
+  }
+
+  private async writeCostReport(): Promise<void> {
+    const model = this.config.copilot.model;
+    const records = this.tokenTracker.getRecords();
+
+    // Compute totals with input/output breakdown when available
+    let totalInput = 0;
+    let totalOutput = 0;
+    let hasDetailedRecords = false;
+    for (const r of records) {
+      if (r.input != null && r.output != null) {
+        totalInput += r.input;
+        totalOutput += r.output;
+        hasDetailedRecords = true;
+      } else {
+        totalInput += Math.round(r.tokens * 0.75);
+        totalOutput += r.tokens - Math.round(r.tokens * 0.75);
+      }
+    }
+
+    const overallEstimate = hasDetailedRecords
+      ? this.costEstimator.estimateDetailed(totalInput, totalOutput, model)
+      : this.costEstimator.estimate(this.tokenTracker.getTotal(), model);
+
+    // Build byAgent entries
+    const agentMap: Record<string, { tokens: number; input: number; output: number }> = {};
+    for (const r of records) {
+      if (!agentMap[r.agent]) {
+        agentMap[r.agent] = { tokens: 0, input: 0, output: 0 };
+      }
+      agentMap[r.agent].tokens += r.tokens;
+      if (r.input != null && r.output != null) {
+        agentMap[r.agent].input += r.input;
+        agentMap[r.agent].output += r.output;
+      } else {
+        agentMap[r.agent].input += Math.round(r.tokens * 0.75);
+        agentMap[r.agent].output += r.tokens - Math.round(r.tokens * 0.75);
+      }
+    }
+
+    const byAgent: CostReportAgentEntry[] = Object.entries(agentMap).map(([agent, data]) => {
+      const est = this.costEstimator.estimateDetailed(data.input, data.output, model);
+      return {
+        agent,
+        tokens: data.tokens,
+        inputTokens: data.input,
+        outputTokens: data.output,
+        estimatedCost: est.totalCost,
+      };
+    });
+
+    // Build byPhase entries
+    const phaseMap = this.tokenTracker.getByPhase();
+    const phaseNames: Record<number, string> = {
+      1: 'Analysis & Scouting',
+      2: 'Planning',
+      3: 'Implementation',
+      4: 'Integration Verification',
+      5: 'PR Composition',
+    };
+    const byPhase: CostReportPhaseEntry[] = Object.entries(phaseMap).map(([phaseStr, tokens]) => {
+      const phase = Number(phaseStr);
+      const phaseEst = this.costEstimator.estimate(tokens, model);
+      return {
+        phase,
+        phaseName: phaseNames[phase] ?? `Phase ${phase}`,
+        tokens,
+        estimatedCost: phaseEst.totalCost,
+      };
+    });
+
+    const report: CostReport = {
+      issueNumber: this.issue.number,
+      generatedAt: new Date().toISOString(),
+      totalTokens: overallEstimate.totalTokens,
+      inputTokens: overallEstimate.inputTokens,
+      outputTokens: overallEstimate.outputTokens,
+      estimatedCost: overallEstimate.totalCost,
+      model,
+      byAgent,
+      byPhase,
+    };
+
+    await ensureDir(this.progressDir);
+    await atomicWriteJSON(join(this.progressDir, 'cost-report.json'), report);
+
+    this.logger.info(`Cost report written: ${this.costEstimator.format(overallEstimate)}`, {
+      issueNumber: this.issue.number,
+    });
+
+    if (this.config.options.postCostComment) {
+      const comment = this.formatCostComment(report);
+      try {
+        await this.platform.addIssueComment(this.issue.number, comment);
+      } catch (err) {
+        this.logger.warn(`Failed to post cost comment: ${err}`, { issueNumber: this.issue.number });
+      }
+    }
+  }
+
+  private formatCostComment(report: CostReport): string {
+    const lines: string[] = [
+      `## 💰 Cost Report for Issue #${report.issueNumber}`,
+      '',
+      `**Total tokens:** ${report.totalTokens.toLocaleString()}`,
+      `**Estimated cost:** $${report.estimatedCost.toFixed(4)}`,
+      `**Model:** ${report.model}`,
+      '',
+      '### By Agent',
+      '',
+      '| Agent | Tokens | Cost |',
+      '|-------|--------|------|',
+      ...report.byAgent.map(
+        (e) => `| ${e.agent} | ${e.tokens.toLocaleString()} | $${e.estimatedCost.toFixed(4)} |`,
+      ),
+      '',
+      '### By Phase',
+      '',
+      '| Phase | Tokens | Cost |',
+      '|-------|--------|------|',
+      ...report.byPhase.map(
+        (e) => `| ${e.phaseName} | ${e.tokens.toLocaleString()} | $${e.estimatedCost.toFixed(4)} |`,
+      ),
+    ];
+    return lines.join('\n');
   }
 }
