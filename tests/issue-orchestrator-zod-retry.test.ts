@@ -122,6 +122,7 @@ vi.mock('../src/git/commit.js', () => ({
     isClean: mockCommitIsClean,
     getChangedFiles: mockCommitGetChangedFiles,
     getDiff: mockCommitGetDiff,
+    getTaskDiff: mockCommitGetDiff,
     commit: mockCommitCommit,
     push: mockCommitPush,
     squash: mockCommitSquash,
@@ -146,7 +147,7 @@ vi.mock('../src/execution/task-queue.js', () => {
       restoreState: vi.fn(),
       start: vi.fn(),
       complete: vi.fn(),
-      block: vi.fn(),
+      markBlocked: vi.fn(),
     })),
     { selectNonOverlappingBatch: mockSelectNonOverlappingBatch },
   );

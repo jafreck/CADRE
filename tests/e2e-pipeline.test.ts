@@ -33,6 +33,7 @@ vi.mock('../src/git/commit.js', () => ({
     getChangedFiles: vi.fn().mockResolvedValue([]),
     isClean: vi.fn().mockResolvedValue(true),
     getDiff: vi.fn().mockResolvedValue(''),
+    getTaskDiff: vi.fn().mockResolvedValue(''),
     push: vi.fn().mockResolvedValue(undefined),
     squash: vi.fn().mockResolvedValue('abc123'),
   })),
