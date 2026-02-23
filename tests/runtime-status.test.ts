@@ -314,11 +314,11 @@ describe('CadreRuntime.status() — with issueNumber, issue present in fleet', (
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('issue detail table'));
   });
 
-  it('also renders the fleet status table before the issue detail', async () => {
+  it('does not render the fleet status table when issueNumber is provided', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(7);
 
-    expect(mockRenderFleetStatus).toHaveBeenCalledOnce();
+    expect(mockRenderFleetStatus).not.toHaveBeenCalled();
     expect(mockRenderIssueDetail).toHaveBeenCalledOnce();
   });
 });
@@ -409,7 +409,7 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint missi
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(5);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No per-issue checkpoint found for #5'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No per-issue checkpoint found for issue #5'));
   });
 
   it('does not call renderIssueDetail when per-issue checkpoint is missing', async () => {
@@ -420,10 +420,10 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint missi
     expect(MockCheckpointManager).not.toHaveBeenCalled();
   });
 
-  it('still renders the fleet status table before returning', async () => {
+  it('does not render the fleet status table when per-issue checkpoint is missing', async () => {
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(5);
 
-    expect(mockRenderFleetStatus).toHaveBeenCalledOnce();
+    expect(mockRenderFleetStatus).not.toHaveBeenCalled();
   });
 });
