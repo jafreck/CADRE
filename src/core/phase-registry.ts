@@ -2,6 +2,8 @@
  * Phase definitions and ordering for CADRE's per-issue pipeline.
  */
 
+import type { PhaseExecutor } from './phase-executor.js';
+
 export interface PhaseDefinition {
   /** Phase number (1-based). */
   id: number;
@@ -38,4 +40,21 @@ export function getPhaseCount(): number {
  */
 export function isLastPhase(phaseId: number): boolean {
   return phaseId === ISSUE_PHASES[ISSUE_PHASES.length - 1].id;
+}
+
+/**
+ * Holds an ordered list of PhaseExecutor instances for the pipeline.
+ */
+export class PhaseRegistry {
+  private executors: PhaseExecutor[] = [];
+
+  /** Append an executor to the registry. */
+  register(executor: PhaseExecutor): void {
+    this.executors.push(executor);
+  }
+
+  /** Return all registered executors in registration order. */
+  getAll(): PhaseExecutor[] {
+    return this.executors;
+  }
 }
