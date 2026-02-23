@@ -99,6 +99,61 @@ Values support `${ENV_VAR}` syntax to reference host environment variables:
 }
 ```
 
+### Claude CLI Setup
+
+CADRE supports [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli) (`claude`) as an alternative agent backend alongside the default GitHub Copilot CLI.
+
+**Install the Claude CLI:**
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+**Authenticate:**
+
+```bash
+claude login
+```
+
+This opens a browser to authenticate with your Anthropic account. Alternatively, set the `ANTHROPIC_API_KEY` environment variable:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+**Configure CADRE to use Claude:**
+
+Set `agent.backend` to `"claude"` in `cadre.config.json`:
+
+```json
+{
+  "projectName": "my-project",
+  "repository": "owner/repo",
+  "repoPath": "/path/to/local/clone",
+  "baseBranch": "main",
+  "issues": {
+    "ids": [42, 57, 61]
+  },
+  "agent": {
+    "backend": "claude",
+    "model": "claude-opus-4-5",
+    "timeout": 600000,
+    "claude": {
+      "cliCommand": "claude"
+    }
+  }
+}
+```
+
+**`agent` config reference:**
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `agent.backend` | `"copilot"` \| `"claude"` | `"copilot"` | Which AI backend to use for agent invocations |
+| `agent.model` | string | backend default | Model identifier (overrides the backend's default model) |
+| `agent.timeout` | number (ms) | backend default | Timeout in milliseconds for agent invocations |
+| `agent.claude.cliCommand` | string | `"claude"` | Path or name of the `claude` CLI executable |
+
 ## Architecture
 
 CADRE processes issues through a 5-phase pipeline:

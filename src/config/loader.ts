@@ -45,6 +45,19 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
 
   const config = result.data;
 
+  // Synthesize agent config from legacy copilot config if agent is not set
+  const agent = config.agent ?? {
+    backend: 'copilot' as const,
+    model: config.copilot.model,
+    timeout: config.copilot.timeout,
+    copilot: {
+      cliCommand: config.copilot.cliCommand,
+      agentDir: config.copilot.agentDir,
+      costOverrides: config.copilot.costOverrides,
+    },
+    claude: { cliCommand: 'claude' },
+  };
+
   // Resolve relative paths to absolute
   const resolvedRepoPath = isAbsolute(config.repoPath)
     ? config.repoPath
@@ -68,6 +81,7 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
     ...config,
     repoPath: resolvedRepoPath,
     worktreeRoot: resolvedWorktreeRoot,
+    agent,
   };
 
   return Object.freeze(frozen);

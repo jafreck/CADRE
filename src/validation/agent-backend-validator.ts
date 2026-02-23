@@ -10,10 +10,20 @@ export const agentBackendValidator: PreRunValidator = {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    const cliCommand = config.copilot.cliCommand;
+    let cliCommand: string;
+    let cliConfigKey: string;
+
+    if (!config.agent || config.agent.backend === 'copilot') {
+      cliCommand = config.agent ? config.agent.copilot.cliCommand : config.copilot.cliCommand;
+      cliConfigKey = config.agent ? 'agent.copilot.cliCommand' : 'copilot.cliCommand';
+    } else {
+      cliCommand = config.agent.claude.cliCommand;
+      cliConfigKey = 'agent.claude.cliCommand';
+    }
+
     const whichResult = await exec('which', [cliCommand]);
     if (whichResult.exitCode !== 0) {
-      errors.push(`CLI command '${cliCommand}' not found on PATH. Install it or set copilot.cliCommand to the correct command name.`);
+      errors.push(`CLI command '${cliCommand}' not found on PATH. Install it or set ${cliConfigKey} to the correct command name.`);
     }
 
     const agentDir = config.copilot.agentDir;

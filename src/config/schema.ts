@@ -26,6 +26,37 @@ const NotificationsConfigSchema = z
 
 export type NotificationsConfig = z.infer<typeof NotificationsConfigSchema>;
 
+export const AgentConfigSchema = z.object({
+  /** Which AI backend to use for agent invocations. */
+  backend: z.enum(['copilot', 'claude']).default('copilot'),
+  /** Model identifier to pass to the backend (overrides backend-specific default). */
+  model: z.string().optional(),
+  /** Timeout in milliseconds for agent invocations. */
+  timeout: z.number().int().optional(),
+  /** Copilot-backend-specific options. */
+  copilot: z
+    .object({
+      cliCommand: z.string().default('copilot'),
+      agentDir: z.string().default('.github/agents'),
+      costOverrides: z
+        .record(
+          z.string(),
+          z.object({
+            input: z.number().min(0),
+            output: z.number().min(0),
+          }),
+        )
+        .optional(),
+    })
+    .default({}),
+  /** Claude-backend-specific options. */
+  claude: z
+    .object({
+      cliCommand: z.string().default('claude'),
+    })
+    .default({}),
+});
+
 export const CadreConfigSchema = z.object({
   /** Human-readable project name, used for directory naming. */
   projectName: z.string().min(1).regex(/^[a-z0-9-]+$/),
@@ -269,6 +300,9 @@ export const CadreConfigSchema = z.object({
 
   /** Notification provider configuration. Optional; defaults to disabled. */
   notifications: NotificationsConfigSchema,
+
+  /** Agent backend configuration. Optional; uses copilot defaults when omitted. */
+  agent: AgentConfigSchema.optional(),
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;
