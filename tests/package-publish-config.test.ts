@@ -25,3 +25,17 @@ describe('package.json main field', () => {
     expect(pkg.main).toBe('dist/index.js');
   });
 });
+
+describe('package.json files field exclusions', () => {
+  it('should not include src/ directly in files field', () => {
+    expect(pkg.files).not.toContain('src/');
+  });
+
+  it('should not include tests/ in files field', () => {
+    expect(pkg.files).not.toContain('tests/');
+  });
+
+  it('should not include .cadre/ in files field', () => {
+    expect(pkg.files).not.toContain('.cadre/');
+  });
+});
