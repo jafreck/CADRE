@@ -306,7 +306,7 @@ export class GitHubAPI {
 
   /**
    * Use GitHub search API for queries that need milestone/assignee filtering.
-   * Paginates using the `page` parameter until results are exhausted or `limit` is reached.
+   * Paginates using the `after` cursor until results are exhausted or `limit` is reached.
    */
   private async searchIssuesWithFilters(filters: {
     labels?: string[];
@@ -332,31 +332,46 @@ export class GitHubAPI {
       queryParts.push(`assignee:${filters.assignee}`);
     }
 
-    const limit = filters.limit ?? 1000;
+    const limit = filters.limit ?? Infinity;
     const accumulated: Record<string, unknown>[] = [];
-    let page = 1;
+    let after: string | undefined;
 
     while (accumulated.length < limit) {
       const remaining = limit - accumulated.length;
       const perPage = Math.min(remaining, 100);
 
-      const result = await this.mcp.callTool<Record<string, unknown>>('search_issues', {
+      const args: Record<string, unknown> = {
         query: queryParts.join(' '),
         perPage,
-        page,
-      });
-
-      const items = (result.items as Record<string, unknown>[]) ?? [];
-      accumulated.push(...items);
-
-      // Stop if last page (fewer items than requested) or no items returned
-      if (items.length < perPage) {
-        break;
+      };
+      if (after) {
+        args.after = after;
       }
 
-      page++;
+      const result = await this.mcp.callTool<
+        | { items: Record<string, unknown>[]; pageInfo?: { hasNextPage: boolean; endCursor?: string } }
+        | Record<string, unknown>
+      >('search_issues', args);
+
+      let items: Record<string, unknown>[];
+      let hasNextPage = false;
+
+      if (result && typeof result === 'object' && 'items' in result) {
+        const envelope = result as { items: Record<string, unknown>[]; pageInfo?: { hasNextPage: boolean; endCursor?: string } };
+        items = envelope.items ?? [];
+        hasNextPage = envelope.pageInfo?.hasNextPage ?? false;
+        after = envelope.pageInfo?.endCursor;
+      } else {
+        items = [];
+      }
+
+      accumulated.push(...items);
+
+      if (!hasNextPage || accumulated.length >= limit) {
+        break;
+      }
     }
 
-    return accumulated.slice(0, limit);
+    return filters.limit !== undefined ? accumulated.slice(0, filters.limit) : accumulated;
   }
 }
