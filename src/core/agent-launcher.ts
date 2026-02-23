@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import type { CadreConfig } from '../config/schema.js';
-import type { AgentInvocation, AgentResult, AgentName } from '../agents/types.js';
+import type { AgentInvocation, AgentResult, AgentName, TokenUsageDetail } from '../agents/types.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { spawnProcess, stripVSCodeEnv, trackProcess, type ProcessResult } from '../util/process.js';
 import { exists, ensureDir, statOrNull } from '../util/fs.js';
@@ -206,10 +206,27 @@ export class AgentLauncher {
    * Parse token usage from agent output.
    * Agents may report usage in various formats.
    */
-  private parseTokenUsage(result: ProcessResult): number {
+  private parseTokenUsage(result: ProcessResult): TokenUsageDetail | number {
     const combined = result.stdout + result.stderr;
 
-    // Try to find token usage in various formats
+    // Try structured cadre_tokens JSON block first
+    const structuredMatch = combined.match(/\{"cadre_tokens"\s*:\s*(\{[^}]*\})\}/);
+    if (structuredMatch) {
+      try {
+        const parsed = JSON.parse(structuredMatch[1]) as { input?: unknown; output?: unknown; model?: unknown };
+        if (
+          typeof parsed.input === 'number' &&
+          typeof parsed.output === 'number' &&
+          typeof parsed.model === 'string'
+        ) {
+          return { input: parsed.input, output: parsed.output, model: parsed.model };
+        }
+      } catch {
+        // fall through to regex patterns
+      }
+    }
+
+    // Fall back to regex patterns
     const patterns = [
       /total[_\s]?tokens?[:\s]+(\d[\d,]*)/i,
       /tokens?[_\s]?used[:\s]+(\d[\d,]*)/i,

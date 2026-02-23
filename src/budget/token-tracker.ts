@@ -18,6 +18,21 @@ export class TokenTracker {
   }
 
   /**
+   * Record detailed token usage with input/output breakdown.
+   */
+  recordDetailed(issueNumber: number, agent: string, phase: number, detail: TokenUsageDetail): void {
+    this.records.push({
+      issueNumber,
+      agent,
+      phase,
+      tokens: detail.input + detail.output,
+      input: detail.input,
+      output: detail.output,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
    * Get total usage across all issues.
    */
   getTotal(): number {
@@ -109,11 +124,23 @@ export class TokenTracker {
   }
 
   /**
+   * Get all records (alias for exportRecords).
+   */
+  getRecords(): TokenRecord[] {
+    return this.exportRecords();
+  }
+
+  /**
    * Import records (for checkpoint resume).
    */
   importRecords(records: TokenRecord[]): void {
     this.records = [...records];
   }
+}
+
+export interface TokenUsageDetail {
+  input: number;
+  output: number;
 }
 
 export interface TokenRecord {

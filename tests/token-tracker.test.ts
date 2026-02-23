@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TokenTracker } from '../src/budget/token-tracker.js';
+import { TokenTracker, TokenUsageDetail } from '../src/budget/token-tracker.js';
 
 describe('TokenTracker', () => {
   function setupTracker(): TokenTracker {
@@ -137,6 +137,93 @@ describe('TokenTracker', () => {
       // Add to original should not affect copy
       tracker.record(42, 'code-writer', 3, 1000);
       expect(tracker2.getTotal()).toBe(17000);
+    });
+  });
+
+  describe('recordDetailed', () => {
+    it('should store input and output fields on the record', () => {
+      const tracker = new TokenTracker();
+      const detail: TokenUsageDetail = { input: 1000, output: 500 };
+      tracker.recordDetailed(1, 'code-writer', 2, detail);
+
+      const records = tracker.exportRecords();
+      expect(records).toHaveLength(1);
+      expect(records[0].input).toBe(1000);
+      expect(records[0].output).toBe(500);
+    });
+
+    it('should set tokens as input + output', () => {
+      const tracker = new TokenTracker();
+      tracker.recordDetailed(1, 'code-writer', 2, { input: 800, output: 200 });
+
+      expect(tracker.getTotal()).toBe(1000);
+    });
+
+    it('should store correct issueNumber, agent, and phase', () => {
+      const tracker = new TokenTracker();
+      tracker.recordDetailed(42, 'fix-surgeon', 3, { input: 300, output: 100 });
+
+      const records = tracker.exportRecords();
+      expect(records[0].issueNumber).toBe(42);
+      expect(records[0].agent).toBe('fix-surgeon');
+      expect(records[0].phase).toBe(3);
+    });
+
+    it('should aggregate correctly with getTotal, getByAgent, getByPhase', () => {
+      const tracker = new TokenTracker();
+      tracker.record(1, 'issue-analyst', 1, 2000);
+      tracker.recordDetailed(1, 'code-writer', 2, { input: 600, output: 400 });
+
+      expect(tracker.getTotal()).toBe(3000);
+      expect(tracker.getByAgent()['issue-analyst']).toBe(2000);
+      expect(tracker.getByAgent()['code-writer']).toBe(1000);
+      expect(tracker.getByPhase()[1]).toBe(2000);
+      expect(tracker.getByPhase()[2]).toBe(1000);
+    });
+
+    it('should include input/output in exportRecords output', () => {
+      const tracker = new TokenTracker();
+      tracker.recordDetailed(5, 'test-writer', 3, { input: 450, output: 150 });
+
+      const exported = tracker.exportRecords();
+      expect(exported[0].input).toBe(450);
+      expect(exported[0].output).toBe(150);
+      expect(exported[0].tokens).toBe(600);
+    });
+
+    it('should round-trip detailed records through importRecords', () => {
+      const tracker = new TokenTracker();
+      tracker.recordDetailed(7, 'pr-composer', 4, { input: 700, output: 300 });
+      const exported = tracker.exportRecords();
+
+      const tracker2 = new TokenTracker();
+      tracker2.importRecords(exported);
+
+      expect(tracker2.getTotal()).toBe(1000);
+      const records = tracker2.exportRecords();
+      expect(records[0].input).toBe(700);
+      expect(records[0].output).toBe(300);
+    });
+  });
+
+  describe('getRecords', () => {
+    it('should return the same records as exportRecords', () => {
+      const tracker = setupTracker();
+      expect(tracker.getRecords()).toEqual(tracker.exportRecords());
+    });
+
+    it('should return an empty array for a new tracker', () => {
+      const tracker = new TokenTracker();
+      expect(tracker.getRecords()).toEqual([]);
+    });
+
+    it('should include detailed records with input/output fields', () => {
+      const tracker = new TokenTracker();
+      tracker.recordDetailed(1, 'code-writer', 1, { input: 200, output: 100 });
+      const records = tracker.getRecords();
+      expect(records).toHaveLength(1);
+      expect(records[0].input).toBe(200);
+      expect(records[0].output).toBe(100);
     });
   });
 });
