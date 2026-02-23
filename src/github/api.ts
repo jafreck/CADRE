@@ -306,6 +306,7 @@ export class GitHubAPI {
 
   /**
    * Use GitHub search API for queries that need milestone/assignee filtering.
+   * Paginates using the `page` parameter until results are exhausted or `limit` is reached.
    */
   private async searchIssuesWithFilters(filters: {
     labels?: string[];
@@ -331,11 +332,31 @@ export class GitHubAPI {
       queryParts.push(`assignee:${filters.assignee}`);
     }
 
-    const result = await this.mcp.callTool<Record<string, unknown>>('search_issues', {
-      query: queryParts.join(' '),
-      perPage: filters.limit ?? 30,
-    });
+    const limit = filters.limit ?? 1000;
+    const accumulated: Record<string, unknown>[] = [];
+    let page = 1;
 
-    return (result.items as Record<string, unknown>[]) ?? [];
+    while (accumulated.length < limit) {
+      const remaining = limit - accumulated.length;
+      const perPage = Math.min(remaining, 100);
+
+      const result = await this.mcp.callTool<Record<string, unknown>>('search_issues', {
+        query: queryParts.join(' '),
+        perPage,
+        page,
+      });
+
+      const items = (result.items as Record<string, unknown>[]) ?? [];
+      accumulated.push(...items);
+
+      // Stop if last page (fewer items than requested) or no items returned
+      if (items.length < perPage) {
+        break;
+      }
+
+      page++;
+    }
+
+    return accumulated.slice(0, limit);
   }
 }
