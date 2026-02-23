@@ -1,16 +1,19 @@
-# Task Result: task-002 - Align FleetResult.tokenUsage with TokenSummary and handle null in processIssue
+# Task Result: task-002 - Create `IssueNotifier` Class
 
 ## Changes Made
-- `src/core/fleet-orchestrator.ts`: Imported `TokenSummary` from `../budget/token-tracker.js`, changed `FleetResult.tokenUsage` type from inline object to `TokenSummary`, added null guard around `tokenTracker.record()` and `fleetCheckpoint.recordTokenUsage()` calls
-- `src/core/runtime.ts`: Fixed `emptyResult()` to return a complete `TokenSummary` object (added `byPhase: {}` and `recordCount: 0` fields)
+- `src/core/issue-notifier.ts`: Created new file exporting the `IssueNotifier` class with all five public `notify*` methods.
 
 ## Files Modified
-- src/core/fleet-orchestrator.ts
-- src/core/runtime.ts
-
-## Files Created
 - (none)
 
+## Files Created
+- src/core/issue-notifier.ts
+
 ## Notes
-- `runtime.ts` had an inline `tokenUsage` object literal that was missing the `byPhase` and `recordCount` fields required by `TokenSummary`; fixed to avoid a type error
-- TypeScript build passes with no errors
+- Constructor accepts `CadreConfig`, `PlatformProvider`, and `Logger`.
+- All five methods (`notifyStart`, `notifyPhaseComplete`, `notifyComplete`, `notifyFailed`, `notifyBudgetWarning`) return `Promise<void>`.
+- Each method short-circuits when `issueUpdates.enabled` is false or when the specific flag is false.
+- Errors from `platform.addIssueComment()` are caught in the private `post()` helper and passed to `logger.warn()` — methods always resolve.
+- `notifyComplete` includes the PR URL and token usage when provided.
+- `notifyFailed` includes phase number/name and failed task ID when provided.
+- `notifyBudgetWarning` includes both consumed and total token counts with percentage.
