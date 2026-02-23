@@ -139,7 +139,7 @@ describe('GitHubAPI', () => {
       });
     });
 
-    it('should include labels in MCP call when labels are provided', async () => {
+    it('should apply labels via a separate issue_write call after PR creation', async () => {
       vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 88 });
 
       await api.createPullRequest({
@@ -150,12 +150,19 @@ describe('GitHubAPI', () => {
         labels: ['enhancement', 'cadre-generated'],
       });
 
-      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.objectContaining({
+      // Labels are NOT passed to create_pull_request (MCP tool schema does not support it)
+      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.not.objectContaining({
+        labels: expect.anything(),
+      }));
+      // Labels are applied via a separate issue_write call using the new PR number
+      expect(mockMCP.callTool).toHaveBeenCalledWith('issue_write', expect.objectContaining({
+        method: 'update',
+        issue_number: 88,
         labels: ['enhancement', 'cadre-generated'],
       }));
     });
 
-    it('should include reviewers in MCP call when reviewers are provided', async () => {
+    it('should request reviewers via a separate update_pull_request call after PR creation', async () => {
       vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 89 });
 
       await api.createPullRequest({
@@ -166,12 +173,18 @@ describe('GitHubAPI', () => {
         reviewers: ['alice', 'bob'],
       });
 
-      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.objectContaining({
+      // Reviewers are NOT passed to create_pull_request (MCP tool schema does not support it)
+      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.not.objectContaining({
+        reviewers: expect.anything(),
+      }));
+      // Reviewers are requested via a separate update_pull_request call
+      expect(mockMCP.callTool).toHaveBeenCalledWith('update_pull_request', expect.objectContaining({
+        pullNumber: 89,
         reviewers: ['alice', 'bob'],
       }));
     });
 
-    it('should include both labels and reviewers in MCP call when both are provided', async () => {
+    it('should apply labels and request reviewers via separate calls after PR creation', async () => {
       vi.mocked(mockMCP.callTool).mockResolvedValue({ number: 90 });
 
       await api.createPullRequest({
@@ -183,8 +196,13 @@ describe('GitHubAPI', () => {
         reviewers: ['charlie'],
       });
 
-      expect(mockMCP.callTool).toHaveBeenCalledWith('create_pull_request', expect.objectContaining({
+      expect(mockMCP.callTool).toHaveBeenCalledWith('issue_write', expect.objectContaining({
+        method: 'update',
+        issue_number: 90,
         labels: ['refactor'],
+      }));
+      expect(mockMCP.callTool).toHaveBeenCalledWith('update_pull_request', expect.objectContaining({
+        pullNumber: 90,
         reviewers: ['charlie'],
       }));
     });
