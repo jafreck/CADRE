@@ -692,3 +692,211 @@ describe('IssueOrchestrator notifier integration', () => {
     await expect(orchestrator.run()).resolves.toMatchObject({ success: false, budgetExceeded: true });
   });
 });
+
+// ── IssueResult codeComplete / prCreated / prFailed ──
+
+describe('IssueOrchestrator – buildResult codeComplete and prCreated', () => {
+  let tempDir: string;
+  let worktreePath: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockNotifierMethods.notifyStart.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyPhaseComplete.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyComplete.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyFailed.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyBudgetWarning.mockResolvedValue(undefined);
+    tempDir = join(tmpdir(), `cadre-result-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    worktreePath = join(tempDir, 'worktree');
+    await mkdir(worktreePath, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  function makeWorktreeLocal(): WorktreeInfo {
+    return {
+      path: worktreePath,
+      branch: 'cadre/issue-42',
+      baseCommit: 'abc123',
+      issueNumber: 42,
+    } as unknown as WorktreeInfo;
+  }
+
+  it('should include codeComplete and prCreated in IssueResult', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => true) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktreeLocal(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result).toHaveProperty('codeComplete');
+    expect(result).toHaveProperty('prCreated');
+  });
+
+  it('should set codeComplete to true when phases 1-4 all succeed (skipped as pre-completed)', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => true) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktreeLocal(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result.codeComplete).toBe(true);
+  });
+
+  it('should set prCreated to false when no PR is created', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => true) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktreeLocal(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result.prCreated).toBe(false);
+    expect(result.pr).toBeUndefined();
+  });
+
+  it('should set prCreated to true when setPR is called during execution', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktreeLocal(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const fakePR = {
+      number: 77,
+      url: 'https://github.com/owner/repo/pull/77',
+      title: 'feat: implement changes',
+      headBranch: 'cadre/issue-42',
+      baseBranch: 'main',
+    };
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockImplementation(async (executor: { phaseId: number; name: string }) => {
+        if (executor.phaseId === 5) {
+          (orchestrator as unknown as { createdPR: typeof fakePR }).createdPR = fakePR;
+        }
+        return {
+          phase: executor.phaseId,
+          phaseName: executor.name,
+          success: true,
+          duration: 10,
+          tokenUsage: 0,
+          outputPath: '',
+        };
+      });
+
+    const result = await orchestrator.run();
+
+    expect(result.prCreated).toBe(true);
+    expect(result.pr).toEqual(fakePR);
+  });
+
+  it('should set codeComplete to false when budget is exceeded', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(100),
+      makeIssue(),
+      makeWorktreeLocal(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockRejectedValue(new BudgetExceededError());
+
+    const result = await orchestrator.run();
+
+    expect(result.codeComplete).toBe(false);
+    expect(result.budgetExceeded).toBe(true);
+  });
+
+  it('should set codeComplete to false when a critical phase fails before phase 4', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktreeLocal(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockResolvedValue({
+        phase: 1,
+        phaseName: 'Analysis & Scouting',
+        success: false,
+        duration: 10,
+        tokenUsage: 0,
+        error: 'agent failed',
+      });
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(false);
+    expect(result.codeComplete).toBe(false);
+  });
+
+  it('should set success to true when code is complete and only PR creation failed', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktreeLocal(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockImplementation(async (executor: { phaseId: number; name: string }) => ({
+        phase: executor.phaseId,
+        phaseName: executor.name,
+        success: true,
+        duration: 10,
+        tokenUsage: 0,
+        outputPath: '',
+      }));
+
+    // Simulate prFailed being set (as would happen when setPRFailed is invoked via ctx)
+    (orchestrator as unknown as { prFailed: boolean }).prFailed = true;
+
+    const result = await orchestrator.run();
+
+    // success should be true because codeComplete = true and prFailed = true
+    expect(result.success).toBe(true);
+    expect(result.codeComplete).toBe(true);
+    expect(result.prCreated).toBe(false);
+  });
+});
