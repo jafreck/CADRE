@@ -7,6 +7,19 @@ import type { PullRequestInfo, ReviewThread } from '../src/platform/provider.js'
 vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
   writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockResolvedValue('# PR Content\n\nSome body'),
+}));
+
+vi.mock('../src/git/commit.js', () => ({
+  CommitManager: vi.fn().mockImplementation(() => ({
+    push: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+vi.mock('../src/agents/result-parser.js', () => ({
+  ResultParser: vi.fn().mockImplementation(() => ({
+    parsePRContent: vi.fn().mockResolvedValue({ title: 'Updated PR Title', body: 'Updated body addressing review comments' }),
+  })),
 }));
 
 vi.mock('../src/core/checkpoint.js', () => ({
@@ -120,6 +133,8 @@ function makeMockDeps() {
       comments: [],
     }),
     addIssueComment: vi.fn().mockResolvedValue(undefined),
+    updatePullRequest: vi.fn().mockResolvedValue(undefined),
+    issueLinkSuffix: vi.fn().mockReturnValue('Closes #1'),
   };
   const logger = {
     info: vi.fn(),
@@ -351,6 +366,80 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
       1,
       expect.stringContaining('PR #10'),
     );
+  });
+
+  it('pushes the branch after a successful pipeline', async () => {
+    const { CommitManager } = await import('../src/git/commit.js');
+    const pushSpy = vi.fn().mockResolvedValue(undefined);
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({ push: pushSpy }));
+
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(pushSpy).toHaveBeenCalledOnce();
+  });
+
+  it('updates the existing PR description after a successful pipeline', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR({ number: 10 })]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(platform.updatePullRequest).toHaveBeenCalledWith(
+      10,
+      expect.objectContaining({ body: expect.any(String) }),
+    );
+  });
+
+  it('does not push or update PR when pipeline fails', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({ issueNumber: 1, success: false, phases: [], totalDuration: 0, tokenUsage: 0 }),
+    }));
+
+    const { CommitManager } = await import('../src/git/commit.js');
+    const pushSpy = vi.fn().mockResolvedValue(undefined);
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({ push: pushSpy }));
+
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(pushSpy).not.toHaveBeenCalled();
+    expect(platform.updatePullRequest).not.toHaveBeenCalled();
   });
 
   it('does not post a reply comment when autoReplyOnResolved is true but pipeline fails', async () => {

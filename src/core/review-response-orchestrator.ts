@@ -4,11 +4,13 @@ import type { CadreConfig } from '../config/schema.js';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager } from '../git/worktree.js';
+import { CommitManager } from '../git/commit.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager } from './checkpoint.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
 import { Logger } from '../logging/logger.js';
 import { ContextBuilder } from '../agents/context-builder.js';
+import { ResultParser } from '../agents/result-parser.js';
 import { NotificationManager } from '../notifications/manager.js';
 
 /** The phases executed during a review-response cycle (skips analysis & planning). */
@@ -172,7 +174,52 @@ export class ReviewResponseOrchestrator {
 
         const issueResult = await issueOrchestrator.run();
 
-        // 9. Optionally post a reply comment when configured and pipeline succeeded
+        // 9. Push the branch and update the existing PR body on success
+        if (issueResult.success) {
+          // Push any new commits made by the implementation phase
+          const commitManager = new CommitManager(worktree.path, this.config.commits, this.logger);
+          try {
+            await commitManager.push();
+            this.logger.info(
+              `Issue #${issueNumber} (PR #${pr.number}): pushed changes to ${worktree.branch}`,
+              { issueNumber },
+            );
+          } catch (pushErr) {
+            this.logger.error(
+              `Issue #${issueNumber}: push failed: ${pushErr}`,
+              { issueNumber },
+            );
+          }
+
+          // Update the existing PR body with the pr-composer's output
+          const prContentPath = join(progressDir, 'pr-content.md');
+          try {
+            const resultParser = new ResultParser(this.logger);
+            const prContent = await resultParser.parsePRContent(prContentPath);
+            const newTitle = prContent.title
+              ? `${prContent.title} (#${issueNumber})`
+              : undefined;
+            let newBody = prContent.body;
+            if (this.config.pullRequest.linkIssue) {
+              newBody += `\n\n${this.platform.issueLinkSuffix(issueNumber)}`;
+            }
+            await this.platform.updatePullRequest(pr.number, {
+              ...(newTitle ? { title: newTitle } : {}),
+              body: newBody,
+            });
+            this.logger.info(
+              `Issue #${issueNumber}: updated PR #${pr.number} description`,
+              { issueNumber },
+            );
+          } catch (updateErr) {
+            this.logger.error(
+              `Issue #${issueNumber}: failed to update PR #${pr.number}: ${updateErr}`,
+              { issueNumber },
+            );
+          }
+        }
+
+        // 11. Optionally post a reply comment when configured and pipeline succeeded
         if (this.config.reviewResponse.autoReplyOnResolved && issueResult.success) {
           await this.platform.addIssueComment(
             issueNumber,
