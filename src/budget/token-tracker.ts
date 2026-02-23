@@ -122,6 +122,8 @@ export interface TokenRecord {
   phase: number;
   tokens: number;
   timestamp: string;
+  input?: number;
+  output?: number;
 }
 
 export interface TokenSummary {

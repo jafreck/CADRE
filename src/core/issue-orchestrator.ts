@@ -6,6 +6,7 @@ import type {
   AgentResult,
   ImplementationTask,
   PhaseResult,
+  TokenUsageDetail,
 } from '../agents/types.js';
 import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
@@ -888,18 +889,19 @@ export class IssueOrchestrator {
     return result.result;
   }
 
-  private recordTokens(agent: string, tokens: number | null): void {
-    if (tokens != null && tokens > 0) {
+  private recordTokens(agent: string, tokens: TokenUsageDetail | number | null): void {
+    const tokenCount = typeof tokens === 'object' && tokens !== null ? tokens.input + tokens.output : tokens;
+    if (tokenCount != null && tokenCount > 0) {
       this.tokenTracker.record(
         this.issue.number,
         agent,
         this.checkpoint.getState().currentPhase,
-        tokens,
+        tokenCount,
       );
       void this.checkpoint.recordTokenUsage(
         agent,
         this.checkpoint.getState().currentPhase,
-        tokens,
+        tokenCount,
       );
     }
     if (

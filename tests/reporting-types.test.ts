@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { RunIssueSummary, RunPhaseSummary, RunTotals, RunReport } from '../src/reporting/types.js';
+import type { RunIssueSummary, RunPhaseSummary, RunTotals, RunReport, CostReport, CostReportAgentEntry, CostReportPhaseEntry } from '../src/reporting/types.js';
 
 describe('RunIssueSummary', () => {
   it('should accept a minimal valid RunIssueSummary', () => {
@@ -217,5 +217,176 @@ describe('RunReport', () => {
     expect(report.issues[1].success).toBe(false);
     expect(report.issues[1].error).toBe('Timeout exceeded');
     expect(report.totals.failures).toBe(1);
+  });
+});
+
+describe('CostReportAgentEntry', () => {
+  it('should accept a valid CostReportAgentEntry', () => {
+    const entry: CostReportAgentEntry = {
+      agent: 'code-writer',
+      tokens: 2000,
+      inputTokens: 1500,
+      outputTokens: 500,
+      estimatedCost: 0.04,
+    };
+    expect(entry.agent).toBe('code-writer');
+    expect(entry.tokens).toBe(2000);
+    expect(entry.inputTokens).toBe(1500);
+    expect(entry.outputTokens).toBe(500);
+    expect(entry.estimatedCost).toBe(0.04);
+  });
+
+  it('should accept zero token values for CostReportAgentEntry', () => {
+    const entry: CostReportAgentEntry = {
+      agent: 'idle-agent',
+      tokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCost: 0,
+    };
+    expect(entry.tokens).toBe(0);
+    expect(entry.estimatedCost).toBe(0);
+  });
+
+  it('should accept inputTokens + outputTokens summing to tokens', () => {
+    const entry: CostReportAgentEntry = {
+      agent: 'test-writer',
+      tokens: 300,
+      inputTokens: 200,
+      outputTokens: 100,
+      estimatedCost: 0.006,
+    };
+    expect(entry.inputTokens + entry.outputTokens).toBe(entry.tokens);
+  });
+});
+
+describe('CostReportPhaseEntry', () => {
+  it('should accept a valid CostReportPhaseEntry', () => {
+    const entry: CostReportPhaseEntry = {
+      phase: 1,
+      phaseName: 'Analysis',
+      tokens: 500,
+      estimatedCost: 0.01,
+    };
+    expect(entry.phase).toBe(1);
+    expect(entry.phaseName).toBe('Analysis');
+    expect(entry.tokens).toBe(500);
+    expect(entry.estimatedCost).toBe(0.01);
+  });
+
+  it('should accept zero values for CostReportPhaseEntry', () => {
+    const entry: CostReportPhaseEntry = {
+      phase: 0,
+      phaseName: 'Setup',
+      tokens: 0,
+      estimatedCost: 0,
+    };
+    expect(entry.tokens).toBe(0);
+    expect(entry.estimatedCost).toBe(0);
+  });
+});
+
+describe('CostReport', () => {
+  const agentEntry: CostReportAgentEntry = {
+    agent: 'code-writer',
+    tokens: 1200,
+    inputTokens: 900,
+    outputTokens: 300,
+    estimatedCost: 0.024,
+  };
+
+  const phaseEntry: CostReportPhaseEntry = {
+    phase: 2,
+    phaseName: 'Implementation',
+    tokens: 1200,
+    estimatedCost: 0.024,
+  };
+
+  it('should accept a valid CostReport', () => {
+    const report: CostReport = {
+      issueNumber: 42,
+      generatedAt: '2024-06-01T12:00:00.000Z',
+      totalTokens: 1200,
+      inputTokens: 900,
+      outputTokens: 300,
+      estimatedCost: 0.024,
+      model: 'claude-3-5-sonnet',
+      byAgent: [agentEntry],
+      byPhase: [phaseEntry],
+    };
+    expect(report.issueNumber).toBe(42);
+    expect(report.generatedAt).toBe('2024-06-01T12:00:00.000Z');
+    expect(report.totalTokens).toBe(1200);
+    expect(report.inputTokens).toBe(900);
+    expect(report.outputTokens).toBe(300);
+    expect(report.estimatedCost).toBe(0.024);
+    expect(report.model).toBe('claude-3-5-sonnet');
+    expect(report.byAgent).toHaveLength(1);
+    expect(report.byPhase).toHaveLength(1);
+  });
+
+  it('should accept a CostReport with empty byAgent and byPhase arrays', () => {
+    const report: CostReport = {
+      issueNumber: 1,
+      generatedAt: '2024-01-01T00:00:00.000Z',
+      totalTokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCost: 0,
+      model: 'gpt-4',
+      byAgent: [],
+      byPhase: [],
+    };
+    expect(report.byAgent).toEqual([]);
+    expect(report.byPhase).toEqual([]);
+    expect(report.totalTokens).toBe(0);
+  });
+
+  it('should accept a CostReport with multiple agent and phase entries', () => {
+    const secondAgent: CostReportAgentEntry = {
+      agent: 'test-writer',
+      tokens: 800,
+      inputTokens: 600,
+      outputTokens: 200,
+      estimatedCost: 0.016,
+    };
+    const secondPhase: CostReportPhaseEntry = {
+      phase: 3,
+      phaseName: 'Testing',
+      tokens: 800,
+      estimatedCost: 0.016,
+    };
+    const report: CostReport = {
+      issueNumber: 7,
+      generatedAt: '2024-03-15T08:30:00.000Z',
+      totalTokens: 2000,
+      inputTokens: 1500,
+      outputTokens: 500,
+      estimatedCost: 0.04,
+      model: 'claude-3-5-sonnet',
+      byAgent: [agentEntry, secondAgent],
+      byPhase: [phaseEntry, secondPhase],
+    };
+    expect(report.byAgent).toHaveLength(2);
+    expect(report.byPhase).toHaveLength(2);
+    expect(report.byAgent[1].agent).toBe('test-writer');
+    expect(report.byPhase[1].phaseName).toBe('Testing');
+  });
+
+  it('should store generatedAt as an ISO string', () => {
+    const isoDate = '2024-12-31T23:59:59.999Z';
+    const report: CostReport = {
+      issueNumber: 100,
+      generatedAt: isoDate,
+      totalTokens: 50,
+      inputTokens: 30,
+      outputTokens: 20,
+      estimatedCost: 0.001,
+      model: 'gpt-4o',
+      byAgent: [],
+      byPhase: [],
+    };
+    expect(report.generatedAt).toBe(isoDate);
+    expect(() => new Date(report.generatedAt)).not.toThrow();
   });
 });
