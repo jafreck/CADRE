@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Coordinated Agent Development Runtime Engine",
   "type": "module",
+  "files": [
+    "dist/",
+    "src/agents/templates/"
+  ],
   "bin": {
     "cadre": "dist/index.js"
   },
