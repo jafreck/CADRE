@@ -240,6 +240,7 @@ describe('PhaseContext', () => {
       recordTokens: vi.fn(),
       checkBudget: vi.fn(),
       setPR,
+      setPRFailed: vi.fn(),
       logger: {} as never,
     };
 
@@ -251,5 +252,60 @@ describe('PhaseContext', () => {
     expect(setPR).toHaveBeenCalledTimes(2);
     expect(setPR).toHaveBeenNthCalledWith(1, pr1);
     expect(setPR).toHaveBeenNthCalledWith(2, pr2);
+  });
+
+  it('should accept a setPRFailed callback with no arguments', () => {
+    const setPRFailed = vi.fn();
+    const ctx: PhaseContext = {
+      issue: {} as never,
+      worktree: {} as never,
+      config: {} as never,
+      progressDir: '',
+      contextBuilder: {} as never,
+      launcher: {} as never,
+      resultParser: {} as never,
+      checkpoint: {} as never,
+      commitManager: {} as never,
+      retryExecutor: {} as never,
+      tokenTracker: {} as never,
+      progressWriter: {} as never,
+      platform: {} as never,
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      setPR: vi.fn(),
+      setPRFailed,
+      logger: {} as never,
+    };
+
+    ctx.setPRFailed();
+    expect(setPRFailed).toHaveBeenCalledOnce();
+  });
+
+  it('setPRFailed can be called multiple times', () => {
+    const setPRFailed = vi.fn();
+    const ctx: PhaseContext = {
+      issue: {} as never,
+      worktree: {} as never,
+      config: {} as never,
+      progressDir: '',
+      contextBuilder: {} as never,
+      launcher: {} as never,
+      resultParser: {} as never,
+      checkpoint: {} as never,
+      commitManager: {} as never,
+      retryExecutor: {} as never,
+      tokenTracker: {} as never,
+      progressWriter: {} as never,
+      platform: {} as never,
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      setPR: vi.fn(),
+      setPRFailed,
+      logger: {} as never,
+    };
+
+    ctx.setPRFailed();
+    ctx.setPRFailed();
+    expect(setPRFailed).toHaveBeenCalledTimes(2);
   });
 });
