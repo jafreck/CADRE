@@ -267,9 +267,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
       state:
         (result.status as string) === 'active'
           ? 'open'
-          : (result.status as string) === 'completed'
-            ? 'merged'
-            : 'closed',
+          : 'closed',
       merged: (result.status as string) === 'completed',
     };
   }
@@ -345,9 +343,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
       state:
         (pr.status as string) === 'active'
           ? 'open'
-          : (pr.status as string) === 'completed'
-            ? 'merged'
-            : 'closed',
+          : 'closed',
       merged: (pr.status as string) === 'completed',
     }));
   }
