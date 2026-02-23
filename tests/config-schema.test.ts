@@ -528,7 +528,6 @@ describe('CadreConfigSchema', () => {
       expect(result.success).toBe(false);
     });
   });
-});
 
   describe('cleanup field', () => {
     it('should parse successfully without a cleanup field (backward compat)', () => {
@@ -593,6 +592,7 @@ describe('CadreConfigSchema', () => {
       expect(typeof cleanup.onClosed).toBe('boolean');
     });
   });
+});
 
 describe('AgentConfigSchema', () => {
   it('should default backend to copilot', () => {
