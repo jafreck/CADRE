@@ -6,20 +6,6 @@ import type { IssueDetail } from '../src/platform/provider.js';
 import type { TokenRecord } from '../src/budget/token-tracker.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
-vi.mock('../src/budget/token-tracker.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/budget/token-tracker.js')>();
-  return {
-    ...actual,
-    TokenTracker: vi.fn().mockImplementation(() => ({
-      record: vi.fn(),
-      importRecords: vi.fn(),
-      exportRecords: vi.fn().mockReturnValue([]),
-      getRecords: vi.fn().mockReturnValue([]),
-      getTotal: vi.fn().mockReturnValue(0),
-      getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, records: [], recordCount: 0 }),
-    })),
-  };
-});
 vi.mock('../src/git/worktree.js', () => ({
   WorktreeManager: vi.fn(),
 }));
