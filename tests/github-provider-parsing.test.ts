@@ -400,7 +400,7 @@ describe('GitHubProvider – getPullRequest type guards', () => {
     expect(pr.state).toBe('open');
   });
 
-  it('should default state to "open" when state has an unexpected value', async () => {
+  it('should return state "merged" and merged true when API response has state: "merged"', async () => {
     vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
       number: 103,
       title: 'PR with weird state',

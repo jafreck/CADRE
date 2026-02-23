@@ -3,6 +3,16 @@ import type { CadreConfig } from '../src/config/schema.js';
 
 // ── Hoisted mock objects (accessible inside vi.mock factories) ─────────────
 
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  debug: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  child: vi.fn(),
+}));
+// child() returns the same logger instance so sub-loggers share the same mocks
+mockLogger.child.mockReturnValue(mockLogger);
+
 const mockProvider = vi.hoisted(() => ({
   name: 'github',
   connect: vi.fn().mockResolvedValue(undefined),
@@ -48,13 +58,7 @@ const mockCheckpointManager = vi.hoisted(() => ({
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 vi.mock('../src/logging/logger.js', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  })),
+  Logger: vi.fn().mockImplementation(() => mockLogger),
 }));
 
 vi.mock('../src/platform/factory.js', () => ({
@@ -367,6 +371,7 @@ describe('CadreRuntime.pruneWorktrees() — cleanup logic', () => {
 
       await expect(runtime.pruneWorktrees()).resolves.not.toThrow();
       expect(mockWorktreeManager.remove).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
 
     it('does not prune checkpoint for worktrees with no matching PR', async () => {
