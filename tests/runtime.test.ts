@@ -71,6 +71,10 @@ vi.mock('../src/core/checkpoint.js', () => ({
     load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0 }, lastCheckpoint: '', resumeCount: 0, projectName: 'test' }),
     setIssueStatus: vi.fn().mockResolvedValue(undefined),
   })),
+  CheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue({}),
+    resetFromPhase: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 vi.mock('../src/core/progress.js', () => ({
@@ -99,11 +103,14 @@ import { createNotificationManager } from '../src/notifications/manager.js';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { FleetProgressWriter } from '../src/core/progress.js';
+import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoint.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
 const MockCreatePlatformProvider = createPlatformProvider as ReturnType<typeof vi.fn>;
 const MockFleetProgressWriter = FleetProgressWriter as unknown as ReturnType<typeof vi.fn>;
+const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnType<typeof vi.fn>;
+const MockCheckpointManager = CheckpointManager as unknown as ReturnType<typeof vi.fn>;
 
 function makeConfig(issueIds = [1]): CadreConfig {
   return {
@@ -423,5 +430,124 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
     const interruptedCalls = dispatchSpy.mock.calls.filter(([e]) => e.type === 'fleet-interrupted');
     expect(interruptedCalls).toHaveLength(1);
+  });
+});
+
+describe('CadreRuntime — reset()', () => {
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let mockFleetLoad: ReturnType<typeof vi.fn>;
+  let mockSetIssueStatus: ReturnType<typeof vi.fn>;
+  let mockCheckpointLoad: ReturnType<typeof vi.fn>;
+  let mockResetFromPhase: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+
+    mockFleetLoad = vi.fn();
+    mockSetIssueStatus = vi.fn().mockResolvedValue(undefined);
+    mockCheckpointLoad = vi.fn().mockResolvedValue({});
+    mockResetFromPhase = vi.fn().mockResolvedValue(undefined);
+
+    MockCheckpointManager.mockImplementation(() => ({
+      load: mockCheckpointLoad,
+      resetFromPhase: mockResetFromPhase,
+    }));
+  });
+
+  afterEach(() => {
+    processOnSpy.mockRestore();
+  });
+
+  function setupFleetWithIssues(issues: Record<number, { worktreePath?: string; branchName?: string }>) {
+    mockFleetLoad.mockResolvedValue({
+      issues,
+      tokenUsage: { total: 0 },
+      lastCheckpoint: '',
+      resumeCount: 0,
+      projectName: 'test',
+    });
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: mockFleetLoad,
+      setIssueStatus: mockSetIssueStatus,
+    }));
+  }
+
+  it('calls resetFromPhase on the issue CheckpointManager when issueNumber and fromPhase are provided', async () => {
+    setupFleetWithIssues({ 42: { worktreePath: '/wt/42', branchName: 'branch-42' } });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset(42, 2);
+
+    expect(MockCheckpointManager).toHaveBeenCalledOnce();
+    expect(mockCheckpointLoad).toHaveBeenCalledWith('42');
+    expect(mockResetFromPhase).toHaveBeenCalledWith(2);
+  });
+
+  it('constructs CheckpointManager with progressDir derived from worktreePath', async () => {
+    setupFleetWithIssues({ 7: { worktreePath: '/projects/repo', branchName: 'br' } });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset(7, 3);
+
+    const ctorArgs = MockCheckpointManager.mock.calls[0];
+    expect(ctorArgs[0]).toBe('/projects/repo/.cadre/issues/7');
+  });
+
+  it('calls setIssueStatus with fromPhase when fromPhase is provided', async () => {
+    setupFleetWithIssues({ 42: { worktreePath: '/wt/42', branchName: 'branch-42' } });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset(42, 3);
+
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(
+      42,
+      'not-started',
+      '/wt/42',
+      'branch-42',
+      3,
+    );
+  });
+
+  it('calls setIssueStatus with 0 when fromPhase is not provided', async () => {
+    setupFleetWithIssues({ 42: { worktreePath: '/wt/42', branchName: 'branch-42' } });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset(42);
+
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(42, 'not-started', '/wt/42', 'branch-42', 0);
+  });
+
+  it('does not instantiate CheckpointManager when fromPhase is not provided', async () => {
+    setupFleetWithIssues({ 42: { worktreePath: '/wt/42', branchName: 'branch-42' } });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset(42);
+
+    expect(MockCheckpointManager).not.toHaveBeenCalled();
+  });
+
+  it('does not instantiate CheckpointManager when issue has no worktreePath', async () => {
+    setupFleetWithIssues({ 42: {} });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset(42, 2);
+
+    expect(MockCheckpointManager).not.toHaveBeenCalled();
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(42, 'not-started', '', '', 2);
+  });
+
+  it('resets all fleet issues to phase 0 when no issueNumber is provided', async () => {
+    setupFleetWithIssues({
+      10: { worktreePath: '/wt/10', branchName: 'br-10' },
+      20: { worktreePath: '/wt/20', branchName: 'br-20' },
+    });
+    const runtime = new CadreRuntime(makeConfig());
+
+    await runtime.reset();
+
+    expect(mockSetIssueStatus).toHaveBeenCalledTimes(2);
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(10, 'not-started', '', '', 0);
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(20, 'not-started', '', '', 0);
   });
 });
