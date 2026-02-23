@@ -380,6 +380,146 @@ describe('GitHubProvider – getPullRequest type guards', () => {
   });
 });
 
+describe('GitHubProvider – listPRReviewComments parsing', () => {
+  let provider: GitHubProvider;
+  let mockMCP: GitHubMCPClient;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockMCP = makeMockMCP();
+    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
+    (provider as any).mcpClient = mockMCP;
+    await provider.connect();
+  });
+
+  it('should return [] when the MCP response is an empty array', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([]);
+
+    const threads = await provider.listPRReviewComments(1);
+
+    expect(threads).toEqual([]);
+  });
+
+  it('should return [] when the MCP response is null or non-array', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce(null);
+
+    const threads = await provider.listPRReviewComments(1);
+
+    expect(threads).toEqual([]);
+  });
+
+  it('should parse a fully-populated review thread', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        id: 'thread-1',
+        isResolved: false,
+        isOutdated: false,
+        comments: [
+          {
+            id: 'comment-1',
+            author: { login: 'alice' },
+            body: 'Please fix this.',
+            createdAt: '2024-03-01T10:00:00Z',
+            path: 'src/foo.ts',
+            line: 42,
+          },
+        ],
+      },
+    ]);
+
+    const threads = await provider.listPRReviewComments(10);
+
+    expect(threads).toHaveLength(1);
+    expect(threads[0].id).toBe('thread-1');
+    expect(threads[0].prNumber).toBe(10);
+    expect(threads[0].isResolved).toBe(false);
+    expect(threads[0].isOutdated).toBe(false);
+    expect(threads[0].comments).toHaveLength(1);
+    expect(threads[0].comments[0].id).toBe('comment-1');
+    expect(threads[0].comments[0].author).toBe('alice');
+    expect(threads[0].comments[0].body).toBe('Please fix this.');
+    expect(threads[0].comments[0].createdAt).toBe('2024-03-01T10:00:00Z');
+    expect(threads[0].comments[0].path).toBe('src/foo.ts');
+    expect(threads[0].comments[0].line).toBe(42);
+  });
+
+  it('should map isResolved and isOutdated correctly', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { id: 'r', isResolved: true, isOutdated: true, comments: [] },
+    ]);
+
+    const threads = await provider.listPRReviewComments(5);
+
+    expect(threads[0].isResolved).toBe(true);
+    expect(threads[0].isOutdated).toBe(true);
+  });
+
+  it('should default isResolved and isOutdated to false when absent', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { id: 'r', comments: [] },
+    ]);
+
+    const threads = await provider.listPRReviewComments(5);
+
+    expect(threads[0].isResolved).toBe(false);
+    expect(threads[0].isOutdated).toBe(false);
+  });
+
+  it('should default comment author to "unknown" when absent', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        id: 'thread-2',
+        isResolved: false,
+        isOutdated: false,
+        comments: [{ id: 'c1', body: 'Hi', createdAt: '', path: 'a.ts' }],
+      },
+    ]);
+
+    const threads = await provider.listPRReviewComments(2);
+
+    expect(threads[0].comments[0].author).toBe('unknown');
+  });
+
+  it('should produce an empty comments array when thread has no comments', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { id: 'empty-thread', isResolved: false, isOutdated: false, comments: [] },
+    ]);
+
+    const threads = await provider.listPRReviewComments(3);
+
+    expect(threads[0].comments).toEqual([]);
+  });
+
+  it('should omit line from comment when it is not a number', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        id: 'thread-3',
+        isResolved: false,
+        isOutdated: false,
+        comments: [{ id: 'c2', author: { login: 'bob' }, body: 'test', createdAt: '', path: 'b.ts' }],
+      },
+    ]);
+
+    const threads = await provider.listPRReviewComments(4);
+
+    expect(threads[0].comments[0].line).toBeUndefined();
+  });
+
+  it('should parse multiple threads correctly', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      { id: 't1', isResolved: false, isOutdated: false, comments: [] },
+      { id: 't2', isResolved: true, isOutdated: false, comments: [] },
+    ]);
+
+    const threads = await provider.listPRReviewComments(7);
+
+    expect(threads).toHaveLength(2);
+    expect(threads[0].id).toBe('t1');
+    expect(threads[1].id).toBe('t2');
+    expect(threads[1].isResolved).toBe(true);
+  });
+});
+
 describe('GitHubProvider – listPullRequests type guards', () => {
   let provider: GitHubProvider;
   let mockMCP: GitHubMCPClient;
