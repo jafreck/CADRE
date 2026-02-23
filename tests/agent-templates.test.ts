@@ -122,8 +122,16 @@ describe('Agent Template Files', () => {
       expect(content).toMatch(/total\s*tokens/i);
     });
 
+    it('should show estimated cost in the Token Usage section', () => {
+      expect(content).toMatch(/estimatedCost|estimated\s*cost/i);
+    });
+
     it('should describe a per-phase or per-agent breakdown', () => {
       expect(content).toMatch(/byPhase|byAgent|by phase|by agent|breakdown/i);
+    });
+
+    it('should instruct omitting Token Usage section when tokenSummary is absent', () => {
+      expect(content).toMatch(/absent|omit|not.*present|only if/i);
     });
 
     it('should place Token Usage instructions after the standard sections', () => {
