@@ -3,11 +3,12 @@ import type { CadreConfig } from '../config/schema.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
-import { FleetCheckpointManager } from './checkpoint.js';
+import { FleetCheckpointManager, CheckpointManager } from './checkpoint.js';
+import { exists } from '../util/fs.js';
+import { renderFleetStatus, renderIssueDetail } from '../cli/status-renderer.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
-import { TokenTracker } from '../budget/token-tracker.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { killAllTrackedProcesses } from '../util/process.js';
@@ -148,6 +149,13 @@ export class CadreRuntime {
    * Show current progress status.
    */
   async status(issueNumber?: number): Promise<void> {
+    const fleetCheckpointPath = join(this.cadreDir, 'fleet-checkpoint.json');
+
+    if (!(await exists(fleetCheckpointPath))) {
+      console.log('No fleet checkpoint found.');
+      return;
+    }
+
     const checkpointManager = new FleetCheckpointManager(
       this.cadreDir,
       this.config.projectName,
@@ -156,22 +164,31 @@ export class CadreRuntime {
 
     const state = await checkpointManager.load();
 
-    console.log('\n=== CADRE Fleet Status ===\n');
-    console.log(`Project: ${state.projectName}`);
-    console.log(`Issues tracked: ${Object.keys(state.issues).length}`);
-    console.log(`Total tokens: ${state.tokenUsage.total.toLocaleString()}`);
-    console.log(`Last checkpoint: ${state.lastCheckpoint}`);
-    console.log(`Resume count: ${state.resumeCount}\n`);
-
-    for (const [num, issue] of Object.entries(state.issues)) {
-      if (issueNumber && Number(num) !== issueNumber) continue;
-      console.log(`  #${num}: ${issue.status} (phase ${issue.lastPhase})`);
-      if (issue.error) {
-        console.log(`    Error: ${issue.error}`);
+    if (issueNumber !== undefined) {
+      const issueStatus = state.issues[issueNumber];
+      if (!issueStatus) {
+        console.log(`Issue #${issueNumber} not found in fleet checkpoint.`);
+        return;
       }
-    }
 
-    console.log('');
+      const issueProgressDir = join(this.cadreDir, 'issues', String(issueNumber));
+      const issueCheckpointPath = join(issueProgressDir, 'checkpoint.json');
+
+      if (!(await exists(issueCheckpointPath))) {
+        console.log(`No per-issue checkpoint found for issue #${issueNumber}`);
+        return;
+      }
+
+      const issueCpManager = new CheckpointManager(issueProgressDir, this.logger);
+      try {
+        const issueCheckpoint = await issueCpManager.load(String(issueNumber));
+        console.log(renderIssueDetail(issueNumber, issueStatus, issueCheckpoint));
+      } catch {
+        console.log(`No per-issue checkpoint found for issue #${issueNumber}`);
+      }
+    } else {
+      console.log(renderFleetStatus(state, this.config.copilot.model, this.config.copilot));
+    }
   }
 
   /**
@@ -191,13 +208,13 @@ export class CadreRuntime {
         issueNumber,
         data: { fromPhase },
       });
-      await checkpointManager.setIssueStatus(issueNumber, 'not-started', '', '', 0);
+      await checkpointManager.setIssueStatus(issueNumber, 'not-started', '', '', 0, state.issues[issueNumber]?.issueTitle ?? '');
       console.log(`Reset issue #${issueNumber}`);
     } else {
       this.logger.info('Resetting entire fleet');
       // Clear all issue statuses
       for (const num of Object.keys(state.issues)) {
-        await checkpointManager.setIssueStatus(Number(num), 'not-started', '', '', 0);
+        await checkpointManager.setIssueStatus(Number(num), 'not-started', '', '', 0, state.issues[Number(num)]?.issueTitle ?? '');
       }
       console.log('Reset all issues');
     }

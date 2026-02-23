@@ -4,6 +4,14 @@ import { Logger } from '../logging/logger.js';
 import type { PhaseResult } from '../agents/types.js';
 import type { FleetCheckpointState } from './checkpoint.js';
 
+export const phaseNames = [
+  'Analysis & Scouting',
+  'Planning',
+  'Implementation',
+  'Integration Verification',
+  'PR Composition',
+] as const;
+
 export interface PullRequestRef {
   issueNumber: number;
   prNumber: number;
@@ -137,14 +145,6 @@ export class IssueProgressWriter {
     md += `## Phases\n\n`;
     md += `| # | Phase | Status | Duration |\n`;
     md += `|---|-------|--------|----------|`;
-
-    const phaseNames = [
-      'Analysis & Scouting',
-      'Planning',
-      'Implementation',
-      'Integration Verification',
-      'PR Composition',
-    ];
 
     for (let i = 0; i < 5; i++) {
       const phase = phases.find((p) => p.phase === i + 1);

@@ -290,42 +290,42 @@ describe('FleetCheckpointManager', () => {
   it('isIssueCompleted should return true for completed status', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
-    await manager.setIssueStatus(1, 'completed', '/path', 'branch', 5);
+    await manager.setIssueStatus(1, 'completed', '/path', 'branch', 5, 'Fix bug');
     expect(manager.isIssueCompleted(1)).toBe(true);
   });
 
   it('isIssueCompleted should return true for budget-exceeded status', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
-    await manager.setIssueStatus(2, 'budget-exceeded', '/path', 'branch', 3);
+    await manager.setIssueStatus(2, 'budget-exceeded', '/path', 'branch', 3, 'Add feature');
     expect(manager.isIssueCompleted(2)).toBe(true);
   });
 
   it('isIssueCompleted should return false for in-progress status', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
-    await manager.setIssueStatus(3, 'in-progress', '/path', 'branch', 1);
+    await manager.setIssueStatus(3, 'in-progress', '/path', 'branch', 1, 'Refactor module');
     expect(manager.isIssueCompleted(3)).toBe(false);
   });
 
   it('isIssueCompleted should return false for failed status', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
-    await manager.setIssueStatus(4, 'failed', '/path', 'branch', 2, 'Some error');
+    await manager.setIssueStatus(4, 'failed', '/path', 'branch', 2, 'Update docs', 'Some error');
     expect(manager.isIssueCompleted(4)).toBe(false);
   });
 
   it('isIssueCompleted should return false for blocked status', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
-    await manager.setIssueStatus(5, 'blocked', '/path', 'branch', 2);
+    await manager.setIssueStatus(5, 'blocked', '/path', 'branch', 2, 'Improve performance');
     expect(manager.isIssueCompleted(5)).toBe(false);
   });
 
   it('isIssueCompleted should return false for not-started status', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
-    await manager.setIssueStatus(6, 'not-started', '/path', 'branch', 0);
+    await manager.setIssueStatus(6, 'not-started', '/path', 'branch', 0, 'New feature');
     expect(manager.isIssueCompleted(6)).toBe(false);
   });
 
@@ -338,6 +338,7 @@ describe('FleetCheckpointManager', () => {
   it('FleetIssueStatus should accept budget-exceeded as a valid status', () => {
     const status: FleetIssueStatus = {
       status: 'budget-exceeded',
+      issueTitle: 'Some feature',
       worktreePath: '/path',
       branchName: 'branch',
       lastPhase: 2,
@@ -348,11 +349,123 @@ describe('FleetCheckpointManager', () => {
   it('should persist and reload fleet checkpoint', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
-    await manager.setIssueStatus(7, 'budget-exceeded', '/worktree/7', 'issue-7', 3);
+    await manager.setIssueStatus(7, 'budget-exceeded', '/worktree/7', 'issue-7', 3, 'My Issue Title');
 
     const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager2.load();
     expect(manager2.getIssueStatus(7)?.status).toBe('budget-exceeded');
     expect(manager2.isIssueCompleted(7)).toBe(true);
+  });
+
+  it('should store issueTitle in FleetIssueStatus', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(10, 'in-progress', '/worktree/10', 'issue-10', 1, 'Fix authentication bug');
+
+    const status = manager.getIssueStatus(10);
+    expect(status?.issueTitle).toBe('Fix authentication bug');
+  });
+
+  it('should persist issueTitle across reload', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(11, 'completed', '/worktree/11', 'issue-11', 5, 'Add dark mode support');
+
+    const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager2.load();
+    expect(manager2.getIssueStatus(11)?.issueTitle).toBe('Add dark mode support');
+  });
+
+  it('should update issueTitle when setIssueStatus is called again', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(12, 'in-progress', '/worktree/12', 'issue-12', 1, 'Original title');
+    await manager.setIssueStatus(12, 'completed', '/worktree/12', 'issue-12', 5, 'Updated title');
+
+    expect(manager.getIssueStatus(12)?.issueTitle).toBe('Updated title');
+  });
+
+  it('should store issueTitle alongside error when status is failed', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(13, 'failed', '/worktree/13', 'issue-13', 2, 'Some issue', 'Build failed');
+
+    const status = manager.getIssueStatus(13);
+    expect(status?.issueTitle).toBe('Some issue');
+    expect(status?.error).toBe('Build failed');
+  });
+
+  it('FleetIssueStatus type requires issueTitle field', () => {
+    const status: FleetIssueStatus = {
+      status: 'completed',
+      issueTitle: 'Implement new API endpoint',
+      worktreePath: '/worktree/14',
+      branchName: 'issue-14',
+      lastPhase: 5,
+    };
+    expect(status.issueTitle).toBe('Implement new API endpoint');
+  });
+
+  it('should store empty string issueTitle when provided', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(15, 'in-progress', '/worktree/15', 'issue-15', 0, '');
+
+    expect(manager.getIssueStatus(15)?.issueTitle).toBe('');
+  });
+
+  it('should set updatedAt to an ISO timestamp when setIssueStatus is called', async () => {
+    const before = new Date().toISOString();
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(20, 'in-progress', '/worktree/20', 'issue-20', 1, 'Some issue');
+    const after = new Date().toISOString();
+
+    const status = manager.getIssueStatus(20);
+    expect(status?.updatedAt).toBeDefined();
+    expect(status!.updatedAt! >= before).toBe(true);
+    expect(status!.updatedAt! <= after).toBe(true);
+  });
+
+  it('should update updatedAt on every setIssueStatus call', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(21, 'in-progress', '/worktree/21', 'issue-21', 1, 'Issue');
+    const first = manager.getIssueStatus(21)?.updatedAt;
+
+    await new Promise((r) => setTimeout(r, 5));
+    await manager.setIssueStatus(21, 'completed', '/worktree/21', 'issue-21', 5, 'Issue');
+    const second = manager.getIssueStatus(21)?.updatedAt;
+
+    expect(second).toBeDefined();
+    expect(second! >= first!).toBe(true);
+  });
+
+  it('should persist updatedAt across reload', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(22, 'completed', '/worktree/22', 'issue-22', 5, 'Persist test');
+    const original = manager.getIssueStatus(22)?.updatedAt;
+
+    const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager2.load();
+    expect(manager2.getIssueStatus(22)?.updatedAt).toBe(original);
+  });
+
+  it('FleetIssueStatus should accept updatedAt as an optional field', () => {
+    const withoutUpdatedAt: FleetIssueStatus = {
+      status: 'not-started',
+      issueTitle: 'No timestamp',
+      worktreePath: '/path',
+      branchName: 'branch',
+      lastPhase: 0,
+    };
+    expect(withoutUpdatedAt.updatedAt).toBeUndefined();
+
+    const withUpdatedAt: FleetIssueStatus = {
+      ...withoutUpdatedAt,
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    expect(withUpdatedAt.updatedAt).toBe('2024-01-01T00:00:00.000Z');
   });
 });

@@ -184,6 +184,7 @@ export class FleetOrchestrator {
         '',
         '',
         0,
+        issue.title,
         'Fleet budget exceeded',
       );
       return {
@@ -217,6 +218,7 @@ export class FleetOrchestrator {
         worktree.path,
         worktree.branch,
         0,
+        issue.title,
       );
 
       // 3. Set up per-issue progress directory
@@ -263,6 +265,7 @@ export class FleetOrchestrator {
         worktree.path,
         worktree.branch,
         result.phases.length,
+        issue.title,
         result.error,
       );
 
@@ -340,6 +343,7 @@ export class FleetOrchestrator {
         '',
         '',
         0,
+        issue.title,
         error,
       );
 

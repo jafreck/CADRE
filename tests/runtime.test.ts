@@ -76,15 +76,50 @@ vi.mock('../src/core/agent-launcher.js', () => ({
 
 vi.mock('../src/core/checkpoint.js', () => ({
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0 }, lastCheckpoint: '', resumeCount: 0, projectName: 'test' }),
+    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byIssue: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
     setIssueStatus: vi.fn().mockResolvedValue(undefined),
   })),
+  CheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue({
+      issueNumber: 1,
+      currentPhase: 1,
+      completedPhases: [],
+      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+      gateResults: {},
+      currentTask: null,
+      completedTasks: [],
+      failedTasks: [],
+      blockedTasks: [],
+      phaseOutputs: {},
+      version: 1,
+      worktreePath: '',
+      branchName: '',
+      baseCommit: '',
+      startedAt: '',
+      lastCheckpoint: '',
+      resumeCount: 0,
+    }),
+  })),
+}));
+
+vi.mock('../src/util/fs.js', () => ({
+  exists: vi.fn().mockResolvedValue(false),
+  ensureDir: vi.fn().mockResolvedValue(undefined),
+  readJSON: vi.fn(),
+  atomicWriteJSON: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../src/core/progress.js', () => ({
   FleetProgressWriter: vi.fn().mockImplementation(() => ({
     appendEvent: vi.fn().mockResolvedValue(undefined),
   })),
+  phaseNames: [
+    'Analysis & Scouting',
+    'Planning',
+    'Implementation',
+    'Integration Verification',
+    'PR Composition',
+  ],
 }));
 
 vi.mock('../src/budget/cost-estimator.js', () => ({
@@ -107,11 +142,16 @@ import { createNotificationManager } from '../src/notifications/manager.js';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { FleetProgressWriter } from '../src/core/progress.js';
+import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoint.js';
+import { exists } from '../src/util/fs.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
 const MockCreatePlatformProvider = createPlatformProvider as ReturnType<typeof vi.fn>;
 const MockFleetProgressWriter = FleetProgressWriter as unknown as ReturnType<typeof vi.fn>;
+const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnType<typeof vi.fn>;
+const MockCheckpointManager = CheckpointManager as unknown as ReturnType<typeof vi.fn>;
+const mockExists = exists as unknown as ReturnType<typeof vi.fn>;
 
 function makeConfig(issueIds = [1]): CadreConfig {
   return {
@@ -508,5 +548,142 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
     const interruptedCalls = dispatchSpy.mock.calls.filter(([e]) => e.type === 'fleet-interrupted');
     expect(interruptedCalls).toHaveLength(1);
+  });
+});
+
+describe('CadreRuntime — status() rendering', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    mockExists.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    processOnSpy.mockRestore();
+  });
+
+  it('prints "No fleet checkpoint found." when no checkpoint file exists', async () => {
+    mockExists.mockResolvedValue(false);
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status();
+    expect(consoleSpy).toHaveBeenCalledWith('No fleet checkpoint found.');
+  });
+
+  it('renders summary header with project name and total tokens', async () => {
+    mockExists.mockResolvedValue(true);
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        projectName: 'my-awesome-project',
+        tokenUsage: { total: 0, byIssue: {} },
+        issues: {},
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+        version: 1,
+        startedAt: new Date().toISOString(),
+      }),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status();
+
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('my-awesome-project');
+    expect(output).toContain('Total Tokens: 0');
+  });
+
+  it('renders issue table with issue title and human-readable phase name', async () => {
+    mockExists.mockResolvedValue(true);
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        projectName: 'test-project',
+        tokenUsage: { total: 0, byIssue: {} },
+        issues: {
+          42: {
+            status: 'in-progress',
+            issueTitle: 'Fix the widget bug',
+            worktreePath: '/tmp/wt',
+            branchName: 'cadre/issue-42',
+            lastPhase: 2,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+        version: 1,
+        startedAt: new Date().toISOString(),
+      }),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status();
+
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('Fix the widget bug');
+    expect(output).toContain('Planning'); // human-readable name for lastPhase=2 (phaseNames[1])
+  });
+
+  it('renders per-issue breakdown when an issue number is provided', async () => {
+    mockExists.mockImplementation((path: string) =>
+      Promise.resolve(path.includes('checkpoint')),
+    );
+
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        projectName: 'test-project',
+        tokenUsage: { total: 0, byIssue: {} },
+        issues: {
+          42: {
+            status: 'in-progress',
+            issueTitle: 'Fix the widget bug',
+            worktreePath: '/tmp/wt',
+            branchName: 'cadre/issue-42',
+            lastPhase: 3,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+        version: 1,
+        startedAt: new Date().toISOString(),
+      }),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    MockCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        issueNumber: 42,
+        currentPhase: 3,
+        completedPhases: [1, 2],
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        gateResults: {},
+        currentTask: null,
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        version: 1,
+        worktreePath: '/tmp/wt',
+        branchName: 'cadre/issue-42',
+        baseCommit: 'abc123',
+        startedAt: new Date().toISOString(),
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+      }),
+    }));
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(42);
+
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('Issue #42');
+    expect(output).toContain('Fix the widget bug');
+    expect(output).toContain('Implementation'); // phaseNames[2] for phase 3
   });
 });

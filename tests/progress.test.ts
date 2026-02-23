@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { FleetProgressWriter, IssueProgressWriter } from '../src/core/progress.js';
+import { FleetProgressWriter, IssueProgressWriter, phaseNames } from '../src/core/progress.js';
 import type { IssueProgressInfo } from '../src/core/progress.js';
 import { Logger } from '../src/logging/logger.js';
 import type { PhaseResult } from '../src/agents/types.js';
@@ -166,6 +166,37 @@ describe('FleetProgressWriter', () => {
     const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
     expect(content).toContain('Issue #1 started');
     expect(content).toContain('Event Log');
+  });
+});
+
+describe('phaseNames', () => {
+  it('should be exported as a const array of 5 strings', () => {
+    expect(Array.isArray(phaseNames)).toBe(true);
+    expect(phaseNames).toHaveLength(5);
+  });
+
+  it('should contain the canonical phase names in order', () => {
+    expect(phaseNames[0]).toBe('Analysis & Scouting');
+    expect(phaseNames[1]).toBe('Planning');
+    expect(phaseNames[2]).toBe('Implementation');
+    expect(phaseNames[3]).toBe('Integration Verification');
+    expect(phaseNames[4]).toBe('PR Composition');
+  });
+
+  it('should render all phase names in IssueProgressWriter output', async () => {
+    const logger = makeMockLogger();
+    const tempDir = join(tmpdir(), `cadre-phase-names-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const writer = new IssueProgressWriter(tempDir, 1, 'Test', logger);
+      await writer.write([], 1, [], 0);
+      const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+      for (const name of phaseNames) {
+        expect(content).toContain(name);
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
