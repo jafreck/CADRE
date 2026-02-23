@@ -79,6 +79,7 @@ describe('GitHubAPI', () => {
         repo: 'repo',
         state: 'open',
         labels: ['bug'],
+        perPage: 100,
       });
     });
 
@@ -92,6 +93,136 @@ describe('GitHubAPI', () => {
       expect(mockMCP.callTool).toHaveBeenCalledWith('search_issues', expect.objectContaining({
         query: expect.stringContaining('milestone:"v1.0"'),
       }));
+    });
+
+    // Pagination tests
+
+    it('should make only one MCP call when pageInfo.hasNextPage is false', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        issues: [{ number: 1, title: 'Issue 1' }, { number: 2, title: 'Issue 2' }],
+        pageInfo: { hasNextPage: false, endCursor: 'cursor1' },
+      });
+
+      const issues = await api.listIssues({});
+      expect(issues).toHaveLength(2);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should fetch multiple pages and concatenate results', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({
+          issues: [{ number: 1 }, { number: 2 }],
+          pageInfo: { hasNextPage: true, endCursor: 'cursor-page-1' },
+        })
+        .mockResolvedValueOnce({
+          issues: [{ number: 3 }, { number: 4 }],
+          pageInfo: { hasNextPage: false, endCursor: 'cursor-page-2' },
+        });
+
+      const issues = await api.listIssues({});
+      expect(issues).toHaveLength(4);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(2);
+    });
+
+    it('should pass endCursor as after on subsequent pages', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({
+          issues: [{ number: 1 }],
+          pageInfo: { hasNextPage: true, endCursor: 'cursor-abc' },
+        })
+        .mockResolvedValueOnce({
+          issues: [{ number: 2 }],
+          pageInfo: { hasNextPage: false },
+        });
+
+      await api.listIssues({});
+
+      expect(mockMCP.callTool).toHaveBeenNthCalledWith(2, 'list_issues', expect.objectContaining({
+        after: 'cursor-abc',
+      }));
+    });
+
+    it('should set perPage to limit when limit is less than 100', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        issues: [{ number: 1 }, { number: 2 }, { number: 3 }],
+        pageInfo: { hasNextPage: false },
+      });
+
+      await api.listIssues({ limit: 30 });
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('list_issues', expect.objectContaining({
+        perPage: 30,
+      }));
+    });
+
+    it('should not exceed limit items in returned array', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        issues: [{ number: 1 }, { number: 2 }, { number: 3 }, { number: 4 }, { number: 5 }],
+        pageInfo: { hasNextPage: false },
+      });
+
+      const issues = await api.listIssues({ limit: 3 });
+      expect(issues).toHaveLength(3);
+    });
+
+    it('should stop fetching pages when accumulated length reaches limit exactly on a page boundary', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+        issues: [{ number: 1 }, { number: 2 }],
+        pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+      });
+
+      const issues = await api.listIssues({ limit: 2 });
+      expect(issues).toHaveLength(2);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reduce perPage on last page when remaining is less than 100', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({
+          issues: Array.from({ length: 100 }, (_, i) => ({ number: i + 1 })),
+          pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+        })
+        .mockResolvedValueOnce({
+          issues: Array.from({ length: 50 }, (_, i) => ({ number: i + 101 })),
+          pageInfo: { hasNextPage: false },
+        });
+
+      await api.listIssues({ limit: 150 });
+
+      expect(mockMCP.callTool).toHaveBeenNthCalledWith(2, 'list_issues', expect.objectContaining({
+        perPage: 50,
+      }));
+    });
+
+    it('should fetch all pages when no limit is specified', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({
+          issues: [{ number: 1 }],
+          pageInfo: { hasNextPage: true, endCursor: 'c1' },
+        })
+        .mockResolvedValueOnce({
+          issues: [{ number: 2 }],
+          pageInfo: { hasNextPage: true, endCursor: 'c2' },
+        })
+        .mockResolvedValueOnce({
+          issues: [{ number: 3 }],
+          pageInfo: { hasNextPage: false },
+        });
+
+      const issues = await api.listIssues({});
+      expect(issues).toHaveLength(3);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle array response format (no envelope) without paginating', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+        { number: 1 },
+        { number: 2 },
+      ]);
+
+      const issues = await api.listIssues({});
+      expect(issues).toHaveLength(2);
+      expect(mockMCP.callTool).toHaveBeenCalledTimes(1);
     });
   });
 

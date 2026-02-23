@@ -73,32 +73,58 @@ export class GitHubAPI {
       return this.searchIssuesWithFilters(filters);
     }
 
-    const args: Record<string, unknown> = {
-      owner: this.owner,
-      repo: this.repo,
-    };
+    const limit = filters.limit ?? Infinity;
+    const accumulated: Record<string, unknown>[] = [];
+    let after: string | undefined;
 
-    if (filters.state) {
-      args.state = filters.state;
-    }
-    if (filters.labels && filters.labels.length > 0) {
-      args.labels = filters.labels;
-    }
-    if (filters.limit) {
-      args.perPage = Math.min(filters.limit, 100);
+    while (accumulated.length < limit) {
+      const remaining = limit - accumulated.length;
+      const perPage = Math.min(remaining, 100);
+
+      const args: Record<string, unknown> = {
+        owner: this.owner,
+        repo: this.repo,
+        perPage,
+      };
+
+      if (filters.state) {
+        args.state = filters.state;
+      }
+      if (filters.labels && filters.labels.length > 0) {
+        args.labels = filters.labels;
+      }
+      if (after) {
+        args.after = after;
+      }
+
+      // The list_issues MCP tool returns a paginated envelope: { issues, pageInfo, totalCount }
+      const result = await this.mcp.callTool<
+        | Record<string, unknown>[]
+        | {
+            issues: Record<string, unknown>[];
+            pageInfo?: { hasNextPage: boolean; endCursor?: string };
+          }
+      >('list_issues', args);
+
+      let issues: Record<string, unknown>[];
+      let hasNextPage = false;
+
+      if (result && !Array.isArray(result) && 'issues' in result) {
+        issues = result.issues;
+        hasNextPage = result.pageInfo?.hasNextPage ?? false;
+        after = result.pageInfo?.endCursor;
+      } else {
+        issues = result as Record<string, unknown>[];
+      }
+
+      accumulated.push(...issues);
+
+      if (!hasNextPage || accumulated.length >= limit) {
+        break;
+      }
     }
 
-    // The list_issues MCP tool returns a paginated envelope: { issues, pageInfo, totalCount }
-    const result = await this.mcp.callTool<
-      Record<string, unknown>[] | { issues: Record<string, unknown>[] }
-    >('list_issues', args);
-
-    // Unwrap paginated envelope if present
-    if (result && !Array.isArray(result) && 'issues' in result) {
-      return (result as { issues: Record<string, unknown>[] }).issues;
-    }
-
-    return result as Record<string, unknown>[];
+    return filters.limit !== undefined ? accumulated.slice(0, filters.limit) : accumulated;
   }
 
   /**
