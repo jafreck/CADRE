@@ -70,6 +70,7 @@ export class IssueOrchestrator {
   private readonly phases: PhaseResult[] = [];
   private budgetExceeded = false;
   private createdPR: PullRequestInfo | undefined;
+  private costReport: CostReport | undefined;
 
   constructor(
     private readonly config: CadreConfig,
@@ -797,6 +798,13 @@ export class IssueOrchestrator {
     const diff = await this.commitManager.getDiff(this.worktree.baseCommit);
     await writeFile(diffPath, diff, 'utf-8');
 
+    // Compute cost report for use in PR body and to share with writeCostReport()
+    try {
+      this.costReport = this.buildCostReportData();
+    } catch {
+      // Non-critical: PR body will omit Token Usage section gracefully
+    }
+
     // Launch pr-composer
     const composerContextPath = await this.contextBuilder.buildForPRComposer(
       this.issue.number,
@@ -807,7 +815,7 @@ export class IssueOrchestrator {
       integrationReportPath,
       diffPath,
       this.progressDir,
-      this.tokenTracker.getSummary(),
+      this.costReport ?? this.tokenTracker.getSummary(),
     );
 
     const composerResult = await this.launchWithRetry('pr-composer', {
