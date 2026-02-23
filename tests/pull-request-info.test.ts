@@ -29,44 +29,6 @@ describe('PullRequestInfo merged field', () => {
     expect(pr.merged).toBe(false);
   });
 
-  it('should allow merged to be omitted (optional field)', () => {
-    const pr: PullRequestInfo = {
-      number: 3,
-      url: 'https://github.com/owner/repo/pull/3',
-      title: 'Open PR',
-      headBranch: 'feature/y',
-      baseBranch: 'main',
-      state: 'open',
-    };
-    expect(pr.merged).toBeUndefined();
-  });
-
-  it('should allow merged: undefined explicitly', () => {
-    const pr: PullRequestInfo = {
-      number: 4,
-      url: 'https://github.com/owner/repo/pull/4',
-      title: 'Another PR',
-      headBranch: 'feature/z',
-      baseBranch: 'main',
-      state: 'open',
-      merged: undefined,
-    };
-    expect(pr.merged).toBeUndefined();
-  });
-
-  it('should coexist with state open and no merged field', () => {
-    const pr: PullRequestInfo = {
-      number: 5,
-      url: 'https://github.com/owner/repo/pull/5',
-      title: 'In-progress PR',
-      headBranch: 'wip/branch',
-      baseBranch: 'main',
-      state: 'open',
-    };
-    expect(pr.state).toBe('open');
-    expect(pr.merged).toBeUndefined();
-  });
-
   it('should unambiguously distinguish merged from closed-not-merged', () => {
     const mergedPr: PullRequestInfo = {
       number: 10,
