@@ -5,6 +5,30 @@ import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
+vi.mock('../src/core/review-response-orchestrator.js', () => ({
+  ReviewResponseOrchestrator: vi.fn().mockImplementation(() => ({
+    run: vi.fn().mockResolvedValue({
+      processed: 1,
+      skipped: 0,
+      succeeded: 1,
+      failed: 0,
+      issues: [
+        {
+          issueNumber: 1,
+          skipped: false,
+          result: {
+            issueNumber: 1,
+            issueTitle: 'Test issue',
+            success: true,
+            phases: [],
+            totalDuration: 100,
+            tokenUsage: 500,
+          },
+        },
+      ],
+    }),
+  })),
+}));
 vi.mock('../src/git/worktree.js', () => ({
   WorktreeManager: vi.fn(),
 }));

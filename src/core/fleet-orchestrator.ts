@@ -130,6 +130,46 @@ export class FleetOrchestrator {
   }
 
   /**
+   * Execute review-response pipelines (phases 3–5) for issues with open PRs
+   * that have unresolved review threads.
+   */
+  async runReviewResponse(issueNumbers?: number[]): Promise<FleetResult> {
+    const startTime = Date.now();
+    const orchestrator = new ReviewResponseOrchestrator(
+      this.config,
+      this.worktreeManager,
+      this.launcher,
+      this.platform,
+      this.logger,
+      this.notifications,
+    );
+
+    const rrResult = await orchestrator.run(issueNumbers);
+
+    const issueResults: IssueResult[] = rrResult.issues
+      .filter((o) => !o.skipped && o.result != null)
+      .map((o) => o.result!);
+
+    const prsCreated = issueResults.filter((r) => r.pr != null).map((r) => r.pr!);
+
+    const failedIssues = rrResult.issues
+      .filter((o) => !o.skipped && (o.result == null || !o.result.success))
+      .map((o) => ({
+        issueNumber: o.issueNumber,
+        error: o.result?.error ?? 'Review response pipeline failed',
+      }));
+
+    return {
+      success: failedIssues.length === 0,
+      issues: issueResults,
+      prsCreated,
+      failedIssues,
+      totalDuration: Date.now() - startTime,
+      tokenUsage: this.tokenTracker.getSummary(),
+    };
+  }
+
+  /**
    * Process a single issue through its full pipeline.
    */
   private async processIssue(issue: IssueDetail): Promise<IssueResult> {
