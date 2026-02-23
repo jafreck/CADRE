@@ -4,6 +4,7 @@ import { confirm } from '@inquirer/prompts';
 import { CadreConfigSchema } from '../config/schema.js';
 import { collectAnswers } from './prompts.js';
 import { atomicWriteJSON, atomicWriteFile, exists, ensureDir, readFileOrNull } from '../util/fs.js';
+import { runScaffold } from '../cli/agents.js';
 
 export async function runInit(opts: { yes: boolean; repoPath?: string }): Promise<void> {
   const repoPath = opts.repoPath ?? process.cwd();
@@ -90,9 +91,26 @@ export async function runInit(opts: { yes: boolean; repoPath?: string }): Promis
   }
 
   // 8. Create .github/agents/ directory
-  await ensureDir(join(repoPath, '.github', 'agents'));
+  const agentDir = join(repoPath, '.github', 'agents');
+  await ensureDir(agentDir);
 
-  // 9. Print success summary
+  // 9. Scaffold agent templates (prompt unless --yes)
+  let scaffolded = false;
+  if (opts.yes) {
+    await runScaffold({ agentDir });
+    scaffolded = true;
+  } else {
+    const doScaffold = await confirm({
+      message: 'Scaffold built-in agent templates now? (recommended)',
+      default: true,
+    });
+    if (doScaffold) {
+      await runScaffold({ agentDir });
+      scaffolded = true;
+    }
+  }
+
+  // 10. Print success summary
   console.log('');
   console.log(chalk.green('✓ cadre initialized successfully!'));
   console.log('');
@@ -106,5 +124,10 @@ export async function runInit(opts: { yes: boolean; repoPath?: string }): Promis
     console.log(`  ${chalk.dim('.gitignore')} updated (added .cadre/)`);
   }
   console.log(`  ${chalk.dim('.github/agents/')} created`);
+  if (scaffolded) {
+    console.log(`  ${chalk.dim('.github/agents/')} scaffolded with built-in agent templates`);
+  } else {
+    console.log(`  ${chalk.dim('Tip:')} run ${chalk.cyan('cadre agents scaffold')} to add built-in agent templates`);
+  }
   console.log('');
 }
