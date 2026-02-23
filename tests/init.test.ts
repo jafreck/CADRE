@@ -440,61 +440,6 @@ describe('runInit', () => {
     });
   });
 
-  describe('scaffold agent templates', () => {
-    it('should call runScaffold automatically when --yes is true', async () => {
-      setupHappyPath();
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockRunScaffold).toHaveBeenCalledWith({ agentDir: `${REPO_PATH}/.github/agents` });
-    });
-
-    it('should not show scaffold confirm prompt when --yes is true', async () => {
-      setupHappyPath();
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockConfirm).not.toHaveBeenCalled();
-    });
-
-    it('should show scaffold confirm prompt with recommended message when --yes is false', async () => {
-      setupHappyPath();
-      mockConfirm.mockResolvedValue(true);
-
-      await runInit({ yes: false, repoPath: REPO_PATH });
-
-      expect(mockConfirm).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('Scaffold built-in agent templates') }),
-      );
-    });
-
-    it('should call runScaffold with correct agentDir when user accepts scaffold prompt', async () => {
-      setupHappyPath();
-      mockConfirm.mockResolvedValue(true);
-
-      await runInit({ yes: false, repoPath: REPO_PATH });
-
-      expect(mockRunScaffold).toHaveBeenCalledWith({ agentDir: `${REPO_PATH}/.github/agents` });
-    });
-
-    it('should not call runScaffold when user declines scaffold prompt', async () => {
-      setupHappyPath();
-      mockConfirm.mockResolvedValue(false);
-
-      await runInit({ yes: false, repoPath: REPO_PATH });
-
-      expect(mockRunScaffold).not.toHaveBeenCalled();
-    });
-
-    it('should complete init normally when user declines scaffold prompt', async () => {
-      setupHappyPath();
-      mockConfirm.mockResolvedValue(false);
-
-      await expect(runInit({ yes: false, repoPath: REPO_PATH })).resolves.toBeUndefined();
-      expect(mockAtomicWriteJSON).toHaveBeenCalled();
-    });
-  });
-
   describe('success output', () => {
     it('should print success message after initialization', async () => {
       setupHappyPath();
@@ -512,25 +457,6 @@ describe('runInit', () => {
       const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
       expect(logCalls).toContain('my-project');
       expect(logCalls).toContain('owner/repo');
-    });
-
-    it('should include scaffolded agent templates note when scaffolded', async () => {
-      setupHappyPath();
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
-      expect(logCalls).toContain('scaffolded');
-    });
-
-    it('should include cadre agents scaffold reminder hint when not scaffolded', async () => {
-      setupHappyPath();
-      mockConfirm.mockResolvedValue(false);
-
-      await runInit({ yes: false, repoPath: REPO_PATH });
-
-      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
-      expect(logCalls).toContain('cadre agents scaffold');
     });
   });
 });
