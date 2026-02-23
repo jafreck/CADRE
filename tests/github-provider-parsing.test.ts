@@ -197,6 +197,23 @@ describe('GitHubProvider – createPullRequest type guards', () => {
     expect(pr.baseBranch).toBe('main');
   });
 
+  it('should always set merged to false for a newly created PR', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 60,
+      html_url: 'https://github.com/owner/repo/pull/60',
+      title: 'New PR',
+    });
+
+    const pr = await provider.createPullRequest({
+      title: 'New PR',
+      body: '',
+      head: 'feature',
+      base: 'main',
+    });
+
+    expect(pr.merged).toBe(false);
+  });
+
   it('should fall back to params.title when response title is absent', async () => {
     vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
       number: 56,
@@ -276,6 +293,47 @@ describe('GitHubProvider – getPullRequest type guards', () => {
     expect(pr.baseBranch).toBe('main');
   });
 
+  it('should set merged to true when API response has merged: true', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 91,
+      title: 'Merged PR',
+      head: { ref: 'feature' },
+      base: { ref: 'main' },
+      merged: true,
+    });
+
+    const pr = await provider.getPullRequest(91);
+
+    expect(pr.merged).toBe(true);
+  });
+
+  it('should set merged to true when API response has merged_at set', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 92,
+      title: 'Merged via merged_at',
+      head: { ref: 'feature' },
+      base: { ref: 'main' },
+      merged_at: '2024-06-01T12:00:00Z',
+    });
+
+    const pr = await provider.getPullRequest(92);
+
+    expect(pr.merged).toBe(true);
+  });
+
+  it('should set merged to false when neither merged nor merged_at are present', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 93,
+      title: 'Open PR',
+      head: { ref: 'feature' },
+      base: { ref: 'main' },
+    });
+
+    const pr = await provider.getPullRequest(93);
+
+    expect(pr.merged).toBe(false);
+  });
+
   it('should default branch refs to empty string when head/base are absent', async () => {
     vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
       number: 89,
@@ -299,6 +357,61 @@ describe('GitHubProvider – getPullRequest type guards', () => {
 
     expect(pr.headBranch).toBe('');
     expect(pr.baseBranch).toBe('');
+  });
+
+  it('should set state to "open" when API response has state: "open"', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 100,
+      title: 'Open PR',
+      head: { ref: 'feature' },
+      base: { ref: 'main' },
+      state: 'open',
+    });
+
+    const pr = await provider.getPullRequest(100);
+
+    expect(pr.state).toBe('open');
+  });
+
+  it('should set state to "closed" when API response has state: "closed"', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 101,
+      title: 'Closed PR',
+      head: { ref: 'feature' },
+      base: { ref: 'main' },
+      state: 'closed',
+    });
+
+    const pr = await provider.getPullRequest(101);
+
+    expect(pr.state).toBe('closed');
+  });
+
+  it('should default state to "open" when state is absent from API response', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 102,
+      title: 'PR without state',
+      head: { ref: 'feature' },
+      base: { ref: 'main' },
+    });
+
+    const pr = await provider.getPullRequest(102);
+
+    expect(pr.state).toBe('open');
+  });
+
+  it('should default state to "open" when state has an unexpected value', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      number: 103,
+      title: 'PR with weird state',
+      head: { ref: 'feature' },
+      base: { ref: 'main' },
+      state: 'merged',
+    });
+
+    const pr = await provider.getPullRequest(103);
+
+    expect(pr.state).toBe('merged');
   });
 });
 
@@ -339,6 +452,56 @@ describe('GitHubProvider – listPullRequests type guards', () => {
     expect(prs[0].headBranch).toBe('branch-a');
     expect(prs[1].number).toBe(11);
     expect(prs[1].headBranch).toBe('branch-b');
+  });
+
+  it('should set merged to true for a PR with merged: true in list results', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        number: 20,
+        html_url: 'https://github.com/owner/repo/pull/20',
+        title: 'Merged PR',
+        head: { ref: 'feature' },
+        base: { ref: 'main' },
+        merged: true,
+      },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].merged).toBe(true);
+  });
+
+  it('should set merged to true for a PR with merged_at in list results', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        number: 21,
+        html_url: 'https://github.com/owner/repo/pull/21',
+        title: 'Merged via merged_at',
+        head: { ref: 'feature' },
+        base: { ref: 'main' },
+        merged_at: '2024-07-01T00:00:00Z',
+      },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].merged).toBe(true);
+  });
+
+  it('should set merged to false for a PR with no merge indicators in list results', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        number: 22,
+        html_url: 'https://github.com/owner/repo/pull/22',
+        title: 'Open PR',
+        head: { ref: 'feature' },
+        base: { ref: 'main' },
+      },
+    ]);
+
+    const prs = await provider.listPullRequests();
+
+    expect(prs[0].merged).toBe(false);
   });
 
   it('should produce empty list when API returns empty array', async () => {
