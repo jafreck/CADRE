@@ -154,6 +154,22 @@ export class IssueProgressWriter {
       md += `\n| ${i + 1} | ${name} | ${status} | ${duration} |`;
     }
 
+    const phasesWithGates = phases.filter((p) => p.gateResult != null);
+    if (phasesWithGates.length > 0) {
+      md += `\n\n## Gate Results\n`;
+      for (const phase of phasesWithGates) {
+        const gate = phase.gateResult!;
+        const statusEmoji = gate.status === 'pass' ? '✅' : gate.status === 'warn' ? '⚠️' : '❌';
+        md += `\n### Phase ${phase.phase}: ${phase.phaseName} — ${statusEmoji} ${gate.status}\n`;
+        for (const err of gate.errors) {
+          md += `- ❌ ${err}\n`;
+        }
+        for (const warn of gate.warnings) {
+          md += `- ⚠️ ${warn}\n`;
+        }
+      }
+    }
+
     if (tasks.length > 0) {
       md += `\n\n## Implementation Tasks\n\n`;
       md += `| Task | Name | Status |\n`;
