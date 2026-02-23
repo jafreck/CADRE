@@ -177,8 +177,7 @@ export class ReviewResponseOrchestrator {
         // 9. Push the branch and update the existing PR body on success
         if (issueResult.success) {
           // Push any new commits made by the implementation phase
-          const issueLogger = this.logger.child(issueNumber, join(this.cadreDir, 'logs'));
-          const commitManager = new CommitManager(worktree.path, this.config.commits, issueLogger);
+          const commitManager = new CommitManager(worktree.path, this.config.commits, this.logger);
           try {
             await commitManager.push();
             this.logger.info(
@@ -195,7 +194,7 @@ export class ReviewResponseOrchestrator {
           // Update the existing PR body with the pr-composer's output
           const prContentPath = join(progressDir, 'pr-content.md');
           try {
-            const resultParser = new ResultParser(issueLogger);
+            const resultParser = new ResultParser(this.logger);
             const prContent = await resultParser.parsePRContent(prContentPath);
             const newTitle = prContent.title
               ? `${prContent.title} (#${issueNumber})`
