@@ -102,6 +102,24 @@ describe('integration-checker.md template', () => {
     });
   });
 
+  describe('baseline comparison', () => {
+    it('should reference baseline-results.json', () => {
+      expect(content).toMatch(/baseline-results\.json/);
+    });
+
+    it('should describe baselineFailures field', () => {
+      expect(content).toMatch(/baselineFailures/);
+    });
+
+    it('should describe regressionFailures field', () => {
+      expect(content).toMatch(/regressionFailures/);
+    });
+
+    it('should define overallPass in terms of regressions', () => {
+      expect(content).toMatch(/overallPass.+regression|regression.+overallPass/is);
+    });
+  });
+
   describe('tool permissions', () => {
     it('should mention bash as a permitted tool', () => {
       expect(content).toMatch(/\bbash\b/i);

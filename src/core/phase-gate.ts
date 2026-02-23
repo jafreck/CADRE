@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
 import type { GateResult, ImplementationTask } from '../agents/types.js';
@@ -186,6 +186,18 @@ export class PlanningToImplementationGate implements PhaseGate {
       errors.push(`Implementation plan has a dependency cycle: ${String(err)}`);
     }
 
+    // Check that each file referenced in the plan exists under the worktree
+    for (const task of tasks) {
+      for (const filePath of task.files) {
+        const resolvedPath = join(context.worktreePath, filePath);
+        try {
+          await access(resolvedPath);
+        } catch {
+          warnings.push(`Task ${task.id}: file does not exist: ${filePath}`);
+        }
+      }
+    }
+
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);
   }
 }
@@ -251,6 +263,26 @@ export class IntegrationToPRGate implements PhaseGate {
 
     if (!/test/i.test(reportContent)) {
       warnings.push('integration-report.md does not contain a test result section');
+    }
+
+    // Check for new regressions — only these should fail the gate
+    const regressionsMatch = reportContent.match(/##\s*New Regressions\s*\n+([\s\S]*?)(?=\n##|$)/i);
+    if (regressionsMatch) {
+      const regressionsBody = regressionsMatch[1].trim();
+      const hasRegressions = regressionsBody !== '' && !/^_none_$/i.test(regressionsBody);
+      if (hasRegressions) {
+        errors.push('integration-report.md contains new regression failures');
+      }
+    }
+
+    // Warn (but do not fail) if there are pre-existing baseline failures
+    const preExistingMatch = reportContent.match(/##\s*Pre-existing Failures\s*\n+([\s\S]*?)(?=\n##|$)/i);
+    if (preExistingMatch) {
+      const preExistingBody = preExistingMatch[1].trim();
+      const hasPreExisting = preExistingBody !== '' && !/^_none_$/i.test(preExistingBody);
+      if (hasPreExisting) {
+        warnings.push('integration-report.md contains pre-existing failures (not caused by these changes)');
+      }
     }
 
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);

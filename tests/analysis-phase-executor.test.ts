@@ -14,8 +14,13 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../src/util/process.js', () => ({
+  execShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+}));
+
 import { ensureDir, atomicWriteJSON, listFilesRecursive } from '../src/util/fs.js';
 import { writeFile } from 'node:fs/promises';
+import { execShell } from '../src/util/process.js';
 
 function makeSuccessAgentResult(agent: string): AgentResult {
   return {
@@ -76,6 +81,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     worktree: { path: '/tmp/worktree', branch: 'cadre/issue-42', baseCommit: 'abc123', issueNumber: 42 } as never,
     config: {
       options: { maxRetriesPerTask: 3 },
+      commands: {},
     } as never,
     progressDir: '/tmp/progress',
     contextBuilder: contextBuilder as never,
@@ -89,7 +95,12 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     platform: {} as never,
     recordTokens,
     checkBudget,
-    logger: {} as never,
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as never,
     ...overrides,
   };
 }
@@ -366,6 +377,161 @@ describe('AnalysisPhaseExecutor', () => {
 
       expect(descriptions).toContain('issue-analyst');
       expect(descriptions).toContain('codebase-scout');
+    });
+  });
+
+  describe('captureBaseline()', () => {
+    const baselinePath = '/tmp/worktree/.cadre/baseline-results.json';
+
+    it('should write baseline with zeros and empty arrays when no commands configured', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, {
+        buildExitCode: 0,
+        testExitCode: 0,
+        buildFailures: [],
+        testFailures: [],
+      });
+    });
+
+    it('should run build command when configured and record exit code 0 on success', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).toHaveBeenCalledWith('npm run build', expect.objectContaining({ cwd: '/tmp/worktree' }));
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ buildExitCode: 0 }));
+    });
+
+    it('should record non-zero buildExitCode when build command fails', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 1, stdout: 'FAIL src/foo.ts', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ buildExitCode: 1 }));
+    });
+
+    it('should extract buildFailures from output when build fails', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: 'FAIL src/foo.test.ts\nsome other line',
+        stderr: '',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildFailures: ['src/foo.test.ts'],
+      }));
+    });
+
+    it('should run test command when configured and record exit code 0 on success', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { test: 'npx vitest run' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).toHaveBeenCalledWith('npx vitest run', expect.objectContaining({ cwd: '/tmp/worktree' }));
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ testExitCode: 0 }));
+    });
+
+    it('should record non-zero testExitCode and extract testFailures when tests fail', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: '✗ should do something\n× another failing test',
+        stderr: '',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { test: 'npx vitest run' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        testExitCode: 1,
+        testFailures: expect.arrayContaining(['should do something', 'another failing test']),
+      }));
+    });
+
+    it('should run both build and test commands when both are configured', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          commands: { build: 'npm run build', test: 'npm test' },
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).toHaveBeenCalledTimes(2);
+      expect(execShell).toHaveBeenCalledWith('npm run build', expect.any(Object));
+      expect(execShell).toHaveBeenCalledWith('npm test', expect.any(Object));
+    });
+
+    it('should not throw and should still write baseline when both commands fail', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'FAILED build', stderr: '' })
+        .mockResolvedValueOnce({ exitCode: 2, stdout: 'FAILED tests', stderr: '' });
+      const ctx = makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          commands: { build: 'npm run build', test: 'npm test' },
+        } as never,
+      });
+      await expect(executor.execute(ctx)).resolves.toBeDefined();
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildExitCode: 1,
+        testExitCode: 2,
+      }));
+    });
+
+    it('should log warning and write baseline when execShell throws', async () => {
+      vi.mocked(execShell).mockRejectedValueOnce(new Error('spawn failed'));
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await expect(executor.execute(ctx)).resolves.toBeDefined();
+      expect((ctx.logger as never as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalledWith(
+        expect.stringContaining('spawn failed'),
+      );
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, {
+        buildExitCode: 0,
+        testExitCode: 0,
+        buildFailures: [],
+        testFailures: [],
+      });
+    });
+
+    it('should deduplicate identical failure lines', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: 'FAIL src/foo.ts\nFAIL src/foo.ts',
+        stderr: '',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildFailures: ['src/foo.ts'],
+      }));
+    });
+
+    it('should extract error: lines from output as failures', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'error: Cannot find module foo',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'tsc' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildFailures: expect.arrayContaining([expect.stringContaining('error: Cannot find module foo')]),
+      }));
     });
   });
 });

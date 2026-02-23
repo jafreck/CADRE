@@ -153,11 +153,14 @@ describe('AnalysisToPlanningGate', () => {
 
 describe('PlanningToImplementationGate', () => {
   let tempDir: string;
+  let worktreeDir: string;
   let gate: PlanningToImplementationGate;
 
   beforeEach(async () => {
     tempDir = join(tmpdir(), `cadre-gate-test-${Date.now()}`);
+    worktreeDir = join(tempDir, 'worktree');
     await mkdir(tempDir, { recursive: true });
+    await mkdir(worktreeDir, { recursive: true });
     gate = new PlanningToImplementationGate();
   });
 
@@ -167,8 +170,10 @@ describe('PlanningToImplementationGate', () => {
 
   it('should pass with a valid implementation plan', async () => {
     await writeFile(join(tempDir, 'implementation-plan.md'), VALID_PLAN);
+    await mkdir(join(worktreeDir, 'src/core'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/core/first.ts'), '');
 
-    const result = await gate.validate(makeContext(tempDir));
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
     expect(result.status).toBe('pass');
     expect(result.errors).toHaveLength(0);
   });
@@ -273,9 +278,86 @@ describe('PlanningToImplementationGate', () => {
 - Also works
 `;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+    await mkdir(join(worktreeDir, 'src'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/first.ts'), '');
+    await writeFile(join(worktreeDir, 'src/second.ts'), '');
 
-    const result = await gate.validate(makeContext(tempDir));
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
     expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should warn (not fail) when a referenced file does not exist', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), VALID_PLAN);
+    // Do NOT create src/core/first.ts in worktreeDir
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('task-001') && w.includes('src/core/first.ts'))).toBe(true);
+  });
+
+  it('should warn for every missing file across all tasks', async () => {
+    const plan = `# Plan
+## Task: task-001 - First
+**Description:** Do first.
+**Files:** src/first.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+- Works
+
+## Task: task-002 - Second
+**Description:** Do second.
+**Files:** src/second.ts
+**Dependencies:** task-001
+**Acceptance Criteria:**
+- Also works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+    // Create worktreeDir but no source files
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('task-001') && w.includes('src/first.ts'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('task-002') && w.includes('src/second.ts'))).toBe(true);
+  });
+
+  it('should warn only for missing files when some exist and some do not', async () => {
+    const plan = `# Plan
+## Task: task-001 - First
+**Description:** Do first.
+**Files:** src/exists.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+- Works
+
+## Task: task-002 - Second
+**Description:** Do second.
+**Files:** src/missing.ts
+**Dependencies:** task-001
+**Acceptance Criteria:**
+- Also works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+    await mkdir(join(worktreeDir, 'src'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/exists.ts'), '');
+    // Do NOT create src/missing.ts
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('warn');
+    expect(result.warnings.some((w) => w.includes('src/missing.ts'))).toBe(true);
+    expect(result.warnings.every((w) => !w.includes('src/exists.ts'))).toBe(true);
+  });
+
+  it('should pass with no warnings when all referenced files exist', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), VALID_PLAN);
+    await mkdir(join(worktreeDir, 'src/core'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/core/first.ts'), '');
+
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
+    expect(result.status).toBe('pass');
+    expect(result.warnings).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
   });
 });
@@ -390,6 +472,90 @@ describe('IntegrationToPRGate', () => {
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).not.toBe('fail');
     expect(result.warnings.length).toBe(2);
+  });
+
+  it('should fail when New Regressions section contains failures', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## New Regressions
+- test-foo: AssertionError
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('new regression failures'))).toBe(true);
+  });
+
+  it('should pass when New Regressions section is _none_', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## New Regressions
+_none_
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should warn but not fail when only Pre-existing Failures are present', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## Pre-existing Failures
+- test-legacy: known failure
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).not.toBe('fail');
+    expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should pass without warning when Pre-existing Failures section is _none_', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## Pre-existing Failures
+_none_
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(false);
+  });
+
+  it('should fail with errors and include pre-existing warning when both sections have content', async () => {
+    const report = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+## New Regressions
+- test-new: broken
+## Pre-existing Failures
+- test-old: known issue
+`;
+    await writeFile(join(tempDir, 'integration-report.md'), report);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('new regression failures'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(true);
   });
 });
 

@@ -184,6 +184,94 @@ describe('TaskQueue', () => {
     });
   });
 
+  describe('detectBatchCollisions', () => {
+    it('should return empty array when no tasks share a file', () => {
+      const tasks = [
+        makeTask('task-001', [], ['src/a.ts']),
+        makeTask('task-002', [], ['src/b.ts']),
+        makeTask('task-003', [], ['src/c.ts']),
+      ];
+
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toEqual([]);
+    });
+
+    it('should return one collision entry for a pair sharing a file', () => {
+      const tasks = [
+        makeTask('task-001', [], ['src/a.ts']),
+        makeTask('task-002', [], ['src/a.ts']),
+      ];
+
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toHaveLength(1);
+      expect(collisions[0]).toContain('src/a.ts');
+      expect(collisions[0]).toContain('task-001');
+      expect(collisions[0]).toContain('task-002');
+    });
+
+    it('should return separate entries for multiple colliding pairs', () => {
+      const tasks = [
+        makeTask('task-001', [], ['src/a.ts', 'src/b.ts']),
+        makeTask('task-002', [], ['src/a.ts']),
+        makeTask('task-003', [], ['src/b.ts']),
+      ];
+
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toHaveLength(2);
+      const combined = collisions.join('\n');
+      expect(combined).toContain('src/a.ts');
+      expect(combined).toContain('src/b.ts');
+    });
+
+    it('should return three entries for three tasks sharing the same file', () => {
+      const tasks = [
+        makeTask('task-001', [], ['src/shared.ts']),
+        makeTask('task-002', [], ['src/shared.ts']),
+        makeTask('task-003', [], ['src/shared.ts']),
+      ];
+
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      // Pairs: (001,002), (001,003), (002,003)
+      expect(collisions).toHaveLength(3);
+    });
+
+    it('should return empty array for an empty task list', () => {
+      const collisions = TaskQueue.detectBatchCollisions([]);
+      expect(collisions).toEqual([]);
+    });
+
+    it('should return empty array for a single-task batch', () => {
+      const tasks = [makeTask('task-001', [], ['src/a.ts'])];
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toEqual([]);
+    });
+
+    it('should detect collision when two tasks share a test file', () => {
+      const tasks = [
+        makeTask('task-001', [], ['src/a.ts', 'tests/foo.test.ts']),
+        makeTask('task-002', [], ['src/b.ts', 'tests/foo.test.ts']),
+      ];
+
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toHaveLength(1);
+      expect(collisions[0]).toContain('tests/foo.test.ts');
+      expect(collisions[0]).toContain('task-001');
+      expect(collisions[0]).toContain('task-002');
+    });
+
+    it('should not report a collision for a task that owns a file exclusively', () => {
+      const tasks = [
+        makeTask('task-001', [], ['src/a.ts', 'src/b.ts']),
+        makeTask('task-002', [], ['src/b.ts']),
+      ];
+
+      const collisions = TaskQueue.detectBatchCollisions(tasks);
+      expect(collisions).toHaveLength(1);
+      expect(collisions[0]).toContain('src/b.ts');
+      expect(collisions[0]).not.toContain('src/a.ts');
+    });
+  });
+
   describe('selectNonOverlappingBatch', () => {
     it('should select tasks with non-overlapping files', () => {
       const tasks = [

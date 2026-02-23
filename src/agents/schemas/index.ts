@@ -15,3 +15,6 @@ export type { CommandResult, IntegrationReport } from './integration-report.sche
 
 export { prContentSchema } from './pr-content.schema.js';
 export type { PRContent } from './pr-content.schema.js';
+
+export { baselineResultsSchema } from './baseline-results.schema.js';
+export type { BaselineResults } from './baseline-results.schema.js';
