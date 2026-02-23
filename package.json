@@ -2,6 +2,8 @@
   "name": "cadre",
   "version": "0.1.0",
   "description": "Coordinated Agent Development Runtime Engine",
+  "license": "MIT",
+  "author": "Jacob Freck",
   "type": "module",
   "files": [
     "dist/",
