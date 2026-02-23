@@ -66,6 +66,33 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     buildForCodebaseScout: vi.fn().mockResolvedValue('/progress/scout-ctx.json'),
   };
 
+  const services = {
+    launcher: launcher as never,
+    retryExecutor: retryExecutor as never,
+    tokenTracker: {} as never,
+    contextBuilder: contextBuilder as never,
+    resultParser: {} as never,
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as never,
+  };
+
+  const io = {
+    progressDir: '/tmp/progress',
+    progressWriter: {} as never,
+    checkpoint: {} as never,
+    commitManager: {} as never,
+  };
+
+  const callbacks = {
+    recordTokens,
+    checkBudget,
+    updateProgress: vi.fn().mockResolvedValue(undefined),
+  };
+
   return {
     issue: {
       number: 42,
@@ -83,26 +110,14 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
       options: { maxRetriesPerTask: 3 },
       commands: {},
     } as never,
-    progressDir: '/tmp/progress',
-    contextBuilder: contextBuilder as never,
-    launcher: launcher as never,
-    resultParser: {} as never,
-    checkpoint: {} as never,
-    commitManager: {} as never,
-    retryExecutor: retryExecutor as never,
-    tokenTracker: {} as never,
-    progressWriter: {} as never,
     platform: {} as never,
-    recordTokens,
-    checkBudget,
-    logger: {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    } as never,
-    ...overrides,
-  };
+    services: { ...services, ...overrides.services } as never,
+    io: { ...io, ...overrides.io } as never,
+    callbacks: { ...callbacks, ...overrides.callbacks } as never,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([k]) => !['services', 'io', 'callbacks'].includes(k)),
+    ),
+  } as PhaseContext;
 }
 
 describe('AnalysisPhaseExecutor', () => {
@@ -179,7 +194,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for issue-analyst with correct args', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.contextBuilder as never as { buildForIssueAnalyst: ReturnType<typeof vi.fn> }).buildForIssueAnalyst)
+      expect((ctx.services.contextBuilder as never as { buildForIssueAnalyst: ReturnType<typeof vi.fn> }).buildForIssueAnalyst)
         .toHaveBeenCalledWith(
           42,
           '/tmp/worktree',
@@ -191,7 +206,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should launch issue-analyst with correct invocation', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
+      expect((ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
         .toHaveBeenCalledWith(
           expect.objectContaining({
             agent: 'issue-analyst',
@@ -207,7 +222,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for codebase-scout after analyst succeeds', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.contextBuilder as never as { buildForCodebaseScout: ReturnType<typeof vi.fn> }).buildForCodebaseScout)
+      expect((ctx.services.contextBuilder as never as { buildForCodebaseScout: ReturnType<typeof vi.fn> }).buildForCodebaseScout)
         .toHaveBeenCalledWith(
           42,
           '/tmp/worktree',
@@ -220,7 +235,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should launch codebase-scout with correct invocation', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
+      expect((ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
         .toHaveBeenCalledWith(
           expect.objectContaining({
             agent: 'codebase-scout',
@@ -242,16 +257,16 @@ describe('AnalysisPhaseExecutor', () => {
     it('should record tokens for both agents', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('issue-analyst', 50);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('codebase-scout', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('issue-analyst', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('codebase-scout', 50);
     });
 
     it('should check budget multiple times during execution', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       // checkBudget is called: before each launchAgent, after recordTokens, and after retryExecutor.execute
-      expect(ctx.checkBudget).toHaveBeenCalled();
-      expect((ctx.checkBudget as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(4);
+      expect(ctx.callbacks.checkBudget).toHaveBeenCalled();
+      expect((ctx.callbacks.checkBudget as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(4);
     });
   });
 
@@ -275,7 +290,7 @@ describe('AnalysisPhaseExecutor', () => {
         launchAgent: vi.fn().mockResolvedValue(analystResult),
       };
 
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Issue analyst failed:');
     });
 
@@ -301,7 +316,7 @@ describe('AnalysisPhaseExecutor', () => {
           .mockResolvedValueOnce(scoutResult),
       };
 
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Codebase scout failed:');
     });
 
@@ -324,10 +339,10 @@ describe('AnalysisPhaseExecutor', () => {
         launchAgent: vi.fn().mockResolvedValue(analystResult),
       };
 
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow();
       // Only one call — for the analyst. Scout should not be launched.
-      expect((ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
+      expect((ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
         .toHaveBeenCalledTimes(1);
     });
 
@@ -337,7 +352,7 @@ describe('AnalysisPhaseExecutor', () => {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'max retries exceeded' }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
 
       // The failure result from launchWithRetry should be treated as a failed agent result
       // causing execute() to throw "Issue analyst failed:"
@@ -354,7 +369,7 @@ describe('AnalysisPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(retryExecutor.execute).toHaveBeenCalledWith(
@@ -372,7 +387,7 @@ describe('AnalysisPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(descriptions).toContain('issue-analyst');
@@ -493,7 +508,7 @@ describe('AnalysisPhaseExecutor', () => {
         config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
       });
       await expect(executor.execute(ctx)).resolves.toBeDefined();
-      expect((ctx.logger as never as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalledWith(
+      expect((ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalledWith(
         expect.stringContaining('spawn failed'),
       );
       expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, {

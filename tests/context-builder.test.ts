@@ -301,7 +301,7 @@ describe('ContextBuilder', () => {
     });
 
     it('should NOT include outputSchema for fix-surgeon', async () => {
-      await builder.buildForFixSurgeon(42, '/tmp/worktree', task, '/tmp/feedback.md', [], '/tmp/progress', 'review');
+      await builder.buildForFixSurgeon(42, '/tmp/worktree', task.id, '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
     });

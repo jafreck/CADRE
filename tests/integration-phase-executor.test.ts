@@ -56,6 +56,28 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     debug: vi.fn(),
   };
 
+  const services = {
+    launcher: launcher as never,
+    retryExecutor: {} as never,
+    tokenTracker: {} as never,
+    contextBuilder: contextBuilder as never,
+    resultParser: {} as never,
+    logger: logger as never,
+  };
+
+  const io = {
+    progressDir: '/tmp/progress',
+    progressWriter: {} as never,
+    checkpoint: {} as never,
+    commitManager: commitManager as never,
+  };
+
+  const callbacks = {
+    recordTokens,
+    checkBudget,
+    updateProgress: vi.fn().mockResolvedValue(undefined),
+  };
+
   return {
     issue: {
       number: 42,
@@ -83,21 +105,14 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
         maxIntegrationFixRounds: 3,
       },
     } as never,
-    progressDir: '/tmp/progress',
-    contextBuilder: contextBuilder as never,
-    launcher: launcher as never,
-    resultParser: {} as never,
-    checkpoint: {} as never,
-    commitManager: commitManager as never,
-    retryExecutor: {} as never,
-    tokenTracker: {} as never,
-    progressWriter: {} as never,
     platform: {} as never,
-    recordTokens,
-    checkBudget,
-    logger: logger as never,
-    ...overrides,
-  };
+    services: { ...services, ...overrides.services } as never,
+    io: { ...io, ...overrides.io } as never,
+    callbacks: { ...callbacks, ...overrides.callbacks } as never,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([k]) => !['services', 'io', 'callbacks'].includes(k)),
+    ),
+  } as PhaseContext;
 }
 
 describe('IntegrationPhaseExecutor', () => {
@@ -180,7 +195,7 @@ describe('IntegrationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit,
+        (ctx.io.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit,
       ).not.toHaveBeenCalled();
     });
 
@@ -190,7 +205,7 @@ describe('IntegrationPhaseExecutor', () => {
         commit: vi.fn().mockResolvedValue(undefined),
         getChangedFiles: vi.fn().mockResolvedValue(['src/foo.ts']),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(commitManager.commit).toHaveBeenCalledWith('address integration issues', 42, 'fix');
     });
@@ -260,7 +275,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 4 }),
         '/tmp/worktree',
@@ -279,7 +294,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 4 }),
         '/tmp/worktree',
@@ -297,7 +312,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).not.toHaveBeenCalled();
     });
 
@@ -329,7 +344,7 @@ describe('IntegrationPhaseExecutor', () => {
 
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('fix-surgeon', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('fix-surgeon', 50);
     });
 
     it('should call checkBudget after fix-surgeon launches', async () => {
@@ -342,7 +357,7 @@ describe('IntegrationPhaseExecutor', () => {
 
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.checkBudget).toHaveBeenCalled();
+      expect(ctx.callbacks.checkBudget).toHaveBeenCalled();
     });
 
     it('should include fail status in report for failed commands', async () => {
@@ -365,8 +380,8 @@ describe('IntegrationPhaseExecutor', () => {
     });
   });
 
-  describe('tryFixIntegration - ImplementationTask construction', () => {
-    it('should build fix-surgeon context using buildForFixSurgeon', async () => {
+  describe('tryFixIntegration - null task passed to buildForFixSurgeon', () => {
+    it('should build fix-surgeon context using buildForFixSurgeon with null task', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
         .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false }) // build (fail)
@@ -378,15 +393,16 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
       ).toHaveBeenCalledWith(
         42,
         '/tmp/worktree',
-        expect.objectContaining({ id: 'integration-fix-build' }),
+        'integration-fix-build',
         join('/tmp/progress', 'build-failure.txt'),
         expect.any(Array),
         '/tmp/progress',
-        'test-failure',
+        'build',
+        4,
       );
     });
 
@@ -403,19 +419,20 @@ describe('IntegrationPhaseExecutor', () => {
         commit: vi.fn().mockResolvedValue(undefined),
         getChangedFiles: vi.fn().mockResolvedValue(['src/changed.ts', 'src/other.ts']),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
 
       expect(
-        (ctx.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
       ).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
-        expect.objectContaining({ files: ['src/changed.ts', 'src/other.ts'] }),
+        expect.stringContaining('integration-fix-'),
         expect.anything(),
         [join('/tmp/worktree', 'src/changed.ts'), join('/tmp/worktree', 'src/other.ts')],
         expect.anything(),
         expect.anything(),
+        4,
       );
     });
   });
@@ -516,7 +533,7 @@ describe('IntegrationPhaseExecutor', () => {
       });
       await executor.execute(ctx);
 
-      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      const launchAgent = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
       expect(launchAgent).toHaveBeenCalledTimes(maxRounds);
     });
 
@@ -535,7 +552,7 @@ describe('IntegrationPhaseExecutor', () => {
       });
       await executor.execute(ctx);
 
-      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      const launchAgent = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
       expect(launchAgent).toHaveBeenCalledTimes(maxRounds);
     });
 
@@ -556,7 +573,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       // fix-surgeon should only be called once (loop exits early)
-      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      const launchAgent = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
       expect(launchAgent).toHaveBeenCalledTimes(1);
     });
   });
@@ -589,7 +606,7 @@ describe('IntegrationPhaseExecutor', () => {
 
       // Without baseline, any failure is a regression → fix-surgeon should be called
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalled();
     });
   });
@@ -614,7 +631,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).not.toHaveBeenCalled();
     });
 
@@ -637,7 +654,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).not.toHaveBeenCalled();
     });
 
@@ -661,7 +678,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledTimes(1);
     });
 
@@ -685,7 +702,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledTimes(1);
     });
 
@@ -710,7 +727,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       // fix-surgeon called once (for the regression), loop exits after re-run shows only pre-existing
-      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      const launchAgent = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
       expect(launchAgent).toHaveBeenCalledTimes(1);
     });
 
@@ -741,7 +758,7 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       // fix-surgeon called exactly maxRounds times (rounds applied to regression attempts, not pre-existing)
-      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      const launchAgent = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
       expect(launchAgent).toHaveBeenCalledTimes(maxRounds);
     });
   });

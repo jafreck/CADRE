@@ -27,14 +27,20 @@ const {
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('../src/core/issue-notifier.js', () => ({
-  IssueNotifier: vi.fn().mockImplementation(() => ({
-    notifyStart: vi.fn().mockResolvedValue(undefined),
-    notifyPhaseComplete: vi.fn().mockResolvedValue(undefined),
-    notifyComplete: vi.fn().mockResolvedValue(undefined),
-    notifyFailed: vi.fn().mockResolvedValue(undefined),
-    notifyBudgetWarning: vi.fn().mockResolvedValue(undefined),
-    notifyAmbiguities: mockNotifyAmbiguities,
-  })),
+  IssueNotifier: vi.fn().mockImplementation(() => {
+    const methods = {
+      notifyStart: vi.fn().mockResolvedValue(undefined),
+      notifyPhaseComplete: vi.fn().mockResolvedValue(undefined),
+      notifyComplete: vi.fn().mockResolvedValue(undefined),
+      notifyFailed: vi.fn().mockResolvedValue(undefined),
+      notifyBudgetWarning: vi.fn().mockResolvedValue(undefined),
+      notifyAmbiguities: mockNotifyAmbiguities,
+      notify: vi.fn().mockImplementation(async (event: any) => {
+        if (event.type === 'ambiguity-detected') return mockNotifyAmbiguities(event.issueNumber, event.ambiguities);
+      }),
+    };
+    return methods;
+  }),
 }));
 
 vi.mock('../src/core/phase-gate.js', () => ({

@@ -11,14 +11,18 @@ export interface PhaseDefinition {
   name: string;
   /** Whether failure in this phase should abort the issue pipeline. */
   critical: boolean;
+  /** Commit type for per-phase commits (e.g. 'chore', 'feat', 'fix'). */
+  commitType?: string;
+  /** Commit message template. Use `{issueNumber}` as a placeholder. */
+  commitMessage?: string;
 }
 
 export const ISSUE_PHASES: PhaseDefinition[] = [
-  { id: 1, name: 'Analysis & Scouting', critical: true },
-  { id: 2, name: 'Planning', critical: true },
-  { id: 3, name: 'Implementation', critical: true },
-  { id: 4, name: 'Integration Verification', critical: false },
-  { id: 5, name: 'PR Composition', critical: false },
+  { id: 1, name: 'Analysis & Scouting', critical: true, commitType: 'chore', commitMessage: 'analyze issue #{issueNumber}' },
+  { id: 2, name: 'Planning', critical: true, commitType: 'chore', commitMessage: 'plan implementation for #{issueNumber}' },
+  { id: 3, name: 'Implementation', critical: true, commitType: 'feat', commitMessage: 'implement changes for #{issueNumber}' },
+  { id: 4, name: 'Integration Verification', critical: false, commitType: 'fix', commitMessage: 'address integration issues' },
+  { id: 5, name: 'PR Composition', critical: false, commitType: 'chore', commitMessage: 'compose PR for #{issueNumber}' },
 ];
 
 /**

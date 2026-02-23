@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { writeFile, readFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
-import type { ImplementationTask } from '../agents/types.js';
 import { execShell } from '../util/process.js';
+import { extractFailures } from '../util/failure-parser.js';
 import { baselineResultsSchema } from '../agents/schemas/index.js';
 import type { BaselineResults } from '../agents/schemas/index.js';
 
@@ -11,7 +11,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
   readonly name = 'Integration Verification';
 
   async execute(ctx: PhaseContext): Promise<string> {
-    const reportPath = join(ctx.progressDir, 'integration-report.md');
+    const reportPath = join(ctx.io.progressDir, 'integration-report.md');
     let report = '';
 
     // Read baseline results (null-safe: missing baseline treats all failures as regressions)
@@ -53,7 +53,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       report += `## Build\n\n**Command:** \`${ctx.config.commands.build}\`\n`;
 
       let buildOutput = buildResult.stderr + buildResult.stdout;
-      let buildFailures = this.extractFailures(buildOutput);
+      let buildFailures = extractFailures(buildOutput);
       if (buildResult.exitCode !== 0 && buildFailures.length === 0) {
         buildFailures = ['<build-failed-unrecognised-output>'];
       }
@@ -65,7 +65,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
           timeout: 300_000,
         });
         buildOutput = buildResult.stderr + buildResult.stdout;
-        buildFailures = this.extractFailures(buildOutput);
+        buildFailures = extractFailures(buildOutput);
         if (buildResult.exitCode !== 0 && buildFailures.length === 0) {
           buildFailures = ['<build-failed-unrecognised-output>'];
         }
@@ -90,7 +90,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       report += `## Test\n\n**Command:** \`${ctx.config.commands.test}\`\n`;
 
       let testOutput = testResult.stderr + testResult.stdout;
-      let testFailures = this.extractFailures(testOutput);
+      let testFailures = extractFailures(testOutput);
       if (testResult.exitCode !== 0 && testFailures.length === 0) {
         testFailures = ['<test-failed-unrecognised-output>'];
       }
@@ -102,7 +102,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
           timeout: 300_000,
         });
         testOutput = testResult.stderr + testResult.stdout;
-        testFailures = this.extractFailures(testOutput);
+        testFailures = extractFailures(testOutput);
         if (testResult.exitCode !== 0 && testFailures.length === 0) {
           testFailures = ['<test-failed-unrecognised-output>'];
         }
@@ -158,8 +158,8 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     await writeFile(reportPath, fullReport, 'utf-8');
 
     // Commit any fixes
-    if (!(await ctx.commitManager.isClean())) {
-      await ctx.commitManager.commit(
+    if (!(await ctx.io.commitManager.isClean())) {
+      await ctx.io.commitManager.commit(
         'address integration issues',
         ctx.issue.number,
         'fix',
@@ -169,26 +169,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     return reportPath;
   }
 
-  private extractFailures(output: string): string[] {
-    const failures = new Set<string>();
-    for (const line of output.split('\n')) {
-      const trimmed = line.trim();
-      // Match common test failure indicators - strip prefix to produce the same format as AnalysisPhaseExecutor
-      if (/^(FAIL|FAILED|✗|×)\s+/.test(trimmed)) {
-        const match = trimmed.match(/^(?:FAIL|FAILED|✗|×)\s+(.+)/);
-        if (match) failures.add(match[1].trim());
-      }
-      // Match TypeScript/build error lines (no prefix to strip)
-      else if (/error TS\d+:/.test(trimmed)) {
-        failures.add(trimmed);
-      }
-      // Match generic error lines (aligned with AnalysisPhaseExecutor)
-      else if (/^\s*(error|Error)\s*:/i.test(trimmed) && trimmed.length < 200) {
-        failures.add(trimmed);
-      }
-    }
-    return Array.from(failures);
-  }
+
 
   private computeRegressions(currentFailures: string[], baselineFailures: Set<string>): string[] {
     return currentFailures.filter((f) => !baselineFailures.has(f));
@@ -196,32 +177,24 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
 
   private async tryFixIntegration(ctx: PhaseContext, failureOutput: string, type: string): Promise<void> {
     // Write failure output to a file for fix-surgeon
-    const failurePath = join(ctx.progressDir, `${type}-failure.txt`);
+    const failurePath = join(ctx.io.progressDir, `${type}-failure.txt`);
     await writeFile(failurePath, failureOutput, 'utf-8');
 
-    const changedFiles = await ctx.commitManager.getChangedFiles();
+    const changedFiles = await ctx.io.commitManager.getChangedFiles();
 
-    const dummyTask: ImplementationTask = {
-      id: `integration-fix-${type}`,
-      name: `Fix ${type} failure`,
-      description: `Fix ${type} failure detected during integration verification`,
-      files: changedFiles,
-      dependencies: [],
-      complexity: 'moderate',
-      acceptanceCriteria: [`${type} command passes`],
-    };
-
-    const fixContextPath = await ctx.contextBuilder.buildForFixSurgeon(
+    const issueType = type === 'build' ? 'build' : 'test-failure' as const;
+    const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
       ctx.issue.number,
       ctx.worktree.path,
-      dummyTask,
+      `integration-fix-${issueType}`,
       failurePath,
       changedFiles.map((f) => join(ctx.worktree.path, f)),
-      ctx.progressDir,
-      'test-failure',
+      ctx.io.progressDir,
+      issueType,
+      4,
     );
 
-    const fixResult = await ctx.launcher.launchAgent(
+    const fixResult = await ctx.services.launcher.launchAgent(
       {
         agent: 'fix-surgeon',
         issueNumber: ctx.issue.number,
@@ -232,7 +205,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       ctx.worktree.path,
     );
 
-    ctx.recordTokens('fix-surgeon', fixResult.tokenUsage);
-    ctx.checkBudget();
+    ctx.callbacks.recordTokens('fix-surgeon', fixResult.tokenUsage);
+    ctx.callbacks.checkBudget();
   }
 }

@@ -50,8 +50,10 @@ export interface IssueStartedEvent {
 export interface IssueCompletedEvent {
   type: 'issue-completed';
   issueNumber: number;
+  issueTitle: string;
   success: boolean;
   prNumber?: number;
+  prUrl?: string;
   duration: number;
   tokenUsage: number;
 }
@@ -59,8 +61,11 @@ export interface IssueCompletedEvent {
 export interface IssueFailedEvent {
   type: 'issue-failed';
   issueNumber: number;
+  issueTitle: string;
   error: string;
   phase: number;
+  phaseName?: string;
+  failedTask?: string;
 }
 
 // ── Phase-level events ──
@@ -173,6 +178,12 @@ export interface PRCreatedEvent {
 
 // ── Budget events ──
 
+export interface AmbiguityDetectedEvent {
+  type: 'ambiguity-detected';
+  issueNumber: number;
+  ambiguities: string[];
+}
+
 export interface BudgetWarningEvent {
   type: 'budget-warning';
   scope: 'fleet' | 'issue';
@@ -210,5 +221,6 @@ export type CadreEvent =
   | GitCommitEvent
   | GitPushEvent
   | PRCreatedEvent
+  | AmbiguityDetectedEvent
   | BudgetWarningEvent
   | BudgetExceededEvent;

@@ -12,12 +12,12 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
   readonly name = 'Implementation';
 
   async execute(ctx: PhaseContext): Promise<string> {
-    const planPath = join(ctx.progressDir, 'implementation-plan.md');
-    const tasks = await ctx.resultParser.parseImplementationPlan(planPath);
+    const planPath = join(ctx.io.progressDir, 'implementation-plan.md');
+    const tasks = await ctx.services.resultParser.parseImplementationPlan(planPath);
 
     // Create task queue and restore checkpoint state
     const queue = new TaskQueue(tasks);
-    const cpState = ctx.checkpoint.getState();
+    const cpState = ctx.io.checkpoint.getState();
     queue.restoreState(cpState.completedTasks, cpState.blockedTasks);
 
     const maxParallel = ctx.config.options.maxParallelAgents;
@@ -25,7 +25,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
     while (!queue.isComplete()) {
       const readyTasks = queue.getReady();
       if (readyTasks.length === 0) {
-        ctx.logger.warn('No ready tasks but queue not complete — possible deadlock', {
+        ctx.services.logger.warn('No ready tasks but queue not complete — possible deadlock', {
           issueNumber: ctx.issue.number,
         });
         break;
@@ -33,7 +33,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
       // Select non-overlapping batch
       const batch = TaskQueue.selectNonOverlappingBatch(readyTasks, maxParallel);
-      ctx.logger.info(`Implementation batch: ${batch.map((t) => t.id).join(', ')}`, {
+      ctx.services.logger.info(`Implementation batch: ${batch.map((t) => t.id).join(', ')}`, {
         issueNumber: ctx.issue.number,
         phase: 3,
       });
@@ -42,11 +42,11 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       const batchPromises = batch.map((task) => this.executeTask(task, queue, ctx));
       await Promise.all(batchPromises);
 
-      await this.updateProgress(ctx);
+      await ctx.callbacks.updateProgress();
     }
 
     const counts = queue.getCounts();
-    ctx.logger.info(
+    ctx.services.logger.info(
       `Implementation complete: ${counts.completed}/${counts.total} tasks (${counts.blocked} blocked)`,
       { issueNumber: ctx.issue.number, phase: 3 },
     );
@@ -59,36 +59,36 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
   }
 
   private async executeTask(task: ImplementationTask, queue: TaskQueue, ctx: PhaseContext): Promise<void> {
-    if (ctx.checkpoint.isTaskCompleted(task.id)) {
+    if (ctx.io.checkpoint.isTaskCompleted(task.id)) {
       queue.complete(task.id);
       return;
     }
 
     queue.start(task.id);
-    await ctx.checkpoint.startTask(task.id);
-    await ctx.progressWriter.appendEvent(`Task ${task.id} started: ${task.name}`);
+    await ctx.io.checkpoint.startTask(task.id);
+    await ctx.io.progressWriter.appendEvent(`Task ${task.id} started: ${task.name}`);
 
     const maxRetries = ctx.config.options.maxRetriesPerTask;
 
-    const retryResult = await ctx.retryExecutor.execute({
+    const retryResult = await ctx.services.retryExecutor.execute({
       fn: async (attempt) => {
-        ctx.checkBudget();
+        ctx.callbacks.checkBudget();
         // 1. Write task plan slice
-        const taskPlanPath = join(ctx.progressDir, `task-${task.id}.md`);
+        const taskPlanPath = join(ctx.io.progressDir, `task-${task.id}.md`);
         const taskPlanContent = this.buildTaskPlanSlice(task);
         await writeFile(taskPlanPath, taskPlanContent, 'utf-8');
 
         // 2. Launch code-writer
-        const writerContextPath = await ctx.contextBuilder.buildForCodeWriter(
+        const writerContextPath = await ctx.services.contextBuilder.buildForCodeWriter(
           ctx.issue.number,
           ctx.worktree.path,
           task,
           taskPlanPath,
           task.files.map((f) => join(ctx.worktree.path, f)),
-          ctx.progressDir,
+          ctx.io.progressDir,
         );
 
-        const writerResult = await ctx.launcher.launchAgent(
+        const writerResult = await ctx.services.launcher.launchAgent(
           {
             agent: 'code-writer',
             issueNumber: ctx.issue.number,
@@ -100,8 +100,8 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           ctx.worktree.path,
         );
 
-        ctx.recordTokens('code-writer', writerResult.tokenUsage);
-        ctx.checkBudget();
+        ctx.callbacks.recordTokens('code-writer', writerResult.tokenUsage);
+        ctx.callbacks.checkBudget();
 
         if (!writerResult.success) {
           throw new Error(`Code writer failed: ${writerResult.error}`);
@@ -119,20 +119,21 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             round < ctx.config.options.maxBuildFixRounds && buildResult.exitCode !== 0;
             round++
           ) {
-            const buildFailurePath = join(ctx.progressDir, `build-failure-${task.id}-${round}.txt`);
+            const buildFailurePath = join(ctx.io.progressDir, `build-failure-${task.id}-${round}.txt`);
             await writeFile(buildFailurePath, buildResult.stderr + buildResult.stdout, 'utf-8');
 
-            const buildFixContextPath = await ctx.contextBuilder.buildForFixSurgeon(
+            const buildFixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
               ctx.issue.number,
               ctx.worktree.path,
-              task,
+              task.id,
               buildFailurePath,
               task.files.map((f) => join(ctx.worktree.path, f)),
-              ctx.progressDir,
+              ctx.io.progressDir,
               'build',
+              3,
             );
 
-            const buildFixResult = await ctx.launcher.launchAgent(
+            const buildFixResult = await ctx.services.launcher.launchAgent(
               {
                 agent: 'fix-surgeon',
                 issueNumber: ctx.issue.number,
@@ -144,8 +145,8 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               ctx.worktree.path,
             );
 
-            ctx.recordTokens('fix-surgeon', buildFixResult.tokenUsage);
-            ctx.checkBudget();
+            ctx.callbacks.recordTokens('fix-surgeon', buildFixResult.tokenUsage);
+            ctx.callbacks.checkBudget();
 
             buildResult = await execShell(ctx.config.commands.build, {
               cwd: ctx.worktree.path,
@@ -159,17 +160,17 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         }
 
         // 3. Launch test-writer
-        const changedFiles = await ctx.commitManager.getChangedFiles();
-        const testWriterContextPath = await ctx.contextBuilder.buildForTestWriter(
+        const changedFiles = await ctx.io.commitManager.getChangedFiles();
+        const testWriterContextPath = await ctx.services.contextBuilder.buildForTestWriter(
           ctx.issue.number,
           ctx.worktree.path,
           task,
           changedFiles.map((f) => join(ctx.worktree.path, f)),
           taskPlanPath,
-          ctx.progressDir,
+          ctx.io.progressDir,
         );
 
-        const testResult = await ctx.launcher.launchAgent(
+        const testResult = await ctx.services.launcher.launchAgent(
           {
             agent: 'test-writer',
             issueNumber: ctx.issue.number,
@@ -181,57 +182,57 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           ctx.worktree.path,
         );
 
-        ctx.recordTokens('test-writer', testResult.tokenUsage);
-        ctx.checkBudget();
+        ctx.callbacks.recordTokens('test-writer', testResult.tokenUsage);
+        ctx.callbacks.checkBudget();
 
         // 4. Commit code-writer + test-writer output so getTaskDiff() reflects this task's changes
-        await ctx.commitManager.commit(
+        await ctx.io.commitManager.commit(
           `wip: ${task.name} (attempt ${attempt})`,
           ctx.issue.number,
           'feat',
         );
 
         // 5. Launch code-reviewer
-        const diffPath = join(ctx.progressDir, `diff-${task.id}.patch`);
-        const rawDiff = await ctx.commitManager.getTaskDiff();
+        const diffPath = join(ctx.io.progressDir, `diff-${task.id}.patch`);
+        const rawDiff = await ctx.io.commitManager.getTaskDiff();
         const diff = truncateDiff(rawDiff, 200_000);
         await writeFile(diffPath, diff, 'utf-8');
 
-        const reviewerContextPath = await ctx.contextBuilder.buildForCodeReviewer(
+        const reviewerContextPath = await ctx.services.contextBuilder.buildForCodeReviewer(
           ctx.issue.number,
           ctx.worktree.path,
           task,
           diffPath,
           taskPlanPath,
-          ctx.progressDir,
+          ctx.io.progressDir,
         );
 
-        const reviewResult = await ctx.launcher.launchAgent(
+        const reviewResult = await ctx.services.launcher.launchAgent(
           {
             agent: 'code-reviewer',
             issueNumber: ctx.issue.number,
             phase: 3,
             taskId: task.id,
             contextPath: reviewerContextPath,
-            outputPath: join(ctx.progressDir, `review-${task.id}.md`),
+            outputPath: join(ctx.io.progressDir, `review-${task.id}.md`),
           },
           ctx.worktree.path,
         );
 
-        ctx.recordTokens('code-reviewer', reviewResult.tokenUsage);
-        ctx.checkBudget();
+        ctx.callbacks.recordTokens('code-reviewer', reviewResult.tokenUsage);
+        ctx.callbacks.checkBudget();
 
         // 6. Check review verdict
         if (reviewResult.success) {
-          const reviewPath = join(ctx.progressDir, `review-${task.id}.md`);
+          const reviewPath = join(ctx.io.progressDir, `review-${task.id}.md`);
           if (await exists(reviewPath)) {
             let review;
             try {
-              review = await ctx.resultParser.parseReview(reviewPath);
+              review = await ctx.services.resultParser.parseReview(reviewPath);
             } catch (err) {
               if (err instanceof ZodError) {
                 const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
-                ctx.logger.warn(`Review validation failed (will retry): ${msg}`, {
+                ctx.services.logger.warn(`Review validation failed (will retry): ${msg}`, {
                   issueNumber: ctx.issue.number,
                   taskId: task.id,
                 });
@@ -240,17 +241,18 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             }
             if (review.verdict === 'needs-fixes') {
               // Launch fix-surgeon
-              const fixContextPath = await ctx.contextBuilder.buildForFixSurgeon(
+              const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
                 ctx.issue.number,
                 ctx.worktree.path,
-                task,
+                task.id,
                 reviewPath,
                 changedFiles.map((f) => join(ctx.worktree.path, f)),
-                ctx.progressDir,
+                ctx.io.progressDir,
                 'review',
+                3,
               );
 
-              const fixResult = await ctx.launcher.launchAgent(
+              const fixResult = await ctx.services.launcher.launchAgent(
                 {
                   agent: 'fix-surgeon',
                   issueNumber: ctx.issue.number,
@@ -262,8 +264,8 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 ctx.worktree.path,
               );
 
-              ctx.recordTokens('fix-surgeon', fixResult.tokenUsage);
-              ctx.checkBudget();
+              ctx.callbacks.recordTokens('fix-surgeon', fixResult.tokenUsage);
+              ctx.callbacks.checkBudget();
 
               if (!fixResult.success) {
                 throw new Error(`Fix surgeon failed: ${fixResult.error}`);
@@ -278,23 +280,23 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       description: `Task ${task.id}: ${task.name}`,
     });
 
-    ctx.checkBudget();
+    ctx.callbacks.checkBudget();
 
     if (retryResult.success) {
       queue.complete(task.id);
-      await ctx.checkpoint.completeTask(task.id);
-      await ctx.progressWriter.appendEvent(`Task ${task.id} completed`);
+      await ctx.io.checkpoint.completeTask(task.id);
+      await ctx.io.progressWriter.appendEvent(`Task ${task.id} completed`);
 
       // Commit task
-      await ctx.commitManager.commit(
+      await ctx.io.commitManager.commit(
         `implement ${task.name}`,
         ctx.issue.number,
         'feat',
       );
     } else {
       queue.markBlocked(task.id);
-      await ctx.checkpoint.blockTask(task.id);
-      await ctx.progressWriter.appendEvent(`Task ${task.id} blocked: ${retryResult.error}`);
+      await ctx.io.checkpoint.blockTask(task.id);
+      await ctx.io.progressWriter.appendEvent(`Task ${task.id} blocked: ${retryResult.error}`);
     }
   }
 
@@ -311,25 +313,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
     ].join('\n');
   }
 
-  private async updateProgress(ctx: PhaseContext): Promise<void> {
-    const cpState = ctx.checkpoint.getState();
-    const taskStatuses: Array<{ id: string; name: string; status: string }> = cpState.completedTasks.map((id) => ({
-      id,
-      name: id,
-      status: 'completed',
-    }));
 
-    for (const id of cpState.blockedTasks) {
-      taskStatuses.push({ id, name: id, status: 'blocked' });
-    }
-
-    await ctx.progressWriter.write(
-      [],
-      cpState.currentPhase,
-      taskStatuses,
-      ctx.tokenTracker.getTotal(),
-    );
-  }
 }
 
 function truncateDiff(diff: string, maxChars: number): string {

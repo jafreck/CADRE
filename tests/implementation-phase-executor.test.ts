@@ -112,6 +112,28 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     debug: vi.fn(),
   };
 
+  const services = {
+    launcher: launcher as never,
+    retryExecutor: retryExecutor as never,
+    tokenTracker: tokenTracker as never,
+    contextBuilder: contextBuilder as never,
+    resultParser: resultParser as never,
+    logger: logger as never,
+  };
+
+  const io = {
+    progressDir: '/tmp/progress',
+    progressWriter: progressWriter as never,
+    checkpoint: checkpoint as never,
+    commitManager: commitManager as never,
+  };
+
+  const callbacks = {
+    recordTokens,
+    checkBudget,
+    updateProgress: vi.fn().mockResolvedValue(undefined),
+  };
+
   return {
     issue: {
       number: 42,
@@ -129,21 +151,14 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
       commands: { build: undefined },
       options: { maxParallelAgents: 2, maxRetriesPerTask: 3, perTaskBuildCheck: true, maxBuildFixRounds: 2 },
     } as never,
-    progressDir: '/tmp/progress',
-    contextBuilder: contextBuilder as never,
-    launcher: launcher as never,
-    resultParser: resultParser as never,
-    checkpoint: checkpoint as never,
-    commitManager: commitManager as never,
-    retryExecutor: retryExecutor as never,
-    tokenTracker: tokenTracker as never,
-    progressWriter: progressWriter as never,
     platform: {} as never,
-    recordTokens,
-    checkBudget,
-    logger: logger as never,
-    ...overrides,
-  };
+    services: { ...services, ...overrides.services } as never,
+    io: { ...io, ...overrides.io } as never,
+    callbacks: { ...callbacks, ...overrides.callbacks } as never,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([k]) => !['services', 'io', 'callbacks'].includes(k)),
+    ),
+  } as PhaseContext;
 }
 
 describe('ImplementationPhaseExecutor', () => {
@@ -173,7 +188,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.resultParser as never as { parseImplementationPlan: ReturnType<typeof vi.fn> }).parseImplementationPlan,
+        (ctx.services.resultParser as never as { parseImplementationPlan: ReturnType<typeof vi.fn> }).parseImplementationPlan,
       ).toHaveBeenCalledWith(join('/tmp/progress', 'implementation-plan.md'));
     });
 
@@ -191,12 +206,12 @@ describe('ImplementationPhaseExecutor', () => {
         completeTask: vi.fn().mockResolvedValue(undefined),
         blockTask: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ checkpoint: checkpoint as never });
+      const ctx = makeCtx({ io: { checkpoint: checkpoint } as never });
       const result = await executor.execute(ctx);
       // task-001 restored as complete → queue immediately done → no agents launched
       expect(result).toBe(join('/tmp/progress', 'implementation-plan.md'));
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).not.toHaveBeenCalled();
     });
 
@@ -204,7 +219,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'code-writer',
@@ -220,7 +235,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'test-writer',
@@ -236,7 +251,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'code-reviewer',
@@ -252,14 +267,14 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit,
+        (ctx.io.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit,
       ).toHaveBeenCalledTimes(2);
     });
 
     it('should make intermediate commit before final task commit', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      const calls = (ctx.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
+      const calls = (ctx.io.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
       expect(calls[0][0]).toMatch(/^wip:/);
       expect(calls[1][0]).toBe('implement Task task-001');
     });
@@ -268,23 +283,23 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.checkpoint as never as { completeTask: ReturnType<typeof vi.fn> }).completeTask,
+        (ctx.io.checkpoint as never as { completeTask: ReturnType<typeof vi.fn> }).completeTask,
       ).toHaveBeenCalledWith('task-001');
     });
 
     it('should record tokens for code-writer, test-writer, and code-reviewer', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('code-writer', 50);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('test-writer', 50);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('code-reviewer', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('code-writer', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('test-writer', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('code-reviewer', 50);
     });
 
     it('should log implementation completion with task counts', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.logger as never as { info: ReturnType<typeof vi.fn> }).info,
+        (ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info,
       ).toHaveBeenCalledWith(
         expect.stringContaining('Implementation complete'),
         expect.objectContaining({ issueNumber: 42, phase: 3 }),
@@ -315,10 +330,10 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.progressWriter as never as { appendEvent: ReturnType<typeof vi.fn> }).appendEvent,
+        (ctx.io.progressWriter as never as { appendEvent: ReturnType<typeof vi.fn> }).appendEvent,
       ).toHaveBeenCalledWith(expect.stringContaining('task-001 started'));
       expect(
-        (ctx.progressWriter as never as { appendEvent: ReturnType<typeof vi.fn> }).appendEvent,
+        (ctx.io.progressWriter as never as { appendEvent: ReturnType<typeof vi.fn> }).appendEvent,
       ).toHaveBeenCalledWith(expect.stringContaining('task-001 completed'));
     });
 
@@ -342,7 +357,7 @@ describe('ImplementationPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ resultParser: resultParser as never, retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { resultParser: resultParser, retryExecutor: retryExecutor } as never });
       // 1 completed, 1 blocked → should NOT throw
       await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'implementation-plan.md'));
     });
@@ -353,7 +368,7 @@ describe('ImplementationPhaseExecutor', () => {
       const retryExecutor = {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'agent failed' }),
       };
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
     });
 
@@ -372,7 +387,7 @@ describe('ImplementationPhaseExecutor', () => {
         error: 'writer error',
       };
       const launcher = { launchAgent: vi.fn().mockResolvedValue(failResult) };
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
     });
 
@@ -387,7 +402,7 @@ describe('ImplementationPhaseExecutor', () => {
       const retryExecutor = {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'failed' }),
       };
-      const ctx = makeCtx({ resultParser: resultParser as never, retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { resultParser: resultParser, retryExecutor: retryExecutor } as never });
 
       await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
     });
@@ -396,10 +411,10 @@ describe('ImplementationPhaseExecutor', () => {
       const retryExecutor = {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'max retries exceeded' }),
       };
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await expect(executor.execute(ctx)).rejects.toThrow();
       expect(
-        (ctx.checkpoint as never as { blockTask: ReturnType<typeof vi.fn> }).blockTask,
+        (ctx.io.checkpoint as never as { blockTask: ReturnType<typeof vi.fn> }).blockTask,
       ).toHaveBeenCalledWith('task-001');
     });
 
@@ -418,7 +433,7 @@ describe('ImplementationPhaseExecutor', () => {
       };
 
       const checkBudget = vi.fn().mockImplementationOnce(() => { throw budgetError; });
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never, checkBudget });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never, callbacks: { checkBudget } as never });
 
       await expect(executor.execute(ctx)).rejects.toThrow('Per-issue token budget exceeded');
     });
@@ -441,11 +456,11 @@ describe('ImplementationPhaseExecutor', () => {
         parseReview: vi.fn().mockResolvedValue({ verdict: 'needs-fixes' }),
       };
 
-      const ctx = makeCtx({ launcher: launcher as never, resultParser: resultParser as never });
+      const ctx = makeCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
       await executor.execute(ctx);
 
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 3, taskId: 'task-001' }),
         '/tmp/worktree',
@@ -460,10 +475,10 @@ describe('ImplementationPhaseExecutor', () => {
         parseReview: vi.fn().mockResolvedValue({ verdict: 'approved' }),
       };
 
-      const ctx = makeCtx({ resultParser: resultParser as never });
+      const ctx = makeCtx({ services: { resultParser: resultParser } as never });
       await executor.execute(ctx);
 
-      const launchCalls = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent.mock.calls;
+      const launchCalls = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent.mock.calls;
       const agents = launchCalls.map((c: [{ agent: string }]) => c[0].agent);
       expect(agents).not.toContain('fix-surgeon');
     });
@@ -476,15 +491,15 @@ describe('ImplementationPhaseExecutor', () => {
         parseReview: vi.fn().mockResolvedValue({ verdict: 'needs-fixes' }),
       };
 
-      const ctx = makeCtx({ resultParser: resultParser as never });
+      const ctx = makeCtx({ services: { resultParser: resultParser } as never });
       await executor.execute(ctx);
 
-      const launchCalls = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent.mock.calls;
+      const launchCalls = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent.mock.calls;
       const agents = launchCalls.map((c: [{ agent: string }]) => c[0].agent);
       expect(agents).not.toContain('fix-surgeon');
       // parseReview should not be called if file doesn't exist
       expect(
-        (ctx.resultParser as never as { parseReview: ReturnType<typeof vi.fn> }).parseReview,
+        (ctx.services.resultParser as never as { parseReview: ReturnType<typeof vi.fn> }).parseReview,
       ).not.toHaveBeenCalled();
     });
   });
@@ -551,7 +566,7 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
       };
 
-      const ctx = makeCtx({ resultParser: resultParser as never, launcher: launcher as never });
+      const ctx = makeCtx({ services: { resultParser: resultParser, launcher: launcher } as never });
       await executor.execute(ctx);
       expect(secondTaskPlanContent).toBeDefined();
       expect(secondTaskPlanContent).toContain('**Dependencies:** task-001');
@@ -563,7 +578,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { getTaskDiff: ReturnType<typeof vi.fn> }).getTaskDiff,
+        (ctx.io.commitManager as never as { getTaskDiff: ReturnType<typeof vi.fn> }).getTaskDiff,
       ).toHaveBeenCalled();
     });
 
@@ -574,7 +589,7 @@ describe('ImplementationPhaseExecutor', () => {
         getDiff: vi.fn().mockResolvedValue('full diff'),
         commit: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(commitManager.getDiff).not.toHaveBeenCalled();
     });
@@ -585,7 +600,7 @@ describe('ImplementationPhaseExecutor', () => {
         getTaskDiff: vi.fn().mockResolvedValue('my-task-specific-diff'),
         commit: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
         join('/tmp/progress', 'diff-task-001.patch'),
@@ -607,7 +622,7 @@ describe('ImplementationPhaseExecutor', () => {
           return makeSuccessAgentResult(agent);
         }),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never, launcher: launcher as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never, services: { launcher: launcher } as never });
       await executor.execute(ctx);
 
       const reviewerIndex = callOrder.indexOf('launch:code-reviewer');
@@ -619,7 +634,7 @@ describe('ImplementationPhaseExecutor', () => {
     it('should use wip: prefix with task name and attempt number in intermediate commit message', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      const calls = (ctx.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
+      const calls = (ctx.io.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
       const intermediateCall = calls.find(([msg]) => msg.startsWith('wip:'));
       expect(intermediateCall).toBeDefined();
       expect(intermediateCall![0]).toContain('Task task-001');
@@ -641,7 +656,7 @@ describe('ImplementationPhaseExecutor', () => {
           return makeSuccessAgentResult(agent);
         }),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never, launcher: launcher as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never, services: { launcher: launcher } as never });
       await executor.execute(ctx);
 
       const testWriterIndex = callOrder.indexOf('launch:test-writer');
@@ -660,7 +675,7 @@ describe('ImplementationPhaseExecutor', () => {
         getTaskDiff: vi.fn().mockResolvedValue(shortDiff),
         commit: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
         join('/tmp/progress', 'diff-task-001.patch'),
@@ -676,7 +691,7 @@ describe('ImplementationPhaseExecutor', () => {
         getTaskDiff: vi.fn().mockResolvedValue(exactDiff),
         commit: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
         join('/tmp/progress', 'diff-task-001.patch'),
@@ -692,7 +707,7 @@ describe('ImplementationPhaseExecutor', () => {
         getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
         commit: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       const patchCall = vi.mocked(writeFile).mock.calls.find(
         (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
@@ -710,7 +725,7 @@ describe('ImplementationPhaseExecutor', () => {
         getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
         commit: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       const patchCall = vi.mocked(writeFile).mock.calls.find(
         (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
@@ -728,7 +743,7 @@ describe('ImplementationPhaseExecutor', () => {
         getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
         commit: vi.fn().mockResolvedValue(undefined),
       };
-      const ctx = makeCtx({ commitManager: commitManager as never });
+      const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       const patchCall = vi.mocked(writeFile).mock.calls.find(
         (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
@@ -748,7 +763,7 @@ describe('ImplementationPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(retryExecutor.execute).toHaveBeenCalledWith(
@@ -768,7 +783,7 @@ describe('ImplementationPhaseExecutor', () => {
         ),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(descriptions.some((d) => d.includes('task-001') && d.includes('Task task-001'))).toBe(true);
@@ -789,7 +804,6 @@ describe('ImplementationPhaseExecutor', () => {
             maxBuildFixRounds: 2,
           },
         } as never,
-        ...overrides,
       };
     }
 
@@ -828,7 +842,7 @@ describe('ImplementationPhaseExecutor', () => {
     it('should launch test-writer after build succeeds', async () => {
       const ctx = makeCtxWithBuild();
       await executor.execute(ctx);
-      const launchCalls = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent.mock.calls;
+      const launchCalls = (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent.mock.calls;
       const agents = launchCalls.map((c: [{ agent: string }]) => c[0].agent);
       expect(agents).toContain('test-writer');
     });
@@ -846,7 +860,7 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
       await executor.execute(ctx);
 
       const launchCalls = launcher.launchAgent.mock.calls;
@@ -867,19 +881,20 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
       await executor.execute(ctx);
 
       expect(
-        (ctx.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
       ).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
-        expect.anything(),
+        expect.any(String),
         expect.anything(),
         expect.anything(),
         expect.anything(),
         'build',
+        3,
       );
     });
 
@@ -896,7 +911,7 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
       await executor.execute(ctx);
 
       expect(writeFile).toHaveBeenCalledWith(
@@ -919,10 +934,10 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
       await executor.execute(ctx);
 
-      expect(ctx.recordTokens).toHaveBeenCalledWith('fix-surgeon', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('fix-surgeon', 50);
     });
 
     it('should re-run build after each fix-surgeon invocation', async () => {
@@ -938,7 +953,7 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
       await executor.execute(ctx);
 
       // execShell called twice: initial build (fail) + re-run after fix (pass)
@@ -955,7 +970,7 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValue(makeSuccessAgentResult('fix-surgeon')),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
     });
 
@@ -980,7 +995,7 @@ describe('ImplementationPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never, retryExecutor: retryExecutor as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher, retryExecutor: retryExecutor } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
       // Verify the inner error references the build fix rounds
       const lastCall = retryExecutor.execute.mock.results[0];
@@ -996,7 +1011,7 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValue(makeSuccessAgentResult('fix-surgeon')),
       };
 
-      const ctx = makeCtxWithBuild({ launcher: launcher as never });
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow();
 
       const launchCalls = launcher.launchAgent.mock.calls;
