@@ -19,7 +19,6 @@ function buildProgram(): Command {
     .option('-i, --issue <numbers...>', 'Override: process specific issue numbers')
     .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
     .option('--no-pr', 'Skip PR creation')
-    .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
     .option('--respond-to-reviews', 'Respond to pull request reviews instead of processing new issues');
   program.command('status').description('Show current pipeline status');
   program.command('reset').description('Reset pipeline state');
@@ -76,14 +75,6 @@ describe('src/index.ts command registration', () => {
     expect(agentsCmd).toBeDefined();
     const subNames = agentsCmd!.commands.map((c) => c.name()).sort();
     expect(subNames).toEqual(['list', 'scaffold', 'validate']);
-  });
-
-  it('should register --skip-agent-validation option on the run command', () => {
-    const program = buildProgram();
-    const runCmd = program.commands.find((c) => c.name() === 'run');
-    expect(runCmd).toBeDefined();
-    const optionNames = runCmd!.options.map((o) => o.long);
-    expect(optionNames).toContain('--skip-agent-validation');
   });
 
   it('should register --no-pr option on the run command', () => {
