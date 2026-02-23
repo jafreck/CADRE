@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { IssueOrchestrator, BudgetExceededError } from '../src/core/issue-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
+import { AnalysisAmbiguityGate } from '../src/core/phase-gate.js';
 import * as fsUtils from '../src/util/fs.js';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -633,6 +634,76 @@ describe('IssueOrchestrator – phaseSubset', () => {
     await orchestrator.run();
 
     expect(executePhase).toHaveBeenCalledTimes(5);
+  });
+
+  it('should not instantiate AnalysisAmbiguityGate when phase 1 is not in the subset', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn(() => false),
+    });
+    vi.mocked(AnalysisAmbiguityGate).mockClear();
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+      undefined,
+      [3, 4, 5],
+    );
+
+    vi.spyOn(
+      orchestrator as unknown as { executePhase: (executor: { phaseId: number; name: string }) => Promise<unknown> },
+      'executePhase',
+    ).mockResolvedValue({
+      phase: 3,
+      phaseName: 'Implementation',
+      success: true,
+      duration: 100,
+      tokenUsage: 0,
+      outputPath: '/output/phase.md',
+    });
+
+    await orchestrator.run();
+
+    expect(AnalysisAmbiguityGate).not.toHaveBeenCalled();
+  });
+
+  it('should register only a single phase when phaseSubset has one entry', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn(() => false),
+    });
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+      undefined,
+      [3],
+    );
+
+    const executePhase = vi.spyOn(
+      orchestrator as unknown as { executePhase: (executor: { phaseId: number; name: string }) => Promise<unknown> },
+      'executePhase',
+    ).mockResolvedValue({
+      phase: 3,
+      phaseName: 'Implementation',
+      success: true,
+      duration: 100,
+      tokenUsage: 0,
+      outputPath: '/output/phase.md',
+    });
+
+    await orchestrator.run();
+
+    expect(executePhase).toHaveBeenCalledTimes(1);
+    expect((executePhase.mock.calls[0][0] as { phaseId: number }).phaseId).toBe(3);
   });
 });
 
