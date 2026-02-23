@@ -78,6 +78,7 @@ vi.mock('../src/core/phase-gate.js', () => ({
   PlanningToImplementationGate: vi.fn(() => ({ validate: mockPlanningGateValidate })),
   ImplementationToIntegrationGate: vi.fn(() => ({ validate: mockImplGateValidate })),
   IntegrationToPRGate: vi.fn(() => ({ validate: mockIntegrationGateValidate })),
+  AnalysisAmbiguityGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
 }));
 
 vi.mock('../src/core/progress.js', () => ({
