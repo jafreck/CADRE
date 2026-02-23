@@ -73,6 +73,8 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
           head: ctx.worktree.branch,
           base: ctx.config.baseBranch,
           draft: ctx.config.pullRequest.draft,
+          labels: ctx.config.pullRequest.labels,
+          reviewers: ctx.config.pullRequest.reviewers,
         });
       } catch (err) {
         // Non-critical: the branch is pushed, PR can be created manually
