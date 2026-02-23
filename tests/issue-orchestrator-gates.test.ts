@@ -250,6 +250,7 @@ function makeMockCheckpoint(completedPhaseIds: number[] = []): CheckpointManager
       baseCommit: 'abc123',
     }),
     getResumePoint: vi.fn().mockReturnValue({ phase: 1, task: null }),
+    getTokenRecords: vi.fn().mockReturnValue([]),
     isPhaseCompleted: vi.fn().mockImplementation((phaseId: number) =>
       completedPhaseIds.includes(phaseId),
     ),
