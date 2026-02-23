@@ -386,7 +386,8 @@ export class AzureDevOpsProvider implements PlatformProvider {
   }
 
   async listPRReviewComments(_prNumber: number): Promise<ReviewThread[]> {
-    throw new Error('listPRReviewComments: not yet implemented');
+    this.logger.warn('listPRReviewComments: review-response mode is not yet supported on Azure DevOps');
+    return [];
   }
 
   // ── Helpers ──
