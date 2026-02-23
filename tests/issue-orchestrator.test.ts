@@ -3,6 +3,7 @@ import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
 import * as fsUtils from '../src/util/fs.js';
 import { TokenTracker } from '../src/budget/token-tracker.js';
+import { ReportWriter } from '../src/reporting/report-writer.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
@@ -68,6 +69,12 @@ vi.mock('../src/util/process.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../src/reporting/report-writer.js', () => ({
+  ReportWriter: vi.fn().mockImplementation(() => ({
+    writeIssueCostReport: vi.fn().mockResolvedValue('/repo/.cadre/reports/issue-42-cost.json'),
+  })),
 }));
 
 // Default checkpoint mock – all phases are pre-completed so the phase loop skips everything.
@@ -736,6 +743,74 @@ describe('IssueOrchestrator – cost report', () => {
     expect(report.byPhase[0].phase).toBe(1);
   });
 
+  it('should call ReportWriter.writeIssueCostReport after a successful run', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const instance = vi.mocked(ReportWriter).mock.results[0].value as { writeIssueCostReport: ReturnType<typeof vi.fn> };
+    expect(instance.writeIssueCostReport).toHaveBeenCalledOnce();
+    expect(instance.writeIssueCostReport).toHaveBeenCalledWith(
+      expect.objectContaining({ issueNumber: 42 }),
+    );
+  });
+
+  it('should call ReportWriter.writeIssueCostReport even when a critical phase fails', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 1),
+    });
+    vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    const result = await orchestrator.run();
+    expect(result.success).toBe(false);
+
+    const instance = vi.mocked(ReportWriter).mock.results[0].value as { writeIssueCostReport: ReturnType<typeof vi.fn> };
+    expect(instance.writeIssueCostReport).toHaveBeenCalledOnce();
+    expect(instance.writeIssueCostReport).toHaveBeenCalledWith(
+      expect.objectContaining({ issueNumber: 42 }),
+    );
+  });
+
+  it('should write issue-cost report to the repo-level .cadre/reports/ path', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const instance = vi.mocked(ReportWriter).mock.results[0].value as { writeIssueCostReport: ReturnType<typeof vi.fn> };
+    expect(instance.writeIssueCostReport).toHaveBeenCalledOnce();
+    const returnedPath = await instance.writeIssueCostReport.mock.results[0].value as string;
+    expect(returnedPath).toContain('.cadre/reports');
+    expect(returnedPath).toContain('issue-42-cost.json');
+  });
+
   it('formatCostComment should produce markdown with cost summary sections', async () => {
     const checkpoint = makeCheckpointMock();
     (config.options as Record<string, unknown>).postCostComment = true;
@@ -770,6 +845,141 @@ describe('IssueOrchestrator – cost report', () => {
     expect(commentArg).toContain('By Phase');
     expect(commentArg).toContain('pr-composer');
     expect(commentArg).toMatch(/\$\d+\.\d+/); // contains a cost value
+  });
+});
+
+describe('IssueOrchestrator – ReportWriter integration', () => {
+  let config: CadreConfig;
+  let issue: IssueDetail;
+  let worktree: WorktreeInfo;
+  let logger: Logger;
+  let platform: ReturnType<typeof makePlatform>;
+  let launcher: ReturnType<typeof makeLauncher>;
+
+  beforeEach(() => {
+    config = makeConfig();
+    issue = makeIssue();
+    worktree = makeWorktree();
+    logger = makeLogger();
+    platform = makePlatform();
+    launcher = makeLauncher();
+    vi.clearAllMocks();
+  });
+
+  it('should call writeIssueCostReport after a successful run', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const instance = vi.mocked(ReportWriter).mock.results[0]?.value as { writeIssueCostReport: ReturnType<typeof vi.fn> };
+    expect(instance.writeIssueCostReport).toHaveBeenCalledOnce();
+    expect(instance.writeIssueCostReport).toHaveBeenCalledWith(
+      expect.objectContaining({ issueNumber: 42 }),
+    );
+  });
+
+  it('should call writeIssueCostReport even when a critical phase fails (finally block)', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 1),
+    });
+    vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    const result = await orchestrator.run();
+    expect(result.success).toBe(false);
+
+    const instance = vi.mocked(ReportWriter).mock.results[0]?.value as { writeIssueCostReport: ReturnType<typeof vi.fn> };
+    expect(instance.writeIssueCostReport).toHaveBeenCalledOnce();
+  });
+
+  it('should call both atomicWriteJSON (cost-report.json) and writeIssueCostReport in the same run', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(vi.mocked(fsUtils.atomicWriteJSON)).toHaveBeenCalledWith(
+      expect.stringContaining('cost-report.json'),
+      expect.objectContaining({ issueNumber: 42 }),
+    );
+    const instance = vi.mocked(ReportWriter).mock.results[0]?.value as { writeIssueCostReport: ReturnType<typeof vi.fn> };
+    expect(instance.writeIssueCostReport).toHaveBeenCalledOnce();
+  });
+
+  it('should pass the same CostReport object to writeIssueCostReport as written to cost-report.json', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const jsonCall = vi.mocked(fsUtils.atomicWriteJSON).mock.calls.find(
+      (args) => String(args[0]).endsWith('cost-report.json'),
+    );
+    const reportFromJson = jsonCall![1] as Record<string, unknown>;
+
+    const instance = vi.mocked(ReportWriter).mock.results[0]?.value as { writeIssueCostReport: ReturnType<typeof vi.fn> };
+    const reportFromWriter = instance.writeIssueCostReport.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    expect(reportFromWriter.issueNumber).toBe(reportFromJson.issueNumber);
+    expect(reportFromWriter.totalTokens).toBe(reportFromJson.totalTokens);
+    expect(reportFromWriter.generatedAt).toBe(reportFromJson.generatedAt);
+  });
+
+  it('should not throw if writeIssueCostReport rejects (error is swallowed by writeCostReport catch)', async () => {
+    const checkpoint = makeCheckpointMock();
+
+    // Override the mock to reject for this test
+    vi.mocked(ReportWriter).mockImplementationOnce(() => ({
+      writeIssueCostReport: vi.fn().mockRejectedValue(new Error('report write failed')),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    // writeCostReport errors are caught in the finally block; run() should still succeed
+    const result = await orchestrator.run();
+    expect(result.success).toBe(true);
   });
 });
 

@@ -1,11 +1,26 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
+import { TokenTracker } from '../src/budget/token-tracker.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { TokenRecord } from '../src/budget/token-tracker.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
+vi.mock('../src/budget/token-tracker.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/budget/token-tracker.js')>();
+  return {
+    ...actual,
+    TokenTracker: vi.fn().mockImplementation(() => ({
+      record: vi.fn(),
+      importRecords: vi.fn(),
+      exportRecords: vi.fn().mockReturnValue([]),
+      getRecords: vi.fn().mockReturnValue([]),
+      getTotal: vi.fn().mockReturnValue(0),
+      getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, records: [], recordCount: 0 }),
+    })),
+  };
+});
 vi.mock('../src/git/worktree.js', () => ({
   WorktreeManager: vi.fn(),
 }));
@@ -527,5 +542,74 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
         byAgent: expect.any(Object),
       }),
     });
+  });
+});
+
+describe('FleetOrchestrator — importRecords wiring on resume (task-009)', () => {
+  const preExistingRecords: TokenRecord[] = [
+    { issueNumber: 1, agent: 'total', phase: 1, tokens: 500, timestamp: '2024-01-01T00:00:00Z' },
+  ];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    const checkpointMod = await import('../src/core/checkpoint.js');
+    const fleetCheckpointMock = checkpointMod.FleetCheckpointManager as ReturnType<typeof vi.fn>;
+    fleetCheckpointMock.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      getIssueStatus: vi.fn().mockReturnValue(null),
+      getState: vi.fn().mockReturnValue({
+        tokenUsage: { records: preExistingRecords },
+      }),
+    }));
+  });
+
+  it('calls TokenTracker.importRecords() with checkpoint records when resume is true', async () => {
+    const { TokenTracker } = await import('../src/budget/token-tracker.js');
+    const TokenTrackerMock = TokenTracker as ReturnType<typeof vi.fn>;
+
+    const config = makeConfig({ resume: true });
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await fleet.run();
+
+    const mockInstance = TokenTrackerMock.mock.results[0]?.value;
+    expect(mockInstance.importRecords).toHaveBeenCalledWith(preExistingRecords);
+  });
+
+  it('does not call TokenTracker.importRecords() when resume is false', async () => {
+    const { TokenTracker } = await import('../src/budget/token-tracker.js');
+    const TokenTrackerMock = TokenTracker as ReturnType<typeof vi.fn>;
+
+    const config = makeConfig({ resume: false });
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await fleet.run();
+
+    const mockInstance = TokenTrackerMock.mock.results[0]?.value;
+    expect(mockInstance.importRecords).not.toHaveBeenCalled();
   });
 });
