@@ -1,15 +1,15 @@
-# Task Result: task-011 - Build Verification
+# Task Result: task-011 - Fill in `integration-checker.md` template
 
 ## Changes Made
-- `tests/github-issues.test.ts`: Updated `getIssue` test assertion to use new `issue_read` MCP tool name with `method: 'get'` parameter, matching the updated implementation.
+- `src/agents/templates/integration-checker.md`: Replaced 4-line stub with a full system prompt including role, input contract, commands to run, exit code interpretation, and structured output contract (IntegrationReport)
 
 ## Files Modified
-- tests/github-issues.test.ts
+- src/agents/templates/integration-checker.md
 
 ## Files Created
 - (none)
 
 ## Notes
-- `npm run build` exits with code 0.
-- `npx vitest run` exits with code 0 (297 tests pass across 34 test files).
-- The single pre-existing failing test was in `github-issues.test.ts` — it expected the old `get_issue` MCP tool name but a prior task updated the implementation to use `issue_read` with a `method` field. The test was updated to match.
+- Template describes running `npm install`, `npm run build`, `npx vitest run` in order
+- Output contract defines `IntegrationReport` with `buildResult`, `testResult`, `lintResult`, `overallPass`, and `summary`
+- All 21 `agent-templates.test.ts` tests pass
