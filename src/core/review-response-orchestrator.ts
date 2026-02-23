@@ -110,8 +110,6 @@ export class ReviewResponseOrchestrator {
         continue;
       }
 
-      result.processed++;
-
       try {
         // 5. Fetch issue details
         const issue: IssueDetail = await this.platform.getIssue(issueNumber);
@@ -122,9 +120,64 @@ export class ReviewResponseOrchestrator {
           pr.headBranch,
         );
 
-        // 7. Build and persist review-response context so phase agents can read it
+        // 7. Prepare progressDir early — needed for both rebase conflict context
+        //    and the review-response context written below.
         const progressDir = join(worktree.path, '.cadre', 'issues', String(issueNumber));
         await mkdir(progressDir, { recursive: true });
+
+        // 6b. Rebase onto the latest base branch so the PR is in a clean,
+        //     conflict-free state before agents make further changes.
+        //     If conflicts arise, the conflict-resolver agent is invoked to
+        //     resolve them in place; then the rebase is continued.  Any
+        //     failure during this sequence aborts the rebase and throws so
+        //     the issue lands in result.failed.
+        const rebaseStartResult = await this.worktreeManager.rebaseStart(issueNumber);
+
+        if (rebaseStartResult.status === 'conflict') {
+          this.logger.info(
+            `Merge conflicts detected for PR #${pr.number}; launching conflict-resolver agent`,
+            { issueNumber, data: { conflictedFiles: rebaseStartResult.conflictedFiles } },
+          );
+
+          // Build context for the conflict-resolver agent.
+          const conflictContextPath = await this.contextBuilder.buildForConflictResolver(
+            issueNumber,
+            worktree.path,
+            rebaseStartResult.conflictedFiles,
+            progressDir,
+          );
+
+          // Launch the agent; it writes resolved file content directly to disk.
+          const resolverResult = await this.launcher.launchAgent(
+            {
+              agent: 'conflict-resolver',
+              issueNumber,
+              phase: 0,
+              contextPath: conflictContextPath,
+              outputPath: join(progressDir, 'conflict-resolution-report.md'),
+            },
+            worktree.path,
+          );
+
+          if (!resolverResult.success) {
+            await this.worktreeManager.rebaseAbort(issueNumber);
+            throw new Error(
+              `Conflict-resolver agent failed for PR #${pr.number} (exit ${resolverResult.exitCode})`,
+            );
+          }
+
+          // Stage all resolved files and finish the rebase.
+          const continueResult = await this.worktreeManager.rebaseContinue(issueNumber);
+          if (!continueResult.success) {
+            await this.worktreeManager.rebaseAbort(issueNumber);
+            throw new Error(
+              `Rebase --continue failed after conflict resolution for PR #${pr.number}: ${continueResult.error ?? 'unknown error'}`,
+            );
+          }
+        }
+
+        // Rebase succeeded — count this issue as actively processed.
+        result.processed++;
         const reviewContext = this.contextBuilder.buildForReviewResponse(issue, activeThreads);
         await writeFile(join(progressDir, 'review-response.md'), reviewContext, 'utf-8');
 
@@ -176,10 +229,12 @@ export class ReviewResponseOrchestrator {
 
         // 9. Push the branch and update the existing PR body on success
         if (issueResult.success) {
-          // Push any new commits made by the implementation phase
+          // Push any new commits made by the implementation phase.
+          // Force-push is required here because the rebase above rewrote the
+          // branch history relative to the remote.
           const commitManager = new CommitManager(worktree.path, this.config.commits, this.logger);
           try {
-            await commitManager.push(false, worktree.branch);
+            await commitManager.push(true, worktree.branch);
             this.logger.info(
               `Issue #${issueNumber} (PR #${pr.number}): pushed changes to ${worktree.branch}`,
               { issueNumber },

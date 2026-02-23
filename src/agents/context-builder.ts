@@ -339,6 +339,36 @@ export class ContextBuilder {
   }
 
   /**
+   * Build a context file for the conflict-resolver agent.
+   * @param issueNumber   Issue associated with this worktree.
+   * @param worktreePath  Absolute path to the worktree root.
+   * @param conflictedFiles  Paths (relative to worktreePath) of files with conflict markers.
+   * @param progressDir   Directory where context and output files are written.
+   */
+  async buildForConflictResolver(
+    issueNumber: number,
+    worktreePath: string,
+    conflictedFiles: string[],
+    progressDir: string,
+  ): Promise<string> {
+    return this.writeContext(progressDir, 'conflict-resolver', issueNumber, {
+      agent: 'conflict-resolver',
+      issueNumber,
+      projectName: this.config.projectName,
+      repository: this.config.repository,
+      worktreePath,
+      phase: 0,
+      config: { commands: this.config.commands },
+      inputFiles: conflictedFiles.map((f) => join(worktreePath, f)),
+      outputPath: join(progressDir, 'conflict-resolution-report.md'),
+      payload: {
+        conflictedFiles,
+        baseBranch: this.config.baseBranch,
+      },
+    });
+  }
+
+  /**
    * Write a context JSON file and return the path.
    */
   private async writeContext(

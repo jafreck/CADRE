@@ -299,36 +299,101 @@ export class WorktreeManager {
 
   /**
    * Rebase the worktree's branch onto the latest base branch.
+   * Aborts automatically on conflict and returns success=false.
+   * For conflict resolution support, use rebaseStart / rebaseContinue / rebaseAbort.
    */
   async rebase(issueNumber: number): Promise<{ success: boolean; conflicts?: string[] }> {
+    const result = await this.rebaseStart(issueNumber);
+    if (result.status === 'clean') return { success: true };
+
+    await this.rebaseAbort(issueNumber);
+    return { success: false, conflicts: result.conflictedFiles };
+  }
+
+  /**
+   * Fetch and start a rebase of the worktree branch onto the latest base branch.
+   * Unlike rebase(), this does NOT abort on conflict — it leaves the rebase
+   * paused so an agent can resolve the conflicted files, after which
+   * rebaseContinue() should be called.
+   */
+  async rebaseStart(
+    issueNumber: number,
+  ): Promise<
+    | { status: 'clean' }
+    | { status: 'conflict'; conflictedFiles: string[]; worktreePath: string }
+  > {
+    const worktreePath = this.getWorktreePath(issueNumber);
+    const worktreeGit = simpleGit(worktreePath);
+
+    await worktreeGit.fetch('origin', this.baseBranch);
+
+    try {
+      await worktreeGit.rebase([`origin/${this.baseBranch}`]);
+      this.logger.info(`Rebased worktree cleanly for issue #${issueNumber}`, { issueNumber });
+      return { status: 'clean' };
+    } catch {
+      // Rebase is paused at the first conflicting commit — do NOT abort.
+      const conflictedFiles = await this.getConflictedFiles(worktreePath);
+      this.logger.info(
+        `Rebase paused for issue #${issueNumber}: ${conflictedFiles.length} conflicted file(s)`,
+        { issueNumber, data: { conflictedFiles } },
+      );
+      return { status: 'conflict', conflictedFiles, worktreePath };
+    }
+  }
+
+  /**
+   * Stage all changes and continue a paused rebase.
+   * Call this after an agent has resolved the conflicted files left by rebaseStart().
+   */
+  async rebaseContinue(issueNumber: number): Promise<{ success: boolean; error?: string }> {
     const worktreePath = this.getWorktreePath(issueNumber);
     const worktreeGit = simpleGit(worktreePath);
 
     try {
-      // Fetch latest
-      await worktreeGit.fetch('origin', this.baseBranch);
-      // Attempt rebase
-      await worktreeGit.rebase([`origin/${this.baseBranch}`]);
-      this.logger.info(`Rebased worktree for issue #${issueNumber}`, { issueNumber });
+      await worktreeGit.raw(['add', '-A']);
+      // GIT_EDITOR=true prevents git from opening an editor for the commit message.
+      await worktreeGit.env({ ...process.env, GIT_EDITOR: 'true' }).rebase(['--continue']);
+      this.logger.info(`Rebase continued successfully for issue #${issueNumber}`, { issueNumber });
       return { success: true };
     } catch (err) {
-      // Abort the rebase on conflict
-      try {
-        await worktreeGit.rebase(['--abort']);
-      } catch {
-        // May already be aborted
+      // Check whether there are still unresolved conflict markers remaining.
+      const stillConflicted = await this.getConflictedFiles(worktreePath);
+      if (stillConflicted.length > 0) {
+        return {
+          success: false,
+          error: `Conflicts remain after resolution attempt: ${stillConflicted.join(', ')}`,
+        };
       }
+      return { success: false, error: String(err) };
+    }
+  }
 
-      const errorStr = String(err);
-      const conflictMatch = errorStr.match(/CONFLICT.*?: (.+)/g);
-      const conflicts = conflictMatch ?? [errorStr];
+  /**
+   * Abort a paused rebase, restoring the worktree to its pre-rebase state.
+   */
+  async rebaseAbort(issueNumber: number): Promise<void> {
+    const worktreePath = this.getWorktreePath(issueNumber);
+    const worktreeGit = simpleGit(worktreePath);
+    try {
+      await worktreeGit.rebase(['--abort']);
+      this.logger.info(`Rebase aborted for issue #${issueNumber}`, { issueNumber });
+    } catch {
+      // May already be aborted / not in a rebase state.
+    }
+  }
 
-      this.logger.warn(`Rebase failed for issue #${issueNumber}`, {
-        issueNumber,
-        data: { conflicts },
-      });
-
-      return { success: false, conflicts };
+  /**
+   * Return the list of files currently in an unresolved merge-conflict state
+   * inside the given worktree path.
+   */
+  private async getConflictedFiles(worktreePath: string): Promise<string[]> {
+    const worktreeGit = simpleGit(worktreePath);
+    try {
+      const output = await worktreeGit.raw(['diff', '--name-only', '--diff-filter=U']);
+      return output.trim().split('\n').filter(Boolean);
+    } catch {
+      return [];
     }
   }
 

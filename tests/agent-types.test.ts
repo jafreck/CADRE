@@ -18,8 +18,8 @@ const ALL_AGENT_NAMES: AgentName[] = [
 ];
 
 describe('AGENT_DEFINITIONS', () => {
-  it('should contain exactly 12 entries', () => {
-    expect(AGENT_DEFINITIONS).toHaveLength(12);
+  it('should contain exactly 13 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(13);
   });
 
   it('should have one entry for each AgentName', () => {
@@ -77,6 +77,7 @@ describe('AGENT_DEFINITIONS', () => {
     expect(unstructured).toContain('code-writer');
     expect(unstructured).toContain('test-writer');
     expect(unstructured).toContain('fix-surgeon');
+    expect(unstructured).toContain('conflict-resolver');
   });
 
   it('should group orchestration agents in phase 0', () => {
