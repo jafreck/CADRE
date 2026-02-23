@@ -1153,6 +1153,9 @@ export class IssueOrchestrator {
     await ensureDir(this.progressDir);
     await atomicWriteJSON(join(this.progressDir, 'cost-report.json'), report);
 
+    const reportWriter = new ReportWriter(this.config, this.costEstimator);
+    await reportWriter.writeIssueCostReport(report);
+
     this.logger.info(`Cost report written: ${this.costEstimator.format(overallEstimate)}`, {
       issueNumber: this.issue.number,
     });

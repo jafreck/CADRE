@@ -3,6 +3,7 @@ import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
+import type { TokenRecord } from '../src/budget/token-tracker.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
 vi.mock('../src/git/worktree.js', () => ({
