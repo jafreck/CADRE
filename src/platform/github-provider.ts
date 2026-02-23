@@ -27,6 +27,13 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function mapPRState(raw: Record<string, unknown>): { state: 'open' | 'closed' | 'merged'; merged: boolean } {
+  if (raw.merged_at || raw.merged === true) {
+    return { state: 'merged', merged: true };
+  }
+  return { state: asString(raw.state) === 'closed' ? 'closed' : 'open', merged: false };
+}
+
 /**
  * GitHub implementation of PlatformProvider.
  *
