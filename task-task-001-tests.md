@@ -1,23 +1,21 @@
-# Test Result: task-001 - Change tokenUsage to `number | null` in core types
+# Test Result: task-001 - Add `issueUpdates` Config Schema
 
 ## Tests Written
-- `tests/agent-types.test.ts`: 9 new test cases
-  - AgentResult.tokenUsage: should accept null for tokenUsage
-  - AgentResult.tokenUsage: should accept a number for tokenUsage
-  - AgentResult.tokenUsage: should accept zero for tokenUsage
-  - PhaseResult.tokenUsage: should accept null for tokenUsage
-  - PhaseResult.tokenUsage: should accept a number for tokenUsage
-  - PhaseResult.tokenUsage: should accept null with optional fields unset
-  - IssueResult.tokenUsage: should accept null for tokenUsage
-  - IssueResult.tokenUsage: should accept a number for tokenUsage
-  - IssueResult.tokenUsage: should carry tokenUsage from phases
+- `tests/config-schema.test.ts`: 5 new test cases in a nested `issueUpdates` describe block
+  - should apply correct defaults when issueUpdates is omitted
+  - should validate when issueUpdates is omitted entirely
+  - should accept explicit issueUpdates values
+  - should apply defaults for unspecified issueUpdates sub-fields
+  - should reject non-boolean issueUpdates.enabled
 
 ## Test Files Modified
-- (none)
+- tests/config-schema.test.ts
 
 ## Test Files Created
-- tests/agent-types.test.ts
+- (none)
 
 ## Coverage Notes
-- The changes are purely type-level; tests verify the runtime shape of `AgentResult`, `PhaseResult`, and `IssueResult` objects with `tokenUsage` set to both `null` and numeric values.
-- `recordTokens` in `issue-orchestrator.ts` still has signature `tokens: number` (not `number | null`), which is a downstream concern noted in the task result as intentionally deferred.
+- All six sub-fields (`enabled`, `onStart`, `onPhaseComplete`, `onComplete`, `onFailed`, `onBudgetWarning`) are verified for correct defaults.
+- Backward-compatible zero-config usage (omitting `issueUpdates` entirely) is explicitly tested.
+- Partial override behavior (only some sub-fields specified) is tested.
+- Type rejection (non-boolean value) is tested for the `enabled` field as a representative case.

@@ -251,4 +251,62 @@ describe('CadreConfigSchema', () => {
       expect(result.data.github?.auth).toBeUndefined();
     }
   });
+
+  describe('issueUpdates', () => {
+    it('should apply correct defaults when issueUpdates is omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.issueUpdates.enabled).toBe(true);
+      expect(result.issueUpdates.onStart).toBe(true);
+      expect(result.issueUpdates.onPhaseComplete).toBe(false);
+      expect(result.issueUpdates.onComplete).toBe(true);
+      expect(result.issueUpdates.onFailed).toBe(true);
+      expect(result.issueUpdates.onBudgetWarning).toBe(true);
+    });
+
+    it('should validate when issueUpdates is omitted entirely', () => {
+      const result = CadreConfigSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept explicit issueUpdates values', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        issueUpdates: {
+          enabled: false,
+          onStart: false,
+          onPhaseComplete: true,
+          onComplete: false,
+          onFailed: false,
+          onBudgetWarning: false,
+        },
+      });
+      expect(result.issueUpdates.enabled).toBe(false);
+      expect(result.issueUpdates.onStart).toBe(false);
+      expect(result.issueUpdates.onPhaseComplete).toBe(true);
+      expect(result.issueUpdates.onComplete).toBe(false);
+      expect(result.issueUpdates.onFailed).toBe(false);
+      expect(result.issueUpdates.onBudgetWarning).toBe(false);
+    });
+
+    it('should apply defaults for unspecified issueUpdates sub-fields', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        issueUpdates: { enabled: false },
+      });
+      expect(result.issueUpdates.enabled).toBe(false);
+      expect(result.issueUpdates.onStart).toBe(true);
+      expect(result.issueUpdates.onPhaseComplete).toBe(false);
+      expect(result.issueUpdates.onComplete).toBe(true);
+      expect(result.issueUpdates.onFailed).toBe(true);
+      expect(result.issueUpdates.onBudgetWarning).toBe(true);
+    });
+
+    it('should reject non-boolean issueUpdates.enabled', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        issueUpdates: { enabled: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });

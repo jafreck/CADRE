@@ -1,17 +1,14 @@
-# Task Result: task-001 - Change tokenUsage to `number | null` in core types
+# Task Result: task-001 - Add `issueUpdates` Config Schema
 
 ## Changes Made
-- `src/agents/types.ts`: Changed `AgentResult.tokenUsage` from `number` to `number | null`
-- `src/agents/types.ts`: Changed `PhaseResult.tokenUsage` from `number` to `number | null`
-- `src/core/issue-orchestrator.ts`: Changed `IssueResult.tokenUsage` from `number` to `number | null`
+- `src/config/schema.ts`: Added `issueUpdates` Zod object field to `CadreConfigSchema` with six boolean sub-fields (`enabled`, `onStart`, `onPhaseComplete`, `onComplete`, `onFailed`, `onBudgetWarning`) and their correct defaults. Used `.default({})` on the outer object for backward-compatible zero-config usage.
 
 ## Files Modified
-- src/agents/types.ts
-- src/core/issue-orchestrator.ts
+- src/config/schema.ts
 
 ## Files Created
 - (none)
 
 ## Notes
-- These are purely type-level changes; no runtime logic was altered.
-- Downstream callers that pass `tokenUsage` (e.g., `recordTokens`) may produce TypeScript errors until updated in subsequent tasks.
+- All 17 existing tests in `tests/config-schema.test.ts` continue to pass with no modifications.
+- A config object omitting `issueUpdates` passes schema validation and resolves to the defaults as required.
