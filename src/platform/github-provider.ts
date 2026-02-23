@@ -163,38 +163,59 @@ export class GitHubProvider implements PlatformProvider {
   }
 
   private parseReviewThreads(prNumber: number, raw: unknown): ReviewThread[] {
-    // The MCP response may be an array of threads or wrapped in an envelope
+    // The MCP get_review_comments response is { reviewThreads: [...], pageInfo: {...}, totalCount: N }
+    // with Go-serialized capitalized field names (ID, IsResolved, IsOutdated, Comments.Nodes, etc.)
+    // It may also be a plain array of threads (legacy / test format).
     let threads: unknown[];
     if (Array.isArray(raw)) {
       threads = raw;
-    } else if (raw !== null && typeof raw === 'object' && 'threads' in (raw as object)) {
-      threads = asArray((raw as Record<string, unknown>).threads);
+    } else if (raw !== null && typeof raw === 'object') {
+      const envelope = raw as Record<string, unknown>;
+      if ('reviewThreads' in envelope) {
+        threads = asArray(envelope.reviewThreads);
+      } else if ('threads' in envelope) {
+        threads = asArray(envelope.threads);
+      } else {
+        return [];
+      }
     } else {
       return [];
     }
 
     return threads.map((t) => {
       const thread = asRecord(t);
-      const rawComments = asArray(thread.comments);
+
+      // Support both Go-serialized capitalized keys (MCP server) and lowercase (tests/legacy)
+      const rawCommentsContainer = thread.Comments ?? thread.comments;
+      const rawComments = Array.isArray(rawCommentsContainer)
+        ? rawCommentsContainer
+        : asArray(asRecord(rawCommentsContainer).Nodes ?? asRecord(rawCommentsContainer).nodes);
 
       const comments = rawComments.map((c) => {
         const comment = asRecord(c);
-        const author = asRecord(comment.author);
+        const authorContainer = comment.Author ?? comment.author;
+        const author = asRecord(authorContainer);
+        const login = asString(author.Login ?? author.login, 'unknown');
+
+        const lineVal = comment.Line ?? comment.line;
         return {
-          id: asString(comment.id),
-          author: asString(author.login, 'unknown'),
-          body: asString(comment.body),
-          createdAt: asString(comment.createdAt),
-          path: asString(comment.path),
-          line: typeof comment.line === 'number' ? comment.line : undefined,
+          id: asString(comment.ID ?? comment.id),
+          author: login,
+          body: asString(comment.Body ?? comment.body),
+          createdAt: asString(comment.CreatedAt ?? comment.createdAt),
+          path: asString(comment.Path ?? comment.path),
+          line: typeof lineVal === 'number' ? lineVal : undefined,
         };
       });
 
+      const isResolved = thread.IsResolved ?? thread.isResolved;
+      const isOutdated = thread.IsOutdated ?? thread.isOutdated;
+
       return {
-        id: asString(thread.id),
+        id: asString(thread.ID ?? thread.id),
         prNumber,
-        isResolved: thread.isResolved === true,
-        isOutdated: thread.isOutdated === true,
+        isResolved: isResolved === true,
+        isOutdated: isOutdated === true,
         comments,
       };
     });
