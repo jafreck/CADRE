@@ -3,14 +3,14 @@
 import { createRequire } from 'module';
 import { Command } from 'commander';
 import chalk from 'chalk';
-
-const require = createRequire(import.meta.url);
-const { version } = require('../package.json');
 import { runInit } from './cli/init.js';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
 import { AgentLauncher } from './core/agent-launcher.js';
 import { registerAgentsCommand } from './cli/agents.js';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
 
 const program = new Command();
 

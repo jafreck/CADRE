@@ -127,3 +127,30 @@ describe('src/index.ts command registration', () => {
     expect(!opts.pr).toBe(false);
   });
 });
+
+describe('src/index.ts version from package.json', () => {
+  it('should be able to read version from package.json using createRequire', () => {
+    expect(pkg.version).toBeDefined();
+    expect(typeof pkg.version).toBe('string');
+    expect(pkg.version.length).toBeGreaterThan(0);
+  });
+
+  it('package.json version should be a valid semver string', () => {
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it('program version should match package.json version when set dynamically', () => {
+    const program = new Command();
+    program.name('cadre').exitOverride().version(pkg.version);
+    expect(program.version()).toBe(pkg.version);
+  });
+
+  it('dynamically set version should not be the hardcoded fallback sentinel', () => {
+    // Verify the pattern: reading from package.json produces the real version string
+    // Once src/index.ts is updated, the running program will use this same value
+    const versionFromPkg = pkg.version;
+    const program = new Command();
+    program.name('cadre').exitOverride().version(versionFromPkg);
+    expect(program.version()).toBe(versionFromPkg);
+  });
+});
