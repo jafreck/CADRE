@@ -1,3 +1,7 @@
+---
+description: "Writes a clear, informative pull request title and body summarizing all changes made."
+tools: ["*"]
+---
 # PR Composer
 
 ## Role

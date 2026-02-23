@@ -33,6 +33,15 @@ function resolveBackend(config: Awaited<ReturnType<typeof loadConfig>>): string 
 }
 
 /**
+ * Return the YAML frontmatter block required by the GitHub Copilot CLI for
+ * an agent file. Copilot only recognises `.agent.md` files that begin with a
+ * frontmatter block containing at least a `description` field.
+ */
+function copilotFrontmatter(description: string): string {
+  return `---\ndescription: "${description}"\ntools: ["*"]\n---\n`;
+}
+
+/**
  * Scaffold any missing agent instruction files from built-in templates.
  * Existing files are left unchanged. Returns the list of file paths that were created.
  * Throws if a required template is not found.
@@ -53,7 +62,10 @@ export async function scaffoldMissingAgentFiles(
       throw new Error(`Template not found for agent '${agent.name}': ${srcPath}`);
     }
 
-    const content = await readFile(srcPath, 'utf-8');
+    let content = await readFile(srcPath, 'utf-8');
+    if (backend === 'copilot') {
+      content = copilotFrontmatter(agent.description) + content;
+    }
     await mkdir(dirname(destPath), { recursive: true });
     await writeFile(destPath, content, 'utf-8');
     created.push(destPath);
@@ -142,7 +154,10 @@ export function registerAgentsCommand(program: Command): void {
               continue;
             }
 
-            const content = await readFile(srcPath, 'utf-8');
+            let content = await readFile(srcPath, 'utf-8');
+            if (effectiveBackend === 'copilot') {
+              content = copilotFrontmatter(agent.description) + content;
+            }
             await mkdir(dirname(destPath), { recursive: true });
             await writeFile(destPath, content, 'utf-8');
             const action = opts.force ? 'overwrite' : 'create ';

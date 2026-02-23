@@ -1,3 +1,7 @@
+---
+description: "Breaks a GitHub issue into discrete implementation tasks with dependencies, ordering, and acceptance criteria."
+tools: ["*"]
+---
 # Implementation Planner
 
 ## Role

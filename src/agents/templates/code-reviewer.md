@@ -1,3 +1,7 @@
+---
+description: "Reviews code changes for correctness, style, and potential issues with a pass/fail verdict."
+tools: ["*"]
+---
 # Code Reviewer
 
 ## Role

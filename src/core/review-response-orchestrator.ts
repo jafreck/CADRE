@@ -134,74 +134,84 @@ export class ReviewResponseOrchestrator {
         const rebaseStartResult = await this.worktreeManager.rebaseStart(issueNumber);
 
         if (rebaseStartResult.status === 'conflict') {
-          this.logger.info(
-            `Merge conflicts detected for PR #${pr.number}; launching conflict-resolver agent`,
-            { issueNumber, data: { conflictedFiles: rebaseStartResult.conflictedFiles } },
-          );
+          if (rebaseStartResult.conflictedFiles.length === 0) {
+            // Rebase is paused but all conflict markers are already resolved
+            // (e.g. a previous run's conflict-resolver cleared them).  Skip
+            // the agent and go straight to rebase --continue.
+            this.logger.info(
+              `Rebase paused for PR #${pr.number} with 0 conflicted files — continuing rebase without conflict-resolver`,
+              { issueNumber },
+            );
+          } else {
+            this.logger.info(
+              `Merge conflicts detected for PR #${pr.number}; launching conflict-resolver agent`,
+              { issueNumber, data: { conflictedFiles: rebaseStartResult.conflictedFiles } },
+            );
 
-          // Build context for the conflict-resolver agent.
-          const conflictContextPath = await this.contextBuilder.buildForConflictResolver(
-            issueNumber,
-            worktree.path,
-            rebaseStartResult.conflictedFiles,
-            progressDir,
-          );
-
-          // Launch the agent; it writes resolved file content directly to disk.
-          const resolverResult = await this.launcher.launchAgent(
-            {
-              agent: 'conflict-resolver',
+            // Build context for the conflict-resolver agent.
+            const conflictContextPath = await this.contextBuilder.buildForConflictResolver(
               issueNumber,
-              phase: 0,
-              contextPath: conflictContextPath,
-              outputPath: join(progressDir, 'conflict-resolution-report.md'),
-            },
-            worktree.path,
-          );
+              worktree.path,
+              rebaseStartResult.conflictedFiles,
+              progressDir,
+            );
 
-          if (!resolverResult.success) {
-            // Build a human-readable detail string for the log and thrown error
-            // so timeouts are clearly distinguishable from non-zero exit codes.
-            const detail = resolverResult.timedOut
-              ? `timed out after ${resolverResult.duration}ms`
-              : `exit ${resolverResult.exitCode}`;
-            this.logger.error(
-              `Conflict-resolver agent failed for PR #${pr.number} (${detail})`,
+            // Launch the agent; it writes resolved file content directly to disk.
+            const resolverResult = await this.launcher.launchAgent(
               {
+                agent: 'conflict-resolver',
                 issueNumber,
-                data: {
-                  timedOut: resolverResult.timedOut,
-                  exitCode: resolverResult.exitCode,
-                  stderr: resolverResult.stderr?.slice(-500) ?? '',
-                },
+                phase: 0,
+                contextPath: conflictContextPath,
+                outputPath: join(progressDir, 'conflict-resolution-report.md'),
               },
+              worktree.path,
             );
-            await this.worktreeManager.rebaseAbort(issueNumber);
-            throw new Error(`Conflict-resolver agent failed for PR #${pr.number} (${detail})`);
-          }
 
-          // Agent exited 0 but may not have written its resolution report.
-          // This happens when the process is killed mid-turn (e.g. timeout fires
-          // after conflict markers are cleared but before the report is written),
-          // or when the agent crashes without producing output.  Without this guard
-          // a successful-looking exit would allow rebaseContinue to run on files
-          // that may still contain unresolved markers.
-          if (!resolverResult.outputExists) {
-            this.logger.error(
-              `Conflict-resolver agent for PR #${pr.number} exited successfully but produced no output at ${resolverResult.outputPath}`,
-              {
-                issueNumber,
-                data: {
-                  outputPath: resolverResult.outputPath,
-                  stderr: resolverResult.stderr?.slice(-300) ?? '',
+            if (!resolverResult.success) {
+              // Build a human-readable detail string for the log and thrown error
+              // so timeouts are clearly distinguishable from non-zero exit codes.
+              const detail = resolverResult.timedOut
+                ? `timed out after ${resolverResult.duration}ms`
+                : `exit ${resolverResult.exitCode}`;
+              this.logger.error(
+                `Conflict-resolver agent failed for PR #${pr.number} (${detail})`,
+                {
+                  issueNumber,
+                  data: {
+                    timedOut: resolverResult.timedOut,
+                    exitCode: resolverResult.exitCode,
+                    stderr: resolverResult.stderr?.slice(-500) ?? '',
+                  },
                 },
-              },
-            );
-            await this.worktreeManager.rebaseAbort(issueNumber);
-            throw new Error(
-              `Conflict-resolver agent produced no output for PR #${pr.number} — resolution report missing at ${resolverResult.outputPath}`,
-            );
-          }
+              );
+              await this.worktreeManager.rebaseAbort(issueNumber);
+              throw new Error(`Conflict-resolver agent failed for PR #${pr.number} (${detail})`);
+            }
+
+            // Agent exited 0 but may not have written its resolution report.
+            // This happens when the process is killed mid-turn (e.g. timeout fires
+            // after conflict markers are cleared but before the report is written),
+            // or when the agent crashes without producing output.  Without this guard
+            // a successful-looking exit would allow rebaseContinue to run on files
+            // that may still contain unresolved markers.
+            if (!resolverResult.outputExists) {
+              this.logger.error(
+                `Conflict-resolver agent for PR #${pr.number} exited successfully but produced no output at ${resolverResult.outputPath}`,
+                {
+                  issueNumber,
+                  data: {
+                    outputPath: resolverResult.outputPath,
+                    stderr: resolverResult.stderr?.slice(-300) ?? '',
+                  },
+                },
+              );
+              await this.worktreeManager.rebaseAbort(issueNumber);
+              throw new Error(
+                `Conflict-resolver agent produced no output for PR #${pr.number} — resolution report missing at ${resolverResult.outputPath}`,
+              );
+            }
+          } // end else (conflictedFiles.length > 0)
 
           // Stage all resolved files and finish the rebase.
           const continueResult = await this.worktreeManager.rebaseContinue(issueNumber);

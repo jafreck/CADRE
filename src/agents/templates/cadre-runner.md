@@ -1,3 +1,7 @@
+---
+description: "Top-level agent describing the CADRE fleet execution model and runtime behavior."
+tools: ["*"]
+---
 # CADRE Runner
 
 ## Role

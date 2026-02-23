@@ -436,4 +436,32 @@ describe('scaffoldMissingAgentFiles', () => {
     await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
     expect(mkdir).toHaveBeenCalledWith('/mock/agents', { recursive: true });
   });
+
+  it('should prepend Copilot YAML frontmatter when backend is copilot', async () => {
+    // Only scaffold the first agent for a focused check
+    const [firstAgent] = AGENT_DEFINITIONS;
+    vi.mocked(exists).mockImplementation(async (path: string) => {
+      return (path as string).includes('templates') || !path.includes(firstAgent.name);
+    });
+
+    await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
+
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]?.[1] as string;
+    expect(writtenContent).toMatch(/^---\ndescription:/);
+    expect(writtenContent).toContain('tools: ["*"]');
+    expect(writtenContent).toContain('# template content');
+  });
+
+  it('should NOT prepend frontmatter when backend is claude', async () => {
+    const [firstAgent] = AGENT_DEFINITIONS;
+    vi.mocked(exists).mockImplementation(async (path: string) => {
+      return (path as string).includes('templates') || !path.includes(firstAgent.name);
+    });
+
+    await scaffoldMissingAgentFiles('/mock/agents', 'claude');
+
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]?.[1] as string;
+    expect(writtenContent).not.toMatch(/^---/);
+    expect(writtenContent).toBe('# template content');
+  });
 });

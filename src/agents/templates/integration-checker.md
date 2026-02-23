@@ -1,3 +1,7 @@
+---
+description: "Verifies all changes integrate correctly by running build, test, and lint commands."
+tools: ["*"]
+---
 # Integration Checker
 
 ## Role

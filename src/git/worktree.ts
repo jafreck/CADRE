@@ -37,6 +37,7 @@ export class WorktreeManager {
     private readonly branchTemplate: string,
     private readonly logger: Logger,
     private readonly agentDir?: string,
+    private readonly backend: string = 'copilot',
   ) {
     this.git = simpleGit(repoPath);
   }
@@ -233,8 +234,9 @@ export class WorktreeManager {
   }
 
   /**
-   * Copy all agent files (*.agent.md) from agentDir into the worktree's
-   * .github/agents/ directory so the Copilot CLI can resolve them by name.
+   * Copy agent files from agentDir into the worktree's `.github/agents/` directory.
+   * For the copilot backend copies `*.agent.md` files; for the claude backend
+   * copies `<name>/CLAUDE.md` subdirectory trees.
    * No-op if agentDir is not configured or does not exist.
    */
   private async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<void> {
@@ -249,15 +251,30 @@ export class WorktreeManager {
     await ensureDir(destDir);
 
     const entries = await readdir(this.agentDir);
-    const agentFiles = entries.filter((f) => f.endsWith('.agent.md'));
+    let syncCount = 0;
 
-    for (const file of agentFiles) {
-      await copyFile(join(this.agentDir, file), join(destDir, file));
+    if (this.backend === 'claude') {
+      // Claude agents live in subdirectories: <agentDir>/<name>/CLAUDE.md
+      for (const entry of entries) {
+        const claudeFile = join(this.agentDir, entry, 'CLAUDE.md');
+        if (await exists(claudeFile)) {
+          await ensureDir(join(destDir, entry));
+          await copyFile(claudeFile, join(destDir, entry, 'CLAUDE.md'));
+          syncCount++;
+        }
+      }
+    } else {
+      // Copilot agents are flat *.agent.md files
+      const agentFiles = entries.filter((f) => f.endsWith('.agent.md'));
+      for (const file of agentFiles) {
+        await copyFile(join(this.agentDir, file), join(destDir, file));
+        syncCount++;
+      }
     }
 
-    if (agentFiles.length > 0) {
+    if (syncCount > 0) {
       this.logger.debug(
-        `Synced ${agentFiles.length} agent file(s) from ${this.agentDir} → ${destDir}`,
+        `Synced ${syncCount} agent file(s) from ${this.agentDir} → ${destDir}`,
         { issueNumber },
       );
     }
@@ -434,6 +451,16 @@ export class WorktreeManager {
           error: `Conflicts remain after resolution attempt: ${stillConflicted.join(', ')}`,
           conflictedFiles: stillConflicted,
         };
+      }
+      // If the agent already completed the rebase (ran its own git rebase --continue),
+      // git reports "no rebase in progress" — treat this as success.
+      const errStr = String(err);
+      if (errStr.includes('no rebase in progress')) {
+        this.logger.info(
+          `Rebase for issue #${issueNumber} was already completed by the agent — treating as success`,
+          { issueNumber },
+        );
+        return { success: true };
       }
       // Unexpected git error (e.g. new conflicts on the next commit in the rebase queue).
       this.logger.error(
