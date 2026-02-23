@@ -1,3 +1,6 @@
+import type { TokenUsageDetail } from '../agents/types.js';
+export type { TokenUsageDetail };
+
 /**
  * Tracks token usage across all issues, agents, and phases.
  */
@@ -138,10 +141,6 @@ export class TokenTracker {
   }
 }
 
-export interface TokenUsageDetail {
-  input: number;
-  output: number;
-}
 
 export interface TokenRecord {
   issueNumber: number;

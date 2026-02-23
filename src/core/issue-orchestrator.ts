@@ -914,12 +914,21 @@ export class IssueOrchestrator {
   private recordTokens(agent: string, tokens: TokenUsageDetail | number | null): void {
     const tokenCount = typeof tokens === 'object' && tokens !== null ? tokens.input + tokens.output : tokens;
     if (tokenCount != null && tokenCount > 0) {
-      this.tokenTracker.record(
-        this.issue.number,
-        agent,
-        this.checkpoint.getState().currentPhase,
-        tokenCount,
-      );
+      if (typeof tokens === 'object' && tokens !== null) {
+        this.tokenTracker.recordDetailed(
+          this.issue.number,
+          agent,
+          this.checkpoint.getState().currentPhase,
+          tokens,
+        );
+      } else {
+        this.tokenTracker.record(
+          this.issue.number,
+          agent,
+          this.checkpoint.getState().currentPhase,
+          tokenCount,
+        );
+      }
       void this.checkpoint.recordTokenUsage(
         agent,
         this.checkpoint.getState().currentPhase,

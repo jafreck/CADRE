@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
 import * as fsUtils from '../src/util/fs.js';
+import { TokenTracker } from '../src/budget/token-tracker.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
@@ -46,6 +47,10 @@ vi.mock('../src/budget/token-tracker.js', () => ({
   TokenTracker: vi.fn().mockImplementation(() => ({
     getTotal: vi.fn().mockReturnValue(0),
     record: vi.fn(),
+    getRecords: vi.fn().mockReturnValue([]),
+    getByPhase: vi.fn().mockReturnValue({}),
+    getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 }),
+    checkIssueBudget: vi.fn().mockReturnValue('ok'),
   })),
 }));
 
@@ -160,6 +165,7 @@ function makePlatform() {
   return {
     createPullRequest: vi.fn(),
     issueLinkSuffix: vi.fn().mockReturnValue(''),
+    addIssueComment: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -463,5 +469,299 @@ describe('IssueOrchestrator – notification dispatch', () => {
       expect(completedIdx).toBeGreaterThanOrEqual(0);
       expect(startedIdx).toBeLessThan(completedIdx);
     });
+  });
+});
+
+describe('IssueOrchestrator – cost report', () => {
+  let config: CadreConfig;
+  let issue: IssueDetail;
+  let worktree: WorktreeInfo;
+  let logger: Logger;
+  let platform: ReturnType<typeof makePlatform>;
+  let launcher: ReturnType<typeof makeLauncher>;
+
+  beforeEach(() => {
+    config = makeConfig();
+    issue = makeIssue();
+    worktree = makeWorktree();
+    logger = makeLogger();
+    platform = makePlatform();
+    launcher = makeLauncher();
+    vi.clearAllMocks();
+  });
+
+  it('should write cost-report.json after a successful run', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const expectedPath = `/tmp/worktree-42/.cadre/issues/42/cost-report.json`;
+    expect(vi.mocked(fsUtils.atomicWriteJSON)).toHaveBeenCalledWith(
+      expectedPath,
+      expect.objectContaining({ issueNumber: 42 }),
+    );
+  });
+
+  it('should write cost-report.json even when a critical phase fails (finally block)', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 1),
+    });
+    vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    const result = await orchestrator.run();
+    expect(result.success).toBe(false);
+
+    // ensureDir is called for the phase AND for cost report; atomicWriteJSON must still be called
+    expect(vi.mocked(fsUtils.atomicWriteJSON)).toHaveBeenCalledWith(
+      expect.stringContaining('cost-report.json'),
+      expect.objectContaining({ issueNumber: 42 }),
+    );
+  });
+
+  it('should produce a cost report conforming to the CostReport interface', async () => {
+    const checkpoint = makeCheckpointMock();
+
+    // Provide a detailed token record (input/output split)
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(1000),
+      record: vi.fn(),
+      getRecords: vi.fn().mockReturnValue([
+        { issueNumber: 42, agent: 'issue-analyst', phase: 1, tokens: 1000, input: 750, output: 250, timestamp: '2024-01-01T00:00:00Z' },
+      ]),
+      getByPhase: vi.fn().mockReturnValue({ 1: 1000 }),
+      getSummary: vi.fn().mockReturnValue({ total: 1000, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 1 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const writeCall = vi.mocked(fsUtils.atomicWriteJSON).mock.calls.find(
+      (args) => String(args[0]).endsWith('cost-report.json'),
+    );
+    expect(writeCall).toBeDefined();
+    const report = writeCall![1] as Record<string, unknown>;
+    expect(report).toHaveProperty('issueNumber', 42);
+    expect(report).toHaveProperty('totalTokens');
+    expect(report).toHaveProperty('estimatedCost');
+    expect(report).toHaveProperty('byAgent');
+    expect(report).toHaveProperty('byPhase');
+    expect(report).toHaveProperty('model');
+    expect(report).toHaveProperty('generatedAt');
+    expect(Array.isArray(report.byAgent)).toBe(true);
+    expect(Array.isArray(report.byPhase)).toBe(true);
+  });
+
+  it('should call addIssueComment when postCostComment is true', async () => {
+    const checkpoint = makeCheckpointMock();
+    (config.options as Record<string, unknown>).postCostComment = true;
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(platform.addIssueComment).toHaveBeenCalledOnce();
+    expect(platform.addIssueComment).toHaveBeenCalledWith(42, expect.stringContaining('Cost Report'));
+  });
+
+  it('should NOT call addIssueComment when postCostComment is false (default)', async () => {
+    const checkpoint = makeCheckpointMock();
+    // postCostComment is not set in makeConfig(), so it defaults to falsy
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(platform.addIssueComment).not.toHaveBeenCalled();
+  });
+
+  it('should use estimateDetailed when token records have input/output split', async () => {
+    const checkpoint = makeCheckpointMock();
+
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(2000),
+      record: vi.fn(),
+      getRecords: vi.fn().mockReturnValue([
+        { issueNumber: 42, agent: 'test-agent', phase: 1, tokens: 2000, input: 1500, output: 500, timestamp: '2024-01-01T00:00:00Z' },
+      ]),
+      getByPhase: vi.fn().mockReturnValue({ 1: 2000 }),
+      getSummary: vi.fn().mockReturnValue({ total: 2000, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 1 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const writeCall = vi.mocked(fsUtils.atomicWriteJSON).mock.calls.find(
+      (args) => String(args[0]).endsWith('cost-report.json'),
+    );
+    const report = writeCall![1] as Record<string, unknown>;
+    // With detailed records: totalTokens = input + output = 1500 + 500 = 2000
+    expect(report.totalTokens).toBe(2000);
+    expect(report.inputTokens).toBe(1500);
+    expect(report.outputTokens).toBe(500);
+  });
+
+  it('should fall back to estimate when token records have no input/output split', async () => {
+    const checkpoint = makeCheckpointMock();
+
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(4000),
+      record: vi.fn(),
+      getRecords: vi.fn().mockReturnValue([
+        { issueNumber: 42, agent: 'test-agent', phase: 1, tokens: 4000, timestamp: '2024-01-01T00:00:00Z' },
+      ]),
+      getByPhase: vi.fn().mockReturnValue({ 1: 4000 }),
+      getSummary: vi.fn().mockReturnValue({ total: 4000, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 1 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const writeCall = vi.mocked(fsUtils.atomicWriteJSON).mock.calls.find(
+      (args) => String(args[0]).endsWith('cost-report.json'),
+    );
+    const report = writeCall![1] as Record<string, unknown>;
+    // Without detailed records: falls back to estimate with 3:1 input/output ratio
+    expect(report.totalTokens).toBe(4000);
+    expect(report.inputTokens).toBe(3000); // 75% of 4000
+    expect(report.outputTokens).toBe(1000); // 25% of 4000
+  });
+
+  it('should include agent and phase breakdowns in byAgent and byPhase', async () => {
+    const checkpoint = makeCheckpointMock();
+
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(1500),
+      record: vi.fn(),
+      getRecords: vi.fn().mockReturnValue([
+        { issueNumber: 42, agent: 'issue-analyst', phase: 1, tokens: 1000, input: 750, output: 250, timestamp: '2024-01-01T00:00:00Z' },
+        { issueNumber: 42, agent: 'codebase-scout', phase: 1, tokens: 500, input: 375, output: 125, timestamp: '2024-01-01T00:00:01Z' },
+      ]),
+      getByPhase: vi.fn().mockReturnValue({ 1: 1500 }),
+      getSummary: vi.fn().mockReturnValue({ total: 1500, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 2 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const writeCall = vi.mocked(fsUtils.atomicWriteJSON).mock.calls.find(
+      (args) => String(args[0]).endsWith('cost-report.json'),
+    );
+    const report = writeCall![1] as { byAgent: Array<{ agent: string }>; byPhase: Array<{ phase: number }> };
+
+    expect(report.byAgent).toHaveLength(2);
+    expect(report.byAgent.map((e) => e.agent)).toContain('issue-analyst');
+    expect(report.byAgent.map((e) => e.agent)).toContain('codebase-scout');
+    expect(report.byPhase).toHaveLength(1);
+    expect(report.byPhase[0].phase).toBe(1);
+  });
+
+  it('formatCostComment should produce markdown with cost summary sections', async () => {
+    const checkpoint = makeCheckpointMock();
+    (config.options as Record<string, unknown>).postCostComment = true;
+
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(500),
+      record: vi.fn(),
+      getRecords: vi.fn().mockReturnValue([
+        { issueNumber: 42, agent: 'pr-composer', phase: 5, tokens: 500, input: 375, output: 125, timestamp: '2024-01-01T00:00:00Z' },
+      ]),
+      getByPhase: vi.fn().mockReturnValue({ 5: 500 }),
+      getSummary: vi.fn().mockReturnValue({ total: 500, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 1 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    const commentArg = vi.mocked(platform.addIssueComment).mock.calls[0]?.[1] as string;
+    expect(commentArg).toContain('Cost Report for Issue #42');
+    expect(commentArg).toContain('By Agent');
+    expect(commentArg).toContain('By Phase');
+    expect(commentArg).toContain('pr-composer');
+    expect(commentArg).toMatch(/\$\d+\.\d+/); // contains a cost value
   });
 });
