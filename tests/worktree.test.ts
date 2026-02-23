@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { simpleGit } from 'simple-git';
-import { WorktreeManager } from '../src/git/worktree.js';
+import { WorktreeManager, RemoteBranchMissingError } from '../src/git/worktree.js';
 import { Logger } from '../src/logging/logger.js';
 
 // Mock simple-git
@@ -11,12 +11,22 @@ vi.mock('simple-git', () => {
     checkout: vi.fn().mockResolvedValue(undefined),
     revparse: vi.fn().mockResolvedValue('abc123'),
     branch: vi.fn().mockResolvedValue(undefined),
+    branchLocal: vi.fn().mockResolvedValue({ all: [] }),
   };
   return {
     simpleGit: vi.fn(() => mockGit),
     default: vi.fn(() => mockGit),
   };
 });
+
+vi.mock('../src/util/fs.js', () => ({
+  exists: vi.fn(),
+  ensureDir: vi.fn().mockResolvedValue(undefined),
+  readFileOrNull: vi.fn().mockResolvedValue(null),
+  atomicWriteFile: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { exists, ensureDir } from '../src/util/fs.js';
 
 describe('WorktreeManager', () => {
   let manager: WorktreeManager;
@@ -100,6 +110,130 @@ describe('WorktreeManager', () => {
 
   it('should have rebase method', () => {
     expect(typeof manager.rebase).toBe('function');
+  });
+
+  describe('RemoteBranchMissingError', () => {
+    it('should extend Error', () => {
+      const err = new RemoteBranchMissingError('cadre/issue-42');
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it('should have name RemoteBranchMissingError', () => {
+      const err = new RemoteBranchMissingError('cadre/issue-42');
+      expect(err.name).toBe('RemoteBranchMissingError');
+    });
+
+    it('should include branch name in message', () => {
+      const err = new RemoteBranchMissingError('cadre/issue-42');
+      expect(err.message).toContain('cadre/issue-42');
+    });
+  });
+
+  describe('provision', () => {
+    let mockGit: ReturnType<typeof simpleGit>;
+
+    beforeEach(() => {
+      mockGit = simpleGit('/tmp/repo');
+      vi.clearAllMocks();
+      // Default: worktree does not exist
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      // Default: revparse returns a commit SHA
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('abc123');
+      // Default: ls-remote returns empty (branch absent)
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
+      // Default: no local branches
+      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: [] });
+    });
+
+    it('should return existing WorktreeInfo when worktree already exists', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      const result = await manager.provision(42, 'my issue');
+      expect(result.issueNumber).toBe(42);
+      expect(result.exists).toBe(true);
+      expect(result.branch).toBe('cadre/issue-42');
+    });
+
+    it('should return existing WorktreeInfo when worktree exists and resume=false', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      const result = await manager.provision(42, 'my issue', false);
+      expect(result.exists).toBe(true);
+      expect(result.issueNumber).toBe(42);
+    });
+
+    it('should return existing WorktreeInfo when worktree exists and resume=true', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      const result = await manager.provision(42, 'my issue', true);
+      expect(result.exists).toBe(true);
+      expect(result.issueNumber).toBe(42);
+      // No ls-remote call should be made when worktree already exists
+      expect(mockGit.raw).not.toHaveBeenCalledWith(expect.arrayContaining(['ls-remote']));
+    });
+
+    it('should throw RemoteBranchMissingError when resume=true and remote branch is absent', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
+      await expect(manager.provision(42, 'my issue', true)).rejects.toThrow(RemoteBranchMissingError);
+    });
+
+    it('should throw RemoteBranchMissingError with correct branch name', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('   ');
+      await expect(manager.provision(42, 'my issue', true)).rejects.toThrow(
+        /cadre\/issue-42/,
+      );
+    });
+
+    it('should fetch and create worktree when resume=true and remote branch exists', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (mockGit.raw as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce('abc123\trefs/heads/cadre/issue-42') // ls-remote
+        .mockResolvedValue(''); // worktree add
+      const result = await manager.provision(42, 'my issue', true);
+      expect(mockGit.fetch).toHaveBeenCalledWith('origin', 'cadre/issue-42');
+      expect(result.issueNumber).toBe(42);
+      expect(result.exists).toBe(true);
+      expect(result.branch).toBe('cadre/issue-42');
+    });
+
+    it('should log info after successful resume', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (mockGit.raw as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce('abc123\trefs/heads/cadre/issue-42')
+        .mockResolvedValue('');
+      await manager.provision(42, 'my issue', true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Resumed worktree'),
+        expect.anything(),
+      );
+    });
+
+    it('should create a new branch and worktree on fresh provision (no resume)', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: [] });
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('deadbeef\n');
+      const result = await manager.provision(42, 'my issue');
+      expect(mockGit.branch).toHaveBeenCalledWith(['cadre/issue-42', 'deadbeef']);
+      expect(result.issueNumber).toBe(42);
+      expect(result.exists).toBe(true);
+    });
+
+    it('should skip branch creation on fresh provision when local branch already exists', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: ['cadre/issue-42'] });
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('deadbeef\n');
+      await manager.provision(42, 'my issue');
+      expect(mockGit.branch).not.toHaveBeenCalled();
+    });
+
+    it('should log info after successful fresh provision', async () => {
+      (exists as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('abc123\n');
+      await manager.provision(42, 'my issue');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Provisioned worktree'),
+        expect.anything(),
+      );
+    });
   });
 
   describe('prefetch', () => {

@@ -1,13 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
+import { RemoteBranchMissingError } from '../src/git/worktree.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
-vi.mock('../src/git/worktree.js', () => ({
-  WorktreeManager: vi.fn(),
-}));
+vi.mock('../src/git/worktree.js', () => {
+  class RemoteBranchMissingError extends Error {
+    constructor(branch: string) {
+      super(`Remote branch '${branch}' is missing`);
+      this.name = 'RemoteBranchMissingError';
+    }
+  }
+  return {
+    WorktreeManager: vi.fn(),
+    RemoteBranchMissingError,
+  };
+});
 vi.mock('../src/core/agent-launcher.js', () => ({
   AgentLauncher: vi.fn(),
 }));
@@ -34,10 +44,10 @@ vi.mock('../src/core/progress.js', () => ({
   IssueProgressWriter: vi.fn(),
 }));
 vi.mock('../src/core/issue-orchestrator.js', () => ({
-  IssueOrchestrator: vi.fn().mockImplementation(() => ({
+  IssueOrchestrator: vi.fn().mockImplementation((_config: unknown, issue: { number: number; title: string }) => ({
     run: vi.fn().mockResolvedValue({
-      issueNumber: 1,
-      issueTitle: 'Test issue',
+      issueNumber: issue.number,
+      issueTitle: issue.title,
       success: true,
       phases: [],
       totalDuration: 100,
@@ -489,5 +499,230 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
         byAgent: expect.any(Object),
       }),
     });
+  });
+});
+
+describe('FleetOrchestrator — resume flag passed to provision()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls provision() with resume: false when config.options.resume is false', async () => {
+    const config = makeConfig({ resume: false });
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.provision).toHaveBeenCalledWith(1, 'Issue 1', false);
+  });
+
+  it('calls provision() with resume: true when config.options.resume is true', async () => {
+    const config = makeConfig({ resume: true });
+    const issues = [makeIssue(2)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockResolvedValue({
+      path: '/tmp/worktree/2',
+      branch: 'cadre/issue-2',
+      baseCommit: 'def456',
+    });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.provision).toHaveBeenCalledWith(2, 'Issue 2', true);
+  });
+
+  it('passes the resume flag for every issue when multiple issues are processed', async () => {
+    const config = makeConfig({ resume: true, maxParallelIssues: 3 });
+    const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.provision).toHaveBeenCalledTimes(3);
+    for (const call of worktreeManager.provision.mock.calls) {
+      expect(call[2]).toBe(true);
+    }
+  });
+});
+
+describe('FleetOrchestrator — RemoteBranchMissingError handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('skips the issue and returns success: false when provision() throws RemoteBranchMissingError', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockRejectedValue(new RemoteBranchMissingError('cadre/issue-1'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    expect(result.failedIssues).toHaveLength(1);
+    expect(result.failedIssues[0].issueNumber).toBe(1);
+    expect(result.failedIssues[0].error).toContain('remote branch is missing');
+    expect(result.success).toBe(false);
+  });
+
+  it('continues processing other issues after one fails with RemoteBranchMissingError', async () => {
+    const config = makeConfig({ maxParallelIssues: 2 });
+    const issues = [makeIssue(1), makeIssue(2)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision
+      .mockRejectedValueOnce(new RemoteBranchMissingError('cadre/issue-1'))
+      .mockResolvedValueOnce({ path: '/tmp/worktree/2', branch: 'cadre/issue-2', baseCommit: 'abc' });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    // Issue 1 failed due to RemoteBranchMissingError; issue 2 was still processed
+    expect(result.failedIssues).toHaveLength(1);
+    expect(result.failedIssues[0].issueNumber).toBe(1);
+    // Both issues should appear in result.issues
+    expect(result.issues).toHaveLength(2);
+    // At least one issue succeeded (issue 2 went through IssueOrchestrator successfully)
+    const anySucceeded = result.issues.some((i) => i.success === true);
+    expect(anySucceeded).toBe(true);
+  });
+
+  it('logs a warning (not an error) when RemoteBranchMissingError is thrown', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockRejectedValue(new RemoteBranchMissingError('cadre/issue-1'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(logger.warn).toHaveBeenCalled();
+    const warnCall = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('remote branch is missing'),
+    );
+    expect(warnCall).toBeDefined();
+    // Should NOT log an error for this specific case
+    const errorCall = (logger.error as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('#1'),
+    );
+    expect(errorCall).toBeUndefined();
+  });
+
+  it('includes issue number and descriptive message in the skipped result', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(42)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockRejectedValue(new RemoteBranchMissingError('cadre/issue-42'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    const skippedIssue = result.issues.find((i) => i.issueNumber === 42);
+    expect(skippedIssue).toBeDefined();
+    expect(skippedIssue!.success).toBe(false);
+    expect(skippedIssue!.error).toContain('42');
+    expect(skippedIssue!.error).toContain('remote branch is missing');
+  });
+
+  it('does not skip issues when provision() succeeds normally', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    // Default mock resolves successfully
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].success).toBe(true);
+    expect(result.failedIssues).toHaveLength(0);
   });
 });
