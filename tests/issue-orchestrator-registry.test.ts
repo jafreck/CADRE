@@ -42,6 +42,7 @@ vi.mock('../src/core/phase-gate.js', () => {
     PlanningToImplementationGate: vi.fn(() => makeGate()),
     ImplementationToIntegrationGate: vi.fn(() => makeGate()),
     IntegrationToPRGate: vi.fn(() => makeGate()),
+    AnalysisAmbiguityGate: vi.fn(() => makeGate()),
   };
 });
 

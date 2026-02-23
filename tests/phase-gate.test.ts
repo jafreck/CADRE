@@ -7,6 +7,7 @@ import {
   PlanningToImplementationGate,
   ImplementationToIntegrationGate,
   IntegrationToPRGate,
+  AnalysisAmbiguityGate,
 } from '../src/core/phase-gate.js';
 
 // Mock simple-git for ImplementationToIntegrationGate tests
@@ -555,5 +556,116 @@ All tests passed.
     expect(result.status).toBe('fail');
     expect(result.errors.some((e) => e.includes('new regression failures'))).toBe(true);
     expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(true);
+  });
+});
+
+// ── AnalysisAmbiguityGate ─────────────────────────────────────────────────────
+
+describe('AnalysisAmbiguityGate', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `cadre-ambiguity-gate-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('should pass when analysis.md has no ambiguities section', async () => {
+    await writeFile(join(tempDir, 'analysis.md'), VALID_ANALYSIS);
+    const gate = new AnalysisAmbiguityGate();
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('should pass when analysis.md has an empty ambiguities section', async () => {
+    const content = `# Analysis\n## Requirements\n- Something\n## Ambiguities\n\n## Scope\nsrc/\n`;
+    await writeFile(join(tempDir, 'analysis.md'), content);
+    const gate = new AnalysisAmbiguityGate();
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should warn (not fail) when analysis.md is missing', async () => {
+    const gate = new AnalysisAmbiguityGate();
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('analysis.md is missing'))).toBe(true);
+  });
+
+  it('should warn when ambiguity count is > 0 but <= threshold', async () => {
+    const content = `# Analysis\n## Ambiguities\n- Unclear requirement A\n- Unclear requirement B\n`;
+    await writeFile(join(tempDir, 'analysis.md'), content);
+    const gate = new AnalysisAmbiguityGate({ ambiguityThreshold: 5, haltOnAmbiguity: false });
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('2 ambiguities found'))).toBe(true);
+  });
+
+  it('should warn when count == threshold', async () => {
+    const ambiguities = Array.from({ length: 3 }, (_, i) => `- Ambiguity ${i + 1}`).join('\n');
+    const content = `# Analysis\n## Ambiguities\n${ambiguities}\n`;
+    await writeFile(join(tempDir, 'analysis.md'), content);
+    const gate = new AnalysisAmbiguityGate({ ambiguityThreshold: 3, haltOnAmbiguity: true });
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should fail when count > threshold and haltOnAmbiguity is true', async () => {
+    const ambiguities = Array.from({ length: 4 }, (_, i) => `- Ambiguity ${i + 1}`).join('\n');
+    const content = `# Analysis\n## Ambiguities\n${ambiguities}\n`;
+    await writeFile(join(tempDir, 'analysis.md'), content);
+    const gate = new AnalysisAmbiguityGate({ ambiguityThreshold: 2, haltOnAmbiguity: true });
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('4 ambiguities found'))).toBe(true);
+  });
+
+  it('should warn (not fail) when count > threshold but haltOnAmbiguity is false', async () => {
+    const ambiguities = Array.from({ length: 6 }, (_, i) => `- Ambiguity ${i + 1}`).join('\n');
+    const content = `# Analysis\n## Ambiguities\n${ambiguities}\n`;
+    await writeFile(join(tempDir, 'analysis.md'), content);
+    const gate = new AnalysisAmbiguityGate({ ambiguityThreshold: 3, haltOnAmbiguity: false });
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('6 ambiguities found'))).toBe(true);
+  });
+
+  it('should use default threshold of 5 and haltOnAmbiguity false when no options given', async () => {
+    const ambiguities = Array.from({ length: 6 }, (_, i) => `- Ambiguity ${i + 1}`).join('\n');
+    const content = `# Analysis\n## Ambiguities\n${ambiguities}\n`;
+    await writeFile(join(tempDir, 'analysis.md'), content);
+    const gate = new AnalysisAmbiguityGate();
+
+    // 6 > default threshold of 5, but haltOnAmbiguity defaults to false → warn not fail
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should not count ambiguities from sections after ambiguities heading', async () => {
+    const content = `# Analysis\n## Ambiguities\n- Only one\n## Other Section\n- Not counted\n- Also not counted\n`;
+    await writeFile(join(tempDir, 'analysis.md'), content);
+    const gate = new AnalysisAmbiguityGate({ ambiguityThreshold: 5, haltOnAmbiguity: true });
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.warnings.some((w) => w.includes('1 ambiguity found'))).toBe(true);
   });
 });

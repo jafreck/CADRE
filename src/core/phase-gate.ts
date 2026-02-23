@@ -288,3 +288,68 @@ export class IntegrationToPRGate implements PhaseGate {
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);
   }
 }
+
+// ── Gate: Analysis Ambiguity Check ───────────────────────────────────────────
+
+/**
+ * Validates that the number of ambiguities identified in `analysis.md` does
+ * not exceed a configured threshold before the pipeline proceeds.
+ *
+ * Checks:
+ * - Extracts lines under the `## Ambiguities` heading in `analysis.md`.
+ * - Returns `warn` when ambiguity count > 0 but ≤ threshold.
+ * - Returns `fail` when count > threshold and `haltOnAmbiguity` is true.
+ * - Returns `warn` when count > threshold but `haltOnAmbiguity` is false.
+ * - Returns `pass` when there is no ambiguities section or it is empty.
+ * - Warns (does not fail) when `analysis.md` is missing.
+ */
+export class AnalysisAmbiguityGate implements PhaseGate {
+  private readonly ambiguityThreshold: number;
+  private readonly haltOnAmbiguity: boolean;
+
+  constructor(options?: { ambiguityThreshold?: number; haltOnAmbiguity?: boolean }) {
+    this.ambiguityThreshold = options?.ambiguityThreshold ?? 5;
+    this.haltOnAmbiguity = options?.haltOnAmbiguity ?? false;
+  }
+
+  async validate(context: GateContext): Promise<GateResult> {
+    const analysisPath = join(context.progressDir, 'analysis.md');
+    const analysisContent = await readFileSafe(analysisPath);
+
+    if (analysisContent === null) {
+      return pass(['analysis.md is missing; skipping ambiguity check']);
+    }
+
+    // Walk lines to extract the ## Ambiguities section
+    const lines = analysisContent.split('\n');
+    let inAmbiguities = false;
+    const ambiguityLines: string[] = [];
+
+    for (const line of lines) {
+      if (/^##\s+Ambiguities/i.test(line)) {
+        inAmbiguities = true;
+        continue;
+      }
+      if (inAmbiguities && /^##\s/.test(line)) {
+        break;
+      }
+      if (inAmbiguities && line.trim()) {
+        ambiguityLines.push(line.trim());
+      }
+    }
+
+    if (!inAmbiguities || ambiguityLines.length === 0) {
+      return pass();
+    }
+
+    const count = ambiguityLines.length;
+    const message = `${count} ambiguit${count === 1 ? 'y' : 'ies'} found in analysis.md (threshold: ${this.ambiguityThreshold})`;
+
+    if (count > this.ambiguityThreshold && this.haltOnAmbiguity) {
+      return fail([message]);
+    }
+
+    return pass([message]);
+  }
+}
+
