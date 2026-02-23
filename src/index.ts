@@ -36,6 +36,7 @@ program
         issueIds: opts.issue?.map(Number),
         maxParallelIssues: opts.parallel,
         skipValidation: opts.skipValidation,
+        noPr: !opts.pr,
       });
 
       if (opts.dryRun) {
