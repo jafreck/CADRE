@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
+import { ZodError } from 'zod';
 import type { CadreConfig } from '../config/schema.js';
 import type {
   AgentInvocation,
@@ -235,7 +236,7 @@ export class IssueOrchestrator {
       issueNumber: successResult.issueNumber,
       success: successResult.success,
       duration: successResult.totalDuration,
-      tokenUsage: successResult.tokenUsage,
+      tokenUsage: successResult.tokenUsage ?? 0,
     });
     return successResult;
   }
@@ -570,7 +571,20 @@ export class IssueOrchestrator {
         if (reviewResult.success) {
           const reviewPath = join(this.progressDir, `review-${task.id}.md`);
           if (await exists(reviewPath)) {
-            const review = await this.resultParser.parseReview(reviewPath);
+            let review;
+            try {
+              review = await this.resultParser.parseReview(reviewPath);
+            } catch (err) {
+              if (err instanceof ZodError) {
+                const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
+                this.logger.warn(`Review validation failed (will retry): ${msg}`, {
+                  issueNumber: this.issue.number,
+                  taskId: task.id,
+                });
+                throw err;
+              }
+              throw err;
+            }
             if (review.verdict === 'needs-fixes') {
               // Launch fix-surgeon
               const fixContextPath = await this.contextBuilder.buildForFixSurgeon(
