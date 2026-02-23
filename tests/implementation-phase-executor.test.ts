@@ -126,7 +126,8 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     },
     worktree: { path: '/tmp/worktree', branch: 'cadre/issue-42', baseCommit: 'abc123', issueNumber: 42 } as never,
     config: {
-      options: { maxParallelAgents: 2, maxRetriesPerTask: 3 },
+      commands: { build: undefined },
+      options: { maxParallelAgents: 2, maxRetriesPerTask: 3, perTaskBuildCheck: true, maxBuildFixRounds: 2 },
     } as never,
     progressDir: '/tmp/progress',
     contextBuilder: contextBuilder as never,
