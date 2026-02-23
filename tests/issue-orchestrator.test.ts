@@ -705,6 +705,46 @@ describe('IssueOrchestrator – phaseSubset', () => {
     expect(executePhase).toHaveBeenCalledTimes(1);
     expect((executePhase.mock.calls[0][0] as { phaseId: number }).phaseId).toBe(3);
   });
+
+  it('should run gate validation only for phases within the subset (phases 3 and 4) when phaseSubset = [3, 4, 5]', async () => {
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn(() => false),
+    });
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+      undefined,
+      [3, 4, 5],
+    );
+
+    vi.spyOn(
+      orchestrator as unknown as { executePhase: () => Promise<unknown> },
+      'executePhase',
+    ).mockResolvedValue({
+      phase: 3,
+      phaseName: 'Implementation',
+      success: true,
+      duration: 100,
+      tokenUsage: 0,
+      outputPath: '/output/phase.md',
+    });
+
+    await orchestrator.run();
+
+    const gatedPhaseIds = vi.mocked(checkpoint.recordGateResult).mock.calls.map(([phaseId]) => phaseId);
+    // Phases 3 and 4 are in the subset and have gate entries, so their gates run
+    expect(gatedPhaseIds).toContain(3);
+    expect(gatedPhaseIds).toContain(4);
+    // Phases 1 and 2 are not in the subset so their gates never run
+    expect(gatedPhaseIds).not.toContain(1);
+    expect(gatedPhaseIds).not.toContain(2);
+  });
 });
 
 describe('IssueOrchestrator notifier integration', () => {
