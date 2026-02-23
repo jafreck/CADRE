@@ -80,6 +80,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
         ctx.logger.error(`Failed to create PR: ${err}`, {
           issueNumber: ctx.issue.number,
         });
+        ctx.setPRFailed();
       }
     }
 

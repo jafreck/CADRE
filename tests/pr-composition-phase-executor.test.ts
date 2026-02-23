@@ -63,7 +63,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
 
   const platform = {
     issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
-    createPullRequest: vi.fn().mockResolvedValue(undefined),
+    createPullRequest: vi.fn().mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' }),
   };
 
   const logger = {
@@ -72,6 +72,9 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     error: vi.fn(),
     debug: vi.fn(),
   };
+
+  const setPR = vi.fn();
+  const setPRFailed = vi.fn();
 
   return {
     issue: {
@@ -104,6 +107,8 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     platform: platform as never,
     recordTokens,
     checkBudget,
+    setPR,
+    setPRFailed,
     logger: logger as never,
     ...overrides,
   };
@@ -210,6 +215,12 @@ describe('PRCompositionPhaseExecutor', () => {
       ).not.toHaveBeenCalled();
     });
 
+    it('should not call ctx.setPR when autoCreate is false', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+      expect(ctx.setPR).not.toHaveBeenCalled();
+    });
+
     it('should not push when autoCreate is false', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
@@ -231,6 +242,27 @@ describe('PRCompositionPhaseExecutor', () => {
         ...overrides,
       });
     }
+
+    it('should call ctx.setPR with the PR returned by createPullRequest', async () => {
+      const createdPR = { number: 99, url: 'https://github.com/owner/repo/pull/99', title: 'Fix: resolve issue (#42)', headBranch: 'cadre/issue-42', baseBranch: 'main' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
+        createPullRequest: vi.fn().mockResolvedValue(createdPR),
+      };
+      const ctx = makeAutoCreateCtx({ platform: platform as never });
+      await executor.execute(ctx);
+      expect(ctx.setPR).toHaveBeenCalledWith(createdPR);
+    });
+
+    it('should not call ctx.setPR when createPullRequest fails', async () => {
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
+        createPullRequest: vi.fn().mockRejectedValue(new Error('API rate limit')),
+      };
+      const ctx = makeAutoCreateCtx({ platform: platform as never });
+      await executor.execute(ctx);
+      expect(ctx.setPR).not.toHaveBeenCalled();
+    });
 
     it('should parse PR content from pr-content.md', async () => {
       const ctx = makeAutoCreateCtx();
@@ -346,6 +378,29 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(
         (ctx.platform as never as { issueLinkSuffix: ReturnType<typeof vi.fn> }).issueLinkSuffix,
       ).not.toHaveBeenCalled();
+    });
+
+    it('should call ctx.setPR with the created PR on success', async () => {
+      const createdPR = { number: 99, url: 'https://github.com/owner/repo/pull/99' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
+        createPullRequest: vi.fn().mockResolvedValue(createdPR),
+      };
+      const setPR = vi.fn();
+      const ctx = makeAutoCreateCtx({ platform: platform as never, setPR });
+      await executor.execute(ctx);
+      expect(setPR).toHaveBeenCalledWith(createdPR);
+    });
+
+    it('should not call ctx.setPR when createPullRequest fails', async () => {
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
+        createPullRequest: vi.fn().mockRejectedValue(new Error('API rate limit')),
+      };
+      const setPR = vi.fn();
+      const ctx = makeAutoCreateCtx({ platform: platform as never, setPR });
+      await executor.execute(ctx);
+      expect(setPR).not.toHaveBeenCalled();
     });
 
     it('should not throw when createPullRequest fails (non-critical)', async () => {

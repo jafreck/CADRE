@@ -58,6 +58,7 @@ export class ReportWriter {
 
     const prsCreated = result.prsCreated.length;
     const failures = result.failedIssues.length;
+    const codeDoneNoPR = result.issues.filter((ir) => ir.codeComplete && !ir.prCreated).length;
 
     const totals: RunTotals = {
       tokens: result.tokenUsage.total,
@@ -65,6 +66,7 @@ export class ReportWriter {
       issues: result.issues.length,
       prsCreated,
       failures,
+      codeDoneNoPR,
     };
 
     return {

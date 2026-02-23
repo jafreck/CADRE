@@ -269,7 +269,7 @@ describe('RunReport', () => {
       totalTokens: 2600,
       estimatedCost: 0.13,
       prsCreated: 1,
-      totals: { tokens: 2600, estimatedCost: 0.13, issues: 2, prsCreated: 1, failures: 1 },
+      totals: { tokens: 2600, estimatedCost: 0.13, issues: 2, prsCreated: 1, failures: 1, codeDoneNoPR: 0 },
     };
     expect(report.issues).toHaveLength(2);
     expect(report.issues[1].success).toBe(false);
