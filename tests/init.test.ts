@@ -16,9 +16,14 @@ vi.mock('@inquirer/prompts', () => ({
   confirm: vi.fn(),
 }));
 
+vi.mock('../src/cli/agents.js', () => ({
+  runScaffold: vi.fn(),
+}));
+
 import { exists, atomicWriteJSON, atomicWriteFile, readFileOrNull, ensureDir } from '../src/util/fs.js';
 import { collectAnswers } from '../src/cli/prompts.js';
 import { confirm } from '@inquirer/prompts';
+import { runScaffold } from '../src/cli/agents.js';
 import { runInit } from '../src/cli/init.js';
 
 const mockExists = vi.mocked(exists);
@@ -28,6 +33,7 @@ const mockReadFileOrNull = vi.mocked(readFileOrNull);
 const mockEnsureDir = vi.mocked(ensureDir);
 const mockCollectAnswers = vi.mocked(collectAnswers);
 const mockConfirm = vi.mocked(confirm);
+const mockRunScaffold = vi.mocked(runScaffold);
 
 const DEFAULT_ANSWERS = {
   projectName: 'my-project',
@@ -53,6 +59,7 @@ function setupHappyPath() {
   mockAtomicWriteFile.mockResolvedValue(undefined);
   mockEnsureDir.mockResolvedValue(undefined);
   mockCollectAnswers.mockResolvedValue(DEFAULT_ANSWERS);
+  mockRunScaffold.mockResolvedValue({ created: 3, skipped: 0 });
 }
 
 describe('runInit', () => {
@@ -353,6 +360,83 @@ describe('runInit', () => {
       await runInit({ yes: true, repoPath: REPO_PATH });
 
       expect(mockEnsureDir).toHaveBeenCalledWith(`${REPO_PATH}/.github/agents`);
+    });
+  });
+
+  describe('scaffold agent templates', () => {
+    it('should call runScaffold with correct agentDir when --yes is true', async () => {
+      setupHappyPath();
+
+      await runInit({ yes: true, repoPath: REPO_PATH });
+
+      expect(mockRunScaffold).toHaveBeenCalledWith({ agentDir: `${REPO_PATH}/.github/agents` });
+    });
+
+    it('should not show scaffold confirm prompt when --yes is true', async () => {
+      setupHappyPath();
+
+      await runInit({ yes: true, repoPath: REPO_PATH });
+
+      expect(mockConfirm).not.toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('Scaffold') }),
+      );
+    });
+
+    it('should call runScaffold when --yes is false and user accepts scaffold prompt', async () => {
+      setupHappyPath();
+      mockConfirm.mockResolvedValue(true);
+
+      await runInit({ yes: false, repoPath: REPO_PATH });
+
+      expect(mockConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('Scaffold') }),
+      );
+      expect(mockRunScaffold).toHaveBeenCalledWith({ agentDir: `${REPO_PATH}/.github/agents` });
+    });
+
+    it('should not call runScaffold when --yes is false and user declines scaffold prompt', async () => {
+      setupHappyPath();
+      mockConfirm.mockResolvedValue(false);
+
+      await runInit({ yes: false, repoPath: REPO_PATH });
+
+      expect(mockRunScaffold).not.toHaveBeenCalled();
+    });
+
+    it('should resolve normally when user declines scaffold prompt', async () => {
+      setupHappyPath();
+      mockConfirm.mockResolvedValue(false);
+
+      await expect(runInit({ yes: false, repoPath: REPO_PATH })).resolves.toBeUndefined();
+      expect(process.exit).not.toHaveBeenCalled();
+    });
+
+    it('should include scaffold confirmation in summary when scaffolded', async () => {
+      setupHappyPath();
+
+      await runInit({ yes: true, repoPath: REPO_PATH });
+
+      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+      expect(logCalls).toContain('scaffolded with built-in agent templates');
+    });
+
+    it('should include reminder hint in summary when not scaffolded', async () => {
+      setupHappyPath();
+      mockConfirm.mockResolvedValue(false);
+
+      await runInit({ yes: false, repoPath: REPO_PATH });
+
+      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+      expect(logCalls).toContain('cadre agents scaffold');
+    });
+
+    it('should not include reminder hint in summary when scaffolded', async () => {
+      setupHappyPath();
+
+      await runInit({ yes: true, repoPath: REPO_PATH });
+
+      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+      expect(logCalls).not.toContain('cadre agents scaffold');
     });
   });
 
