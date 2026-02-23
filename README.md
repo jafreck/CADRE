@@ -8,6 +8,19 @@
 
 CADRE is a framework for **parallel agent-based software development** against a set of open GitHub issues. Given a repository and a list of issues, CADRE provisions one git worktree per issue, then orchestrates a coordinated team of single-purpose agents within each worktree to analyze the issue, plan the implementation, write code, write tests, verify correctness, and open a pull request — all in parallel across issues, with checkpointing and resume at every level.
 
+## Installation
+
+```bash
+npm install -g cadre
+```
+
+Verify the installation:
+
+```bash
+npx cadre --version
+npx cadre --help
+```
+
 ## Quick Start
 
 ```bash
