@@ -280,4 +280,142 @@ describe('AzureDevOpsProvider', () => {
     );
     await expect(provider.getIssue(1)).rejects.toThrow('not connected');
   });
+
+  describe('getPullRequest state/merged mapping', () => {
+    let provider: AzureDevOpsProvider;
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      provider = new AzureDevOpsProvider(
+        { organization: 'org', project: 'proj', auth: { pat: 'token' } },
+        mockLogger,
+      );
+
+      fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      // connect() calls checkAuth() which fetches the project
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'proj-id', name: 'proj' }),
+      });
+      await provider.connect();
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('should return state=open and merged=false for active PR', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          pullRequestId: 1,
+          title: 'My PR',
+          sourceRefName: 'refs/heads/feature',
+          targetRefName: 'refs/heads/main',
+          status: 'active',
+        }),
+      });
+
+      const pr = await provider.getPullRequest(1);
+      expect(pr.state).toBe('open');
+      expect(pr.merged).toBe(false);
+    });
+
+    it('should return state=closed and merged=true for completed PR', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          pullRequestId: 2,
+          title: 'Merged PR',
+          sourceRefName: 'refs/heads/feature',
+          targetRefName: 'refs/heads/main',
+          status: 'completed',
+        }),
+      });
+
+      const pr = await provider.getPullRequest(2);
+      expect(pr.state).toBe('closed');
+      expect(pr.merged).toBe(true);
+    });
+
+    it('should return state=closed and merged=false for abandoned PR', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          pullRequestId: 3,
+          title: 'Abandoned PR',
+          sourceRefName: 'refs/heads/feature',
+          targetRefName: 'refs/heads/main',
+          status: 'abandoned',
+        }),
+      });
+
+      const pr = await provider.getPullRequest(3);
+      expect(pr.state).toBe('closed');
+      expect(pr.merged).toBe(false);
+    });
+  });
+
+  describe('listPullRequests state/merged mapping', () => {
+    let provider: AzureDevOpsProvider;
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      provider = new AzureDevOpsProvider(
+        { organization: 'org', project: 'proj', auth: { pat: 'token' } },
+        mockLogger,
+      );
+
+      fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'proj-id', name: 'proj' }),
+      });
+      await provider.connect();
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('should map active, completed, and abandoned PR statuses correctly', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [
+            {
+              pullRequestId: 1,
+              title: 'Active PR',
+              sourceRefName: 'refs/heads/feat-a',
+              targetRefName: 'refs/heads/main',
+              status: 'active',
+            },
+            {
+              pullRequestId: 2,
+              title: 'Completed PR',
+              sourceRefName: 'refs/heads/feat-b',
+              targetRefName: 'refs/heads/main',
+              status: 'completed',
+            },
+            {
+              pullRequestId: 3,
+              title: 'Abandoned PR',
+              sourceRefName: 'refs/heads/feat-c',
+              targetRefName: 'refs/heads/main',
+              status: 'abandoned',
+            },
+          ],
+        }),
+      });
+
+      const prs = await provider.listPullRequests();
+      expect(prs[0]).toMatchObject({ state: 'open', merged: false });
+      expect(prs[1]).toMatchObject({ state: 'closed', merged: true });
+      expect(prs[2]).toMatchObject({ state: 'closed', merged: false });
+    });
+  });
 });

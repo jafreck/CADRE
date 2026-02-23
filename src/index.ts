@@ -131,15 +131,34 @@ program
   .description('List or prune CADRE-managed worktrees')
   .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
   .option('--prune', 'Remove worktrees for completed issues')
+  .option('-d, --dry-run', 'Print what would be pruned without removing anything')
   .action(async (opts) => {
     try {
       const config = await loadConfig(opts.config);
       const runtime = new CadreRuntime(config);
       if (opts.prune) {
-        await runtime.pruneWorktrees();
+        await runtime.pruneWorktrees(opts.dryRun);
       } else {
         await runtime.listWorktrees();
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(chalk.red(`Error: ${msg}`));
+      process.exit(1);
+    }
+  });
+
+// ─── cleanup ──────────────────────────────────────────
+program
+  .command('cleanup')
+  .description('Remove worktrees for completed issues (alias for worktrees --prune)')
+  .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
+  .option('-d, --dry-run', 'Print what would be pruned without removing anything')
+  .action(async (opts) => {
+    try {
+      const config = await loadConfig(opts.config);
+      const runtime = new CadreRuntime(config);
+      await runtime.pruneWorktrees(opts.dryRun);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));
