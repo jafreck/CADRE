@@ -168,7 +168,7 @@ describe('AgentLauncher.validateAgentFiles', () => {
 
   it('should return empty array when all agent files exist and are non-empty', async () => {
     for (const agent of AGENT_DEFINITIONS) {
-      await writeFile(join(tempDir, `${agent.name}.md`), `# ${agent.name}\nContent`);
+      await writeFile(join(tempDir, `${agent.name}.agent.md`), `# ${agent.name}\nContent`);
     }
     const issues = await AgentLauncher.validateAgentFiles(tempDir);
     expect(issues).toEqual([]);
@@ -178,32 +178,32 @@ describe('AgentLauncher.validateAgentFiles', () => {
     // Create all files except the first agent
     const [first, ...rest] = AGENT_DEFINITIONS;
     for (const agent of rest) {
-      await writeFile(join(tempDir, `${agent.name}.md`), `# ${agent.name}\nContent`);
+      await writeFile(join(tempDir, `${agent.name}.agent.md`), `# ${agent.name}\nContent`);
     }
     const issues = await AgentLauncher.validateAgentFiles(tempDir);
     expect(issues).toHaveLength(1);
     expect(issues[0]).toContain('Missing');
-    expect(issues[0]).toContain(`${first.name}.md`);
+    expect(issues[0]).toContain(`${first.name}.agent.md`);
   });
 
   it('should report empty files', async () => {
     for (const agent of AGENT_DEFINITIONS) {
-      await writeFile(join(tempDir, `${agent.name}.md`), `# ${agent.name}\nContent`);
+      await writeFile(join(tempDir, `${agent.name}.agent.md`), `# ${agent.name}\nContent`);
     }
     // Overwrite the last agent's file with empty content
     const lastAgent = AGENT_DEFINITIONS[AGENT_DEFINITIONS.length - 1];
-    await writeFile(join(tempDir, `${lastAgent.name}.md`), '');
+    await writeFile(join(tempDir, `${lastAgent.name}.agent.md`), '');
 
     const issues = await AgentLauncher.validateAgentFiles(tempDir);
     expect(issues).toHaveLength(1);
     expect(issues[0]).toContain('Empty');
-    expect(issues[0]).toContain(`${lastAgent.name}.md`);
+    expect(issues[0]).toContain(`${lastAgent.name}.agent.md`);
   });
 
   it('should report multiple issues when several files are missing or empty', async () => {
     // Only create one file; all others will be missing
     const firstAgent = AGENT_DEFINITIONS[0];
-    await writeFile(join(tempDir, `${firstAgent.name}.md`), `# ${firstAgent.name}\nContent`);
+    await writeFile(join(tempDir, `${firstAgent.name}.agent.md`), `# ${firstAgent.name}\nContent`);
 
     const issues = await AgentLauncher.validateAgentFiles(tempDir);
     expect(issues.length).toBe(AGENT_DEFINITIONS.length - 1);
@@ -215,7 +215,7 @@ describe('AgentLauncher.validateAgentFiles', () => {
   it('should return empty array for an empty agent list directory that has all files', async () => {
     // Ensure validateAgentFiles resolves relative paths correctly
     for (const agent of AGENT_DEFINITIONS) {
-      await writeFile(join(tempDir, `${agent.name}.md`), 'content');
+      await writeFile(join(tempDir, `${agent.name}.agent.md`), 'content');
     }
     const issues = await AgentLauncher.validateAgentFiles(tempDir);
     expect(Array.isArray(issues)).toBe(true);

@@ -94,7 +94,7 @@ export const CadreConfigSchema = z.object({
         milestone: z.string().optional(),
         assignee: z.string().optional(),
         state: z.enum(['open', 'closed', 'all']).default('open'),
-        limit: z.number().int().min(1).max(100).default(10),
+        limit: z.number().int().min(1).default(10),
       }),
     }),
   ]),

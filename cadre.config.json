@@ -7,7 +7,7 @@
   "issues": {
     "query": {
       "state": "open",
-      "limit": 20
+      "limit": 1000
     }
   },
   "branchTemplate": "cadre/issue-{issue}",
@@ -25,7 +25,7 @@
     "linkIssue": true
   },
   "options": {
-    "maxParallelIssues": 8,
+    "maxParallelIssues": 10,
     "maxParallelAgents": 4,
     "maxRetriesPerTask": 3,
     "tokenBudget": 500000,

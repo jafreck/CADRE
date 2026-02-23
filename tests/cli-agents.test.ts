@@ -216,7 +216,7 @@ describe('registerAgentsCommand', () => {
       expect(writtenPath).toBe(`/mock/agents/${agentName}/CLAUDE.md`);
     });
 
-    it('should use default <agentDir>/<name>.md path without --backend', async () => {
+    it('should use default <agentDir>/<name>.agent.md path for copilot backend (no --backend flag)', async () => {
       const agentName = AGENT_DEFINITIONS[0].name;
 
       const program = makeProgram();
@@ -224,7 +224,7 @@ describe('registerAgentsCommand', () => {
 
       expect(writeFile).toHaveBeenCalledTimes(1);
       const [writtenPath] = vi.mocked(writeFile).mock.calls[0] as [string, ...unknown[]];
-      expect(writtenPath).toBe(`/mock/agents/${agentName}.md`);
+      expect(writtenPath).toBe(`/mock/agents/${agentName}.agent.md`);
     });
 
     it('should warn and skip when template file is not found', async () => {
@@ -370,7 +370,7 @@ describe('registerAgentsCommand', () => {
       const program = makeProgram();
       await program.parseAsync(['agents', 'validate'], { from: 'user' });
 
-      expect(statOrNull).toHaveBeenCalledWith(`/mock/agents/${firstAgent.name}.md`);
+      expect(statOrNull).toHaveBeenCalledWith(`/mock/agents/${firstAgent.name}.agent.md`);
     });
   });
 });
