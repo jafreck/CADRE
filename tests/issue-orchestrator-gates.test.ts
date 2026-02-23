@@ -140,7 +140,12 @@ vi.mock('../src/execution/task-queue.js', () => ({
 vi.mock('../src/budget/token-tracker.js', () => ({
   TokenTracker: vi.fn(() => ({
     record: vi.fn(),
+    importRecords: vi.fn(),
     getTotal: mockTokenTrackerGetTotal,
+    getRecords: vi.fn().mockReturnValue([]),
+    getByPhase: vi.fn().mockReturnValue({}),
+    getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 }),
+    checkIssueBudget: vi.fn().mockReturnValue('ok'),
   })),
 }));
 
