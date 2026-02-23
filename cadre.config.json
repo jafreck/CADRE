@@ -2,12 +2,12 @@
   "projectName": "cadre",
   "platform": "github",
   "repository": "jafreck/CADRE",
-  "repoPath": "/Users/jacobfreck/Source/cadre",
+  "repoPath": ".",
   "baseBranch": "main",
   "issues": {
     "query": {
       "state": "open",
-      "limit": 20
+      "limit": 1000
     }
   },
   "branchTemplate": "cadre/issue-{issue}",
@@ -19,14 +19,14 @@
   },
   "pullRequest": {
     "autoCreate": true,
-    "draft": true,
+    "draft": false,
     "labels": ["cadre-generated"],
     "reviewers": [],
     "linkIssue": true
   },
   "options": {
-    "maxParallelIssues": 3,
-    "maxParallelAgents": 2,
+    "maxParallelIssues": 10,
+    "maxParallelAgents": 4,
     "maxRetriesPerTask": 3,
     "tokenBudget": 500000,
     "perIssueTokenBudget": 100000,

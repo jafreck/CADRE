@@ -57,23 +57,13 @@ export class WorktreeManager {
       };
     }
 
-    // 1. Ensure base branch is up to date
-    try {
-      await this.git.fetch('origin', this.baseBranch);
-      this.logger.debug(`Fetched origin/${this.baseBranch}`, { issueNumber });
-    } catch (err) {
-      this.logger.warn(`Failed to fetch origin/${this.baseBranch}, continuing with local`, {
-        issueNumber,
-      });
-    }
-
-    // 2. Get the base commit SHA
+    // 1. Get the base commit SHA
     const baseCommit = await this.git.revparse([`origin/${this.baseBranch}`]).catch(async () => {
       // Fallback to local base branch
       return this.git.revparse([this.baseBranch]);
     });
 
-    // 3. Create the branch if it doesn't exist
+    // 2. Create the branch if it doesn't exist
     const branchExists = await this.branchExistsLocal(branch);
     if (!branchExists) {
       await this.git.branch([branch, baseCommit.trim()]);
@@ -82,11 +72,11 @@ export class WorktreeManager {
       });
     }
 
-    // 4. Create worktree directory
+    // 3. Create worktree directory
     await ensureDir(this.worktreeRoot);
     await this.git.raw(['worktree', 'add', worktreePath, branch]);
 
-    // 5. Bootstrap the worktree's .cadre/ directory and gitignore cadre artifacts
+    // 4. Bootstrap the worktree's .cadre/ directory and gitignore cadre artifacts
     await this.initCadreDir(worktreePath, issueNumber);
 
     this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
@@ -101,6 +91,19 @@ export class WorktreeManager {
       exists: true,
       baseCommit: baseCommit.trim(),
     };
+  }
+
+  /**
+   * Fetch the latest base branch from origin.
+   * Call this before `provision()` to ensure the remote ref is up to date.
+   */
+  async prefetch(): Promise<void> {
+    try {
+      await this.git.fetch('origin', this.baseBranch);
+      this.logger.debug(`Fetched origin/${this.baseBranch}`);
+    } catch (err) {
+      this.logger.warn(`Failed to fetch origin/${this.baseBranch}, continuing with local`);
+    }
   }
 
   /**

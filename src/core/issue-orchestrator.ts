@@ -1,16 +1,14 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CadreConfig } from '../config/schema.js';
-import type {
-  AgentInvocation,
-  AgentResult,
-  PhaseResult,
-} from '../agents/types.js';
+import type { PhaseResult } from '../agents/types.js';
 import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';
 import { PhaseRegistry, getPhase, type PhaseDefinition } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
 import {
+  AnalysisAmbiguityGate,
   AnalysisToPlanningGate,
   ImplementationToIntegrationGate,
   IntegrationToPRGate,
@@ -53,6 +51,14 @@ export interface IssueResult {
   budgetExceeded?: boolean;
 }
 
+/** Stateless gates — constructed once and reused across all runGate() calls. */
+const GATE_MAP: Record<number, PhaseGate> = {
+  1: new AnalysisToPlanningGate(),
+  2: new PlanningToImplementationGate(),
+  3: new ImplementationToIntegrationGate(),
+  4: new IntegrationToPRGate(),
+};
+
 /**
  * Runs the 5-phase pipeline for a single issue within its worktree.
  */
@@ -64,8 +70,9 @@ export class IssueOrchestrator {
   private readonly retryExecutor: RetryExecutor;
   private readonly progressWriter: IssueProgressWriter;
   private readonly tokenTracker: TokenTracker;
-  private readonly notifier: IssueNotifier;
+  private readonly notificationManager: NotificationManager;
   private readonly registry: PhaseRegistry;
+  private ctx!: PhaseContext;
   private readonly phases: PhaseResult[] = [];
   private budgetExceeded = false;
   private budgetWarningSent = false;
@@ -79,7 +86,7 @@ export class IssueOrchestrator {
     private readonly launcher: AgentLauncher,
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
-    private readonly notificationManager?: NotificationManager,
+    notificationManager?: NotificationManager,
   ) {
     this.progressDir = join(
       worktree.path,
@@ -102,7 +109,15 @@ export class IssueOrchestrator {
       logger,
     );
     this.tokenTracker = new TokenTracker();
-    this.notifier = new IssueNotifier(config, platform, logger);
+
+    // Ensure we always have a NotificationManager so dispatch calls are unconditional.
+    this.notificationManager = notificationManager ?? new NotificationManager();
+
+    // Register IssueNotifier as a provider so issue comments go through the
+    // unified dispatch channel alongside webhooks / Slack / log providers.
+    const notifier = new IssueNotifier(config, platform, logger);
+    this.notificationManager.addProvider(notifier);
+
     this.registry = new PhaseRegistry();
     this.registry.register(new AnalysisPhaseExecutor());
     this.registry.register(new PlanningPhaseExecutor());
@@ -118,15 +133,40 @@ export class IssueOrchestrator {
     const startTime = Date.now();
     const resumePoint = this.checkpoint.getResumePoint();
 
+    this.ctx = {
+      issue: this.issue,
+      worktree: this.worktree,
+      config: this.config,
+      platform: this.platform,
+      services: {
+        launcher: this.launcher,
+        retryExecutor: this.retryExecutor,
+        tokenTracker: this.tokenTracker,
+        contextBuilder: this.contextBuilder,
+        resultParser: this.resultParser,
+        logger: this.logger,
+      },
+      io: {
+        progressDir: this.progressDir,
+        progressWriter: this.progressWriter,
+        checkpoint: this.checkpoint,
+        commitManager: this.commitManager,
+      },
+      callbacks: {
+        recordTokens: (agent, tokens) => this.recordTokens(agent, tokens),
+        checkBudget: () => this.checkBudget(),
+        updateProgress: () => this.updateProgress(),
+      },
+    };
+
     this.logger.info(`Starting pipeline for issue #${this.issue.number}: ${this.issue.title}`, {
       issueNumber: this.issue.number,
       data: { resumeFrom: resumePoint },
     });
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
-    void this.notifier.notifyStart(this.issue.number, this.issue.title);
 
-    await this.notificationManager?.dispatch({
+    await this.notificationManager.dispatch({
       type: 'issue-started',
       issueNumber: this.issue.number,
       issueTitle: this.issue.title,
@@ -174,7 +214,13 @@ export class IssueOrchestrator {
             { issueNumber: this.issue.number },
           );
           await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
-          void this.notifier.notifyFailed(this.issue.number, this.issue.title, undefined, undefined, 'Per-issue token budget exceeded');
+          await this.notificationManager.dispatch({
+            type: 'issue-failed',
+            issueNumber: this.issue.number,
+            issueTitle: this.issue.title,
+            error: 'Per-issue token budget exceeded',
+            phase: cpState.currentPhase,
+          });
           return this.buildResult(false, 'Per-issue token budget exceeded', startTime, true);
         }
         throw err;
@@ -183,6 +229,29 @@ export class IssueOrchestrator {
 
       if (phaseResult.success) {
         await this.checkpoint.completePhase(executor.phaseId, phaseResult.outputPath ?? '');
+
+        // After Phase 1, log ambiguities and notify; halt pipeline if configured
+        if (executor.phaseId === 1) {
+          const ambiguities = await this.readAmbiguitiesFromAnalysis();
+          for (const a of ambiguities) {
+            this.logger.warn(`Ambiguity in issue #${this.issue.number}: ${a}`, { issueNumber: this.issue.number });
+          }
+          if (ambiguities.length > 0) {
+            await this.notificationManager.dispatch({
+              type: 'ambiguity-detected',
+              issueNumber: this.issue.number,
+              ambiguities,
+            });
+          }
+          if (
+            this.config.options.haltOnAmbiguity &&
+            ambiguities.length > this.config.options.ambiguityThreshold
+          ) {
+            const msg = `Analysis identified ${ambiguities.length} ambiguities (threshold: ${this.config.options.ambiguityThreshold})`;
+            await this.progressWriter.appendEvent(`Pipeline halted: ${msg}`);
+            return this.buildResult(false, msg, startTime);
+          }
+        }
 
         // Run gate validators after phases 1–4
         if (executor.phaseId >= 1 && executor.phaseId <= 4) {
@@ -227,19 +296,26 @@ export class IssueOrchestrator {
         }
 
         await this.updateProgress();
-        void this.notifier.notifyPhaseComplete(this.issue.number, executor.phaseId, executor.name, phaseResult.duration);
+        await this.notificationManager.dispatch({
+          type: 'phase-completed',
+          issueNumber: this.issue.number,
+          phase: executor.phaseId,
+          phaseName: executor.name,
+          duration: phaseResult.duration,
+        });
       } else if (phaseDef.critical) {
         this.logger.error(`Critical phase ${executor.phaseId} failed, aborting pipeline`, {
           issueNumber: this.issue.number,
           phase: executor.phaseId,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} failed`);
-        void this.notifier.notifyFailed(this.issue.number, this.issue.title, { id: executor.phaseId, name: executor.name }, undefined, phaseResult.error);
-        await this.notificationManager?.dispatch({
+        await this.notificationManager.dispatch({
           type: 'issue-failed',
           issueNumber: this.issue.number,
+          issueTitle: this.issue.title,
           error: phaseResult.error ?? `Phase ${executor.phaseId} failed`,
           phase: executor.phaseId,
+          phaseName: executor.name,
         });
         return this.buildResult(false, phaseResult.error, startTime);
       }
@@ -247,10 +323,10 @@ export class IssueOrchestrator {
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
     const successResult = this.buildResult(true, undefined, startTime);
-    void this.notifier.notifyComplete(this.issue.number, this.issue.title, undefined, successResult.tokenUsage ?? 0);
-    await this.notificationManager?.dispatch({
+    await this.notificationManager.dispatch({
       type: 'issue-completed',
       issueNumber: successResult.issueNumber,
+      issueTitle: successResult.issueTitle,
       success: successResult.success,
       duration: successResult.totalDuration,
       tokenUsage: successResult.tokenUsage ?? 0,
@@ -272,26 +348,7 @@ export class IssueOrchestrator {
     });
 
     try {
-      const ctx: PhaseContext = {
-        issue: this.issue,
-        worktree: this.worktree,
-        config: this.config,
-        progressDir: this.progressDir,
-        contextBuilder: this.contextBuilder,
-        launcher: this.launcher,
-        resultParser: this.resultParser,
-        checkpoint: this.checkpoint,
-        commitManager: this.commitManager,
-        retryExecutor: this.retryExecutor,
-        tokenTracker: this.tokenTracker,
-        progressWriter: this.progressWriter,
-        platform: this.platform,
-        recordTokens: (agent, tokens) => this.recordTokens(agent, tokens),
-        checkBudget: () => this.checkBudget(),
-        logger: this.logger,
-      };
-
-      const outputPath = await executor.execute(ctx);
+      const outputPath = await executor.execute(this.ctx);
 
       const duration = Date.now() - phaseStart;
       await this.progressWriter.appendEvent(`Phase ${executor.phaseId} completed in ${duration}ms`);
@@ -324,49 +381,6 @@ export class IssueOrchestrator {
 
   // ── Helper Methods ──
 
-  private async launchWithRetry(
-    agentName: string,
-    invocation: Omit<AgentInvocation, 'timeout'>,
-  ): Promise<AgentResult> {
-    const result = await this.retryExecutor.execute<AgentResult>({
-      fn: async () => {
-        this.checkBudget();
-        const agentResult = await this.launcher.launchAgent(
-          invocation as AgentInvocation,
-          this.worktree.path,
-        );
-        this.recordTokens(agentName, agentResult.tokenUsage);
-        this.checkBudget();
-        if (!agentResult.success) {
-          throw new Error(agentResult.error ?? `Agent ${agentName} failed`);
-        }
-        return agentResult;
-      },
-      maxAttempts: this.config.options.maxRetriesPerTask,
-      description: agentName,
-    });
-
-    this.checkBudget();
-
-    if (!result.success || !result.result) {
-      return {
-        agent: invocation.agent,
-        success: false,
-        exitCode: 1,
-        timedOut: false,
-        duration: 0,
-        stdout: '',
-        stderr: result.error ?? 'Unknown failure',
-        tokenUsage: null,
-        outputPath: invocation.outputPath,
-        outputExists: false,
-        error: result.error,
-      };
-    }
-
-    return result.result;
-  }
-
   private recordTokens(agent: string, tokens: number | null): void {
     if (tokens != null && tokens > 0) {
       this.tokenTracker.record(
@@ -393,11 +407,16 @@ export class IssueOrchestrator {
       this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'warning'
     ) {
       this.budgetWarningSent = true;
-      void this.notifier.notifyBudgetWarning(
-        this.issue.number,
-        this.tokenTracker.getTotal() ?? 0,
-        this.config.options.tokenBudget ?? 0,
-      );
+      const currentUsage = this.tokenTracker.getTotal() ?? 0;
+      const budget = this.config.options.tokenBudget ?? 0;
+      void this.notificationManager.dispatch({
+        type: 'budget-warning',
+        scope: 'issue',
+        issueNumber: this.issue.number,
+        currentUsage,
+        budget,
+        percentUsed: budget > 0 ? Math.round((currentUsage / budget) * 100) : 0,
+      });
     }
   }
 
@@ -409,15 +428,9 @@ export class IssueOrchestrator {
     try {
       const isClean = await this.commitManager.isClean();
       if (!isClean) {
-        const type = phase.id <= 2 ? 'chore' : phase.id === 3 ? 'feat' : 'fix';
-        const message =
-          phase.id === 1
-            ? `analyze issue #${this.issue.number}`
-            : phase.id === 2
-              ? `plan implementation for #${this.issue.number}`
-              : phase.id === 4
-                ? `address integration issues`
-                : `phase ${phase.id} complete`;
+        const type = phase.commitType ?? 'chore';
+        const message = (phase.commitMessage ?? `phase ${phase.id} complete`)
+          .replace('{issueNumber}', String(this.issue.number));
 
         await this.commitManager.commit(message, this.issue.number, type);
       }
@@ -450,14 +463,7 @@ export class IssueOrchestrator {
   }
 
   private async runGate(phaseId: number): Promise<'pass' | 'warn' | 'fail'> {
-    const gateMap: Record<number, PhaseGate> = {
-      1: new AnalysisToPlanningGate(),
-      2: new PlanningToImplementationGate(),
-      3: new ImplementationToIntegrationGate(),
-      4: new IntegrationToPRGate(),
-    };
-
-    const gate = gateMap[phaseId];
+    const gate = GATE_MAP[phaseId];
     if (!gate) return 'pass';
 
     const context: GateContext = {
@@ -466,7 +472,21 @@ export class IssueOrchestrator {
       baseCommit: this.worktree.baseCommit,
     };
 
-    const result = await gate.validate(context);
+    let result = await gate.validate(context);
+
+    // For phase 1, also run the ambiguity gate and merge results
+    if (phaseId === 1) {
+      const ambiguityGate = new AnalysisAmbiguityGate({
+        ambiguityThreshold: this.config.options.ambiguityThreshold,
+        haltOnAmbiguity: this.config.options.haltOnAmbiguity,
+      });
+      const ambiguityResult = await ambiguityGate.validate(context);
+      const mergedErrors = [...result.errors, ...ambiguityResult.errors];
+      const mergedWarnings = [...result.warnings, ...ambiguityResult.warnings];
+      const mergedStatus = mergedErrors.length > 0 ? 'fail' : mergedWarnings.length > 0 ? 'warn' : 'pass';
+      result = { status: mergedStatus, errors: mergedErrors, warnings: mergedWarnings };
+    }
+
     await this.checkpoint.recordGateResult(phaseId, result);
 
     this.phases[this.phases.length - 1] = {
@@ -491,6 +511,33 @@ export class IssueOrchestrator {
     }
 
     return result.status;
+  }
+
+  private async readAmbiguitiesFromAnalysis(): Promise<string[]> {
+    const analysisPath = join(this.progressDir, 'analysis.md');
+    let content: string;
+    try {
+      content = await readFile(analysisPath, 'utf-8');
+    } catch {
+      return [];
+    }
+
+    const lines = content.split('\n');
+    let inAmbiguities = false;
+    const ambiguityLines: string[] = [];
+
+    for (const line of lines) {
+      if (/^##\s+Ambiguities/i.test(line)) {
+        inAmbiguities = true;
+        continue;
+      }
+      if (inAmbiguities && /^##\s/.test(line)) break;
+      if (inAmbiguities && line.trim()) {
+        ambiguityLines.push(line.trim());
+      }
+    }
+
+    return ambiguityLines;
   }
 
   private buildResult(success: boolean, error?: string, startTime?: number, budgetExceeded?: boolean): IssueResult {

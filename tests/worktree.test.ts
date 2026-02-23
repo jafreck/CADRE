@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { simpleGit } from 'simple-git';
 import { WorktreeManager } from '../src/git/worktree.js';
 import { Logger } from '../src/logging/logger.js';
 
@@ -99,5 +100,42 @@ describe('WorktreeManager', () => {
 
   it('should have rebase method', () => {
     expect(typeof manager.rebase).toBe('function');
+  });
+
+  describe('prefetch', () => {
+    let mockGit: ReturnType<typeof simpleGit>;
+
+    beforeEach(() => {
+      // simpleGit is mocked; calling it returns the shared mock instance
+      mockGit = simpleGit('/tmp/repo');
+      vi.clearAllMocks();
+    });
+
+    it('should expose a public prefetch method', () => {
+      expect(typeof manager.prefetch).toBe('function');
+    });
+
+    it('should call git.fetch with origin and baseBranch', async () => {
+      await manager.prefetch();
+      expect(mockGit.fetch).toHaveBeenCalledWith('origin', 'main');
+    });
+
+    it('should log debug message on successful fetch', async () => {
+      await manager.prefetch();
+      expect(mockLogger.debug).toHaveBeenCalledWith('Fetched origin/main');
+    });
+
+    it('should not throw when fetch fails', async () => {
+      (mockGit.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network error'));
+      await expect(manager.prefetch()).resolves.toBeUndefined();
+    });
+
+    it('should log warn when fetch fails', async () => {
+      (mockGit.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network error'));
+      await manager.prefetch();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to fetch origin/main, continuing with local',
+      );
+    });
   });
 });

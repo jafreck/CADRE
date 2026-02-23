@@ -36,6 +36,7 @@ program
         issueIds: opts.issue?.map(Number),
         maxParallelIssues: opts.parallel,
         skipValidation: opts.skipValidation,
+        noPr: !opts.pr,
       });
 
       if (opts.dryRun) {
@@ -45,7 +46,8 @@ program
       }
 
       if (!opts.skipAgentValidation) {
-        const issues = await AgentLauncher.validateAgentFiles(config.copilot.agentDir);
+        const backend = config.agent?.backend ?? 'copilot';
+        const issues = await AgentLauncher.validateAgentFiles(config.copilot.agentDir, backend);
         if (issues.length > 0) {
           console.error(
             chalk.red(`❌ Agent validation failed — ${issues.length} issue(s) found:\n`) +

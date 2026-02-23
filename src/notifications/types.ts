@@ -8,6 +8,8 @@ import type {
   IssueFailedEvent,
   BudgetWarningEvent,
   BudgetExceededEvent,
+  PhaseCompletedEvent,
+  AmbiguityDetectedEvent,
 } from '../logging/events.js';
 
 export type { CadreEvent };
@@ -19,6 +21,8 @@ export type NotificationEvent =
   | IssueStartedEvent
   | IssueCompletedEvent
   | IssueFailedEvent
+  | PhaseCompletedEvent
+  | AmbiguityDetectedEvent
   | BudgetWarningEvent
   | BudgetExceededEvent;
 

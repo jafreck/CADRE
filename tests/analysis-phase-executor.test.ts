@@ -14,8 +14,13 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../src/util/process.js', () => ({
+  execShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+}));
+
 import { ensureDir, atomicWriteJSON, listFilesRecursive } from '../src/util/fs.js';
 import { writeFile } from 'node:fs/promises';
+import { execShell } from '../src/util/process.js';
 
 function makeSuccessAgentResult(agent: string): AgentResult {
   return {
@@ -61,6 +66,33 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     buildForCodebaseScout: vi.fn().mockResolvedValue('/progress/scout-ctx.json'),
   };
 
+  const services = {
+    launcher: launcher as never,
+    retryExecutor: retryExecutor as never,
+    tokenTracker: {} as never,
+    contextBuilder: contextBuilder as never,
+    resultParser: {} as never,
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as never,
+  };
+
+  const io = {
+    progressDir: '/tmp/progress',
+    progressWriter: {} as never,
+    checkpoint: {} as never,
+    commitManager: {} as never,
+  };
+
+  const callbacks = {
+    recordTokens,
+    checkBudget,
+    updateProgress: vi.fn().mockResolvedValue(undefined),
+  };
+
   return {
     issue: {
       number: 42,
@@ -76,22 +108,16 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     worktree: { path: '/tmp/worktree', branch: 'cadre/issue-42', baseCommit: 'abc123', issueNumber: 42 } as never,
     config: {
       options: { maxRetriesPerTask: 3 },
+      commands: {},
     } as never,
-    progressDir: '/tmp/progress',
-    contextBuilder: contextBuilder as never,
-    launcher: launcher as never,
-    resultParser: {} as never,
-    checkpoint: {} as never,
-    commitManager: {} as never,
-    retryExecutor: retryExecutor as never,
-    tokenTracker: {} as never,
-    progressWriter: {} as never,
     platform: {} as never,
-    recordTokens,
-    checkBudget,
-    logger: {} as never,
-    ...overrides,
-  };
+    services: { ...services, ...overrides.services } as never,
+    io: { ...io, ...overrides.io } as never,
+    callbacks: { ...callbacks, ...overrides.callbacks } as never,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([k]) => !['services', 'io', 'callbacks'].includes(k)),
+    ),
+  } as PhaseContext;
 }
 
 describe('AnalysisPhaseExecutor', () => {
@@ -168,7 +194,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for issue-analyst with correct args', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.contextBuilder as never as { buildForIssueAnalyst: ReturnType<typeof vi.fn> }).buildForIssueAnalyst)
+      expect((ctx.services.contextBuilder as never as { buildForIssueAnalyst: ReturnType<typeof vi.fn> }).buildForIssueAnalyst)
         .toHaveBeenCalledWith(
           42,
           '/tmp/worktree',
@@ -180,7 +206,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should launch issue-analyst with correct invocation', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
+      expect((ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
         .toHaveBeenCalledWith(
           expect.objectContaining({
             agent: 'issue-analyst',
@@ -196,7 +222,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for codebase-scout after analyst succeeds', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.contextBuilder as never as { buildForCodebaseScout: ReturnType<typeof vi.fn> }).buildForCodebaseScout)
+      expect((ctx.services.contextBuilder as never as { buildForCodebaseScout: ReturnType<typeof vi.fn> }).buildForCodebaseScout)
         .toHaveBeenCalledWith(
           42,
           '/tmp/worktree',
@@ -209,7 +235,7 @@ describe('AnalysisPhaseExecutor', () => {
     it('should launch codebase-scout with correct invocation', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
+      expect((ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
         .toHaveBeenCalledWith(
           expect.objectContaining({
             agent: 'codebase-scout',
@@ -231,16 +257,16 @@ describe('AnalysisPhaseExecutor', () => {
     it('should record tokens for both agents', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('issue-analyst', 50);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('codebase-scout', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('issue-analyst', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('codebase-scout', 50);
     });
 
     it('should check budget multiple times during execution', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       // checkBudget is called: before each launchAgent, after recordTokens, and after retryExecutor.execute
-      expect(ctx.checkBudget).toHaveBeenCalled();
-      expect((ctx.checkBudget as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(4);
+      expect(ctx.callbacks.checkBudget).toHaveBeenCalled();
+      expect((ctx.callbacks.checkBudget as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(4);
     });
   });
 
@@ -264,7 +290,7 @@ describe('AnalysisPhaseExecutor', () => {
         launchAgent: vi.fn().mockResolvedValue(analystResult),
       };
 
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Issue analyst failed:');
     });
 
@@ -290,7 +316,7 @@ describe('AnalysisPhaseExecutor', () => {
           .mockResolvedValueOnce(scoutResult),
       };
 
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Codebase scout failed:');
     });
 
@@ -313,10 +339,10 @@ describe('AnalysisPhaseExecutor', () => {
         launchAgent: vi.fn().mockResolvedValue(analystResult),
       };
 
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow();
       // Only one call — for the analyst. Scout should not be launched.
-      expect((ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
+      expect((ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
         .toHaveBeenCalledTimes(1);
     });
 
@@ -326,7 +352,7 @@ describe('AnalysisPhaseExecutor', () => {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'max retries exceeded' }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
 
       // The failure result from launchWithRetry should be treated as a failed agent result
       // causing execute() to throw "Issue analyst failed:"
@@ -343,7 +369,7 @@ describe('AnalysisPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(retryExecutor.execute).toHaveBeenCalledWith(
@@ -361,11 +387,166 @@ describe('AnalysisPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(descriptions).toContain('issue-analyst');
       expect(descriptions).toContain('codebase-scout');
+    });
+  });
+
+  describe('captureBaseline()', () => {
+    const baselinePath = '/tmp/worktree/.cadre/baseline-results.json';
+
+    it('should write baseline with zeros and empty arrays when no commands configured', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, {
+        buildExitCode: 0,
+        testExitCode: 0,
+        buildFailures: [],
+        testFailures: [],
+      });
+    });
+
+    it('should run build command when configured and record exit code 0 on success', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).toHaveBeenCalledWith('npm run build', expect.objectContaining({ cwd: '/tmp/worktree' }));
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ buildExitCode: 0 }));
+    });
+
+    it('should record non-zero buildExitCode when build command fails', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 1, stdout: 'FAIL src/foo.ts', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ buildExitCode: 1 }));
+    });
+
+    it('should extract buildFailures from output when build fails', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: 'FAIL src/foo.test.ts\nsome other line',
+        stderr: '',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildFailures: ['src/foo.test.ts'],
+      }));
+    });
+
+    it('should run test command when configured and record exit code 0 on success', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { test: 'npx vitest run' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).toHaveBeenCalledWith('npx vitest run', expect.objectContaining({ cwd: '/tmp/worktree' }));
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ testExitCode: 0 }));
+    });
+
+    it('should record non-zero testExitCode and extract testFailures when tests fail', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: '✗ should do something\n× another failing test',
+        stderr: '',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { test: 'npx vitest run' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        testExitCode: 1,
+        testFailures: expect.arrayContaining(['should do something', 'another failing test']),
+      }));
+    });
+
+    it('should run both build and test commands when both are configured', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          commands: { build: 'npm run build', test: 'npm test' },
+        } as never,
+      });
+      await executor.execute(ctx);
+      expect(execShell).toHaveBeenCalledTimes(2);
+      expect(execShell).toHaveBeenCalledWith('npm run build', expect.any(Object));
+      expect(execShell).toHaveBeenCalledWith('npm test', expect.any(Object));
+    });
+
+    it('should not throw and should still write baseline when both commands fail', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'FAILED build', stderr: '' })
+        .mockResolvedValueOnce({ exitCode: 2, stdout: 'FAILED tests', stderr: '' });
+      const ctx = makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          commands: { build: 'npm run build', test: 'npm test' },
+        } as never,
+      });
+      await expect(executor.execute(ctx)).resolves.toBeDefined();
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildExitCode: 1,
+        testExitCode: 2,
+      }));
+    });
+
+    it('should log warning and write baseline when execShell throws', async () => {
+      vi.mocked(execShell).mockRejectedValueOnce(new Error('spawn failed'));
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await expect(executor.execute(ctx)).resolves.toBeDefined();
+      expect((ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalledWith(
+        expect.stringContaining('spawn failed'),
+      );
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, {
+        buildExitCode: 0,
+        testExitCode: 0,
+        buildFailures: [],
+        testFailures: [],
+      });
+    });
+
+    it('should deduplicate identical failure lines', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: 'FAIL src/foo.ts\nFAIL src/foo.ts',
+        stderr: '',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildFailures: ['src/foo.ts'],
+      }));
+    });
+
+    it('should extract error: lines from output as failures', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'error: Cannot find module foo',
+      });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'tsc' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
+        buildFailures: expect.arrayContaining([expect.stringContaining('error: Cannot find module foo')]),
+      }));
     });
   });
 });

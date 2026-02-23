@@ -42,6 +42,7 @@ vi.mock('../src/core/phase-gate.js', () => {
     PlanningToImplementationGate: vi.fn(() => makeGate()),
     ImplementationToIntegrationGate: vi.fn(() => makeGate()),
     IntegrationToPRGate: vi.fn(() => makeGate()),
+    AnalysisAmbiguityGate: vi.fn(() => makeGate()),
   };
 });
 
@@ -416,12 +417,13 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
       expect(ctx.issue).toBe(issue);
       expect(ctx.config).toBe(config);
       expect(ctx.worktree).toBe(worktree);
-      expect(typeof ctx.recordTokens).toBe('function');
-      expect(typeof ctx.checkBudget).toBe('function');
-      expect(ctx.logger).toBeDefined();
-      expect(ctx.launcher).toBeDefined();
-      expect(ctx.checkpoint).toBeDefined();
-      expect(ctx.progressDir).toContain(String(issue.number));
+      expect(typeof ctx.callbacks.recordTokens).toBe('function');
+      expect(typeof ctx.callbacks.checkBudget).toBe('function');
+      expect(typeof ctx.callbacks.updateProgress).toBe('function');
+      expect(ctx.services.logger).toBeDefined();
+      expect(ctx.services.launcher).toBeDefined();
+      expect(ctx.io.checkpoint).toBeDefined();
+      expect(ctx.io.progressDir).toContain(String(issue.number));
     });
   });
 

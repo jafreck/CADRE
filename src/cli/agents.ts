@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve, dirname, join, sep } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import chalk from 'chalk';
@@ -10,11 +10,8 @@ import { exists, statOrNull } from '../util/fs.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** Resolve the bundled templates directory whether running from src/ or dist/. */
+/** Resolve the bundled templates directory. */
 function getTemplateDir(): string {
-  if (__filename.includes(`${sep}dist${sep}`)) {
-    return resolve(__dirname, '../../src/agents/templates');
-  }
   return resolve(__dirname, '../agents/templates');
 }
 
@@ -23,7 +20,16 @@ function agentFilePath(agentDir: string, agentName: string, backend?: string): s
   if (backend === 'claude') {
     return join(agentDir, agentName, 'CLAUDE.md');
   }
+  if (backend === 'copilot') {
+    // GitHub Copilot CLI resolves agents by the .agent.md convention
+    return join(agentDir, `${agentName}.agent.md`);
+  }
   return join(agentDir, `${agentName}.md`);
+}
+
+/** Resolve the configured backend from a loaded config. */
+function resolveBackend(config: Awaited<ReturnType<typeof loadConfig>>): string {
+  return config.agent?.backend ?? 'copilot';
 }
 
 /**
@@ -50,8 +56,9 @@ export function registerAgentsCommand(program: Command): void {
         console.log(chalk.bold(`${col1}${col2}${col3}${col4}`));
         console.log('─'.repeat(72));
 
+        const backend = resolveBackend(config);
         for (const agent of AGENT_DEFINITIONS) {
-          const filePath = agentFilePath(agentDir, agent.name);
+          const filePath = agentFilePath(agentDir, agent.name, backend);
           const fileExists = await exists(filePath);
           const status = fileExists ? chalk.green('✅') : chalk.red('❌');
           const name = agent.name.padEnd(30);
@@ -90,9 +97,10 @@ export function registerAgentsCommand(program: Command): void {
             process.exit(1);
           }
 
+          const effectiveBackend = opts.backend ?? resolveBackend(config);
           for (const agent of toScaffold) {
             const srcPath = join(templateDir, agent.templateFile);
-            const destPath = agentFilePath(agentDir, agent.name, opts.backend);
+            const destPath = agentFilePath(agentDir, agent.name, effectiveBackend);
 
             if (!(await exists(srcPath))) {
               console.warn(chalk.yellow(`⚠ Template not found: ${srcPath}`));
@@ -128,10 +136,11 @@ export function registerAgentsCommand(program: Command): void {
         const config = await loadConfig(opts.config);
         const agentDir = resolve(config.copilot.agentDir);
 
+        const backend = resolveBackend(config);
         const issues: string[] = [];
 
         for (const agent of AGENT_DEFINITIONS) {
-          const filePath = agentFilePath(agentDir, agent.name);
+          const filePath = agentFilePath(agentDir, agent.name, backend);
           const fileStat = await statOrNull(filePath);
           if (fileStat === null) {
             issues.push(`  ❌ Missing: ${filePath}`);

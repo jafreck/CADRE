@@ -149,6 +149,19 @@ export class CommitManager {
   }
 
   /**
+   * Get the diff introduced by the last commit (HEAD~1..HEAD).
+   * Falls back to `git show HEAD` if HEAD~1 does not exist (i.e., first commit).
+   */
+  async getTaskDiff(): Promise<string> {
+    try {
+      return await this.git.diff(['HEAD~1..HEAD']);
+    } catch {
+      // HEAD~1 does not exist — this is the first commit; show its full content
+      return this.git.raw(['show', 'HEAD']);
+    }
+  }
+
+  /**
    * Get the diff of all changes from the base commit to HEAD.
    */
   async getDiff(baseCommit?: string): Promise<string> {

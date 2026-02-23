@@ -3,6 +3,7 @@ import { IssueNotifier } from '../src/core/issue-notifier.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { PlatformProvider } from '../src/platform/provider.js';
 import type { Logger } from '../src/logging/logger.js';
+import type { CadreEvent } from '../src/logging/events.js';
 
 function makeMockLogger(): Logger {
   return {
@@ -224,6 +225,54 @@ describe('IssueNotifier', () => {
     });
   });
 
+  describe('notifyAmbiguities', () => {
+    it('should post a comment containing each ambiguity item', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(12, ['Ambiguity one', 'Ambiguity two']);
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(12);
+      expect(body).toContain('Ambiguity one');
+      expect(body).toContain('Ambiguity two');
+    });
+
+    it('should format ambiguities as a markdown list', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(12, ['Item A', 'Item B']);
+      const [, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(body).toContain('- Item A');
+      expect(body).toContain('- Item B');
+    });
+
+    it('should request clarification in the comment body', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(12, ['Something unclear']);
+      const [, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(body.toLowerCase()).toContain('clarification');
+    });
+
+    it('should reference the issue number in the comment body', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notifyAmbiguities(99, ['Some ambiguity']);
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(99);
+      expect(body).toContain('#99');
+    });
+
+    it('should not post when enabled is false', async () => {
+      const notifier = new IssueNotifier(makeConfig({ enabled: false }), platform, logger);
+      await notifier.notifyAmbiguities(1, ['Ambiguity']);
+      expect(platform.addIssueComment).not.toHaveBeenCalled();
+    });
+
+    it('should resolve without throwing when addIssueComment rejects', async () => {
+      (platform.addIssueComment as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'));
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await expect(notifier.notifyAmbiguities(1, ['Some ambiguity'])).resolves.toBeUndefined();
+      expect(logger.warn).toHaveBeenCalled();
+    });
+  });
+
   describe('notifyBudgetWarning', () => {
     it('should post a comment with token counts and percentage', async () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
@@ -253,6 +302,131 @@ describe('IssueNotifier', () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
       await expect(notifier.notifyBudgetWarning(1, 5000, 10000)).resolves.toBeUndefined();
       expect(logger.warn).toHaveBeenCalled();
+    });
+  });
+
+  describe('notify() – NotificationProvider adapter', () => {
+    it('should dispatch issue-started to notifyStart', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({ type: 'issue-started', issueNumber: 7, issueTitle: 'My Issue', worktreePath: '/tmp' });
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(7);
+      expect(body).toContain('My Issue');
+    });
+
+    it('should dispatch phase-completed to notifyPhaseComplete', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({ type: 'phase-completed', issueNumber: 5, phase: 2, phaseName: 'Planning', duration: 3500 });
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(5);
+      expect(body).toContain('Phase 2');
+      expect(body).toContain('Planning');
+    });
+
+    it('should dispatch issue-completed to notifyComplete', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({
+        type: 'issue-completed',
+        issueNumber: 10,
+        issueTitle: 'Feature X',
+        success: true,
+        duration: 5000,
+        tokenUsage: 1234,
+        prUrl: 'https://github.com/owner/repo/pull/99',
+      });
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(10);
+      expect(body).toContain('Feature X');
+      expect(body).toContain('https://github.com/owner/repo/pull/99');
+    });
+
+    it('should dispatch issue-failed to notifyFailed with phase info', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({
+        type: 'issue-failed',
+        issueNumber: 3,
+        issueTitle: 'Broken',
+        error: 'crash',
+        phase: 2,
+        phaseName: 'Planning',
+      });
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(body).toContain('Phase 2');
+      expect(body).toContain('Planning');
+      expect(body).toContain('crash');
+    });
+
+    it('should dispatch issue-failed without phase info when phaseName is absent', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({
+        type: 'issue-failed',
+        issueNumber: 3,
+        issueTitle: 'Broken',
+        error: 'budget exceeded',
+        phase: 1,
+      });
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(body).toContain('budget exceeded');
+      expect(body).not.toContain('Phase 1');
+    });
+
+    it('should dispatch budget-warning with scope=issue to notifyBudgetWarning', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({
+        type: 'budget-warning',
+        scope: 'issue',
+        issueNumber: 7,
+        currentUsage: 8000,
+        budget: 10000,
+        percentUsed: 80,
+      });
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(7);
+      expect(body).toContain('80%');
+    });
+
+    it('should ignore budget-warning with scope=fleet', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({
+        type: 'budget-warning',
+        scope: 'fleet',
+        currentUsage: 8000,
+        budget: 10000,
+        percentUsed: 80,
+      });
+      expect(platform.addIssueComment).not.toHaveBeenCalled();
+    });
+
+    it('should dispatch ambiguity-detected to notifyAmbiguities', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({
+        type: 'ambiguity-detected',
+        issueNumber: 12,
+        ambiguities: ['Ambiguity one', 'Ambiguity two'],
+      });
+      expect(platform.addIssueComment).toHaveBeenCalledOnce();
+      const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(issueNum).toBe(12);
+      expect(body).toContain('Ambiguity one');
+      expect(body).toContain('Ambiguity two');
+    });
+
+    it('should silently ignore unknown event types', async () => {
+      const notifier = new IssueNotifier(makeConfig(), platform, logger);
+      await notifier.notify({ type: 'fleet-started', issueCount: 2, maxParallel: 1 } as CadreEvent);
+      expect(platform.addIssueComment).not.toHaveBeenCalled();
+    });
+
+    it('should respect enabled=false for dispatched events', async () => {
+      const notifier = new IssueNotifier(makeConfig({ enabled: false }), platform, logger);
+      await notifier.notify({ type: 'issue-started', issueNumber: 1, issueTitle: 'X', worktreePath: '/tmp' });
+      expect(platform.addIssueComment).not.toHaveBeenCalled();
     });
   });
 });

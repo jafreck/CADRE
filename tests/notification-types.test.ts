@@ -76,12 +76,12 @@ describe('NotificationEvent type union', () => {
   });
 
   it('should accept issue-completed event', () => {
-    const event: NotificationEvent = { type: 'issue-completed', issueNumber: 42, success: true, prNumber: 99, duration: 120, tokenUsage: 5000 };
+    const event: NotificationEvent = { type: 'issue-completed', issueNumber: 42, issueTitle: 'Fix bug', success: true, prNumber: 99, duration: 120, tokenUsage: 5000 };
     expect(event.type).toBe('issue-completed');
   });
 
   it('should accept issue-failed event', () => {
-    const event: NotificationEvent = { type: 'issue-failed', issueNumber: 42, error: 'timeout', phase: 2 };
+    const event: NotificationEvent = { type: 'issue-failed', issueNumber: 42, issueTitle: 'Fix bug', error: 'timeout', phase: 2 };
     expect(event.type).toBe('issue-failed');
   });
 

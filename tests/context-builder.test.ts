@@ -238,6 +238,61 @@ describe('ContextBuilder', () => {
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
     });
+  });
+
+  describe('buildForCodeWriter siblingFiles', () => {
+    const task = {
+      id: 'task-001',
+      name: 'Fix login',
+      description: 'Fix the login handler',
+      files: ['src/auth/login.ts'],
+      dependencies: [],
+      complexity: 'simple' as const,
+      acceptanceCriteria: ['Login works'],
+    };
+
+    it('should include siblingFiles in payload when provided and non-empty', async () => {
+      const siblingFiles = ['src/auth/utils.ts', 'src/config.ts'];
+      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress', siblingFiles);
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.siblingFiles).toEqual(siblingFiles);
+    });
+
+    it('should not include siblingFiles in payload when omitted', async () => {
+      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress');
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.siblingFiles).toBeUndefined();
+    });
+
+    it('should not include siblingFiles in payload when passed as empty array', async () => {
+      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress', []);
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.siblingFiles).toBeUndefined();
+    });
+
+    it('should always include taskId, files, and acceptanceCriteria in payload regardless of siblingFiles', async () => {
+      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress', ['src/other.ts']);
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.taskId).toBe(task.id);
+      expect(payload.files).toEqual(task.files);
+      expect(payload.acceptanceCriteria).toEqual(task.acceptanceCriteria);
+    });
+  });
+
+  describe('outputSchema exclusions', () => {
+    const task = {
+      id: 'task-001',
+      name: 'Fix login',
+      description: 'Fix the login handler',
+      files: ['src/auth/login.ts'],
+      dependencies: [],
+      complexity: 'simple' as const,
+      acceptanceCriteria: ['Login works'],
+    };
 
     it('should NOT include outputSchema for test-writer', async () => {
       await builder.buildForTestWriter(42, '/tmp/worktree', task, [], '/tmp/task-plan.md', '/tmp/progress');
@@ -246,7 +301,7 @@ describe('ContextBuilder', () => {
     });
 
     it('should NOT include outputSchema for fix-surgeon', async () => {
-      await builder.buildForFixSurgeon(42, '/tmp/worktree', task, '/tmp/feedback.md', [], '/tmp/progress', 'review');
+      await builder.buildForFixSurgeon(42, '/tmp/worktree', task.id, '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
     });

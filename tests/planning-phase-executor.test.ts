@@ -58,6 +58,28 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     debug: vi.fn(),
   };
 
+  const services = {
+    launcher: launcher as never,
+    retryExecutor: retryExecutor as never,
+    tokenTracker: {} as never,
+    contextBuilder: contextBuilder as never,
+    resultParser: resultParser as never,
+    logger: logger as never,
+  };
+
+  const io = {
+    progressDir: '/tmp/progress',
+    progressWriter: {} as never,
+    checkpoint: {} as never,
+    commitManager: {} as never,
+  };
+
+  const callbacks = {
+    recordTokens,
+    checkBudget,
+    updateProgress: vi.fn().mockResolvedValue(undefined),
+  };
+
   return {
     issue: {
       number: 42,
@@ -74,21 +96,14 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     config: {
       options: { maxRetriesPerTask: 3 },
     } as never,
-    progressDir: '/tmp/progress',
-    contextBuilder: contextBuilder as never,
-    launcher: launcher as never,
-    resultParser: resultParser as never,
-    checkpoint: {} as never,
-    commitManager: {} as never,
-    retryExecutor: retryExecutor as never,
-    tokenTracker: {} as never,
-    progressWriter: {} as never,
     platform: {} as never,
-    recordTokens,
-    checkBudget,
-    logger: logger as never,
-    ...overrides,
-  };
+    services: { ...services, ...overrides.services } as never,
+    io: { ...io, ...overrides.io } as never,
+    callbacks: { ...callbacks, ...overrides.callbacks } as never,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([k]) => !['services', 'io', 'callbacks'].includes(k)),
+    ),
+  } as PhaseContext;
 }
 
 describe('PlanningPhaseExecutor', () => {
@@ -118,7 +133,7 @@ describe('PlanningPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.contextBuilder as never as { buildForImplementationPlanner: ReturnType<typeof vi.fn> })
+        (ctx.services.contextBuilder as never as { buildForImplementationPlanner: ReturnType<typeof vi.fn> })
           .buildForImplementationPlanner,
       ).toHaveBeenCalledWith(
         42,
@@ -133,7 +148,7 @@ describe('PlanningPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'implementation-planner',
@@ -150,7 +165,7 @@ describe('PlanningPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.resultParser as never as { parseImplementationPlan: ReturnType<typeof vi.fn> })
+        (ctx.services.resultParser as never as { parseImplementationPlan: ReturnType<typeof vi.fn> })
           .parseImplementationPlan,
       ).toHaveBeenCalledWith(join('/tmp/progress', 'implementation-plan.md'));
     });
@@ -164,21 +179,21 @@ describe('PlanningPhaseExecutor', () => {
     it('should record tokens for implementation-planner', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('implementation-planner', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('implementation-planner', 50);
     });
 
     it('should check budget during execution', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.checkBudget).toHaveBeenCalled();
-      expect((ctx.checkBudget as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(ctx.callbacks.checkBudget).toHaveBeenCalled();
+      expect((ctx.callbacks.checkBudget as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
     it('should log info with task count after successful plan validation', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.logger as never as { info: ReturnType<typeof vi.fn> }).info,
+        (ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info,
       ).toHaveBeenCalledWith(
         expect.stringContaining('2 tasks'),
         expect.objectContaining({ issueNumber: 42, phase: 2 }),
@@ -203,7 +218,7 @@ describe('PlanningPhaseExecutor', () => {
       };
 
       const launcher = { launchAgent: vi.fn().mockResolvedValue(plannerResult) };
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Implementation planner failed:');
     });
 
@@ -211,7 +226,7 @@ describe('PlanningPhaseExecutor', () => {
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue([]),
       };
-      const ctx = makeCtx({ resultParser: resultParser as never });
+      const ctx = makeCtx({ services: { resultParser: resultParser } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Implementation plan produced zero tasks');
     });
 
@@ -222,7 +237,7 @@ describe('PlanningPhaseExecutor', () => {
           { id: 'task-002', name: 'Task 2', dependencies: ['task-001'] },
         ]),
       };
-      const ctx = makeCtx({ resultParser: resultParser as never });
+      const ctx = makeCtx({ services: { resultParser: resultParser } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Invalid implementation plan:');
     });
 
@@ -230,7 +245,7 @@ describe('PlanningPhaseExecutor', () => {
       const retryExecutor = {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'max retries exceeded' }),
       };
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Implementation planner failed:');
     });
   });
@@ -244,7 +259,7 @@ describe('PlanningPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(retryExecutor.execute).toHaveBeenCalledWith(
@@ -262,7 +277,7 @@ describe('PlanningPhaseExecutor', () => {
         }),
       };
 
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
       expect(descriptions).toContain('implementation-planner');

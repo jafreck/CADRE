@@ -29,6 +29,43 @@ const baseConfig: CadreConfig = {
   environment: { inheritShellPath: true, extraPath: [] },
 };
 
+describe('applyOverrides – noPr', () => {
+  it('should set pullRequest.autoCreate to false when noPr is true', () => {
+    const result = applyOverrides(baseConfig, { noPr: true });
+    expect(result.pullRequest.autoCreate).toBe(false);
+  });
+
+  it('should set pullRequest.autoCreate to true when noPr is false', () => {
+    const configWithAutoCreateFalse = applyOverrides(baseConfig, { noPr: true });
+    const result = applyOverrides(configWithAutoCreateFalse, { noPr: false });
+    expect(result.pullRequest.autoCreate).toBe(true);
+  });
+
+  it('should not change pullRequest.autoCreate when noPr is undefined', () => {
+    const result = applyOverrides(baseConfig, {});
+    expect(result.pullRequest.autoCreate).toBe(true);
+  });
+
+  it('should preserve other pullRequest fields when applying noPr override', () => {
+    const result = applyOverrides(baseConfig, { noPr: true });
+    expect(result.pullRequest.draft).toBe(true);
+    expect(result.pullRequest.labels).toEqual(['cadre-generated']);
+    expect(result.pullRequest.linkIssue).toBe(true);
+  });
+
+  it('should preserve other options when applying noPr override', () => {
+    const result = applyOverrides(baseConfig, { noPr: true });
+    expect(result.options.dryRun).toBe(false);
+    expect(result.options.resume).toBe(false);
+    expect(result.options.maxParallelIssues).toBe(3);
+  });
+
+  it('should return a frozen object', () => {
+    const result = applyOverrides(baseConfig, { noPr: true });
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+});
+
 describe('applyOverrides – skipValidation', () => {
   it('should default skipValidation to false in the base config', () => {
     expect(baseConfig.options.skipValidation).toBe(false);

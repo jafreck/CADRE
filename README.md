@@ -1,5 +1,11 @@
 # CADRE — Coordinated Agent Development Runtime Engine
 
+[![CI](https://github.com/jafreck/cadre/actions/workflows/ci.yml/badge.svg)](https://github.com/jafreck/cadre/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/cadre)](https://www.npmjs.com/package/cadre)
+[![npm downloads](https://img.shields.io/npm/dw/cadre)](https://www.npmjs.com/package/cadre)
+[![Coverage](https://img.shields.io/codecov/c/github/jafreck/cadre)](https://codecov.io/gh/jafreck/cadre)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 CADRE is a framework for **parallel agent-based software development** against a set of open GitHub issues. Given a repository and a list of issues, CADRE provisions one git worktree per issue, then orchestrates a coordinated team of single-purpose agents within each worktree to analyze the issue, plan the implementation, write code, write tests, verify correctness, and open a pull request — all in parallel across issues, with checkpointing and resume at every level.
 
 ## Quick Start
@@ -52,6 +58,8 @@ Create a `cadre.config.json`:
   }
 }
 ```
+
+See [docs/config-schema.md](docs/config-schema.md) for the full schema reference.
 
 ### GitHub MCP Server
 
@@ -199,4 +207,6 @@ Each issue runs in its own git worktree with full isolation. Multiple issues are
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Jacob Freck

@@ -12,6 +12,8 @@ export const integrationReportSchema = z.object({
   testResult: commandResultSchema,
   lintResult: commandResultSchema.optional(),
   overallPass: z.boolean(),
+  baselineFailures: z.array(z.string()).optional(),
+  regressionFailures: z.array(z.string()).optional(),
 });
 
 export type CommandResult = z.infer<typeof commandResultSchema>;

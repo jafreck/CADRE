@@ -19,6 +19,37 @@ const mockNotifierMethods = {
   notifyComplete: vi.fn().mockResolvedValue(undefined),
   notifyFailed: vi.fn().mockResolvedValue(undefined),
   notifyBudgetWarning: vi.fn().mockResolvedValue(undefined),
+  notifyAmbiguities: vi.fn().mockResolvedValue(undefined),
+  notify: vi.fn().mockImplementation(async (event: { type: string }) => {
+    // The real IssueNotifier.notify() dispatches to inner methods;
+    // we replicate that routing here so assertions on the specific
+    // methods still pass while the orchestrator goes through dispatch.
+    switch (event.type) {
+      case 'issue-started':
+        return mockNotifierMethods.notifyStart((event as any).issueNumber, (event as any).issueTitle);
+      case 'phase-completed':
+        return mockNotifierMethods.notifyPhaseComplete((event as any).issueNumber, (event as any).phase, (event as any).phaseName, (event as any).duration);
+      case 'issue-completed':
+        return mockNotifierMethods.notifyComplete((event as any).issueNumber, (event as any).issueTitle, (event as any).prUrl, (event as any).tokenUsage);
+      case 'issue-failed':
+        return mockNotifierMethods.notifyFailed(
+          (event as any).issueNumber,
+          (event as any).issueTitle,
+          (event as any).phaseName ? { id: (event as any).phase, name: (event as any).phaseName } : undefined,
+          (event as any).failedTask,
+          (event as any).error,
+        );
+      case 'budget-warning':
+        if ((event as any).scope === 'issue' && (event as any).issueNumber != null) {
+          return mockNotifierMethods.notifyBudgetWarning((event as any).issueNumber, (event as any).currentUsage, (event as any).budget);
+        }
+        return;
+      case 'ambiguity-detected':
+        return mockNotifierMethods.notifyAmbiguities((event as any).issueNumber, (event as any).ambiguities);
+      default:
+        return;
+    }
+  }),
 };
 
 vi.mock('../src/core/issue-notifier.js', () => ({
@@ -35,6 +66,7 @@ vi.mock('../src/core/phase-gate.js', () => {
     PlanningToImplementationGate: vi.fn(() => makeGate()),
     ImplementationToIntegrationGate: vi.fn(() => makeGate()),
     IntegrationToPRGate: vi.fn(() => makeGate()),
+    AnalysisAmbiguityGate: vi.fn(() => makeGate()),
   };
 });
 
@@ -268,7 +300,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
     it('should dispatch issue-started when notificationManager is provided', async () => {
       const checkpoint = makeCheckpointMock();
       const dispatch = vi.fn().mockResolvedValue(undefined);
-      const nm = { dispatch } as unknown as NotificationManager;
+      const nm = { dispatch, addProvider: vi.fn() } as unknown as NotificationManager;
 
       const orchestrator = new IssueOrchestrator(
         config,
@@ -291,7 +323,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
     it('should dispatch issue-completed on successful pipeline', async () => {
       const checkpoint = makeCheckpointMock();
       const dispatch = vi.fn().mockResolvedValue(undefined);
-      const nm = { dispatch } as unknown as NotificationManager;
+      const nm = { dispatch, addProvider: vi.fn() } as unknown as NotificationManager;
 
       const orchestrator = new IssueOrchestrator(
         config,
@@ -315,7 +347,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
     it('should include duration and tokenUsage in issue-completed event', async () => {
       const checkpoint = makeCheckpointMock();
       const dispatch = vi.fn().mockResolvedValue(undefined);
-      const nm = { dispatch } as unknown as NotificationManager;
+      const nm = { dispatch, addProvider: vi.fn() } as unknown as NotificationManager;
 
       const orchestrator = new IssueOrchestrator(
         config,
@@ -386,7 +418,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
       });
       vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('simulated phase failure'));
       const dispatch = vi.fn().mockResolvedValue(undefined);
-      const nm = { dispatch } as unknown as NotificationManager;
+      const nm = { dispatch, addProvider: vi.fn() } as unknown as NotificationManager;
 
       const orchestrator = new IssueOrchestrator(
         config,
@@ -413,7 +445,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
       });
       vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
       const dispatch = vi.fn().mockResolvedValue(undefined);
-      const nm = { dispatch } as unknown as NotificationManager;
+      const nm = { dispatch, addProvider: vi.fn() } as unknown as NotificationManager;
 
       const orchestrator = new IssueOrchestrator(
         config,
@@ -461,7 +493,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
       });
       vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
       const dispatch = vi.fn().mockResolvedValue(undefined);
-      const nm = { dispatch } as unknown as NotificationManager;
+      const nm = { dispatch, addProvider: vi.fn() } as unknown as NotificationManager;
 
       const orchestrator = new IssueOrchestrator(
         config,
@@ -491,7 +523,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
         callOrder.push(event.type);
         return Promise.resolve(undefined);
       });
-      const nm = { dispatch } as unknown as NotificationManager;
+      const nm = { dispatch, addProvider: vi.fn() } as unknown as NotificationManager;
 
       const orchestrator = new IssueOrchestrator(
         config,
@@ -529,6 +561,35 @@ describe('IssueOrchestrator notifier integration', () => {
     mockNotifierMethods.notifyComplete.mockResolvedValue(undefined);
     mockNotifierMethods.notifyFailed.mockResolvedValue(undefined);
     mockNotifierMethods.notifyBudgetWarning.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyAmbiguities.mockResolvedValue(undefined);
+    // Re-apply notify routing after clearAllMocks
+    mockNotifierMethods.notify.mockImplementation(async (event: { type: string }) => {
+      switch (event.type) {
+        case 'issue-started':
+          return mockNotifierMethods.notifyStart((event as any).issueNumber, (event as any).issueTitle);
+        case 'phase-completed':
+          return mockNotifierMethods.notifyPhaseComplete((event as any).issueNumber, (event as any).phase, (event as any).phaseName, (event as any).duration);
+        case 'issue-completed':
+          return mockNotifierMethods.notifyComplete((event as any).issueNumber, (event as any).issueTitle, (event as any).prUrl, (event as any).tokenUsage);
+        case 'issue-failed':
+          return mockNotifierMethods.notifyFailed(
+            (event as any).issueNumber,
+            (event as any).issueTitle,
+            (event as any).phaseName ? { id: (event as any).phase, name: (event as any).phaseName } : undefined,
+            (event as any).failedTask,
+            (event as any).error,
+          );
+        case 'budget-warning':
+          if ((event as any).scope === 'issue' && (event as any).issueNumber != null) {
+            return mockNotifierMethods.notifyBudgetWarning((event as any).issueNumber, (event as any).currentUsage, (event as any).budget);
+          }
+          return;
+        case 'ambiguity-detected':
+          return mockNotifierMethods.notifyAmbiguities((event as any).issueNumber, (event as any).ambiguities);
+        default:
+          return;
+      }
+    });
     tempDir = join(tmpdir(), `cadre-notif-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     worktreePath = join(tempDir, 'worktree');
     await mkdir(worktreePath, { recursive: true });

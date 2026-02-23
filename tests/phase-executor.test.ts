@@ -68,25 +68,32 @@ describe('PhaseContext', () => {
       },
       worktree: { path: '/tmp/worktree', branch: 'cadre/issue-42', baseCommit: 'abc123', issueNumber: 42 } as never,
       config: {} as never,
-      progressDir: '/tmp/progress',
-      contextBuilder: {} as never,
-      launcher: {} as never,
-      resultParser: {} as never,
-      checkpoint: {} as never,
-      commitManager: {} as never,
-      retryExecutor: {} as never,
-      tokenTracker: {} as never,
-      progressWriter: {} as never,
       platform: {} as never,
-      recordTokens: vi.fn(),
-      checkBudget: vi.fn(),
-      logger: {} as never,
+      services: {
+        launcher: {} as never,
+        retryExecutor: {} as never,
+        tokenTracker: {} as never,
+        contextBuilder: {} as never,
+        resultParser: {} as never,
+        logger: {} as never,
+      },
+      io: {
+        progressDir: '/tmp/progress',
+        progressWriter: {} as never,
+        checkpoint: {} as never,
+        commitManager: {} as never,
+      },
+      callbacks: {
+        recordTokens: vi.fn(),
+        checkBudget: vi.fn(),
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+      },
     };
 
-    expect(ctx.progressDir).toBe('/tmp/progress');
+    expect(ctx.io.progressDir).toBe('/tmp/progress');
     expect(ctx.issue.number).toBe(42);
-    expect(typeof ctx.recordTokens).toBe('function');
-    expect(typeof ctx.checkBudget).toBe('function');
+    expect(typeof ctx.callbacks.recordTokens).toBe('function');
+    expect(typeof ctx.callbacks.checkBudget).toBe('function');
   });
 
   it('recordTokens should accept agent name and nullable token count', () => {
@@ -95,23 +102,30 @@ describe('PhaseContext', () => {
       issue: {} as never,
       worktree: {} as never,
       config: {} as never,
-      progressDir: '',
-      contextBuilder: {} as never,
-      launcher: {} as never,
-      resultParser: {} as never,
-      checkpoint: {} as never,
-      commitManager: {} as never,
-      retryExecutor: {} as never,
-      tokenTracker: {} as never,
-      progressWriter: {} as never,
       platform: {} as never,
-      recordTokens,
-      checkBudget: vi.fn(),
-      logger: {} as never,
+      services: {
+        launcher: {} as never,
+        retryExecutor: {} as never,
+        tokenTracker: {} as never,
+        contextBuilder: {} as never,
+        resultParser: {} as never,
+        logger: {} as never,
+      },
+      io: {
+        progressDir: '',
+        progressWriter: {} as never,
+        checkpoint: {} as never,
+        commitManager: {} as never,
+      },
+      callbacks: {
+        recordTokens,
+        checkBudget: vi.fn(),
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+      },
     };
 
-    ctx.recordTokens('issue-analyst', 1500);
-    ctx.recordTokens('code-writer', null);
+    ctx.callbacks.recordTokens('issue-analyst', 1500);
+    ctx.callbacks.recordTokens('code-writer', null);
 
     expect(recordTokens).toHaveBeenCalledWith('issue-analyst', 1500);
     expect(recordTokens).toHaveBeenCalledWith('code-writer', null);
@@ -123,22 +137,29 @@ describe('PhaseContext', () => {
       issue: {} as never,
       worktree: {} as never,
       config: {} as never,
-      progressDir: '',
-      contextBuilder: {} as never,
-      launcher: {} as never,
-      resultParser: {} as never,
-      checkpoint: {} as never,
-      commitManager: {} as never,
-      retryExecutor: {} as never,
-      tokenTracker: {} as never,
-      progressWriter: {} as never,
       platform: {} as never,
-      recordTokens: vi.fn(),
-      checkBudget,
-      logger: {} as never,
+      services: {
+        launcher: {} as never,
+        retryExecutor: {} as never,
+        tokenTracker: {} as never,
+        contextBuilder: {} as never,
+        resultParser: {} as never,
+        logger: {} as never,
+      },
+      io: {
+        progressDir: '',
+        progressWriter: {} as never,
+        checkpoint: {} as never,
+        commitManager: {} as never,
+      },
+      callbacks: {
+        recordTokens: vi.fn(),
+        checkBudget,
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+      },
     };
 
-    ctx.checkBudget();
+    ctx.callbacks.checkBudget();
     expect(checkBudget).toHaveBeenCalledOnce();
   });
 });

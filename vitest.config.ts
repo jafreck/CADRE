@@ -7,5 +7,15 @@ export default defineConfig({
       '**/dist/**',
       '**/.cadre/**',
     ],
+    coverage: {
+      provider: 'v8',
+      reporter: ['lcov', 'text'],
+      exclude: [
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/.cadre/**',
+        '**/tests/**',
+      ],
+    },
   },
 });

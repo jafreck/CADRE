@@ -94,7 +94,7 @@ export const CadreConfigSchema = z.object({
         milestone: z.string().optional(),
         assignee: z.string().optional(),
         state: z.enum(['open', 'closed', 'all']).default('open'),
-        limit: z.number().int().min(1).max(100).default(10),
+        limit: z.number().int().min(1).default(10),
       }),
     }),
   ]),
@@ -154,8 +154,18 @@ export const CadreConfigSchema = z.object({
       buildVerification: z.boolean().default(true),
       /** Run test command after implementation to verify tests pass. */
       testVerification: z.boolean().default(true),
+      /** Run a build check after each task completes (within the issue pipeline). */
+      perTaskBuildCheck: z.boolean().default(true),
+      /** Max fix-surgeon rounds per failing per-task build check. */
+      maxBuildFixRounds: z.number().int().min(1).max(5).default(2),
       /** Skip pre-run validation checks. */
       skipValidation: z.boolean().default(false),
+      /** Max fix-surgeon rounds per failing build/test command. */
+      maxIntegrationFixRounds: z.number().int().min(1).max(5).default(1),
+      /** Number of ambiguous tasks that triggers the ambiguity gate. */
+      ambiguityThreshold: z.number().int().min(0).default(5),
+      /** Halt the pipeline when the ambiguity gate fires instead of continuing. */
+      haltOnAmbiguity: z.boolean().default(false),
     })
     .default({}),
 
