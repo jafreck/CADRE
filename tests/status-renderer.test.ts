@@ -80,9 +80,24 @@ describe('formatElapsed', () => {
     expect(formatElapsed(fiveMinAgo)).toBe('5m ago');
   });
 
-  it('should return "0m ago" for very recent timestamps', () => {
+  it('should return "just now" for very recent timestamps (0ms)', () => {
     const justNow = new Date('2024-01-01T12:00:00Z').toISOString();
-    expect(formatElapsed(justNow)).toBe('0m ago');
+    expect(formatElapsed(justNow)).toBe('just now');
+  });
+
+  it('should return "just now" for timestamps 30 seconds ago', () => {
+    const thirtySecondsAgo = new Date('2024-01-01T11:59:30Z').toISOString();
+    expect(formatElapsed(thirtySecondsAgo)).toBe('just now');
+  });
+
+  it('should return "just now" for timestamps 59 seconds ago', () => {
+    const fiftyNineSecondsAgo = new Date('2024-01-01T11:59:01Z').toISOString();
+    expect(formatElapsed(fiftyNineSecondsAgo)).toBe('just now');
+  });
+
+  it('should return "1m ago" for timestamps exactly 60 seconds ago', () => {
+    const sixtySecondsAgo = new Date('2024-01-01T11:59:00Z').toISOString();
+    expect(formatElapsed(sixtySecondsAgo)).toBe('1m ago');
   });
 
   it('should return hours ago for elapsed >= 60 minutes and < 24 hours', () => {

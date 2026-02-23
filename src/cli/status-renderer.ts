@@ -19,6 +19,7 @@ export function formatElapsed(isoDate?: string): string {
   if (!isoDate) return '—';
   const diffMs = Date.now() - new Date(isoDate).getTime();
   if (isNaN(diffMs) || diffMs < 0) return '—';
+  if (diffMs < 60_000) return 'just now';
   const diffMin = Math.floor(diffMs / 60_000);
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
