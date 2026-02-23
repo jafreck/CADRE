@@ -192,6 +192,27 @@ describe('FleetOrchestrator — prefetch', () => {
     expect(worktreeManager.provision).not.toHaveBeenCalled();
   });
 
+  it('calls prefetch() exactly once when maxParallelIssues: 3 and 3 issues run concurrently', async () => {
+    const config = makeConfig({ maxParallelIssues: 3 });
+    const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.prefetch).toHaveBeenCalledTimes(1);
+  });
+
   it('still calls prefetch() once when issue list is empty', async () => {
     const config = makeConfig();
     const issues: IssueDetail[] = [];
