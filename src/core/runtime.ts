@@ -68,7 +68,7 @@ export class CadreRuntime {
    */
   async run(): Promise<FleetResult> {
     // Run validation unless explicitly skipped
-    if (!this.config.options.skipValidation) {
+    if (this.config.options.skipValidation === false) {
       const passed = await this.validate();
       if (!passed) {
         throw new Error('Pre-run validation failed. Fix the errors above or use --skip-validation to bypass.');

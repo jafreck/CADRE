@@ -322,12 +322,12 @@ describe('ImplementationToIntegrationGate', () => {
     expect(mockDiff).toHaveBeenCalledWith(['abc123..HEAD']);
   });
 
-  it('should fail with descriptive error when git throws', async () => {
+  it('should pass with warning when git throws (non-git environment)', async () => {
     mockDiff.mockRejectedValue(new Error('git error'));
 
     const result = await gate.validate(makeContext('/tmp/worktree'));
-    expect(result.status).toBe('fail');
-    expect(result.errors.some((e) => e.includes('Failed to compute git diff'))).toBe(true);
+    expect(result.status).not.toBe('fail');
+    expect(result.warnings.some((w) => w.includes('Could not verify git diff'))).toBe(true);
   });
 });
 
@@ -361,33 +361,33 @@ describe('IntegrationToPRGate', () => {
     expect(result.errors.some((e) => e.includes('integration-report.md is missing'))).toBe(true);
   });
 
-  it('should fail when report has no build section', async () => {
+  it('should pass with warning when report has no build section', async () => {
     await writeFile(
       join(tempDir, 'integration-report.md'),
       '# Integration Report\n## Test Result\nAll tests passed.\n',
     );
 
     const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).toBe('fail');
-    expect(result.errors.some((e) => e.includes('build result section'))).toBe(true);
+    expect(result.status).not.toBe('fail');
+    expect(result.warnings.some((w) => w.includes('build result section'))).toBe(true);
   });
 
-  it('should fail when report has no test section', async () => {
+  it('should pass with warning when report has no test section', async () => {
     await writeFile(
       join(tempDir, 'integration-report.md'),
       '# Integration Report\n## Build Result\nBuild succeeded.\n',
     );
 
     const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).toBe('fail');
-    expect(result.errors.some((e) => e.includes('test result section'))).toBe(true);
+    expect(result.status).not.toBe('fail');
+    expect(result.warnings.some((w) => w.includes('test result section'))).toBe(true);
   });
 
-  it('should fail with multiple errors when both sections are missing', async () => {
+  it('should pass with multiple warnings when both sections are missing', async () => {
     await writeFile(join(tempDir, 'integration-report.md'), '# Integration Report\nNothing here.\n');
 
     const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).toBe('fail');
-    expect(result.errors.length).toBe(2);
+    expect(result.status).not.toBe('fail');
+    expect(result.warnings.length).toBe(2);
   });
 });

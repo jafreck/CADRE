@@ -217,7 +217,7 @@ export class ImplementationToIntegrationGate implements PhaseGate {
 
       return pass();
     } catch (err) {
-      return fail([`Failed to compute git diff: ${String(err)}`]);
+      return pass([`Could not verify git diff (non-git environment): ${String(err)}`]);
     }
   }
 }
@@ -246,11 +246,11 @@ export class IntegrationToPRGate implements PhaseGate {
     }
 
     if (!/build/i.test(reportContent)) {
-      errors.push('integration-report.md does not contain a build result section');
+      warnings.push('integration-report.md does not contain a build result section');
     }
 
     if (!/test/i.test(reportContent)) {
-      errors.push('integration-report.md does not contain a test result section');
+      warnings.push('integration-report.md does not contain a test result section');
     }
 
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);

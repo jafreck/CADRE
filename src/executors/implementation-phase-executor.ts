@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
+import { ZodError } from 'zod';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { ImplementationTask } from '../agents/types.js';
 import { TaskQueue } from '../execution/task-queue.js';
@@ -164,7 +165,19 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         if (reviewResult.success) {
           const reviewPath = join(ctx.progressDir, `review-${task.id}.md`);
           if (await exists(reviewPath)) {
-            const review = await ctx.resultParser.parseReview(reviewPath);
+            let review;
+            try {
+              review = await ctx.resultParser.parseReview(reviewPath);
+            } catch (err) {
+              if (err instanceof ZodError) {
+                const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
+                ctx.logger.warn(`Review validation failed (will retry): ${msg}`, {
+                  issueNumber: ctx.issue.number,
+                  taskId: task.id,
+                });
+              }
+              throw err;
+            }
             if (review.verdict === 'needs-fixes') {
               // Launch fix-surgeon
               const fixContextPath = await ctx.contextBuilder.buildForFixSurgeon(
