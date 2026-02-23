@@ -518,6 +518,27 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
     expect(threads[1].id).toBe('t2');
     expect(threads[1].isResolved).toBe(true);
   });
+
+  it('should parse threads from an envelope { threads: [...] } response', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+      threads: [
+        { id: 'env-thread-1', isResolved: false, isOutdated: false, comments: [] },
+      ],
+    });
+
+    const threads = await provider.listPRReviewComments(9);
+
+    expect(threads).toHaveLength(1);
+    expect(threads[0].id).toBe('env-thread-1');
+  });
+
+  it('should return [] when envelope threads field is missing or non-array', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({ threads: null });
+
+    const threads = await provider.listPRReviewComments(9);
+
+    expect(threads).toEqual([]);
+  });
 });
 
 describe('GitHubProvider – listPullRequests type guards', () => {
