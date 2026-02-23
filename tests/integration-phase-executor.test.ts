@@ -10,10 +10,11 @@ vi.mock('../src/util/process.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockRejectedValue(new Error('ENOENT: no such file')),
 }));
 
 import { execShell } from '../src/util/process.js';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 
 function makeSuccessAgentResult(agent: string): AgentResult {
   return {
@@ -103,7 +104,10 @@ describe('IntegrationPhaseExecutor', () => {
   let executor: IntegrationPhaseExecutor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(execShell).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false });
+    vi.mocked(writeFile).mockResolvedValue(undefined);
+    vi.mocked(readFile).mockRejectedValue(new Error('ENOENT: no such file'));
     executor = new IntegrationPhaseExecutor();
   });
 
@@ -247,7 +251,7 @@ describe('IntegrationPhaseExecutor', () => {
     it('should call tryFixIntegration (launch fix-surgeon) when build fails', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'build output', stderr: 'build error', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: build error', signal: null, timedOut: false }) // build (fail)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
@@ -267,7 +271,7 @@ describe('IntegrationPhaseExecutor', () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'test output', stderr: 'test error', signal: null, timedOut: false }) // test (fail)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× some failing test', stderr: '', signal: null, timedOut: false }) // test (fail)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -300,7 +304,7 @@ describe('IntegrationPhaseExecutor', () => {
     it('should write failure output to a file before launching fix-surgeon', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'build out', stderr: 'build err', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: build err', signal: null, timedOut: false }) // build (fail)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
@@ -310,7 +314,7 @@ describe('IntegrationPhaseExecutor', () => {
 
       expect(vi.mocked(writeFile)).toHaveBeenCalledWith(
         join('/tmp/progress', 'build-failure.txt'),
-        expect.stringContaining('build err'),
+        expect.stringContaining('error TS2345: build err'),
         'utf-8',
       );
     });
@@ -318,7 +322,7 @@ describe('IntegrationPhaseExecutor', () => {
     it('should record tokens from fix-surgeon after launch', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'build fail', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: build fail', signal: null, timedOut: false }) // build (fail)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
@@ -331,7 +335,7 @@ describe('IntegrationPhaseExecutor', () => {
     it('should call checkBudget after fix-surgeon launches', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'build fail', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: build fail', signal: null, timedOut: false }) // build (fail)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
@@ -344,10 +348,10 @@ describe('IntegrationPhaseExecutor', () => {
     it('should include fail status in report for failed commands', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out', stderr: 'err', signal: null, timedOut: false }) // build (fail round 1)
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out2', stderr: 'err2', signal: null, timedOut: false }) // build re-run (fail round 2)
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out3', stderr: 'err3', signal: null, timedOut: false }) // build re-run (fail round 3)
-        .mockResolvedValueOnce({ exitCode: 1, stdout: 'out4', stderr: 'err4', signal: null, timedOut: false }) // final re-run after max rounds
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'error TS2345: type mismatch', stderr: '', signal: null, timedOut: false }) // build (fail round 1)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'error TS2345: type mismatch', stderr: '', signal: null, timedOut: false }) // build re-run (fail round 2)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'error TS2345: type mismatch', stderr: '', signal: null, timedOut: false }) // build re-run (fail round 3)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'error TS2345: type mismatch', stderr: '', signal: null, timedOut: false }) // final re-run after max rounds
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
@@ -365,7 +369,7 @@ describe('IntegrationPhaseExecutor', () => {
     it('should build fix-surgeon context using buildForFixSurgeon', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }) // build (fail)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false }) // build (fail)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
@@ -389,7 +393,7 @@ describe('IntegrationPhaseExecutor', () => {
     it('should pass changed files from commitManager to buildForFixSurgeon', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false })
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false })
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false })
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run (pass)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false })
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false });
@@ -480,10 +484,10 @@ describe('IntegrationPhaseExecutor', () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err1', signal: null, timedOut: false }) // test fail (round 1)
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err2', signal: null, timedOut: false }) // re-run fail (round 2)
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err3', signal: null, timedOut: false }) // re-run fail (round 3)
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err4', signal: null, timedOut: false }) // final re-run after loop
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× failing test', stderr: '', signal: null, timedOut: false }) // test fail (round 1)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× failing test', stderr: '', signal: null, timedOut: false }) // re-run fail (round 2)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× failing test', stderr: '', signal: null, timedOut: false }) // re-run fail (round 3)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× failing test', stderr: '', signal: null, timedOut: false }) // final re-run after loop
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
 
       const ctx = makeCtx();
@@ -502,7 +506,7 @@ describe('IntegrationPhaseExecutor', () => {
       // build fails every time: initial + 2 re-runs (after each fix) + final re-run check = 1 + 2 + 1 = 4 execShell calls for build
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }); // all build runs fail
+        .mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false }); // all build runs fail
 
       const ctx = makeCtx({
         config: {
@@ -521,7 +525,7 @@ describe('IntegrationPhaseExecutor', () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
-        .mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }); // all test runs fail
+        .mockResolvedValue({ exitCode: 1, stdout: '× failing test', stderr: '', signal: null, timedOut: false }); // all test runs fail
 
       const ctx = makeCtx({
         config: {
@@ -538,7 +542,7 @@ describe('IntegrationPhaseExecutor', () => {
     it('should exit retry loop early when build re-run passes', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
-        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'err', signal: null, timedOut: false }) // build fail
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false }) // build fail
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run pass (exit early)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
@@ -554,6 +558,276 @@ describe('IntegrationPhaseExecutor', () => {
       // fix-surgeon should only be called once (loop exits early)
       const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
       expect(launchAgent).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('baseline reading', () => {
+    it('should read baseline-results.json from .cadre directory in the worktree', async () => {
+      const baseline = { buildExitCode: 0, testExitCode: 0, buildFailures: [], testFailures: [] };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      expect(vi.mocked(readFile)).toHaveBeenCalledWith(
+        join('/tmp/worktree', '.cadre', 'baseline-results.json'),
+        'utf-8',
+      );
+    });
+
+    it('should treat all current failures as regressions when no baseline file exists', async () => {
+      // readFile already mocked to reject (ENOENT) in beforeEach
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: brand new error', signal: null, timedOut: false }) // build fail
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run pass
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      // Without baseline, any failure is a regression → fix-surgeon should be called
+      expect(
+        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+      ).toHaveBeenCalled();
+    });
+  });
+
+  describe('baseline diffing - pre-existing failures should not trigger fix-surgeon', () => {
+    it('should NOT call fix-surgeon when build failure matches a baseline build failure', async () => {
+      const baseline = {
+        buildExitCode: 1,
+        testExitCode: 0,
+        buildFailures: ['error TS2345: pre-existing build error'],
+        testFailures: [],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: pre-existing build error', signal: null, timedOut: false }) // build fail (pre-existing)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call fix-surgeon when test failure matches a baseline test failure', async () => {
+      const baseline = {
+        buildExitCode: 0,
+        testExitCode: 1,
+        buildFailures: [],
+        testFailures: ['some pre-existing test'],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× some pre-existing test', stderr: '', signal: null, timedOut: false }) // test fail (pre-existing)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should call fix-surgeon for a new build regression not in baseline', async () => {
+      const baseline = {
+        buildExitCode: 1,
+        testExitCode: 0,
+        buildFailures: ['error TS2345: old error'],
+        testFailures: [],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: new regression error', signal: null, timedOut: false }) // build fail (new regression)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build re-run pass
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call fix-surgeon for a new test regression not in baseline', async () => {
+      const baseline = {
+        buildExitCode: 0,
+        testExitCode: 1,
+        buildFailures: [],
+        testFailures: ['old pre-existing test'],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× new regression test', stderr: '', signal: null, timedOut: false }) // test fail (new regression)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test re-run pass
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    it('should loop only while regressions exist and exit when they are resolved', async () => {
+      // baseline has one test failure; a second new failure appears then gets fixed
+      const baseline = {
+        buildExitCode: 0,
+        testExitCode: 1,
+        buildFailures: [],
+        testFailures: ['pre-existing test'],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× pre-existing test\n× new regression test', stderr: '', signal: null, timedOut: false }) // test fail (pre-existing + regression)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× pre-existing test', stderr: '', signal: null, timedOut: false }) // test re-run: only pre-existing remains → no regression
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      // fix-surgeon called once (for the regression), loop exits after re-run shows only pre-existing
+      const launchAgent = (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent;
+      expect(launchAgent).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('report - Pre-existing Failures and New Regressions sections', () => {
+    it('should include Pre-existing Failures section listing baseline failures that appear in current run', async () => {
+      const baseline = {
+        buildExitCode: 1,
+        testExitCode: 1,
+        buildFailures: ['error TS2345: old build error'],
+        testFailures: ['old test failure'],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: old build error', signal: null, timedOut: false }) // build fail (pre-existing)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '× old test failure', stderr: '', signal: null, timedOut: false }) // test fail (pre-existing)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## Pre-existing Failures');
+      expect(content).toContain('error TS2345: old build error');
+      expect(content).toContain('old test failure');
+    });
+
+    it('should show _None_ in Pre-existing Failures when no baseline exists', async () => {
+      // readFile already mocked to reject (ENOENT) in beforeEach — no baseline
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## Pre-existing Failures');
+      expect(content).toContain('_None_');
+    });
+
+    it('should include New Regressions section in report', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## New Regressions');
+    });
+
+    it('should show _None_ in New Regressions when all commands pass', async () => {
+      // All commands pass → no failures → no regressions
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## New Regressions');
+      expect(content).toContain('_None_');
+    });
+
+    it('should list new regression identifiers in New Regressions section', async () => {
+      const baseline = { buildExitCode: 0, testExitCode: 0, buildFailures: [], testFailures: [] };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: new regression error', signal: null, timedOut: false }) // build fail (regression)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: new regression error', signal: null, timedOut: false }) // re-run fail round 2
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: new regression error', signal: null, timedOut: false }) // re-run fail round 3
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: new regression error', signal: null, timedOut: false }) // final re-run
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## New Regressions');
+      expect(content).toContain('error TS2345: new regression error');
+    });
+
+    it('should show _None_ in New Regressions when failure is pre-existing in baseline', async () => {
+      const baseline = {
+        buildExitCode: 1,
+        testExitCode: 0,
+        buildFailures: ['error TS2345: pre-existing error'],
+        testFailures: [],
+      };
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(baseline));
+
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: pre-existing error', signal: null, timedOut: false }) // build fail (pre-existing, no regression)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      expect(content).toContain('## New Regressions');
+      expect(content).toContain('_None_');
     });
   });
 });

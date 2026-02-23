@@ -3,6 +3,7 @@ import { writeFile, readFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { ImplementationTask } from '../agents/types.js';
 import { execShell } from '../util/process.js';
+import { baselineResultsSchema } from '../agents/schemas/index.js';
 import type { BaselineResults } from '../agents/schemas/index.js';
 
 export class IntegrationPhaseExecutor implements PhaseExecutor {
@@ -18,14 +19,15 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     let baseline: BaselineResults | null = null;
     try {
       const raw = await readFile(baselineResultsPath, 'utf-8');
-      baseline = JSON.parse(raw) as BaselineResults;
+      const parsed = baselineResultsSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) baseline = parsed.data;
     } catch {
       // No baseline file; all current failures will be treated as regressions
     }
 
     const baselineBuildFailures = new Set<string>(baseline?.buildFailures ?? []);
     const baselineTestFailures = new Set<string>(baseline?.testFailures ?? []);
-    const allBaselineFailures: string[] = [...baselineBuildFailures, ...baselineTestFailures];
+    const allCurrentFailures: string[] = [];
     const allRegressionFailures: string[] = [];
 
     // Run install command if configured
@@ -67,6 +69,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       }
 
       allRegressionFailures.push(...buildRegressions);
+      allCurrentFailures.push(...this.extractFailures(buildResult.stderr + buildResult.stdout));
       report += `**Exit Code:** ${buildResult.exitCode}\n`;
       report += `**Status:** ${buildResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (buildResult.exitCode !== 0) {
@@ -99,6 +102,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       }
 
       allRegressionFailures.push(...testRegressions);
+      allCurrentFailures.push(...this.extractFailures(testResult.stderr + testResult.stdout));
       report += `**Exit Code:** ${testResult.exitCode}\n`;
       report += `**Status:** ${testResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (testResult.exitCode !== 0) {
@@ -121,9 +125,14 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     }
 
     // Pre-existing failures and new regressions sections
+    const allCurrentFailureSet = new Set<string>(allCurrentFailures);
+    const allPreExistingFailures = [...baselineBuildFailures, ...baselineTestFailures].filter((f) =>
+      allCurrentFailureSet.has(f),
+    );
+
     report += `## Pre-existing Failures\n\n`;
-    if (allBaselineFailures.length > 0) {
-      report += allBaselineFailures.map((f) => `- ${f}`).join('\n') + '\n\n';
+    if (allPreExistingFailures.length > 0) {
+      report += allPreExistingFailures.map((f) => `- ${f}`).join('\n') + '\n\n';
     } else {
       report += '_None_\n\n';
     }
@@ -155,11 +164,12 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     const failures: string[] = [];
     for (const line of output.split('\n')) {
       const trimmed = line.trim();
-      // Match common test failure indicators (vitest/jest: × or ✕ prefix, or FAIL lines)
-      if (/^[×✕✗✘]\s/.test(trimmed) || /^\s*FAIL\s/.test(line)) {
-        failures.push(trimmed);
+      // Match common test failure indicators - strip prefix to produce the same format as AnalysisPhaseExecutor
+      if (/^(FAIL|FAILED|✗|×)\s+/.test(trimmed)) {
+        const match = trimmed.match(/^(?:FAIL|FAILED|✗|×)\s+(.+)/);
+        if (match) failures.push(match[1].trim());
       }
-      // Match TypeScript/build error lines
+      // Match TypeScript/build error lines (no prefix to strip)
       else if (/error TS\d+:/.test(trimmed)) {
         failures.push(trimmed);
       }
