@@ -1,24 +1,33 @@
-# Test Result: task-008 - Create Validation Module Index
+# Test Result: task-008 - Fill in `test-writer.md` template
 
 ## Tests Written
-- `tests/validation-index.test.ts`: 10 new test cases
-  - should export ValidationResult type usable as an object
-  - should export PreRunValidator type usable as an object
-  - should export PreRunValidationSuite as a constructable class
-  - PreRunValidationSuite from index should function correctly
-  - should export gitValidator with a name and validate function
-  - should export agentBackendValidator with a name and validate function
-  - should export platformValidator with a name and validate function
-  - should export commandValidator with a name and validate function
-  - should export diskValidator with a name and validate function
-  - should export all five validators with distinct names
+- `tests/test-writer-template.test.ts`: 18 new test cases
+  - should start with a # Test Writer heading
+  - should have at least 30 lines of content
+  - input contract: should describe task result as input
+  - input contract: should describe changed source files as input
+  - output contract: should describe test files as output
+  - output contract: should specify that tests must pass
+  - tool permissions: should mention view permission
+  - tool permissions: should mention edit permission
+  - tool permissions: should mention create permission
+  - tool permissions: should mention bash permission
+  - test framework guidance: should specify Vitest as the test framework
+  - test framework guidance: should include vitest import example
+  - test naming: should describe describe block naming convention
+  - test naming: should describe it/test case naming with "should"
+  - file placement: should specify test file location under tests/
+  - coverage goals: should mention error paths or edge cases
+  - coverage goals: should mention public API coverage
+  - constraints: should prohibit modifying source files
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/validation-index.test.ts
+- tests/test-writer-template.test.ts
 
 ## Coverage Notes
-- The index file is a pure re-export barrel; tests verify that all named symbols are reachable at runtime and satisfy their expected shapes (name string + validate function).
-- Type-only exports (ValidationResult, PreRunValidator) are verified by using them as TypeScript type annotations on concrete objects.
+- All 18 tests pass with `npx vitest run tests/test-writer-template.test.ts`
+- Follows the same pattern as `issue-analyst-template.test.ts`
+- Tests verify structural requirements (heading, line count) and content requirements (input contract, output contract, tool permissions, test framework guidance, naming, file placement, coverage goals, constraints)

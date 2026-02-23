@@ -1,3 +1,20 @@
+# Task Result: task-008 - Fill in `test-writer.md` template
+
+## Changes Made
+- `src/agents/templates/test-writer.md`: Replaced 4-line stub with full system prompt (role, input/output contracts, tool permissions, Vitest conventions, test naming, file placement, coverage goals, constraints)
+
+## Files Modified
+- src/agents/templates/test-writer.md
+
+## Files Created
+- (none)
+
+## Notes
+- All 21 `agent-templates.test.ts` tests pass.
+- Follows same structure as `issue-analyst.md` for consistency.
+
+---
+<!-- original content below -->
 # Task Result: task-008 - Create Validation Module Index
 
 ## Changes Made

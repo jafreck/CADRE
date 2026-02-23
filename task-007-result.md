@@ -1,16 +1,14 @@
-# Task Result: task-007 - Implement PreRunValidationSuite
+# Task Result: task-007 - Fill in `code-writer.md` template
 
 ## Changes Made
-- `src/validation/suite.ts`: Created `PreRunValidationSuite` class with a `run(config): Promise<boolean>` method
+- `src/agents/templates/code-writer.md`: Expanded the 4-line stub into a full system prompt including role, input contract, output contract, tool permissions, and style constraints.
 
 ## Files Modified
-- (none)
+- src/agents/templates/code-writer.md
 
 ## Files Created
-- src/validation/suite.ts
+- (none)
 
 ## Notes
-- Runs all validators concurrently via `Promise.allSettled`
-- Prints ✅ for pass with no warnings, ⚠️ for pass with warnings, ❌ for failures
-- Prints each error/warning message indented below its validator line
-- Returns `false` if any validator returned `passed: false`; `true` otherwise
+- Followed the style established by `implementation-planner.md` for section headings and formatting.
+- All 21 agent-templates tests pass after the change.
