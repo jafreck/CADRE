@@ -156,6 +156,8 @@ export const CadreConfigSchema = z.object({
       testVerification: z.boolean().default(true),
       /** Skip pre-run validation checks. */
       skipValidation: z.boolean().default(false),
+      /** Max fix-surgeon rounds per failing build/test command. */
+      maxIntegrationFixRounds: z.number().int().min(1).max(5).default(1),
     })
     .default({}),
 
