@@ -479,5 +479,72 @@ describe('CadreRuntime.pruneWorktrees() — PR-aware cleanup', () => {
 
       await expect(runtime.pruneWorktrees()).resolves.not.toThrow();
     });
+
+    it('defaults to onMerged: true — removes merged PR worktree when config is absent', async () => {
+      const wt = makeWorktree(1);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'merged', merged: true })]);
+
+      const config = { ...makeConfig(), cleanup: undefined } as unknown as CadreConfig;
+      const runtime = new CadreRuntime(config);
+      await runtime.pruneWorktrees();
+
+      expect(mockWorktreeManager.remove).toHaveBeenCalledWith(1);
+      expect(mockCheckpointManager.pruneIssue).toHaveBeenCalledWith(1);
+    });
+
+    it('defaults to onClosed: false — does not remove closed-not-merged PR worktree when config is absent', async () => {
+      const wt = makeWorktree(2);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'closed', merged: false })]);
+
+      const config = { ...makeConfig(), cleanup: undefined } as unknown as CadreConfig;
+      const runtime = new CadreRuntime(config);
+      await runtime.pruneWorktrees();
+
+      expect(mockWorktreeManager.remove).not.toHaveBeenCalled();
+    });
+
+    it('defaults to deleteRemoteBranch: true — deletes remote branch when config is absent and PR is merged', async () => {
+      const wt = makeWorktree(1);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'merged', merged: true })]);
+
+      const config = { ...makeConfig(), cleanup: undefined } as unknown as CadreConfig;
+      const runtime = new CadreRuntime(config);
+      await runtime.pruneWorktrees();
+
+      expect(mockBranchManager.deleteRemote).toHaveBeenCalledWith(wt.branch);
+    });
+  });
+
+  describe('cleanup() alias', () => {
+    it('cleanup() removes a merged PR worktree just like pruneWorktrees()', async () => {
+      const wt = makeWorktree(1);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'merged', merged: true })]);
+
+      const config = makeConfig({ onMerged: true });
+      const runtime = new CadreRuntime(config);
+      await runtime.cleanup();
+
+      expect(mockWorktreeManager.remove).toHaveBeenCalledWith(1);
+      expect(mockBranchManager.deleteLocal).toHaveBeenCalledWith(wt.branch);
+      expect(mockCheckpointManager.pruneIssue).toHaveBeenCalledWith(1);
+    });
+
+    it('cleanup(true) does not perform destructive actions in dry-run mode', async () => {
+      const wt = makeWorktree(1);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'merged', merged: true })]);
+
+      const config = makeConfig({ onMerged: true });
+      const runtime = new CadreRuntime(config);
+      await runtime.cleanup(true);
+
+      expect(mockWorktreeManager.remove).not.toHaveBeenCalled();
+      expect(mockBranchManager.deleteLocal).not.toHaveBeenCalled();
+      expect(mockCheckpointManager.pruneIssue).not.toHaveBeenCalled();
+    });
   });
 });
