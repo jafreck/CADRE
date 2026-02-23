@@ -137,3 +137,46 @@ describe('Agent Template Files', () => {
     });
   });
 });
+
+describe('.github/agents/pr-composer.agent.md – Token Usage section', () => {
+  let content: string;
+
+  beforeAll(() => {
+    content = readFileSync(join(AGENT_DEFINITIONS_DIR, 'pr-composer.agent.md'), 'utf-8');
+  });
+
+  it('should exist as a readable file', () => {
+    expect(existsSync(join(AGENT_DEFINITIONS_DIR, 'pr-composer.agent.md'))).toBe(true);
+  });
+
+  it('should include a ## Token Usage section in its output format', () => {
+    expect(content).toMatch(/##\s+Token Usage/i);
+  });
+
+  it('should reference totalTokens in the Token Usage section', () => {
+    expect(content).toMatch(/totalTokens/);
+  });
+
+  it('should reference estimatedCost in the Token Usage section', () => {
+    expect(content).toMatch(/estimatedCost/);
+  });
+
+  it('should reference the model field in the Token Usage section', () => {
+    expect(content).toMatch(/\bmodel\b/i);
+  });
+
+  it('should mark the Token Usage section as conditional on tokenSummary presence', () => {
+    expect(content).toMatch(/tokenSummary|if.*token|when.*token|absent|present/i);
+  });
+
+  it('should instruct omitting Token Usage when tokenSummary is absent', () => {
+    expect(content).toMatch(/absent|omit|not.*present|only if/i);
+  });
+
+  it('should place Token Usage after the standard PR sections in the output format', () => {
+    const summaryIdx = content.indexOf('Summary');
+    const tokenUsageIdx = content.indexOf('Token Usage');
+    expect(summaryIdx).toBeGreaterThanOrEqual(0);
+    expect(tokenUsageIdx).toBeGreaterThan(summaryIdx);
+  });
+});
