@@ -6,6 +6,17 @@ import type { IssueDetail } from '../src/platform/provider.js';
 import type { TokenRecord } from '../src/budget/token-tracker.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
+vi.mock('../src/budget/token-tracker.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/budget/token-tracker.js')>();
+  return {
+    ...actual,
+    TokenTracker: vi.fn().mockImplementation((...args: unknown[]) => {
+      const instance = new actual.TokenTracker(...(args as []));
+      vi.spyOn(instance, 'importRecords');
+      return instance;
+    }),
+  };
+});
 vi.mock('../src/git/worktree.js', () => ({
   WorktreeManager: vi.fn(),
 }));
