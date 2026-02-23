@@ -1,5 +1,5 @@
 ---
-description: "Reference document describing the per-issue 5-phase development pipeline that CADRE executes for each GitHub issue."
+description: "Reference agent describing the per-issue 5-phase development pipeline."
 tools: ["*"]
 ---
 # Issue Orchestrator
@@ -9,89 +9,95 @@ Reference document describing the per-issue 5-phase development pipeline that CA
 
 ## Overview
 
-This agent definition serves as a reference for the CADRE runtime's per-issue pipeline. The runtime (not this agent) orchestrates the execution of all phases. Each phase invokes specific agents in a defined order.
+For each GitHub issue, CADRE runs a structured 5-phase pipeline. Each phase is handled by one or more specialized agents. The orchestrator coordinates handoffs between phases and ensures that outputs from one phase are available as inputs to the next.
 
-## Pipeline Phases
+---
 
-### Phase 1: Analysis & Scouting
-**Agents:** `issue-analyst`, `codebase-scout`
-**Goal:** Understand the issue and locate relevant code
+## Phase 1: Analysis & Scouting
 
-1. Fetch issue details from GitHub
-2. Launch `issue-analyst` → produces `analysis.md`
-3. Launch `codebase-scout` → produces `scout-report.md`
-4. These two agents can run in parallel
-5. Commit: `chore(cadre): analyze issue #{number}`
+**Goal:** Understand the issue and locate the relevant code.
 
-### Phase 2: Planning
-**Agents:** `implementation-planner`, `adjudicator` (optional)
-**Goal:** Create a task-based implementation plan
+**Agents:**
+- `issue-analyst`: Reads the GitHub issue, extracts requirements, classifies the change type, estimates scope, and identifies affected areas.
+- `codebase-scout`: Scans the repository to locate the specific files relevant to the issue, maps their dependencies, and identifies related tests.
 
-1. Launch `implementation-planner` → produces `implementation-plan.md`
-2. Parse plan to extract task list with dependencies
-3. Validate: all referenced files exist, dependency graph is acyclic
-4. Commit: `chore(cadre): plan implementation for #{number}`
+**Inputs:**
+- GitHub issue number and body
+- Repository source tree
 
-### Phase 3: Implementation
-**Agents:** `code-writer`, `test-writer`, `code-reviewer`, `fix-surgeon`
-**Goal:** Implement all tasks with review and testing
+**Outputs:**
+- Issue analysis report (requirements, classification, scope estimate)
+- Scout report (relevant files, dependency map, related tests)
 
-For each ready task (dependencies satisfied):
-1. Launch `code-writer` → modifies source files
-2. Launch `test-writer` → writes test files
-3. Launch `code-reviewer` → produces `review.md`
-4. If review says "needs-fixes":
-   a. Launch `fix-surgeon` with review feedback
-   b. Re-run `code-reviewer` (up to maxRetries)
-5. Commit: `feat(#{number}): implement {task-name}`
+---
 
-Tasks are executed in dependency order with parallelism where possible.
+## Phase 2: Planning
 
-### Phase 4: Integration Verification
-**Agents:** `integration-checker`, `fix-surgeon` (on failure)
-**Goal:** Verify all changes integrate correctly
+**Goal:** Produce a concrete, ordered implementation plan.
 
-1. Run install, build, test, lint commands
-2. If any fails, launch `fix-surgeon` with failure output
-3. Re-attempt (up to 2 iterations)
-4. Commit fixes: `fix(#{number}): address integration issues`
+**Agents:**
+- `implementation-planner`: Breaks the issue into discrete implementation tasks with dependencies, ordering, and acceptance criteria.
+- `adjudicator` (optional): Evaluates competing implementation approaches and selects the best option.
 
-### Phase 5: PR Composition
-**Agents:** `pr-composer`
-**Goal:** Create a pull request
+**Inputs:**
+- Issue analysis report (Phase 1)
+- Scout report (Phase 1)
 
-1. Generate full diff
-2. Launch `pr-composer` → produces `pr-content.md`
-3. Squash commits if configured
-4. Push branch and create PR
+**Outputs:**
+- Implementation plan (ordered task list with acceptance criteria and file assignments)
 
-## File Structure
+---
 
-Each issue's working data is stored under `.cadre/issues/{number}/`:
+## Phase 3: Implementation
 
-```
-.cadre/issues/42/
-├── issue.json              # Raw issue data
-├── file-tree.txt           # Repository file listing
-├── analysis.md             # Phase 1 output
-├── scout-report.md         # Phase 1 output
-├── implementation-plan.md  # Phase 2 output
-├── tasks/
-│   ├── task-001/
-│   │   ├── context.json    # Agent input context
-│   │   ├── result.md       # code-writer output
-│   │   ├── tests.md        # test-writer output
-│   │   └── review.md       # code-reviewer output
-│   └── task-002/
-│       └── ...
-├── integration-report.md   # Phase 4 output
-├── pr-content.md           # Phase 5 output
-├── checkpoint.json         # Resume state
-└── progress.md             # Human-readable progress
-```
+**Goal:** Write the code changes described in the plan.
 
-## Constraints
-- This agent is a reference document — the runtime handles all orchestration
-- Each phase's output becomes input for subsequent phases
-- Phase failures in critical phases (1-3) abort the pipeline
-- Phase failures in non-critical phases (4-5) are reported but don't block
+**Agents:**
+- `code-writer`: Implements each task from the plan by modifying or creating source files.
+- `test-writer`: Writes unit and integration tests for the changes made by `code-writer`.
+- `code-reviewer`: Reviews changes for correctness, style consistency, and potential issues.
+- `fix-surgeon` (on failure): Applies targeted, minimal fixes to resolve issues identified during review or test runs.
+
+**Inputs:**
+- Implementation plan (Phase 2)
+- Scout report (Phase 1)
+- Source files identified in the plan
+
+**Outputs:**
+- Modified or created source files committed to the worktree
+- New or updated test files
+- Code review verdict (pass/fail with findings)
+
+---
+
+## Phase 4: Integration Verification
+
+**Goal:** Confirm that all changes integrate correctly.
+
+**Agents:**
+- `integration-checker`: Runs build, test, and lint commands and reports the results.
+
+**Inputs:**
+- Modified worktree (Phase 3)
+- Project build and test configuration
+
+**Outputs:**
+- Integration report (build status, test results, lint findings)
+- Pass/fail verdict; failures trigger `fix-surgeon` loop back in Phase 3
+
+---
+
+## Phase 5: PR Composition
+
+**Goal:** Produce a clear, informative pull request summarizing all changes.
+
+**Agents:**
+- `pr-composer`: Writes a pull request title and body summarizing all changes made to resolve the issue.
+
+**Inputs:**
+- GitHub issue (Phase 1)
+- Implementation plan (Phase 2)
+- List of commits and changed files (Phase 3 & 4)
+
+**Outputs:**
+- Pull request title and body ready for submission

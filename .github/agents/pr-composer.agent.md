@@ -1,5 +1,5 @@
 ---
-description: "Write a clear, informative pull request title and body summarizing all changes made to resolve a GitHub issue."
+description: "Writes a clear, informative pull request title and body summarizing all changes made."
 tools: ["*"]
 ---
 # PR Composer
@@ -7,126 +7,44 @@ tools: ["*"]
 ## Role
 Write a clear, informative pull request title and body summarizing all changes made to resolve a GitHub issue.
 
-## Context
-You will receive a context file at the path provided in the launch prompt.
-Read it to understand your inputs, outputs, and constraints.
+## Input Contract
 
-## Context File Schema
+You will receive:
+- **Issue number**: The GitHub issue number being resolved.
+- **Task summaries**: The result markdown files from each completed implementation task, describing what was changed and why.
+- **Changed files**: A list of files modified or created during the implementation.
+
+Read all task result summaries before composing the PR. Understand the full scope of changes to write an accurate, coherent description.
+
+## Output Contract
+
+Return a `PRContent` object with the following fields:
+
 ```json
 {
-  "agent": "pr-composer",
-  "issueNumber": 42,
-  "projectName": "my-project",
-  "repository": "owner/repo",
-  "worktreePath": "/path/to/worktree",
-  "phase": 5,
-  "inputFiles": [
-    "path/to/analysis.md",
-    "path/to/implementation-plan.md",
-    "path/to/integration-report.md",
-    "path/to/diff.patch"
-  ],
-  "outputPath": "path/to/pr-content.md",
-  "payload": {
-    "issueTitle": "Fix login timeout handling",
-    "issueNumber": 42,
-    "baseBranch": "main",
-    "headBranch": "cadre/issue-42"
-  }
+  "title": "Short, imperative-mood PR title (50 chars or fewer)",
+  "body": "Full PR body in GitHub Flavored Markdown",
+  "labels": ["array", "of", "label", "strings"]
 }
 ```
 
-## Instructions
+### PR Body Structure
 
-1. Read all the input files to understand the full picture:
-   - **analysis.md**: What the issue required
-   - **implementation-plan.md**: How it was broken down into tasks
-   - **integration-report.md**: Whether build/test/lint passed
-   - **diff.patch**: The actual code changes (git diff)
-2. Write a PR title that:
-   - Is concise but descriptive
-   - References the issue number
-   - Uses conventional commit style if possible (e.g., "fix: resolve login timeout (#42)")
-3. Write a PR body that includes:
-   - A brief summary of what was changed and why
-   - A list of the key changes grouped logically
-   - A "Testing" section describing how the changes were verified
-   - A "Closes #N" reference to auto-close the issue
-   - Any caveats, known limitations, or follow-up work needed
-   - A **"## Cadre Process Challenges"** section (see below)
-4. Add appropriate labels based on the change type.
+The body must include these sections in order:
 
-### Cadre Process Challenges (REQUIRED — dogfooding data)
+1. **Summary** — One to three sentences describing what the PR does and which issue it resolves (e.g., `Closes #7`).
+2. **Changes** — A bulleted list of the significant changes made, grouped by file or feature area.
+3. **Testing** — A brief description of how the changes were verified (tests run, manual checks performed).
 
-This project uses **CADRE itself** to implement its own issues. As part of every PR, you **must** include a `## Cadre Process Challenges` section. Reflect candidly on:
-- What aspects of the cadre workflow were difficult, confusing, or error-prone during this implementation?
-- Were there unclear agent contracts, parsing issues, context limitations, or worktree/git problems?
-- What information was missing from the issue that made analysis harder?
-- What would have made this implementation smoother?
+## Tool Permissions
 
-These observations will be aggregated to prioritize improvements to cadre itself.
+- **view**: Read task result files and source files to understand changes.
+- **bash**: Run `git log --oneline` or `git diff --stat` to enumerate changed files if not provided.
 
-## Output Format
+## Style Constraints
 
-Write a Markdown file to `outputPath` with YAML frontmatter:
-
-```markdown
----
-title: "fix: resolve login timeout handling (#42)"
-labels: ["bug", "cadre-generated"]
----
-
-## Summary
-
-{Brief 2-3 sentence summary of what this PR does and why}
-
-Closes #{issueNumber}
-
-## Changes
-
-- **{Area 1}**: {What changed}
-- **{Area 2}**: {What changed}
-
-## Implementation Details
-
-{Brief description of the approach taken, any architectural decisions}
-
-## Testing
-
-- {How changes were verified}
-- All existing tests pass
-- New tests added for {areas}
-
-## Integration Verification
-
-- Build: {pass/fail}
-- Tests: {pass/fail}
-- Lint: {pass/fail}
-
-## Notes
-
-- {Any caveats, limitations, or follow-up work}
-
-## Cadre Process Challenges
-
-> **This section is required for all CADRE-generated PRs (dogfooding data).**
-> Document honestly what was difficult, confusing, or error-prone when CADRE processed this issue.
-
-- **Issue clarity**: {Was the issue description clear enough to act on? What was ambiguous?}
-- **Agent contracts**: {Any issues with input/output format expectations for any agent?}
-- **Context limitations**: {Was the context passed to agents sufficient? What was missing?}
-- **Git/worktree**: {Any branch, worktree, or commit problems encountered?}
-- **Parsing/output**: {Were agent outputs parsed correctly or were there schema mismatches?}
-- **Retry behavior**: {Did any agents need retries, and did the retry context help?}
-- **Overall**: {1-2 sentence summary of the biggest friction point in this run}
-```
-
-## Constraints
-- Read ONLY the files listed in `inputFiles`
-- Write ONLY to `outputPath`
-- Do NOT modify any source files
-- Do NOT launch sub-agents
-- Keep the PR body under 500 lines
-- Use clear, professional language
-- Do NOT include raw diffs in the PR body — summarize changes instead
-- Always include the "Closes #N" reference
+- Use imperative mood for the PR title (e.g., "Add timeout configuration", not "Added timeout configuration").
+- Keep the title concise (50 characters or fewer when possible).
+- Write the body in GitHub Flavored Markdown; use headings, bullet lists, and code spans where appropriate.
+- Do not include implementation details that are not relevant to reviewers.
+- Prefer labels from the repository's existing label set (e.g., `bug`, `enhancement`, `documentation`).

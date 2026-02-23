@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { FleetResult } from '../src/core/fleet-orchestrator.js';
 import type { TokenSummary } from '../src/budget/token-tracker.js';
+import type { PullRequestInfo } from '../src/platform/provider.js';
 import { CadreRuntime } from '../src/core/runtime.js';
 import { CadreConfigSchema } from '../src/config/schema.js';
 
@@ -21,6 +22,72 @@ const minimalConfig = CadreConfigSchema.parse({
   github: {
     auth: { token: 'test-token' },
   },
+});
+
+describe('FleetResult.prsCreated', () => {
+  it('should accept an array of PullRequestInfo objects', () => {
+    const pr1: PullRequestInfo = {
+      number: 10,
+      url: 'https://github.com/owner/repo/pull/10',
+      title: 'Fix issue #1',
+      headBranch: 'cadre/issue-1',
+      baseBranch: 'main',
+    };
+    const pr2: PullRequestInfo = {
+      number: 11,
+      url: 'https://github.com/owner/repo/pull/11',
+      title: 'Fix issue #2',
+      headBranch: 'cadre/issue-2',
+      baseBranch: 'main',
+    };
+    const result: FleetResult = {
+      success: true,
+      issues: [],
+      prsCreated: [pr1, pr2],
+      codeDoneNoPR: [],
+      failedIssues: [],
+      totalDuration: 2000,
+      tokenUsage: emptyTokenUsage,
+    };
+    expect(result.prsCreated).toHaveLength(2);
+    expect(result.prsCreated[0]).toEqual(pr1);
+    expect(result.prsCreated[1]).toEqual(pr2);
+  });
+
+  it('should store the PR url in the PullRequestInfo url field', () => {
+    const prUrl = 'https://github.com/owner/repo/pull/42';
+    const pr: PullRequestInfo = {
+      number: 42,
+      url: prUrl,
+      title: 'Fix issue #5',
+      headBranch: 'cadre/issue-5',
+      baseBranch: 'main',
+    };
+    const result: FleetResult = {
+      success: true,
+      issues: [],
+      prsCreated: [pr],
+      codeDoneNoPR: [],
+      failedIssues: [],
+      totalDuration: 500,
+      tokenUsage: emptyTokenUsage,
+    };
+    expect(result.prsCreated[0].url).toBe(prUrl);
+    expect(result.prsCreated[0].number).toBe(42);
+  });
+
+  it('should accept an empty prsCreated array when no PRs were opened', () => {
+    const result: FleetResult = {
+      success: true,
+      issues: [],
+      prsCreated: [],
+      codeDoneNoPR: [],
+      failedIssues: [],
+      totalDuration: 0,
+      tokenUsage: emptyTokenUsage,
+    };
+    expect(result.prsCreated).toEqual([]);
+  });
 });
 
 describe('FleetResult.codeDoneNoPR', () => {

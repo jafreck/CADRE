@@ -20,7 +20,7 @@ export interface FleetResult {
   success: boolean;
   /** Per-issue outcomes. */
   issues: IssueResult[];
-  /** Issues that completed and had PRs opened. */
+  /** Issues where a pull request was successfully opened (`prCreated === true`). Only populated when the PR phase actually succeeded; use `codeDoneNoPR` for issues where code is done but no PR exists. */
   prsCreated: PullRequestInfo[];
   /** Issues where code is complete but no PR was created. */
   codeDoneNoPR: Array<{ issueNumber: number; issueTitle: string }>;
