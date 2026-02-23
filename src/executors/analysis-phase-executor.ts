@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { AgentInvocation, AgentResult } from '../agents/types.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
+import { execShell } from '../util/process.js';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 1;
@@ -64,7 +65,70 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
       throw new Error(`Codebase scout failed: ${scoutResult.error}`);
     }
 
+    // Capture baseline build/test results
+    await this.captureBaseline(ctx);
+
     return join(ctx.progressDir, 'scout-report.md');
+  }
+
+  private async captureBaseline(ctx: PhaseContext): Promise<void> {
+    const baselinePath = join(ctx.worktree.path, '.cadre', 'baseline-results.json');
+
+    let buildExitCode = 0;
+    let testExitCode = 0;
+    let buildFailures: string[] = [];
+    let testFailures: string[] = [];
+
+    try {
+      if (ctx.config.commands.build) {
+        const result = await execShell(ctx.config.commands.build, {
+          cwd: ctx.worktree.path,
+          timeout: 300_000,
+        });
+        buildExitCode = result.exitCode ?? 1;
+        if (buildExitCode !== 0) {
+          buildFailures = this.extractFailures(result.stdout + '\n' + result.stderr);
+        }
+      }
+
+      if (ctx.config.commands.test) {
+        const result = await execShell(ctx.config.commands.test, {
+          cwd: ctx.worktree.path,
+          timeout: 300_000,
+        });
+        testExitCode = result.exitCode ?? 1;
+        if (testExitCode !== 0) {
+          testFailures = this.extractFailures(result.stdout + '\n' + result.stderr);
+        }
+      }
+    } catch (err) {
+      ctx.logger.warn(`Baseline capture encountered an error: ${String(err)}`);
+    }
+
+    await atomicWriteJSON(baselinePath, {
+      buildExitCode,
+      testExitCode,
+      buildFailures,
+      testFailures,
+    });
+  }
+
+  /**
+   * Extract failing test/build identifiers from command output using line-based heuristics.
+   */
+  private extractFailures(output: string): string[] {
+    const failures = new Set<string>();
+    for (const line of output.split('\n')) {
+      const trimmed = line.trim();
+      // Common failure patterns: lines containing FAIL, ✗, ×, error:, Error:
+      if (/^(FAIL|FAILED|✗|×)\s+/.test(trimmed)) {
+        const match = trimmed.match(/^(?:FAIL|FAILED|✗|×)\s+(.+)/);
+        if (match) failures.add(match[1].trim());
+      } else if (/^\s*(error|Error)\s*:/i.test(trimmed) && trimmed.length < 200) {
+        failures.add(trimmed);
+      }
+    }
+    return Array.from(failures);
   }
 
   private async launchWithRetry(
