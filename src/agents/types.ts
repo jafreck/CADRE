@@ -14,6 +14,7 @@ export type AgentName =
   | 'fix-surgeon'
   | 'integration-checker'
   | 'pr-composer'
+  | 'conflict-resolver'
   | 'issue-orchestrator'
   | 'cadre-runner';
 
@@ -124,6 +125,14 @@ export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
     description: 'Writes a clear, informative pull request title and body summarizing all changes made.',
     hasStructuredOutput: true,
     templateFile: 'pr-composer.md',
+  },
+  {
+    name: 'conflict-resolver',
+    phase: 0,
+    phaseName: 'Orchestration',
+    description: 'Resolves merge conflict markers in files left by a paused git rebase, producing valid compilable code.',
+    hasStructuredOutput: false,
+    templateFile: 'conflict-resolver.md',
   },
 ] as const;
 

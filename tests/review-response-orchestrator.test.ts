@@ -45,6 +45,7 @@ vi.mock('../src/core/issue-orchestrator.js', () => ({
 vi.mock('../src/agents/context-builder.js', () => ({
   ContextBuilder: vi.fn().mockImplementation(() => ({
     buildForReviewResponse: vi.fn().mockReturnValue('# Review context'),
+    buildForConflictResolver: vi.fn().mockResolvedValue('/tmp/worktree/1/.cadre/issues/1/contexts/conflict-resolver-123.json'),
   })),
 }));
 
@@ -115,6 +116,9 @@ function makeMockDeps() {
       branch: 'cadre/issue-1',
       baseCommit: 'abc123',
     }),
+    rebaseStart: vi.fn().mockResolvedValue({ status: 'clean' }),
+    rebaseContinue: vi.fn().mockResolvedValue({ success: true }),
+    rebaseAbort: vi.fn().mockResolvedValue(undefined),
   };
   const launcher = {};
   const platform = {
@@ -278,6 +282,220 @@ describe('ReviewResponseOrchestrator — run() skipping logic', () => {
 
     expect(result.processed).toBe(1);
     expect(result.skipped).toBe(0);
+  });
+});
+
+describe('ReviewResponseOrchestrator — run() rebase step', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls worktreeManager.rebaseStart after provisioning the worktree', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(worktreeManager.rebaseStart).toHaveBeenCalledWith(1);
+  });
+
+  it('proceeds with the pipeline when rebase has no conflicts', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({ status: 'clean' });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(result.processed).toBe(1);
+    expect(result.succeeded).toBe(1);
+  });
+
+  it('launches the conflict-resolver agent when rebaseStart reports conflicts', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({
+      status: 'conflict',
+      conflictedFiles: ['src/foo.ts'],
+      worktreePath: '/tmp/worktree/1',
+    });
+
+    // Provide a minimal launcher mock that records calls
+    const launchAgent = vi.fn().mockResolvedValue({
+      agent: 'conflict-resolver',
+      success: true,
+      exitCode: 0,
+      timedOut: false,
+      duration: 100,
+    });
+    (launcher as any).launchAgent = launchAgent;
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(launchAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ agent: 'conflict-resolver', issueNumber: 1 }),
+      '/tmp/worktree/1',
+    );
+  });
+
+  it('calls rebaseContinue after the conflict-resolver agent succeeds', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({
+      status: 'conflict',
+      conflictedFiles: ['src/foo.ts'],
+      worktreePath: '/tmp/worktree/1',
+    });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver' });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(worktreeManager.rebaseContinue).toHaveBeenCalledWith(1);
+  });
+
+  it('aborts the rebase and fails the issue when the conflict-resolver agent fails', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({
+      status: 'conflict',
+      conflictedFiles: ['src/foo.ts'],
+      worktreePath: '/tmp/worktree/1',
+    });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: false, exitCode: 1, timedOut: false, duration: 100, agent: 'conflict-resolver' });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(worktreeManager.rebaseAbort).toHaveBeenCalledWith(1);
+    expect(result.failed).toBe(1);
+    expect(result.processed).toBe(0);
+  });
+
+  it('aborts the rebase and fails the issue when rebaseContinue fails', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({
+      status: 'conflict',
+      conflictedFiles: ['src/foo.ts'],
+      worktreePath: '/tmp/worktree/1',
+    });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver' });
+    worktreeManager.rebaseContinue.mockResolvedValue({ success: false, error: 'still conflicted' });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(worktreeManager.rebaseAbort).toHaveBeenCalledWith(1);
+    expect(result.failed).toBe(1);
+    expect(result.processed).toBe(0);
+  });
+
+  it('proceeds with the pipeline after successful conflict resolution', async () => {
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({
+      status: 'conflict',
+      conflictedFiles: ['src/foo.ts'],
+      worktreePath: '/tmp/worktree/1',
+    });
+    (launcher as any).launchAgent = vi.fn().mockResolvedValue({ success: true, exitCode: 0, timedOut: false, duration: 100, agent: 'conflict-resolver' });
+    worktreeManager.rebaseContinue.mockResolvedValue({ success: true });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(result.processed).toBe(1);
+    expect(result.succeeded).toBe(1);
+  });
+
+  it('force-pushes after a successful rebase and pipeline', async () => {
+    const { CommitManager } = await import('../src/git/commit.js');
+    const pushMock = vi.fn().mockResolvedValue(undefined);
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({ push: pushMock }));
+
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    worktreeManager.rebaseStart.mockResolvedValue({ status: 'clean' });
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(pushMock).toHaveBeenCalledWith(true, 'cadre/issue-1');
   });
 });
 
