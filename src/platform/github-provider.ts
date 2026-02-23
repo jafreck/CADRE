@@ -108,6 +108,8 @@ export class GitHubProvider implements PlatformProvider {
       title: asString(result.title) || params.title,
       headBranch: params.head,
       baseBranch: params.base,
+      state: 'open',
+      merged: false,
     };
   }
 
@@ -119,6 +121,8 @@ export class GitHubProvider implements PlatformProvider {
       title: asString(result.title),
       headBranch: asString(asRecord(result.head).ref),
       baseBranch: asString(asRecord(result.base).ref),
+      state: (asString(result.state) as 'open' | 'closed') || 'open',
+      merged: !!result.merged,
     };
   }
 
@@ -138,6 +142,8 @@ export class GitHubProvider implements PlatformProvider {
       title: asString(pr.title),
       headBranch: asString(asRecord(pr.head).ref),
       baseBranch: asString(asRecord(pr.base).ref),
+      state: (asString(pr.state) as 'open' | 'closed') || 'open',
+      merged: !!pr.merged,
     }));
   }
 

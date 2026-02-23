@@ -244,6 +244,8 @@ export class AzureDevOpsProvider implements PlatformProvider {
       title: params.title,
       headBranch: params.head,
       baseBranch: params.base,
+      state: 'open',
+      merged: false,
     };
   }
 
@@ -262,6 +264,8 @@ export class AzureDevOpsProvider implements PlatformProvider {
       title: (result.title as string) ?? '',
       headBranch: this.stripRefPrefix((result.sourceRefName as string) ?? ''),
       baseBranch: this.stripRefPrefix((result.targetRefName as string) ?? ''),
+      state: (result.status as string) === 'active' ? 'open' : 'closed',
+      merged: (result.status as string) === 'completed',
     };
   }
 
@@ -333,6 +337,8 @@ export class AzureDevOpsProvider implements PlatformProvider {
       title: (pr.title as string) ?? '',
       headBranch: this.stripRefPrefix((pr.sourceRefName as string) ?? ''),
       baseBranch: this.stripRefPrefix((pr.targetRefName as string) ?? ''),
+      state: (pr.status as string) === 'active' ? 'open' : 'closed',
+      merged: (pr.status as string) === 'completed',
     }));
   }
 
