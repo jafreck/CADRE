@@ -153,35 +153,8 @@ export class FleetOrchestrator {
       };
     }
 
-    // Pre-flight: skip if estimated tokens would exceed remaining budget
-    if (this.config.options.tokenBudget) {
-      const estimate = this.costEstimator.estimateIssueTokens();
-      const currentTotal = this.tokenTracker.getTotal();
-      if (currentTotal + estimate > this.config.options.tokenBudget) {
-        this.logger.warn(
-          `Skipping issue #${issue.number}: estimated tokens (${estimate.toLocaleString()}) would exceed remaining budget`,
-          { issueNumber: issue.number },
-        );
-        await this.fleetCheckpoint.setIssueStatus(
-          issue.number,
-          'budget-exceeded',
-          '',
-          '',
-          0,
-          'Pre-flight budget estimation exceeded',
-        );
-        return {
-          issueNumber: issue.number,
-          issueTitle: issue.title,
-          success: false,
-          budgetExceeded: true,
-          phases: [],
-          totalDuration: 0,
-          tokenUsage: 0,
-          error: 'Pre-flight budget estimation exceeded',
-        };
-      }
-    }
+    // Pre-flight estimate check removed: post-run check (step 9) correctly
+    // handles budget enforcement with actual usage.
 
     this.logger.info(`Processing issue #${issue.number}: ${issue.title}`, {
       issueNumber: issue.number,

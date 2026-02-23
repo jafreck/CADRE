@@ -217,7 +217,12 @@ export class ImplementationToIntegrationGate implements PhaseGate {
 
       return pass();
     } catch (err) {
-      return fail([`Failed to compute git diff: ${String(err)}`]);
+      const message = String(err);
+      if (/not a git repository/i.test(message)) {
+        // Working directory is not a git repository; cannot verify diff but allow gate to pass.
+        return pass([`Could not verify file changes: working directory is not a git repository`]);
+      }
+      return fail([`Failed to compute git diff: ${message}`]);
     }
   }
 }

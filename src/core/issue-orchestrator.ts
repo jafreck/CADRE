@@ -257,7 +257,7 @@ export class IssueOrchestrator {
       issueNumber: successResult.issueNumber,
       success: successResult.success,
       duration: successResult.totalDuration,
-      tokenUsage: successResult.tokenUsage,
+      tokenUsage: successResult.tokenUsage ?? 0,
     });
     return successResult;
   }
@@ -688,6 +688,8 @@ export class IssueOrchestrator {
         // Try fix-surgeon for build failure
         await this.tryFixIntegration(buildResult.stderr + buildResult.stdout, 'build');
       }
+    } else {
+      report += `## Build\n\n**Status:** skipped\n\n`;
     }
 
     // Run test command
@@ -705,6 +707,8 @@ export class IssueOrchestrator {
         // Try fix-surgeon for test failure
         await this.tryFixIntegration(testResult.stderr + testResult.stdout, 'test');
       }
+    } else {
+      report += `## Test\n\n**Status:** skipped\n\n`;
     }
 
     // Run lint command
@@ -934,12 +938,12 @@ export class IssueOrchestrator {
         this.checkpoint.getState().currentPhase,
         tokenCount,
       );
-    }
-    if (
-      !this.budgetExceeded &&
-      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'exceeded'
-    ) {
-      this.budgetExceeded = true;
+      if (
+        !this.budgetExceeded &&
+        this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'exceeded'
+      ) {
+        this.budgetExceeded = true;
+      }
     }
   }
 
