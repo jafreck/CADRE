@@ -14,6 +14,18 @@ import type { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail, WorktreeInfo } from '../src/platform/provider.js';
 
+const mockNotifierMethods = vi.hoisted(() => ({
+  notifyStart: vi.fn().mockResolvedValue(undefined),
+  notifyPhaseComplete: vi.fn().mockResolvedValue(undefined),
+  notifyComplete: vi.fn().mockResolvedValue(undefined),
+  notifyFailed: vi.fn().mockResolvedValue(undefined),
+  notifyBudgetWarning: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../src/core/issue-notifier.js', () => ({
+  IssueNotifier: vi.fn().mockImplementation(() => mockNotifierMethods),
+}));
+
 // ── BudgetExceededError ──
 
 describe('BudgetExceededError', () => {
@@ -502,5 +514,183 @@ describe('IssueOrchestrator', () => {
         error: 'Per-issue token budget exceeded',
       });
     });
+  });
+});
+
+// ── IssueNotifier integration ──
+
+describe('IssueOrchestrator notifier integration', () => {
+  let tempDir: string;
+  let worktreePath: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Re-apply default resolved values after clearAllMocks resets them
+    mockNotifierMethods.notifyStart.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyPhaseComplete.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyComplete.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyFailed.mockResolvedValue(undefined);
+    mockNotifierMethods.notifyBudgetWarning.mockResolvedValue(undefined);
+    tempDir = join(tmpdir(), `cadre-notif-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    worktreePath = join(tempDir, 'worktree');
+    await mkdir(worktreePath, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  function makeWorktree(): WorktreeInfo {
+    return {
+      path: worktreePath,
+      branch: 'cadre/issue-42',
+      baseCommit: 'abc123',
+      issueNumber: 42,
+    } as unknown as WorktreeInfo;
+  }
+
+  function makeOrchestrator(
+    config: CadreConfig,
+    checkpoint: CheckpointManager,
+    launcher: AgentLauncher,
+    logger: Logger,
+  ): IssueOrchestrator {
+    return new IssueOrchestrator(
+      config,
+      makeIssue(),
+      makeWorktree(),
+      checkpoint,
+      launcher,
+      makePlatform(),
+      logger,
+    );
+  }
+
+  it('should call notifyStart once when pipeline starts', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => true) });
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    await orchestrator.run();
+
+    expect(mockNotifierMethods.notifyStart).toHaveBeenCalledOnce();
+    expect(mockNotifierMethods.notifyStart).toHaveBeenCalledWith(42, 'Test issue');
+  });
+
+  it('should call notifyPhaseComplete for each successfully completed phase when all phases run', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockResolvedValue({
+        phase: 1,
+        phaseName: 'Test Phase',
+        success: true,
+        duration: 100,
+        tokenUsage: 0,
+        outputPath: '',
+      });
+
+    await orchestrator.run();
+
+    expect(mockNotifierMethods.notifyPhaseComplete).toHaveBeenCalledTimes(5);
+  });
+
+  it('should not call notifyPhaseComplete for already-completed (skipped) phases', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => true) });
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    await orchestrator.run();
+
+    // Skipped phases do not trigger notifyPhaseComplete
+    expect(mockNotifierMethods.notifyPhaseComplete).not.toHaveBeenCalled();
+  });
+
+  it('should call notifyComplete when pipeline succeeds', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => true) });
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    await orchestrator.run();
+
+    expect(mockNotifierMethods.notifyComplete).toHaveBeenCalledOnce();
+    expect(mockNotifierMethods.notifyComplete).toHaveBeenCalledWith(42, 'Test issue', undefined, 0);
+  });
+
+  it('should call notifyFailed when budget is exceeded', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = makeOrchestrator(makeConfig(100), checkpoint, makeLauncher(), makeLogger());
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockRejectedValue(new BudgetExceededError());
+
+    await orchestrator.run();
+
+    expect(mockNotifierMethods.notifyFailed).toHaveBeenCalledOnce();
+    expect(mockNotifierMethods.notifyFailed).toHaveBeenCalledWith(
+      42,
+      'Test issue',
+      undefined,
+      undefined,
+      'Per-issue token budget exceeded',
+    );
+  });
+
+  it('should call notifyFailed when a critical phase fails', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockResolvedValue({
+        phase: 1,
+        phaseName: 'Analysis & Scouting',
+        success: false,
+        duration: 50,
+        tokenUsage: 0,
+        error: 'agent crashed',
+      });
+
+    await orchestrator.run();
+
+    expect(mockNotifierMethods.notifyFailed).toHaveBeenCalledOnce();
+  });
+
+  it('should not call notifyComplete when pipeline fails', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = makeOrchestrator(makeConfig(100), checkpoint, makeLauncher(), makeLogger());
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockRejectedValue(new BudgetExceededError());
+
+    await orchestrator.run();
+
+    expect(mockNotifierMethods.notifyComplete).not.toHaveBeenCalled();
+  });
+
+  it('should not call notifyFailed when pipeline succeeds', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => true) });
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    await orchestrator.run();
+
+    expect(mockNotifierMethods.notifyFailed).not.toHaveBeenCalled();
+  });
+
+  it('should not crash when notifyStart rejects', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => true) });
+    mockNotifierMethods.notifyStart.mockRejectedValue(new Error('network failure'));
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    await expect(orchestrator.run()).resolves.toBeDefined();
+  });
+
+  it('should not crash when notifyFailed rejects', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = makeOrchestrator(makeConfig(100), checkpoint, makeLauncher(), makeLogger());
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockRejectedValue(new BudgetExceededError());
+
+    mockNotifierMethods.notifyFailed.mockRejectedValue(new Error('network failure'));
+
+    await expect(orchestrator.run()).resolves.toMatchObject({ success: false, budgetExceeded: true });
   });
 });
