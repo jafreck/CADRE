@@ -4,6 +4,14 @@ import type { TokenSummary } from '../src/budget/token-tracker.js';
 import { CadreRuntime } from '../src/core/runtime.js';
 import { CadreConfigSchema } from '../src/config/schema.js';
 
+const emptyTokenUsage: TokenSummary = {
+  total: 0,
+  byIssue: {},
+  byAgent: {},
+  byPhase: {},
+  recordCount: 0,
+};
+
 const minimalConfig = CadreConfigSchema.parse({
   projectName: 'test-project',
   repository: 'owner/repo',
@@ -13,6 +21,39 @@ const minimalConfig = CadreConfigSchema.parse({
   github: {
     auth: { token: 'test-token' },
   },
+});
+
+describe('FleetResult.codeDoneNoPR', () => {
+  it('should accept an array of codeDoneNoPR entries', () => {
+    const result: FleetResult = {
+      success: true,
+      issues: [],
+      prsCreated: [],
+      codeDoneNoPR: [
+        { issueNumber: 5, issueTitle: 'Fix the thing' },
+        { issueNumber: 7, issueTitle: 'Another fix' },
+      ],
+      failedIssues: [],
+      totalDuration: 1000,
+      tokenUsage: emptyTokenUsage,
+    };
+    expect(result.codeDoneNoPR).toHaveLength(2);
+    expect(result.codeDoneNoPR[0]).toEqual({ issueNumber: 5, issueTitle: 'Fix the thing' });
+    expect(result.codeDoneNoPR[1]).toEqual({ issueNumber: 7, issueTitle: 'Another fix' });
+  });
+
+  it('should accept an empty codeDoneNoPR array', () => {
+    const result: FleetResult = {
+      success: true,
+      issues: [],
+      prsCreated: [],
+      codeDoneNoPR: [],
+      failedIssues: [],
+      totalDuration: 0,
+      tokenUsage: emptyTokenUsage,
+    };
+    expect(result.codeDoneNoPR).toEqual([]);
+  });
 });
 
 describe('FleetResult.tokenUsage', () => {
