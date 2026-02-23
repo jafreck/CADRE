@@ -45,6 +45,8 @@ export interface IssueResult {
   issueNumber: number;
   issueTitle: string;
   success: boolean;
+  codeComplete: boolean;
+  prCreated: boolean;
   phases: PhaseResult[];
   pr?: PullRequestInfo;
   totalDuration: number;
@@ -69,6 +71,7 @@ export class IssueOrchestrator {
   private readonly phases: PhaseResult[] = [];
   private budgetExceeded = false;
   private budgetWarningSent = false;
+  private prFailed = false;
   private createdPR: PullRequestInfo | undefined;
 
   constructor(
@@ -289,6 +292,7 @@ export class IssueOrchestrator {
         recordTokens: (agent, tokens) => this.recordTokens(agent, tokens),
         checkBudget: () => this.checkBudget(),
         setPR: (pr) => { this.createdPR = pr; },
+        setPRFailed: () => { this.prFailed = true; },
         logger: this.logger,
       };
 
@@ -495,10 +499,16 @@ export class IssueOrchestrator {
   }
 
   private buildResult(success: boolean, error?: string, startTime?: number, budgetExceeded?: boolean): IssueResult {
+    const codeComplete = !budgetExceeded &&
+      [1, 2, 3, 4].every(id => this.phases.some(p => p.phase === id && p.success));
+    const prCreated = this.createdPR !== undefined;
+    const actualSuccess = success || (codeComplete && this.prFailed);
     return {
       issueNumber: this.issue.number,
       issueTitle: this.issue.title,
-      success,
+      success: actualSuccess,
+      codeComplete,
+      prCreated,
       phases: this.phases,
       pr: this.createdPR,
       totalDuration: startTime ? Date.now() - startTime : 0,

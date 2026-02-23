@@ -6,6 +6,8 @@ export interface RunIssueSummary {
   tokens: number;
   duration: number;
   error?: string;
+  codeComplete?: boolean;
+  prCreated?: boolean;
 }
 
 export interface RunPhaseSummary {
@@ -22,6 +24,7 @@ export interface RunTotals {
   issues: number;
   prsCreated: number;
   failures: number;
+  codeDoneNoPR: number;
 }
 
 export interface RunReport {

@@ -44,6 +44,46 @@ describe('RunIssueSummary', () => {
     expect(summary.error).toBe('Agent timed out');
   });
 
+  it('should accept RunIssueSummary with optional codeComplete flag', () => {
+    const summary: RunIssueSummary = {
+      issueNumber: 5,
+      issueTitle: 'Code done, no PR',
+      success: true,
+      tokens: 800,
+      duration: 4000,
+      codeComplete: true,
+    };
+    expect(summary.codeComplete).toBe(true);
+    expect(summary.prCreated).toBeUndefined();
+  });
+
+  it('should accept RunIssueSummary with optional prCreated flag', () => {
+    const summary: RunIssueSummary = {
+      issueNumber: 6,
+      issueTitle: 'PR created issue',
+      success: true,
+      prNumber: 42,
+      tokens: 1200,
+      duration: 6000,
+      codeComplete: true,
+      prCreated: true,
+    };
+    expect(summary.codeComplete).toBe(true);
+    expect(summary.prCreated).toBe(true);
+  });
+
+  it('should default codeComplete and prCreated to undefined when not provided', () => {
+    const summary: RunIssueSummary = {
+      issueNumber: 7,
+      issueTitle: 'No flags',
+      success: true,
+      tokens: 100,
+      duration: 500,
+    };
+    expect(summary.codeComplete).toBeUndefined();
+    expect(summary.prCreated).toBeUndefined();
+  });
+
   it('should accept zero values for numeric fields', () => {
     const summary: RunIssueSummary = {
       issueNumber: 1,
@@ -93,12 +133,14 @@ describe('RunTotals', () => {
       issues: 5,
       prsCreated: 4,
       failures: 1,
+      codeDoneNoPR: 0,
     };
     expect(totals.tokens).toBe(10000);
     expect(totals.estimatedCost).toBe(0.5);
     expect(totals.issues).toBe(5);
     expect(totals.prsCreated).toBe(4);
     expect(totals.failures).toBe(1);
+    expect(totals.codeDoneNoPR).toBe(0);
   });
 
   it('should accept all-zero RunTotals', () => {
@@ -108,8 +150,22 @@ describe('RunTotals', () => {
       issues: 0,
       prsCreated: 0,
       failures: 0,
+      codeDoneNoPR: 0,
     };
     expect(totals.failures).toBe(0);
+    expect(totals.codeDoneNoPR).toBe(0);
+  });
+
+  it('should accept RunTotals with codeDoneNoPR greater than zero', () => {
+    const totals: RunTotals = {
+      tokens: 3000,
+      estimatedCost: 0.15,
+      issues: 4,
+      prsCreated: 2,
+      failures: 0,
+      codeDoneNoPR: 2,
+    };
+    expect(totals.codeDoneNoPR).toBe(2);
   });
 });
 
@@ -120,6 +176,7 @@ describe('RunReport', () => {
     issues: 2,
     prsCreated: 2,
     failures: 0,
+    codeDoneNoPR: 0,
   };
 
   const baseIssue: RunIssueSummary = {
@@ -184,6 +241,7 @@ describe('RunReport', () => {
         issues: 0,
         prsCreated: 0,
         failures: 0,
+        codeDoneNoPR: 0,
       },
     };
     expect(report.issues).toEqual([]);

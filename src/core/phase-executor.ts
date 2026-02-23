@@ -31,6 +31,7 @@ export type PhaseContext = {
   recordTokens: (agent: string, tokens: number | null) => void;
   checkBudget: () => void;
   setPR: (pr: PullRequestInfo) => void;
+  setPRFailed: () => void;
   logger: Logger;
 };
 
