@@ -1171,7 +1171,7 @@ describe('IssueOrchestrator – PR body Token Usage', () => {
       duration: 100,
       stdout: '',
       stderr: '',
-      tokenUsage: { total: 100, input: 75, output: 25 },
+      tokenUsage: null,
       outputPath: '/tmp/pr-content.md',
       outputExists: true,
     });
