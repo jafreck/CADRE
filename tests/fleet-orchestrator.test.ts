@@ -838,3 +838,122 @@ describe('FleetOrchestrator — codeDoneNoPR aggregation', () => {
     expect(result.codeDoneNoPR).toHaveLength(1);
   });
 });
+
+describe('FleetOrchestrator — checkpoint status determination', () => {
+  let notifications: NotificationManager;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as unknown as NotificationManager;
+  });
+
+  async function runWithResult(
+    issueResult: Record<string, unknown>,
+    config = makeConfig(),
+  ) {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue(issueResult),
+    }));
+
+    const mockSetIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const { FleetCheckpointManager: FCM } = await import('../src/core/checkpoint.js');
+    (FCM as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: mockSetIssueStatus,
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      getIssueStatus: vi.fn().mockReturnValue(null),
+    }));
+
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config, issues, worktreeManager as any, launcher as any, platform as any, logger as any, notifications,
+    );
+    await fleet.run();
+
+    // Return only the terminal (non-in-progress) status call
+    const calls = mockSetIssueStatus.mock.calls as unknown[][];
+    return calls.find(([, status]) => status !== 'in-progress');
+  }
+
+  it('sets checkpoint status to completed when success=true and prCreated=true', async () => {
+    const terminalCall = await runWithResult({
+      issueNumber: 1,
+      issueTitle: 'Issue 1',
+      success: true,
+      codeComplete: true,
+      prCreated: true,
+      phases: [1],
+      totalDuration: 100,
+      tokenUsage: 100,
+    });
+    expect(terminalCall).toBeDefined();
+    expect(terminalCall![1]).toBe('completed');
+  });
+
+  it('sets checkpoint status to completed when success=true and codeComplete=false', async () => {
+    const terminalCall = await runWithResult({
+      issueNumber: 1,
+      issueTitle: 'Issue 1',
+      success: true,
+      codeComplete: false,
+      prCreated: false,
+      phases: [1],
+      totalDuration: 100,
+      tokenUsage: 100,
+    });
+    expect(terminalCall).toBeDefined();
+    expect(terminalCall![1]).toBe('completed');
+  });
+
+  it('sets checkpoint status to failed when success=false and budgetExceeded is falsy', async () => {
+    const terminalCall = await runWithResult({
+      issueNumber: 1,
+      issueTitle: 'Issue 1',
+      success: false,
+      codeComplete: false,
+      prCreated: false,
+      phases: [],
+      totalDuration: 100,
+      tokenUsage: 100,
+      error: 'Pipeline error',
+    });
+    expect(terminalCall).toBeDefined();
+    expect(terminalCall![1]).toBe('failed');
+  });
+
+  it('sets checkpoint status to budget-exceeded when budgetExceeded=true, regardless of success', async () => {
+    const terminalCall = await runWithResult({
+      issueNumber: 1,
+      issueTitle: 'Issue 1',
+      success: false,
+      codeComplete: false,
+      prCreated: false,
+      budgetExceeded: true,
+      phases: [],
+      totalDuration: 100,
+      tokenUsage: 100,
+    });
+    expect(terminalCall).toBeDefined();
+    expect(terminalCall![1]).toBe('budget-exceeded');
+  });
+
+  it('budget-exceeded takes precedence over code-complete-no-pr when both conditions are true', async () => {
+    const terminalCall = await runWithResult({
+      issueNumber: 1,
+      issueTitle: 'Issue 1',
+      success: false,
+      codeComplete: true,
+      prCreated: false,
+      budgetExceeded: true,
+      phases: [],
+      totalDuration: 100,
+      tokenUsage: 100,
+    });
+    expect(terminalCall).toBeDefined();
+    expect(terminalCall![1]).toBe('budget-exceeded');
+  });
+});
