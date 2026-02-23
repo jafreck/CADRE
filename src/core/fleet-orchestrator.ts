@@ -3,7 +3,7 @@ import pLimit from 'p-limit';
 import type { CadreConfig } from '../config/schema.js';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
-import { WorktreeManager } from '../git/worktree.js';
+import { WorktreeManager, RemoteBranchMissingError } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from './progress.js';
@@ -207,6 +207,7 @@ export class FleetOrchestrator {
       const worktree = await this.worktreeManager.provision(
         issue.number,
         issue.title,
+        this.config.options.resume,
       );
 
       // 2. Update fleet checkpoint
@@ -306,6 +307,28 @@ export class FleetOrchestrator {
 
       return result;
     } catch (err) {
+      if (err instanceof RemoteBranchMissingError) {
+        const error = `Skipping issue #${issue.number}: remote branch is missing — ${err.message}`;
+        this.logger.warn(error, { issueNumber: issue.number });
+        await this.fleetCheckpoint.setIssueStatus(
+          issue.number,
+          'failed',
+          '',
+          '',
+          0,
+          error,
+        );
+        return {
+          issueNumber: issue.number,
+          issueTitle: issue.title,
+          success: false,
+          phases: [],
+          totalDuration: 0,
+          tokenUsage: 0,
+          error,
+        };
+      }
+
       const error = String(err);
       this.logger.error(`Issue #${issue.number} failed: ${error}`, {
         issueNumber: issue.number,
