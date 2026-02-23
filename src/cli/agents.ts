@@ -33,6 +33,36 @@ function resolveBackend(config: Awaited<ReturnType<typeof loadConfig>>): string 
 }
 
 /**
+ * Scaffold any missing agent instruction files from built-in templates.
+ * Existing files are left unchanged. Returns the list of file paths that were created.
+ * Throws if a required template is not found.
+ */
+export async function scaffoldMissingAgentFiles(
+  agentDir: string,
+  backend: string,
+): Promise<string[]> {
+  const templateDir = getTemplateDir();
+  const created: string[] = [];
+
+  for (const agent of AGENT_DEFINITIONS) {
+    const destPath = agentFilePath(agentDir, agent.name, backend);
+    if (await exists(destPath)) continue;
+
+    const srcPath = join(templateDir, agent.templateFile);
+    if (!(await exists(srcPath))) {
+      throw new Error(`Template not found for agent '${agent.name}': ${srcPath}`);
+    }
+
+    const content = await readFile(srcPath, 'utf-8');
+    await mkdir(dirname(destPath), { recursive: true });
+    await writeFile(destPath, content, 'utf-8');
+    created.push(destPath);
+  }
+
+  return created;
+}
+
+/**
  * Register the `agents` command group with `list`, `scaffold`, and `validate` subcommands.
  */
 export function registerAgentsCommand(program: Command): void {
