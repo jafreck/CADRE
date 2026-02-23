@@ -29,37 +29,6 @@ export class ContextBuilder {
   ) {}
 
   /**
-   * Build a Markdown prompt section summarising unresolved, non-outdated review threads.
-   */
-  buildForReviewResponse(issue: IssueDetail, reviewThreads: ReviewThread[]): string {
-    const activeThreads = reviewThreads.filter(t => !t.isResolved && !t.isOutdated);
-
-    const lines: string[] = [
-      `# Issue #${issue.number}: ${issue.title}`,
-      '',
-      '## Review Comments',
-      '',
-    ];
-
-    if (activeThreads.length === 0) {
-      lines.push('_No unresolved review comments._');
-    } else {
-      for (const thread of activeThreads) {
-        for (const comment of thread.comments) {
-          lines.push(`### ${comment.path}`);
-          lines.push('');
-          lines.push(`**Author:** ${comment.author}`);
-          lines.push('');
-          lines.push(comment.body);
-          lines.push('');
-        }
-      }
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
    * Build a context file for the issue-analyst agent.
    */
   async buildForIssueAnalyst(
