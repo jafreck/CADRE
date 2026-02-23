@@ -80,8 +80,8 @@ export class ResultParser {
     const complexityMatch = block.match(/^\*\*Complexity:\*\*\s*(simple|moderate|complex)/im);
     const complexity = (complexityMatch?.[1]?.toLowerCase() ?? 'moderate') as 'simple' | 'moderate' | 'complex';
 
-    // Parse acceptance criteria
-    const criteriaMatch = block.match(/^\*\*Acceptance Criteria:\*\*\s*([\s\S]*?)(?=\n\*\*|\n#{2,}|$)/m);
+    // Parse acceptance criteria (match bullet lines following the header)
+    const criteriaMatch = block.match(/^\*\*Acceptance Criteria:\*\*[ \t]*\n((?:[ \t]*[-*][ \t]+.+\n?)*)/m);
     const criteriaStr = criteriaMatch?.[1]?.trim() ?? '';
     const acceptanceCriteria = criteriaStr
       .split('\n')
