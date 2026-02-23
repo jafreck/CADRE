@@ -1,7 +1,11 @@
 # Example workflow for running CADRE in CI.
 # Copy and adapt this file to your repository.
 #
-# Required GitHub App permissions (if using App auth):
+# cadre.config.json must exist at the repository root. Key fields to set:
+#   - repoPath: set dynamically in the workflow steps below
+#   - github.auth: choose PAT or GitHub App variant (see jobs below)
+#
+# Required GitHub App permissions (if using GitHub App auth):
 #   - Issues: read
 #   - Pull Requests: write
 #   - Contents: write
@@ -17,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       issue_ids:
-        description: "Comma-separated list of issue IDs to process (optional)"
+        description: "Space-separated list of issue numbers to process (optional, e.g. '42 57')"
         required: false
         default: ""
 
@@ -26,10 +30,14 @@ on:
     types: [labeled]
 
 jobs:
+  # ── PAT / GITHUB_TOKEN auth variant ──────────────────────────────────────────
+  # Uses the built-in GITHUB_TOKEN (or a PAT stored as a repository secret).
+  #
+  # In cadre.config.json, set:
+  #   "github": { "auth": { "token": "${GITHUB_TOKEN}" } }
+  #
+  # Delete this job if you are using GitHub App auth.
   cadre-pat:
-    # ── PAT / GITHUB_TOKEN auth variant ──────────────────────────────────────
-    # Uses the built-in GITHUB_TOKEN (or a Personal Access Token stored as a
-    # repository secret named PAT_TOKEN).
     name: CADRE (PAT auth)
     runs-on: ubuntu-latest
     steps:
@@ -44,22 +52,42 @@ jobs:
       - name: Install CADRE
         run: npm install -g cadre
 
+      # Patch cadre.config.json to set repoPath to the current workspace
+      - name: Set repoPath in CADRE config
+        run: jq --arg rp "${{ github.workspace }}" '.repoPath = $rp' cadre.config.json > /tmp/cadre.config.json
+
       - name: Run CADRE
-        run: cadre run
+        # Pass --issue to restrict processing to specific issues when triggered manually
+        run: |
+          ISSUE_ARGS=""
+          if [ -n "${{ github.event.inputs.issue_ids }}" ]; then
+            ISSUE_ARGS=$(echo "${{ github.event.inputs.issue_ids }}" | xargs printf -- '--issue %s ')
+          fi
+          cadre run --config /tmp/cadre.config.json $ISSUE_ARGS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Or use a PAT with repo + issues scopes:
+          # To use a PAT instead of GITHUB_TOKEN, store it as a secret and reference it:
           # GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-          CADRE_REPO_PATH: ${{ github.workspace }}
-          CADRE_ISSUE_IDS: ${{ github.event.inputs.issue_ids }}
 
+  # ── GitHub App auth variant ───────────────────────────────────────────────────
+  # Uses a GitHub App for finer-grained permission control.
+  #
+  # Secrets required:
+  #   APP_ID          – GitHub App ID
+  #   INSTALLATION_ID – Installation ID for this repository
+  #   PRIVATE_KEY     – PEM-encoded private key for the GitHub App
+  #
+  # In cadre.config.json, set:
+  #   "github": {
+  #     "auth": {
+  #       "appId": "${APP_ID}",
+  #       "installationId": "${INSTALLATION_ID}",
+  #       "privateKeyFile": "/tmp/cadre-private-key.pem"
+  #     }
+  #   }
+  #
+  # Delete this job if you are using PAT auth.
   cadre-app:
-    # ── GitHub App auth variant ───────────────────────────────────────────────
-    # Uses a GitHub App for finer-grained permission control.
-    # Secrets required:
-    #   APP_ID          – GitHub App ID
-    #   INSTALLATION_ID – Installation ID for this repository
-    #   PRIVATE_KEY     – PEM-encoded private key for the GitHub App
     name: CADRE (GitHub App auth)
     runs-on: ubuntu-latest
     steps:
@@ -74,11 +102,23 @@ jobs:
       - name: Install CADRE
         run: npm install -g cadre
 
+      # Write the GitHub App private key from the repository secret to a temp file.
+      # cadre.config.json should reference this path via "privateKeyFile": "/tmp/cadre-private-key.pem"
+      - name: Write GitHub App private key
+        run: echo "${{ secrets.PRIVATE_KEY }}" > /tmp/cadre-private-key.pem
+
+      # Patch cadre.config.json to set repoPath to the current workspace
+      - name: Set repoPath in CADRE config
+        run: jq --arg rp "${{ github.workspace }}" '.repoPath = $rp' cadre.config.json > /tmp/cadre.config.json
+
       - name: Run CADRE
-        run: cadre run
+        # Pass --issue to restrict processing to specific issues when triggered manually
+        run: |
+          ISSUE_ARGS=""
+          if [ -n "${{ github.event.inputs.issue_ids }}" ]; then
+            ISSUE_ARGS=$(echo "${{ github.event.inputs.issue_ids }}" | xargs printf -- '--issue %s ')
+          fi
+          cadre run --config /tmp/cadre.config.json $ISSUE_ARGS
         env:
-          CADRE_APP_ID: ${{ secrets.APP_ID }}
-          CADRE_INSTALLATION_ID: ${{ secrets.INSTALLATION_ID }}
-          CADRE_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-          CADRE_REPO_PATH: ${{ github.workspace }}
-          CADRE_ISSUE_IDS: ${{ github.event.inputs.issue_ids }}
+          APP_ID: ${{ secrets.APP_ID }}
+          INSTALLATION_ID: ${{ secrets.INSTALLATION_ID }}
