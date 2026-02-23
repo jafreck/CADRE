@@ -320,11 +320,9 @@ export class CadreRuntime {
         if (shouldCleanMerged || shouldCleanClosed) {
           if (!dryRun) {
             await worktreeManager.remove(wt.issueNumber);
-            if (shouldCleanMerged) {
-              await branchManager.deleteLocal(wt.branch);
-              if (cleanup.deleteRemoteBranch) {
-                await branchManager.deleteRemote(wt.branch);
-              }
+            await branchManager.deleteLocal(wt.branch);
+            if (cleanup.deleteRemoteBranch) {
+              await branchManager.deleteRemote(wt.branch);
             }
             await checkpointManager.pruneIssue(wt.issueNumber);
           }
@@ -337,6 +335,13 @@ export class CadreRuntime {
     } finally {
       await this.provider.disconnect();
     }
+  }
+
+  /**
+   * Clean up merged/closed worktrees (alias for pruneWorktrees).
+   */
+  async cleanup(dryRun = false): Promise<void> {
+    return this.pruneWorktrees(dryRun);
   }
 
   /**
