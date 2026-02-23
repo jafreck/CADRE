@@ -31,6 +31,7 @@ import { RetryExecutor } from '../execution/retry.js';
 import { TokenTracker } from '../budget/token-tracker.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import type { CostReport, CostReportAgentEntry, CostReportPhaseEntry } from '../reporting/types.js';
+import { ReportWriter } from '../reporting/report-writer.js';
 import { Logger } from '../logging/logger.js';
 import { atomicWriteJSON, ensureDir, exists, listFilesRecursive } from '../util/fs.js';
 import { execShell } from '../util/process.js';
