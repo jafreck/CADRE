@@ -115,6 +115,163 @@ function makeMockDeps() {
   return { worktreeManager, launcher, platform, logger };
 }
 
+describe('FleetOrchestrator — postCostComment and token recording (task-010)', () => {
+  let recordTokenUsageSpy: ReturnType<typeof vi.fn>;
+  let fleetCheckpointMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    recordTokenUsageSpy = vi.fn().mockResolvedValue(undefined);
+    const checkpointMod = await import('../src/core/checkpoint.js');
+    fleetCheckpointMock = checkpointMod.FleetCheckpointManager as ReturnType<typeof vi.fn>;
+    fleetCheckpointMock.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: recordTokenUsageSpy,
+      getIssueStatus: vi.fn().mockReturnValue(null),
+    }));
+  });
+
+  it('passes config (with postCostComment) to IssueOrchestrator', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const IssueOrchestratorMock = IssueOrchestrator as ReturnType<typeof vi.fn>;
+    IssueOrchestratorMock.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Test issue',
+        success: true,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 500,
+      }),
+    }));
+
+    const config = makeConfig({ postCostComment: true } as any);
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await fleet.run();
+
+    expect(IssueOrchestratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ postCostComment: true }) }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('calls FleetCheckpointManager.recordTokenUsage() with issue number and token count after issue completes', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 42,
+        issueTitle: 'Test issue',
+        success: true,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 1234,
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(42)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    worktreeManager.provision = vi.fn().mockResolvedValue({
+      path: '/tmp/worktree/42',
+      branch: 'cadre/issue-42',
+      baseCommit: 'abc123',
+    });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await fleet.run();
+
+    expect(recordTokenUsageSpy).toHaveBeenCalledWith(42, 1234);
+  });
+
+  it('does not call recordTokenUsage when tokenUsage is null', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Test issue',
+        success: true,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: null,
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await fleet.run();
+
+    expect(recordTokenUsageSpy).not.toHaveBeenCalled();
+  });
+
+  it('calls recordTokenUsage once per issue when multiple issues complete', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 0,
+        issueTitle: 'Test issue',
+        success: true,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 100,
+      }),
+    }));
+
+    const config = makeConfig({ maxParallelIssues: 5 });
+    const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await fleet.run();
+
+    expect(recordTokenUsageSpy).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('FleetOrchestrator — NotificationManager integration', () => {
   let dispatchSpy: ReturnType<typeof vi.fn>;
   let notifications: NotificationManager;
