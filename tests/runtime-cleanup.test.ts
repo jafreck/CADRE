@@ -409,4 +409,57 @@ describe('CadreRuntime.pruneWorktrees() — cleanup logic', () => {
       expect(mockBranchManager.deleteLocal).toHaveBeenCalledWith(wt.branch);
     });
   });
+
+  // Scenario 7: cleanup() public method delegates to pruneWorktrees()
+  describe('scenario 7: cleanup() public method — delegates to pruneWorktrees()', () => {
+    it('removes the worktree via cleanup() when the PR is merged', async () => {
+      const wt = makeWorktree(7);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'merged', merged: true })]);
+
+      const config = makeConfig({ onMerged: true });
+      const runtime = new CadreRuntime(config);
+      await runtime.cleanup();
+
+      expect(mockWorktreeManager.remove).toHaveBeenCalledWith(7);
+      expect(mockBranchManager.deleteLocal).toHaveBeenCalledWith(wt.branch);
+      expect(mockCheckpointManager.pruneIssue).toHaveBeenCalledWith(7);
+    });
+
+    it('passes dryRun=true to pruneWorktrees when called with dryRun', async () => {
+      const wt = makeWorktree(7);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'merged', merged: true })]);
+
+      const config = makeConfig({ onMerged: true });
+      const runtime = new CadreRuntime(config);
+      await runtime.cleanup(true);
+
+      expect(mockWorktreeManager.remove).not.toHaveBeenCalled();
+      expect(mockBranchManager.deleteLocal).not.toHaveBeenCalled();
+      expect(mockCheckpointManager.pruneIssue).not.toHaveBeenCalled();
+    });
+
+    it('defaults dryRun to false when cleanup() is called with no arguments', async () => {
+      const wt = makeWorktree(7);
+      mockWorktreeManager.listActive.mockResolvedValue([wt]);
+      mockProvider.listPullRequests.mockResolvedValue([makePR({ headBranch: wt.branch, state: 'merged', merged: true })]);
+
+      const config = makeConfig({ onMerged: true });
+      const runtime = new CadreRuntime(config);
+      await runtime.cleanup();
+
+      // Destructive actions should have occurred (not dry-run)
+      expect(mockWorktreeManager.remove).toHaveBeenCalled();
+    });
+
+    it('connects and disconnects the provider via cleanup()', async () => {
+      const config = makeConfig();
+      const runtime = new CadreRuntime(config);
+      await runtime.cleanup();
+
+      expect(mockProvider.connect).toHaveBeenCalledOnce();
+      expect(mockProvider.disconnect).toHaveBeenCalledOnce();
+    });
+  });
 });
