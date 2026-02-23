@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContextBuilder } from '../src/agents/context-builder.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
+import type { CostReport } from '../src/reporting/types.js';
+import type { TokenSummary } from '../src/budget/token-tracker.js';
 import { Logger } from '../src/logging/logger.js';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
@@ -163,5 +165,96 @@ describe('ContextBuilder', () => {
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
+  });
+
+  describe('buildForPRComposer tokenSummary injection', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(mkdir).mockResolvedValue(undefined);
+      vi.mocked(writeFile).mockResolvedValue(undefined);
+    });
+
+    const getWrittenContext = () => {
+      const calls = vi.mocked(writeFile).mock.calls;
+      return JSON.parse(calls[calls.length - 1][1] as string);
+    };
+
+    it('should omit tokenSummary from payload when not provided', async () => {
+      await builder.buildForPRComposer(
+        42,
+        '/tmp/worktree',
+        mockIssue,
+        '/tmp/analysis.md',
+        '/tmp/plan.md',
+        '/tmp/integration.md',
+        '/tmp/diff.patch',
+        '/tmp/progress',
+      );
+
+      const context = getWrittenContext();
+      expect(context.payload).toEqual({
+        issueTitle: mockIssue.title,
+        issueBody: mockIssue.body,
+      });
+      expect(context.payload).not.toHaveProperty('tokenSummary');
+    });
+
+    it('should include CostReport in payload when provided', async () => {
+      const costReport: CostReport = {
+        issueNumber: 42,
+        generatedAt: '2024-01-01T00:00:00Z',
+        totalTokens: 1000,
+        inputTokens: 700,
+        outputTokens: 300,
+        estimatedCost: 0.05,
+        model: 'claude-3-5-sonnet',
+        byAgent: [],
+        byPhase: [],
+      };
+
+      await builder.buildForPRComposer(
+        42,
+        '/tmp/worktree',
+        mockIssue,
+        '/tmp/analysis.md',
+        '/tmp/plan.md',
+        '/tmp/integration.md',
+        '/tmp/diff.patch',
+        '/tmp/progress',
+        costReport,
+      );
+
+      const context = getWrittenContext();
+      expect(context.payload.tokenSummary).toEqual(costReport);
+      expect(context.payload.issueTitle).toBe(mockIssue.title);
+      expect(context.payload.issueBody).toBe(mockIssue.body);
+    });
+
+    it('should include TokenSummary in payload when provided', async () => {
+      const tokenSummary: TokenSummary = {
+        total: 500,
+        byIssue: { 42: 500 },
+        byAgent: { 'code-writer': 300, 'test-writer': 200 },
+        byPhase: { 3: 500 },
+        recordCount: 2,
+      };
+
+      await builder.buildForPRComposer(
+        42,
+        '/tmp/worktree',
+        mockIssue,
+        '/tmp/analysis.md',
+        '/tmp/plan.md',
+        '/tmp/integration.md',
+        '/tmp/diff.patch',
+        '/tmp/progress',
+        tokenSummary,
+      );
+
+      const context = getWrittenContext();
+      expect(context.payload.tokenSummary).toEqual(tokenSummary);
+      expect(context.payload.issueTitle).toBe(mockIssue.title);
+      expect(context.payload.issueBody).toBe(mockIssue.body);
+    });
   });
 });
