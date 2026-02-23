@@ -157,6 +157,18 @@ One issue found that should be fixed.
       expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
+    it('should normalize double-escaped newlines in cadre-json review summary', async () => {
+      // Agents may write \\n instead of real newlines in summary/description fields.
+      const summaryWithLiteralBackslashN = 'Good fix!\\nA few notes:\\n1. Point A\\n2. Point B';
+      const review = { verdict: 'pass', issues: [], summary: summaryWithLiteralBackslashN };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(review)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parseReview('/tmp/review.md');
+      expect(result.summary).toBe('Good fix!\nA few notes:\n1. Point A\n2. Point B');
+      expect(result.summary).not.toContain('\\n');
+    });
+
     it('should emit deprecation warn for review regex fallback', async () => {
       vi.mocked(readFile).mockResolvedValue('## Verdict: pass\n\n## Summary\nok');
 
@@ -214,6 +226,27 @@ Closes #42
       expect(result.title).toBe('feat: add thing');
       expect(result.labels).toContain('enhancement');
       expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should normalize double-escaped newlines in cadre-json body', async () => {
+      // Agents sometimes write \\n instead of actual newlines in the JSON body,
+      // producing a literal backslash-n sequence rather than a real line break.
+      // Simulate this by starting with a string that has literal \n (two chars each):
+      const bodyWithLiteralBackslashN = 'Good fix!\\n\\n1. Fix A\\n2. Fix B';
+      //                                                ^^  ^^          ^^
+      //  TypeScript \\n = one backslash + 'n' character (two chars, NOT a newline)
+      const pr = { title: 'fix: something', body: bodyWithLiteralBackslashN, labels: [] };
+      // JSON.stringify encodes each literal backslash as \\ in the JSON text,
+      // so the cadre-json block contains \\n sequences.
+      // extractCadreJson → JSON.parse decodes \\n to literal \n (backslash + n).
+      // unescapeText must convert those back to real newline characters.
+      const content = `\`\`\`cadre-json\n${JSON.stringify(pr)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parsePRContent('/tmp/pr-content.md');
+      // Body must contain real newlines (0x0A), not the literal two-char "\n" sequence.
+      expect(result.body).toBe('Good fix!\n\n1. Fix A\n2. Fix B');
+      expect(result.body).not.toContain('\\n');
     });
 
     it('should emit deprecation warn for PR content regex fallback', async () => {

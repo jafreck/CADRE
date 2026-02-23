@@ -35,6 +35,22 @@ export class ResultParser {
   }
 
   /**
+   * Normalize a markdown string that may contain JSON-style escape sequences
+   * (e.g. `\\n` → actual newline, `\\t` → actual tab).
+   *
+   * Agents that write cadre-json blocks sometimes double-escape newlines,
+   * producing literal `\n` (two characters) instead of actual newline
+   * characters. This results in comments/PR bodies displayed verbatim on
+   * GitHub rather than rendered as Markdown.
+   */
+  private unescapeText(text: string): string {
+    return text
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\r/g, '');
+  }
+
+  /**
    * Parse an implementation plan markdown into a list of ImplementationTasks.
    */
   async parseImplementationPlan(planPath: string): Promise<ImplementationTask[]> {
@@ -132,7 +148,15 @@ export class ResultParser {
 
     const parsed = this.extractCadreJson(content);
     if (parsed !== null) {
-      return reviewSchema.parse(parsed);
+      const result = reviewSchema.parse(parsed);
+      return {
+        ...result,
+        summary: this.unescapeText(result.summary),
+        issues: result.issues.map((issue) => ({
+          ...issue,
+          description: this.unescapeText(issue.description),
+        })),
+      };
     }
 
     this.logger.warn(`[deprecated] parseReview: no cadre-json block found in ${reviewPath}; falling back to regex parsing`);
@@ -230,7 +254,8 @@ export class ResultParser {
 
     const parsed = this.extractCadreJson(content);
     if (parsed !== null) {
-      return prContentSchema.parse(parsed);
+      const result = prContentSchema.parse(parsed);
+      return { ...result, body: this.unescapeText(result.body) };
     }
 
     this.logger.warn(`[deprecated] parsePRContent: no cadre-json block found in ${contentPath}; falling back to regex parsing`);
@@ -316,7 +341,13 @@ export class ResultParser {
 
     const parsed = this.extractCadreJson(content);
     if (parsed !== null) {
-      return analysisSchema.parse(parsed);
+      const result = analysisSchema.parse(parsed);
+      return {
+        ...result,
+        requirements: result.requirements.map((s) => this.unescapeText(s)),
+        affectedAreas: result.affectedAreas.map((s) => this.unescapeText(s)),
+        ambiguities: result.ambiguities.map((s) => this.unescapeText(s)),
+      };
     }
 
     this.logger.warn(`[deprecated] parseAnalysis: no cadre-json block found in ${analysisPath}; falling back to regex parsing`);

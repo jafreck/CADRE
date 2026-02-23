@@ -55,7 +55,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       }
 
       // Push
-      await ctx.io.commitManager.push(true);
+      await ctx.io.commitManager.push(true, ctx.worktree.branch);
 
       // Create PR
       try {
