@@ -99,6 +99,7 @@ export function applyOverrides(
     maxParallelIssues?: number;
     issueIds?: number[];
     skipValidation?: boolean;
+    noPr?: boolean;
   },
 ): CadreConfig {
   const merged = { ...config };
@@ -125,6 +126,10 @@ export function applyOverrides(
 
   if (overrides.skipValidation != null) {
     merged.options = { ...merged.options, skipValidation: overrides.skipValidation };
+  }
+
+  if (overrides.noPr != null) {
+    merged.pullRequest = { ...merged.pullRequest, autoCreate: !overrides.noPr };
   }
 
   return Object.freeze(merged);
