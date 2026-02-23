@@ -1,0 +1,84 @@
+# Example workflow for running CADRE in CI.
+# Copy and adapt this file to your repository.
+#
+# Required GitHub App permissions (if using App auth):
+#   - Issues: read
+#   - Pull Requests: write
+#   - Contents: write
+
+name: CADRE
+
+on:
+  # Run on a schedule (e.g., every hour)
+  schedule:
+    - cron: "0 * * * *"
+
+  # Allow manual triggering with an optional list of issue IDs
+  workflow_dispatch:
+    inputs:
+      issue_ids:
+        description: "Comma-separated list of issue IDs to process (optional)"
+        required: false
+        default: ""
+
+  # Run when an issue is labeled
+  issues:
+    types: [labeled]
+
+jobs:
+  cadre-pat:
+    # ── PAT / GITHUB_TOKEN auth variant ──────────────────────────────────────
+    # Uses the built-in GITHUB_TOKEN (or a Personal Access Token stored as a
+    # repository secret named PAT_TOKEN).
+    name: CADRE (PAT auth)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install CADRE
+        run: npm install -g cadre
+
+      - name: Run CADRE
+        run: cadre run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Or use a PAT with repo + issues scopes:
+          # GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          CADRE_REPO_PATH: ${{ github.workspace }}
+          CADRE_ISSUE_IDS: ${{ github.event.inputs.issue_ids }}
+
+  cadre-app:
+    # ── GitHub App auth variant ───────────────────────────────────────────────
+    # Uses a GitHub App for finer-grained permission control.
+    # Secrets required:
+    #   APP_ID          – GitHub App ID
+    #   INSTALLATION_ID – Installation ID for this repository
+    #   PRIVATE_KEY     – PEM-encoded private key for the GitHub App
+    name: CADRE (GitHub App auth)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install CADRE
+        run: npm install -g cadre
+
+      - name: Run CADRE
+        run: cadre run
+        env:
+          CADRE_APP_ID: ${{ secrets.APP_ID }}
+          CADRE_INSTALLATION_ID: ${{ secrets.INSTALLATION_ID }}
+          CADRE_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          CADRE_REPO_PATH: ${{ github.workspace }}
+          CADRE_ISSUE_IDS: ${{ github.event.inputs.issue_ids }}
