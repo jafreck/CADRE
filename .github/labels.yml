@@ -51,7 +51,7 @@
   description: Issues related to the cadre pipeline execution
 
 - name: dogfooding
-  color: 5319E7
+  color: "5319E7"
   description: Issues identified from cadre self-hosting runs
 
 - name: cadre-generated
