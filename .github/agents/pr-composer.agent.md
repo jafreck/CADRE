@@ -121,6 +121,42 @@ Closes #{issueNumber}
 - **Overall**: {1-2 sentence summary of the biggest friction point in this run}
 ```
 
+### Token Usage Section
+
+If `payload.tokenSummary` is present in the context, append a **`## Token Usage`** section at the very end of the PR body (after all other sections, including Cadre Process Challenges).
+
+The Token Usage section must include:
+- **Total tokens** (`totalTokens`) consumed for this run
+- **Estimated cost** (`estimatedCost`)
+- The **model** used
+- A **per-phase breakdown** (if `byPhase` is available)
+- A **per-agent breakdown** (if `byAgent` is available)
+
+Format it as a collapsed `<details>` block:
+
+```markdown
+<details>
+<summary>## Token Usage</summary>
+
+**Total tokens:** {totalTokens}
+**Estimated cost:** {estimatedCost}
+**Model:** {model}
+
+**By phase:**
+| Phase | Tokens |
+|-------|--------|
+| {phase name} | {tokens} |
+
+**By agent:**
+| Agent | Tokens |
+|-------|--------|
+| {agent name} | {tokens} |
+
+</details>
+```
+
+If `payload.tokenSummary` is **absent**, omit the `## Token Usage` section entirely.
+
 ## Constraints
 - Read ONLY the files listed in `inputFiles`
 - Write ONLY to `outputPath`
