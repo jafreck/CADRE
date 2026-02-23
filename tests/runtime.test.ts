@@ -125,6 +125,7 @@ function makeConfig(issueIds = [1]): CadreConfig {
       invocationDelayMs: 0,
       buildVerification: false,
       testVerification: false,
+      skipValidation: true,
     },
     commands: {},
     copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4', agentDir: '.github/agents', timeout: 300000, costOverrides: {} },

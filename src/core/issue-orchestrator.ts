@@ -235,7 +235,7 @@ export class IssueOrchestrator {
       issueNumber: successResult.issueNumber,
       success: successResult.success,
       duration: successResult.totalDuration,
-      tokenUsage: successResult.tokenUsage,
+      tokenUsage: successResult.tokenUsage ?? 0,
     });
     return successResult;
   }

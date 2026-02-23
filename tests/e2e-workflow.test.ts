@@ -15,8 +15,8 @@ describe('e2e workflow file', () => {
     expect(content.trim().length).toBeGreaterThan(0);
   });
 
-  it('triggers on push events', () => {
-    expect(content).toMatch(/^\s*push\s*:/m);
+  it('does not trigger on push events (only pull_request)', () => {
+    expect(content).not.toMatch(/^\s*push\s*:/m);
   });
 
   it('triggers on pull_request events', () => {

@@ -219,11 +219,11 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
         success: true,
         phases: [],
         totalDuration: 100,
-        tokenUsage: 99999, // very large to exceed budget
+        tokenUsage: 500_000, // exceeds the 250k budget after recording
       }),
     }));
 
-    const config = makeConfig({ tokenBudget: 1 }); // tiny budget to force exceeded
+    const config = makeConfig({ tokenBudget: 250_000 }); // budget that passes pre-flight estimate but is exceeded by token usage
     const issues = [makeIssue(1)];
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
 
@@ -247,7 +247,7 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
     expect(event).toMatchObject({
       type: 'budget-exceeded',
       scope: 'fleet',
-      budget: 1,
+      budget: 250_000,
       currentUsage: expect.any(Number),
     });
   });
@@ -261,11 +261,11 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
         success: true,
         phases: [],
         totalDuration: 100,
-        tokenUsage: 9000, // 90% of 10000
+        tokenUsage: 225_000, // 90% of 250_000
       }),
     }));
 
-    const config = makeConfig({ tokenBudget: 10000 });
+    const config = makeConfig({ tokenBudget: 250_000 });
     const issues = [makeIssue(1)];
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
 
@@ -289,7 +289,7 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
     expect(event).toMatchObject({
       type: 'budget-warning',
       scope: 'fleet',
-      budget: 10000,
+      budget: 250_000,
       currentUsage: expect.any(Number),
       percentUsed: expect.any(Number),
     });
