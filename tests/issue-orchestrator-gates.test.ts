@@ -141,6 +141,7 @@ vi.mock('../src/budget/token-tracker.js', () => ({
   TokenTracker: vi.fn(() => ({
     record: vi.fn(),
     getTotal: mockTokenTrackerGetTotal,
+    checkIssueBudget: vi.fn().mockReturnValue('ok'),
   })),
 }));
 
