@@ -94,7 +94,7 @@ export const CadreConfigSchema = z.object({
         milestone: z.string().optional(),
         assignee: z.string().optional(),
         state: z.enum(['open', 'closed', 'all']).default('open'),
-        limit: z.number().int().min(1).max(100).default(10),
+        limit: z.number().int().min(1).default(10),
       }),
     }),
   ]),
@@ -135,9 +135,9 @@ export const CadreConfigSchema = z.object({
   options: z
     .object({
       /** Max issues processed in parallel (each in its own worktree). */
-      maxParallelIssues: z.number().int().min(1).max(20).default(3),
+      maxParallelIssues: z.number().int().min(1).default(3),
       /** Max agents running in parallel within a single issue pipeline. */
-      maxParallelAgents: z.number().int().min(1).max(10).default(3),
+      maxParallelAgents: z.number().int().min(1).default(3),
       /** Max retries per task before marking blocked. */
       maxRetriesPerTask: z.number().int().min(1).max(5).default(3),
       /** Total token budget across all issues (optional cap). */
