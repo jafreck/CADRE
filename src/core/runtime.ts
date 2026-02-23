@@ -39,6 +39,10 @@ export class CadreRuntime {
     return this.config.agent?.copilot?.agentDir ?? this.config.copilot.agentDir;
   }
 
+  private get backend(): string {
+    return this.config.agent?.backend ?? 'copilot';
+  }
+
   constructor(private readonly config: CadreConfig) {
     this.cadreDir = join(config.repoPath, '.cadre');
     this.logger = new Logger({
@@ -121,6 +125,7 @@ export class CadreRuntime {
       this.config.branchTemplate,
       this.logger,
       this.agentDir,
+      this.backend,
     );
 
     const launcher = new AgentLauncher(this.config, this.logger);
@@ -282,6 +287,7 @@ export class CadreRuntime {
       this.config.branchTemplate,
       this.logger,
       this.agentDir,
+      this.backend,
     );
 
     const worktrees = await worktreeManager.listActive();
@@ -312,6 +318,7 @@ export class CadreRuntime {
       this.config.branchTemplate,
       this.logger,
       this.agentDir,
+      this.backend,
     );
 
     const checkpointManager = new FleetCheckpointManager(
