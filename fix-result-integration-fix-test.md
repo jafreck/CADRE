@@ -5,13 +5,13 @@ test-failures
 
 ## Fixes Applied
 
-### Fix 1: Update test assertion to match new MCP tool API
-**File:** `tests/github-issues.test.ts`
-**Issue:** Test expected `callTool('get_issue', ...)` but implementation was updated to use `callTool('issue_read', { method: 'get', ... })`
-**Fix:** Updated `toHaveBeenCalledWith` assertion in `should fetch issue details via MCP` to use `'issue_read'` with `method: 'get'` to match the current implementation in `src/github/api.ts`
+### Fix 1: Add missing `estimateIssueTokens` mock to CostEstimator mock
+**File:** `tests/fleet-orchestrator.test.ts`
+**Issue:** The `CostEstimator` mock only included `estimate`, but `fleet-orchestrator.ts` calls `this.costEstimator.estimateIssueTokens()` in the pre-flight budget check, causing a `TypeError: this.costEstimator.estimateIssueTokens is not a function`.
+**Fix:** Added `estimateIssueTokens: vi.fn().mockReturnValue(1000)` to the `CostEstimator` mock implementation. The return value of `1000` is intentionally below the test config's `tokenBudget: 100000` to ensure the pre-flight budget check passes and issue processing proceeds normally.
 
 ## Files Modified
-- `tests/github-issues.test.ts`
+- `tests/fleet-orchestrator.test.ts`
 
 ## Verification Notes
-- Run `npx vitest run tests/github-issues.test.ts` — all 7 tests pass
+- Run `npx vitest run tests/fleet-orchestrator.test.ts` — all 6 tests pass.
