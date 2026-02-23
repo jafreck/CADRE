@@ -1,62 +1,29 @@
-# Test Result: task-010 - Write Tests for Validators and Suite
+# Test Result: task-010 - Fill in `fix-surgeon.md` template
 
 ## Tests Written
-
-- `tests/validation-git.test.ts`: 6 test cases
-  - returns passed:false with error when .git directory is missing
-  - returns passed:false with error when current branch cannot be determined
-  - returns passed:true with warning when there are uncommitted changes
-  - returns passed:true with warning when remote is unreachable
-  - returns passed:true with warning when remote check times out
-  - returns passed:true with no warnings when repository is clean
-
-- `tests/validation-agent-backend.test.ts`: 3 test cases
-  - returns passed:false with error when CLI is not on PATH
-  - returns passed:false with error when agentDir does not exist
-  - returns passed:true with no errors when CLI and agentDir are valid
-
-- `tests/validation-platform.test.ts`: 7 test cases
-  - returns passed:false with error when MCP server command is missing
-  - returns passed:false with error when no GitHub token is available
-  - returns passed:true when GitHub token is present in config
-  - returns passed:true when GitHub token is present in GITHUB_TOKEN env var
-  - returns passed:false with error when Azure DevOps PAT is missing
-  - returns passed:true when Azure DevOps PAT is valid
-  - returns passed:false with error when Azure DevOps PAT has wrong format
-
-- `tests/validation-command.test.ts`: 3 test cases
-  - returns passed:false with error when required executable is missing
-  - returns passed:true with no error when optional command is unconfigured
-  - returns passed:true with no errors when all executables are found
-
-- `tests/validation-disk.test.ts`: 4 test cases
-  - returns passed:false with error when disk space is insufficient
-  - returns passed:true with warning when disk space is low but sufficient
-  - returns passed:true with no warnings when disk space is sufficient
-  - returns passed:false when repoPath does not exist
-
-- `tests/validation-suite.test.ts`: 17 test cases (pre-existing, not modified)
-  - All-pass returns true; all-fail returns false; mixed returns false
-  - Empty validators list returns true
-  - Rejected validator promise returns false
-  - Console output: ✅, ⚠️, ❌ symbols for pass/warn/fail
-  - Indented error and warning messages
-  - Unknown validator name printed on rejection
-  - All validators called with correct config
+- `tests/fix-surgeon-template.test.ts`: 15 new test cases
+  - should start with a # Fix Surgeon heading
+  - should have at least 35 non-empty lines of content
+  - input contract: should describe review issues as an input
+  - input contract: should describe source files as an input
+  - input contract: should mention scout report as background context
+  - output contract: should describe fixed source files as output
+  - output contract: should describe a fix summary as output
+  - output contract: should include a Files Modified section in the fix summary format
+  - output contract: should include a Files Created section in the fix summary format
+  - tool permissions: should list view as a permitted tool
+  - tool permissions: should list edit as a permitted tool
+  - tool permissions: should list bash as a permitted tool
+  - style constraints: should emphasize fixing only what is flagged
+  - style constraints: should prohibit refactoring or reformatting unrelated code
+  - style constraints: should mention making minimal or smallest possible changes
 
 ## Test Files Modified
 - (none)
 
 ## Test Files Created
-- tests/validation-git.test.ts
-- tests/validation-agent-backend.test.ts
-- tests/validation-platform.test.ts
-- tests/validation-command.test.ts
-- tests/validation-disk.test.ts
+- tests/fix-surgeon-template.test.ts
 
 ## Coverage Notes
-- All 40 tests pass via `npx vitest run`.
-- `tests/validation-suite.test.ts` pre-existed with 17 tests and was not modified.
-- External dependencies (`exec`, `exists`, `statOrNull`) are mocked via `vi.mock`.
-- Remote reachability in git validator is tested via mocked `exec` timeout/failure.
-- Azure DevOps PAT format validation is tested with both valid and invalid values.
+- All 15 tests pass against the current fix-surgeon.md content
+- Follows the same structure and patterns as code-writer-template.test.ts
