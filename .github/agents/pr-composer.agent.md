@@ -129,4 +129,5 @@ Closes #{issueNumber}
 - Keep the PR body under 500 lines
 - Use clear, professional language
 - Do NOT include raw diffs in the PR body — summarize changes instead
-- Always include the "Closes #N" reference
+- Always include the "Closes #N" reference- Write the file as **plain Markdown with YAML frontmatter** — do NOT wrap the output in a `cadre-json` or `json` code block
+- Use real newline characters in the file content; do **not** write `\n` as a two-character escape sequence in the text

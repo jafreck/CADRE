@@ -260,7 +260,7 @@ describe('PRCompositionPhaseExecutor', () => {
       await executor.execute(ctx);
       expect(
         (ctx.io.commitManager as never as { push: ReturnType<typeof vi.fn> }).push,
-      ).toHaveBeenCalledWith(true);
+      ).toHaveBeenCalledWith(true, 'cadre/issue-42');
     });
 
     it('should create PR with title including issue number', async () => {

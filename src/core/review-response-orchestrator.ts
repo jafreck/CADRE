@@ -179,7 +179,7 @@ export class ReviewResponseOrchestrator {
           // Push any new commits made by the implementation phase
           const commitManager = new CommitManager(worktree.path, this.config.commits, this.logger);
           try {
-            await commitManager.push();
+            await commitManager.push(false, worktree.branch);
             this.logger.info(
               `Issue #${issueNumber} (PR #${pr.number}): pushed changes to ${worktree.branch}`,
               { issueNumber },

@@ -165,7 +165,9 @@ export class WorktreeManager {
 
     // Add the worktree checked out to the remote branch
     await ensureDir(this.worktreeRoot);
-    await this.git.raw(['worktree', 'add', worktreePath, `origin/${branch}`]);
+    // Use -B so the worktree is checked out on a local branch (not detached HEAD),
+    // enabling plain `git push origin HEAD` to work correctly afterwards.
+    await this.git.raw(['worktree', 'add', '-B', branch, worktreePath, `origin/${branch}`]);
 
     // Bootstrap the worktree's .cadre/ directory
     await this.initCadreDir(worktreePath, issueNumber);

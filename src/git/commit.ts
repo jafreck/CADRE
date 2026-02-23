@@ -100,9 +100,11 @@ export class CommitManager {
 
   /**
    * Push the current branch to origin.
+   * @param force - Use --force-with-lease.
+   * @param branch - The branch name to push to on origin (`HEAD:refs/heads/<branch>`).
    */
-  async push(force?: boolean): Promise<void> {
-    const args = ['push', 'origin', 'HEAD'];
+  async push(force = false, branch: string): Promise<void> {
+    const args = ['push', 'origin', `HEAD:refs/heads/${branch}`];
     if (force) {
       args.push('--force-with-lease');
     }
