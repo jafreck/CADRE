@@ -175,14 +175,17 @@ export class CadreRuntime {
       const issueCheckpointPath = join(issueProgressDir, 'checkpoint.json');
 
       if (!(await exists(issueCheckpointPath))) {
-        console.log(`No per-issue checkpoint found for issue #${issueNumber}.`);
+        console.log(`No per-issue checkpoint found for issue #${issueNumber}`);
         return;
       }
 
       const issueCpManager = new CheckpointManager(issueProgressDir, this.logger);
-      const issueCheckpoint = await issueCpManager.load(String(issueNumber));
-
-      console.log(renderIssueDetail(issueNumber, issueStatus, issueCheckpoint));
+      try {
+        const issueCheckpoint = await issueCpManager.load(String(issueNumber));
+        console.log(renderIssueDetail(issueNumber, issueStatus, issueCheckpoint));
+      } catch {
+        console.log(`No per-issue checkpoint found for issue #${issueNumber}`);
+      }
     } else {
       console.log(renderFleetStatus(state, this.config.copilot.model, this.config.copilot));
     }
