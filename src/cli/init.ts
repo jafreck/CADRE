@@ -4,7 +4,7 @@ import { confirm } from '@inquirer/prompts';
 import { CadreConfigSchema } from '../config/schema.js';
 import { collectAnswers } from './prompts.js';
 import { atomicWriteJSON, atomicWriteFile, exists, ensureDir, readFileOrNull } from '../util/fs.js';
-import { runScaffold } from '../cli/agents.js';
+import { runScaffold } from './agents.js';
 
 export async function runInit(opts: { yes: boolean; repoPath?: string }): Promise<void> {
   const repoPath = opts.repoPath ?? process.cwd();
