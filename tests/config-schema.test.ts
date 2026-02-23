@@ -530,6 +530,70 @@ describe('CadreConfigSchema', () => {
   });
 });
 
+  describe('cleanup field', () => {
+    it('should parse successfully without a cleanup field (backward compat)', () => {
+      const result = CadreConfigSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cleanup).toBeUndefined();
+      }
+    });
+
+    it('should apply defaults when cleanup is provided as an empty object', () => {
+      const result = CadreConfigSchema.parse({ ...validConfig, cleanup: {} });
+      expect(result.cleanup?.deleteRemoteBranch).toBe(true);
+      expect(result.cleanup?.onMerged).toBe(true);
+      expect(result.cleanup?.onClosed).toBe(false);
+    });
+
+    it('should accept a fully-specified cleanup section', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        cleanup: {
+          deleteRemoteBranch: false,
+          onMerged: false,
+          onClosed: true,
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cleanup?.deleteRemoteBranch).toBe(false);
+        expect(result.data.cleanup?.onMerged).toBe(false);
+        expect(result.data.cleanup?.onClosed).toBe(true);
+      }
+    });
+
+    it('should accept cleanup with only some fields overridden', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        cleanup: { onClosed: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.cleanup?.onClosed).toBe(true);
+        expect(result.data.cleanup?.deleteRemoteBranch).toBe(true);
+        expect(result.data.cleanup?.onMerged).toBe(true);
+      }
+    });
+
+    it('should reject non-boolean values in cleanup fields', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        cleanup: { deleteRemoteBranch: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('CleanupConfig type should be inferred correctly from the parsed output', () => {
+      const result = CadreConfigSchema.parse({ ...validConfig, cleanup: {} });
+      // Type-level check: CleanupConfig fields are all boolean
+      const cleanup: import('../src/config/schema.js').CleanupConfig = result.cleanup!;
+      expect(typeof cleanup.deleteRemoteBranch).toBe('boolean');
+      expect(typeof cleanup.onMerged).toBe('boolean');
+      expect(typeof cleanup.onClosed).toBe('boolean');
+    });
+  });
+
 describe('AgentConfigSchema', () => {
   it('should default backend to copilot', () => {
     const result = AgentConfigSchema.parse({});

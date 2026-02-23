@@ -298,6 +298,18 @@ export const CadreConfigSchema = z.object({
     })
     .optional(),
 
+  /** Cleanup configuration for pruning merged/closed PR worktrees and branches. */
+  cleanup: z
+    .object({
+      /** Remove the remote branch after cleanup. */
+      deleteRemoteBranch: z.boolean().default(true),
+      /** Clean up when the associated PR is merged. */
+      onMerged: z.boolean().default(true),
+      /** Clean up when the associated PR is closed without merging. */
+      onClosed: z.boolean().default(false),
+    })
+    .optional(),
+
   /** Notification provider configuration. Optional; defaults to disabled. */
   notifications: NotificationsConfigSchema,
 
@@ -306,3 +318,4 @@ export const CadreConfigSchema = z.object({
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;
+export type CleanupConfig = NonNullable<CadreConfig['cleanup']>;

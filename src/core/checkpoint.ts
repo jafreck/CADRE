@@ -405,6 +405,14 @@ export class FleetCheckpointManager {
     return status === 'completed' || status === 'budget-exceeded';
   }
 
+  async pruneIssue(issueNumber: number): Promise<void> {
+    if (!this.state) throw new Error('Fleet checkpoint not loaded');
+    if (!(issueNumber in this.state.issues)) return;
+    delete this.state.issues[issueNumber];
+    delete this.state.tokenUsage.byIssue[issueNumber];
+    await this.save();
+  }
+
   private async save(): Promise<void> {
     if (!this.state) return;
     this.state.lastCheckpoint = new Date().toISOString();

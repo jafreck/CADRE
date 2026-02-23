@@ -355,4 +355,75 @@ describe('FleetCheckpointManager', () => {
     expect(manager2.getIssueStatus(7)?.status).toBe('budget-exceeded');
     expect(manager2.isIssueCompleted(7)).toBe(true);
   });
+
+  describe('pruneIssue', () => {
+    it('should remove issue entry from state.issues', async () => {
+      const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+      await manager.load();
+      await manager.setIssueStatus(10, 'completed', '/worktree/10', 'issue-10', 5);
+
+      await manager.pruneIssue(10);
+
+      expect(manager.getIssueStatus(10)).toBeUndefined();
+    });
+
+    it('should remove issue token usage from state.tokenUsage.byIssue', async () => {
+      const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+      await manager.load();
+      await manager.setIssueStatus(11, 'completed', '/worktree/11', 'issue-11', 5);
+      await manager.recordTokenUsage(11, 5000);
+
+      await manager.pruneIssue(11);
+
+      const state = manager.getState();
+      expect(state.tokenUsage.byIssue[11]).toBeUndefined();
+    });
+
+    it('should persist removal to disk after pruning', async () => {
+      const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+      await manager.load();
+      await manager.setIssueStatus(12, 'completed', '/worktree/12', 'issue-12', 5);
+      await manager.recordTokenUsage(12, 3000);
+
+      await manager.pruneIssue(12);
+
+      const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+      await manager2.load();
+      expect(manager2.getIssueStatus(12)).toBeUndefined();
+      expect(manager2.getState().tokenUsage.byIssue[12]).toBeUndefined();
+    });
+
+    it('should be a no-op when issue does not exist', async () => {
+      const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+      await manager.load();
+
+      await expect(manager.pruneIssue(999)).resolves.toBeUndefined();
+
+      const state = manager.getState();
+      expect(state.issues[999]).toBeUndefined();
+    });
+
+    it('should not affect other issues when pruning one', async () => {
+      const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+      await manager.load();
+      await manager.setIssueStatus(20, 'completed', '/worktree/20', 'issue-20', 5);
+      await manager.setIssueStatus(21, 'in-progress', '/worktree/21', 'issue-21', 2);
+      await manager.recordTokenUsage(20, 1000);
+      await manager.recordTokenUsage(21, 2000);
+
+      await manager.pruneIssue(20);
+
+      const state = manager.getState();
+      expect(state.issues[20]).toBeUndefined();
+      expect(state.issues[21]).toBeDefined();
+      expect(state.tokenUsage.byIssue[20]).toBeUndefined();
+      expect(state.tokenUsage.byIssue[21]).toBe(2000);
+    });
+
+    it('should throw when called before load', async () => {
+      const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+
+      await expect(manager.pruneIssue(1)).rejects.toThrow('Fleet checkpoint not loaded');
+    });
+  });
 });
