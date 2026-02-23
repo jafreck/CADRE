@@ -28,7 +28,7 @@ function asArray(value: unknown): unknown[] {
 }
 
 function mapPRState(raw: Record<string, unknown>): { state: 'open' | 'closed' | 'merged'; merged: boolean } {
-  if (raw.merged_at || raw.merged === true) {
+  if (raw.merged_at || raw.merged === true || raw.state === 'merged') {
     return { state: 'merged', merged: true };
   }
   return { state: asString(raw.state) === 'closed' ? 'closed' : 'open', merged: false };

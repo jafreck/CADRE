@@ -68,7 +68,7 @@ describe('AzureDevOpsProvider – getPullRequest state and merged', () => {
     expect(pr.merged).toBe(false);
   });
 
-  it('returns state "closed" and merged true when ADO status is "completed"', async () => {
+  it('returns state "merged" and merged true when ADO status is "completed"', async () => {
     mockFetch(authResponse, {
       pullRequestId: 2,
       title: 'Completed PR',
@@ -80,7 +80,7 @@ describe('AzureDevOpsProvider – getPullRequest state and merged', () => {
     await provider.connect();
     const pr = await provider.getPullRequest(2);
 
-    expect(pr.state).toBe('closed');
+    expect(pr.state).toBe('merged');
     expect(pr.merged).toBe(true);
   });
 
@@ -169,7 +169,7 @@ describe('AzureDevOpsProvider – listPullRequests state and merged', () => {
     expect(prs[0].merged).toBe(false);
   });
 
-  it('maps "completed" PRs to state "closed" and merged true', async () => {
+  it('maps "completed" PRs to state "merged" and merged true', async () => {
     mockFetch(authResponse, {
       value: [
         {
@@ -186,7 +186,7 @@ describe('AzureDevOpsProvider – listPullRequests state and merged', () => {
     const prs = await provider.listPullRequests();
 
     expect(prs).toHaveLength(1);
-    expect(prs[0].state).toBe('closed');
+    expect(prs[0].state).toBe('merged');
     expect(prs[0].merged).toBe(true);
   });
 
@@ -243,7 +243,7 @@ describe('AzureDevOpsProvider – listPullRequests state and merged', () => {
 
     expect(prs).toHaveLength(3);
     expect(prs[0]).toMatchObject({ number: 20, state: 'open', merged: false });
-    expect(prs[1]).toMatchObject({ number: 21, state: 'closed', merged: true });
+    expect(prs[1]).toMatchObject({ number: 21, state: 'merged', merged: true });
     expect(prs[2]).toMatchObject({ number: 22, state: 'closed', merged: false });
   });
 

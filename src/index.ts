@@ -158,7 +158,7 @@ program
     try {
       const config = await loadConfig(opts.config);
       const runtime = new CadreRuntime(config);
-      await runtime.pruneWorktrees(opts.dryRun);
+      await runtime.cleanup(opts.dryRun);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));
