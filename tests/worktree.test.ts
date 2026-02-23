@@ -165,6 +165,8 @@ describe('WorktreeManager', () => {
       const result = await manager.provision(42, 'my issue', true);
       expect(result.exists).toBe(true);
       expect(result.issueNumber).toBe(42);
+      // No ls-remote call should be made when worktree already exists
+      expect(mockGit.raw).not.toHaveBeenCalledWith(expect.arrayContaining(['ls-remote']));
     });
 
     it('should throw RemoteBranchMissingError when resume=true and remote branch is absent', async () => {
