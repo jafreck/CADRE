@@ -15,6 +15,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12",
     "zod": "^3.23",
+    "zod-to-json-schema": "^3.23",
     "commander": "^12",
     "chalk": "^5",
     "ora": "^8",

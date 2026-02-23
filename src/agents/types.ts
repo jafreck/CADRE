@@ -281,4 +281,5 @@ export interface AgentContext {
   inputFiles: string[];
   outputPath: string;
   payload?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
 }

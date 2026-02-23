@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { GateResult, PhaseResult } from '../src/agents/types.js';
+import type { AgentContext, GateResult, PhaseResult } from '../src/agents/types.js';
 
 describe('GateResult', () => {
   it('should accept status pass with empty arrays', () => {
@@ -111,5 +111,72 @@ describe('PhaseResult with gateResult', () => {
     expect(result.duration).toBe(5000);
     expect(result.tokenUsage).toBe(1234);
     expect(result.outputPath).toBe('/tmp/output.md');
+  });
+});
+
+describe('AgentContext outputSchema field', () => {
+  const baseContext: AgentContext = {
+    agent: 'issue-analyst',
+    issueNumber: 42,
+    projectName: 'my-project',
+    repository: 'owner/repo',
+    worktreePath: '/tmp/worktree',
+    phase: 1,
+    config: { commands: { build: 'npm run build', test: 'npm test' } },
+    inputFiles: [],
+    outputPath: '/tmp/output.md',
+  };
+
+  it('should accept AgentContext without outputSchema (backward compatible)', () => {
+    const ctx: AgentContext = { ...baseContext };
+    expect(ctx.outputSchema).toBeUndefined();
+  });
+
+  it('should accept AgentContext with outputSchema set to an empty object', () => {
+    const ctx: AgentContext = { ...baseContext, outputSchema: {} };
+    expect(ctx.outputSchema).toBeDefined();
+    expect(ctx.outputSchema).toEqual({});
+  });
+
+  it('should accept AgentContext with a JSON Schema object as outputSchema', () => {
+    const schema: Record<string, unknown> = {
+      type: 'object',
+      properties: {
+        verdict: { type: 'string', enum: ['pass', 'fail'] },
+        summary: { type: 'string' },
+      },
+      required: ['verdict', 'summary'],
+    };
+    const ctx: AgentContext = { ...baseContext, outputSchema: schema };
+    expect(ctx.outputSchema).toBeDefined();
+    expect(ctx.outputSchema?.['type']).toBe('object');
+    expect(ctx.outputSchema?.['required']).toEqual(['verdict', 'summary']);
+  });
+
+  it('should accept outputSchema with nested properties', () => {
+    const schema: Record<string, unknown> = {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: { type: 'object', properties: { id: { type: 'string' } } },
+        },
+      },
+    };
+    const ctx: AgentContext = { ...baseContext, outputSchema: schema };
+    expect(ctx.outputSchema?.['properties']).toBeDefined();
+  });
+
+  it('should preserve all other AgentContext fields when outputSchema is set', () => {
+    const ctx: AgentContext = {
+      ...baseContext,
+      taskId: 'task-001',
+      outputSchema: { type: 'object' },
+    };
+    expect(ctx.agent).toBe('issue-analyst');
+    expect(ctx.issueNumber).toBe(42);
+    expect(ctx.projectName).toBe('my-project');
+    expect(ctx.taskId).toBe('task-001');
+    expect(ctx.outputSchema).toEqual({ type: 'object' });
   });
 });
