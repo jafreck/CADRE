@@ -837,6 +837,36 @@ describe('FleetOrchestrator — codeDoneNoPR aggregation', () => {
     expect(result.failedIssues).toHaveLength(1);
     expect(result.codeDoneNoPR).toHaveLength(1);
   });
+
+  it('does not add to prsCreated when prCreated is true but pr is undefined', async () => {
+    // Guards the JSDoc contract: "When true, `pr` holds the PR details."
+    // If pr is unexpectedly absent, the issue should not appear in prsCreated.
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 6,
+        issueTitle: 'Issue 6',
+        success: true,
+        codeComplete: true,
+        prCreated: true,
+        pr: undefined, // inconsistent state: prCreated=true but pr missing
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 100,
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(6)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config, issues, worktreeManager as any, launcher as any, platform as any, logger as any, notifications,
+    );
+    const result = await fleet.run();
+
+    expect(result.prsCreated).toHaveLength(0);
+  });
 });
 
 describe('FleetOrchestrator — checkpoint status determination', () => {

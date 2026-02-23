@@ -45,7 +45,9 @@ export interface IssueResult {
   issueNumber: number;
   issueTitle: string;
   success: boolean;
+  /** True when code changes were committed, regardless of PR outcome. */
   codeComplete: boolean;
+  /** True when a pull request was successfully opened. When true, `pr` holds the PR details. */
   prCreated: boolean;
   phases: PhaseResult[];
   pr?: PullRequestInfo;
