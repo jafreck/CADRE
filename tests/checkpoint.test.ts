@@ -108,6 +108,68 @@ describe('CheckpointManager', () => {
     expect(state.budgetExceeded).toBeUndefined();
   });
 
+  it('should initialize gateResults as empty object', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    const state = await manager.load('42');
+    expect(state.gateResults).toEqual({});
+  });
+
+  it('should record a gate result for a phase', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordGateResult(1, { status: 'pass', warnings: [], errors: [] });
+
+    const state = manager.getState();
+    expect(state.gateResults?.[1]).toEqual({ status: 'pass', warnings: [], errors: [] });
+  });
+
+  it('should record gate results for multiple phases independently', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordGateResult(1, { status: 'pass', warnings: [], errors: [] });
+    await manager.recordGateResult(2, { status: 'warn', warnings: ['slow test'], errors: [] });
+    await manager.recordGateResult(3, { status: 'fail', warnings: [], errors: ['no diff'] });
+
+    const state = manager.getState();
+    expect(state.gateResults?.[1]?.status).toBe('pass');
+    expect(state.gateResults?.[2]?.status).toBe('warn');
+    expect(state.gateResults?.[3]?.status).toBe('fail');
+  });
+
+  it('should overwrite existing gate result when called again for the same phase', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordGateResult(1, { status: 'fail', warnings: [], errors: ['bad output'] });
+    await manager.recordGateResult(1, { status: 'pass', warnings: [], errors: [] });
+
+    const state = manager.getState();
+    expect(state.gateResults?.[1]?.status).toBe('pass');
+  });
+
+  it('should persist gate results across reload', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordGateResult(2, { status: 'warn', warnings: ['low coverage'], errors: [] });
+
+    const manager2 = new CheckpointManager(tempDir, mockLogger);
+    const state2 = await manager2.load('42');
+
+    expect(state2.gateResults?.[2]?.status).toBe('warn');
+    expect(state2.gateResults?.[2]?.warnings).toContain('low coverage');
+  });
+
+  it('should throw when recordGateResult is called before load', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+
+    await expect(
+      manager.recordGateResult(1, { status: 'pass', warnings: [], errors: [] }),
+    ).rejects.toThrow('Checkpoint not loaded');
+  });
+
   it('CheckpointState should accept budgetExceeded as optional boolean', () => {
     const base: CheckpointState = {
       issueNumber: 1,

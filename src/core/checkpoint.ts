@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { atomicWriteJSON, readJSON, exists, ensureDir } from '../util/fs.js';
 import { Logger } from '../logging/logger.js';
+import { GateResult } from '../agents/types.js';
 
 // ── Per-Issue Checkpoint ──
 
@@ -21,6 +22,7 @@ export interface CheckpointState {
   failedTasks: FailedTask[];
   blockedTasks: string[];
   phaseOutputs: Record<number, string>;
+  gateResults?: Record<number, GateResult>;
   tokenUsage: {
     total: number;
     byPhase: Record<number, number>;
@@ -130,6 +132,7 @@ export class CheckpointManager {
       failedTasks: [],
       blockedTasks: [],
       phaseOutputs: {},
+      gateResults: {},
       tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
       worktreePath: '',
       branchName: '',
@@ -247,6 +250,16 @@ export class CheckpointManager {
       (this.state.tokenUsage.byPhase[phase] ?? 0) + tokens;
     this.state.tokenUsage.byAgent[agent] =
       (this.state.tokenUsage.byAgent[agent] ?? 0) + tokens;
+    await this.save();
+  }
+
+  /**
+   * Record the gate result for a specific phase transition.
+   */
+  async recordGateResult(phaseId: number, result: GateResult): Promise<void> {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+    if (!this.state.gateResults) this.state.gateResults = {};
+    this.state.gateResults[phaseId] = result;
     await this.save();
   }
 

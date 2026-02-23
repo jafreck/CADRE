@@ -1,0 +1,393 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  AnalysisToPlanningGate,
+  PlanningToImplementationGate,
+  ImplementationToIntegrationGate,
+  IntegrationToPRGate,
+} from '../src/core/phase-gate.js';
+
+// Mock simple-git for ImplementationToIntegrationGate tests
+const mockDiff = vi.fn();
+const mockGit = { diff: mockDiff };
+
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit),
+}));
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function makeContext(progressDir: string, worktreePath = '/tmp/worktree', baseCommit?: string) {
+  return { progressDir, worktreePath, baseCommit };
+}
+
+const VALID_ANALYSIS = `# Analysis
+## Requirements
+- Implement feature X
+## Change Type
+feat
+## Scope
+src/core
+`;
+
+const VALID_SCOUT = `# Scout Report
+## Relevant Files
+- src/core/checkpoint.ts
+- src/agents/types.ts
+`;
+
+const VALID_PLAN = `# Implementation Plan
+
+## Task: task-001 - First Task
+**Description:** Do the first thing.
+**Files:** src/core/first.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+- It works
+`;
+
+const VALID_INTEGRATION_REPORT = `# Integration Report
+## Build Result
+Build succeeded.
+## Test Result
+All tests passed.
+`;
+
+// ── AnalysisToPlanningGate ────────────────────────────────────────────────────
+
+describe('AnalysisToPlanningGate', () => {
+  let tempDir: string;
+  let gate: AnalysisToPlanningGate;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `cadre-gate-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    gate = new AnalysisToPlanningGate();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('should pass with valid analysis.md and scout-report.md', async () => {
+    await writeFile(join(tempDir, 'analysis.md'), VALID_ANALYSIS);
+    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should fail when analysis.md is missing', async () => {
+    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('analysis.md is missing'))).toBe(true);
+  });
+
+  it('should fail when scout-report.md is missing', async () => {
+    await writeFile(join(tempDir, 'analysis.md'), VALID_ANALYSIS);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('scout-report.md is missing'))).toBe(true);
+  });
+
+  it('should fail when analysis.md has no requirements section', async () => {
+    await writeFile(join(tempDir, 'analysis.md'), '## Change Type\nfeat\n## Scope\nsrc/\n');
+    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('requirements'))).toBe(true);
+  });
+
+  it('should fail when analysis.md has no change type', async () => {
+    await writeFile(
+      join(tempDir, 'analysis.md'),
+      '## Requirements\n- Something\n## Scope\nsrc/\n',
+    );
+    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('change type'))).toBe(true);
+  });
+
+  it('should fail when analysis.md has no scope', async () => {
+    await writeFile(
+      join(tempDir, 'analysis.md'),
+      '## Requirements\n- Something\n## Change Type\nfeat\n',
+    );
+    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('scope'))).toBe(true);
+  });
+
+  it('should fail when scout-report.md lists no file paths', async () => {
+    await writeFile(join(tempDir, 'analysis.md'), VALID_ANALYSIS);
+    await writeFile(join(tempDir, 'scout-report.md'), '# Scout Report\nNo files found.\n');
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('relevant files'))).toBe(true);
+  });
+
+  it('should accumulate multiple errors when both files have problems', async () => {
+    await writeFile(join(tempDir, 'analysis.md'), '# Empty\n');
+    await writeFile(join(tempDir, 'scout-report.md'), '# No paths here\n');
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.length).toBeGreaterThan(1);
+  });
+});
+
+// ── PlanningToImplementationGate ──────────────────────────────────────────────
+
+describe('PlanningToImplementationGate', () => {
+  let tempDir: string;
+  let gate: PlanningToImplementationGate;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `cadre-gate-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    gate = new PlanningToImplementationGate();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('should pass with a valid implementation plan', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), VALID_PLAN);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should fail when implementation-plan.md is missing', async () => {
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('implementation-plan.md is missing'))).toBe(true);
+  });
+
+  it('should fail when the plan contains no tasks', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), '# Plan\nNo tasks here.\n');
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('no tasks'))).toBe(true);
+  });
+
+  it('should fail when a task is missing a description', async () => {
+    const plan = `# Plan
+## Task: task-001 - My Task
+**Files:** src/foo.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+- Works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('missing a description'))).toBe(true);
+  });
+
+  it('should fail when a task has no files', async () => {
+    // Omit the **Files:** field entirely so the parser finds no files
+    const plan = `# Plan
+## Task: task-001 - My Task
+**Description:** Do something.
+**Dependencies:** none
+**Acceptance Criteria:**
+- Works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('does not list any files'))).toBe(true);
+  });
+
+  it('should fail when a task has no acceptance criteria', async () => {
+    const plan = `# Plan
+## Task: task-001 - My Task
+**Description:** Do something.
+**Files:** src/foo.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('no acceptance criteria'))).toBe(true);
+  });
+
+  it('should fail when tasks have a circular dependency', async () => {
+    const plan = `# Plan
+## Task: task-001 - First
+**Description:** Do first.
+**Files:** src/first.ts
+**Dependencies:** task-002
+**Acceptance Criteria:**
+- Works
+
+## Task: task-002 - Second
+**Description:** Do second.
+**Files:** src/second.ts
+**Dependencies:** task-001
+**Acceptance Criteria:**
+- Works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('dependency cycle'))).toBe(true);
+  });
+
+  it('should pass with multiple valid tasks and linear dependencies', async () => {
+    const plan = `# Plan
+## Task: task-001 - First
+**Description:** Do first.
+**Files:** src/first.ts
+**Dependencies:** none
+**Acceptance Criteria:**
+- Works
+
+## Task: task-002 - Second
+**Description:** Do second.
+**Files:** src/second.ts
+**Dependencies:** task-001
+**Acceptance Criteria:**
+- Also works
+`;
+    await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ── ImplementationToIntegrationGate ──────────────────────────────────────────
+
+describe('ImplementationToIntegrationGate', () => {
+  let gate: ImplementationToIntegrationGate;
+
+  beforeEach(() => {
+    gate = new ImplementationToIntegrationGate();
+    mockDiff.mockReset();
+  });
+
+  it('should pass when there is a non-empty HEAD diff', async () => {
+    mockDiff.mockResolvedValue('diff --git a/src/foo.ts ...\n+added line');
+
+    const result = await gate.validate(makeContext('/tmp/worktree'));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should pass when HEAD diff is empty but staged diff is non-empty', async () => {
+    mockDiff
+      .mockResolvedValueOnce('') // HEAD diff
+      .mockResolvedValueOnce('diff --git a/src/bar.ts ...\n+staged line'); // --cached
+
+    const result = await gate.validate(makeContext('/tmp/worktree'));
+    expect(result.status).toBe('pass');
+  });
+
+  it('should fail when both HEAD diff and staged diff are empty', async () => {
+    mockDiff.mockResolvedValue('');
+
+    const result = await gate.validate(makeContext('/tmp/worktree'));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('No file changes detected'))).toBe(true);
+  });
+
+  it('should use baseCommit range when provided', async () => {
+    mockDiff.mockResolvedValue('diff content');
+
+    const result = await gate.validate(makeContext('/tmp/worktree', '/tmp/worktree', 'abc123'));
+    expect(result.status).toBe('pass');
+    expect(mockDiff).toHaveBeenCalledWith(['abc123..HEAD']);
+  });
+
+  it('should fail with descriptive error when git throws', async () => {
+    mockDiff.mockRejectedValue(new Error('git error'));
+
+    const result = await gate.validate(makeContext('/tmp/worktree'));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('Failed to compute git diff'))).toBe(true);
+  });
+});
+
+// ── IntegrationToPRGate ───────────────────────────────────────────────────────
+
+describe('IntegrationToPRGate', () => {
+  let tempDir: string;
+  let gate: IntegrationToPRGate;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `cadre-gate-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    gate = new IntegrationToPRGate();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('should pass with a valid integration-report.md', async () => {
+    await writeFile(join(tempDir, 'integration-report.md'), VALID_INTEGRATION_REPORT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('pass');
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should fail when integration-report.md is missing', async () => {
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('integration-report.md is missing'))).toBe(true);
+  });
+
+  it('should fail when report has no build section', async () => {
+    await writeFile(
+      join(tempDir, 'integration-report.md'),
+      '# Integration Report\n## Test Result\nAll tests passed.\n',
+    );
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('build result section'))).toBe(true);
+  });
+
+  it('should fail when report has no test section', async () => {
+    await writeFile(
+      join(tempDir, 'integration-report.md'),
+      '# Integration Report\n## Build Result\nBuild succeeded.\n',
+    );
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('test result section'))).toBe(true);
+  });
+
+  it('should fail with multiple errors when both sections are missing', async () => {
+    await writeFile(join(tempDir, 'integration-report.md'), '# Integration Report\nNothing here.\n');
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.length).toBe(2);
+  });
+});

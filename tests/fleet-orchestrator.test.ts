@@ -88,6 +88,7 @@ vi.mock('../src/budget/token-tracker.js', () => ({
 vi.mock('../src/budget/cost-estimator.js', () => ({
   CostEstimator: vi.fn().mockImplementation(() => ({
     estimate: vi.fn().mockReturnValue(0.01),
+    estimateIssueTokens: vi.fn().mockReturnValue(5000),
   })),
 }));
 
