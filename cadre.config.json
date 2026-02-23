@@ -2,7 +2,7 @@
   "projectName": "cadre",
   "platform": "github",
   "repository": "jafreck/CADRE",
-  "repoPath": "/Users/jacobfreck/Source/cadre",
+  "repoPath": ".",
   "baseBranch": "main",
   "issues": {
     "query": {
