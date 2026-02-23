@@ -4,6 +4,9 @@ import { NotificationManager } from '../src/notifications/manager.js';
 import * as fsUtils from '../src/util/fs.js';
 import { TokenTracker } from '../src/budget/token-tracker.js';
 import { ReportWriter } from '../src/reporting/report-writer.js';
+import { ContextBuilder } from '../src/agents/context-builder.js';
+import { ResultParser } from '../src/agents/result-parser.js';
+import { RetryExecutor } from '../src/execution/retry.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
@@ -1119,5 +1122,187 @@ describe('IssueOrchestrator – token record import on resume', () => {
 
     expect(result.success).toBe(true);
     expect(result.issueNumber).toBe(42);
+  });
+});
+
+describe('IssueOrchestrator – PR body Token Usage', () => {
+  let config: CadreConfig;
+  let issue: IssueDetail;
+  let worktree: WorktreeInfo;
+  let logger: Logger;
+  let platform: ReturnType<typeof makePlatform>;
+  let launcher: ReturnType<typeof makeLauncher>;
+
+  beforeEach(() => {
+    config = makeConfig();
+    issue = makeIssue();
+    worktree = makeWorktree();
+    logger = makeLogger();
+    platform = makePlatform();
+    launcher = makeLauncher();
+    vi.clearAllMocks();
+  });
+
+  it('should include "## Token Usage" in PR body when cost data is available', async () => {
+    // Phase 5 runs; phases 1–4 are pre-completed
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 5),
+    });
+
+    // RetryExecutor calls fn directly (no delay/retry)
+    vi.mocked(RetryExecutor).mockImplementationOnce(() => ({
+      execute: vi.fn().mockImplementation(async (opts: { fn: (attempt: number) => Promise<unknown> }) => {
+        const result = await opts.fn(1);
+        return { success: true, result, attempts: 1, recoveryUsed: false };
+      }),
+    }) as never);
+
+    // ContextBuilder provides a context path for the pr-composer
+    vi.mocked(ContextBuilder).mockImplementationOnce(() => ({
+      buildForPRComposer: vi.fn().mockResolvedValue('/tmp/pr-composer-context.json'),
+    }) as never);
+
+    // launcher returns a successful pr-composer result
+    launcher.launchAgent = vi.fn().mockResolvedValue({
+      agent: 'pr-composer',
+      success: true,
+      exitCode: 0,
+      timedOut: false,
+      duration: 100,
+      stdout: '',
+      stderr: '',
+      tokenUsage: { total: 100, input: 75, output: 25 },
+      outputPath: '/tmp/pr-content.md',
+      outputExists: true,
+    });
+
+    // ResultParser returns PR content
+    vi.mocked(ResultParser).mockImplementationOnce(() => ({
+      parsePRContent: vi.fn().mockResolvedValue({
+        title: 'Fix: Test PR',
+        body: 'This is the PR body.',
+        labels: [],
+      }),
+    }) as never);
+
+    // Provide token records so costReport is built with non-zero data
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(1000),
+      record: vi.fn(),
+      importRecords: vi.fn(),
+      getRecords: vi.fn().mockReturnValue([
+        { issueNumber: 42, agent: 'test-agent', phase: 1, tokens: 1000, input: 750, output: 250, timestamp: '2024-01-01T00:00:00Z' },
+      ]),
+      getByPhase: vi.fn().mockReturnValue({ 1: 1000 }),
+      getSummary: vi.fn().mockReturnValue({ total: 1000, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 1 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    config.pullRequest.autoCreate = true;
+    platform.createPullRequest = vi.fn().mockResolvedValue({
+      number: 1,
+      url: 'https://github.com/owner/repo/pull/1',
+      title: 'Fix: Test PR (#42)',
+      branch: 'cadre/issue-42',
+      state: 'open',
+    });
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(platform.createPullRequest).toHaveBeenCalledOnce();
+    const prBody = vi.mocked(platform.createPullRequest).mock.calls[0]?.[0]?.body as string;
+    expect(prBody).toContain('## Token Usage');
+  });
+
+  it('should NOT include "## Token Usage" in PR body when cost report is unavailable', async () => {
+    // Phase 5 runs; phases 1–4 are pre-completed
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 5),
+    });
+
+    // RetryExecutor calls fn directly
+    vi.mocked(RetryExecutor).mockImplementationOnce(() => ({
+      execute: vi.fn().mockImplementation(async (opts: { fn: (attempt: number) => Promise<unknown> }) => {
+        const result = await opts.fn(1);
+        return { success: true, result, attempts: 1, recoveryUsed: false };
+      }),
+    }) as never);
+
+    // ContextBuilder.buildForPRComposer throws so costReport remains undefined,
+    // but the error is caught non-critically; use a separate override to simulate
+    // no cost data by making buildCostReportData throw inside executePRComposition.
+    // Achieve this by having getRecords return [] and getTotal return 0 (default mock).
+    vi.mocked(ContextBuilder).mockImplementationOnce(() => ({
+      buildForPRComposer: vi.fn().mockResolvedValue('/tmp/pr-composer-context.json'),
+    }) as never);
+
+    launcher.launchAgent = vi.fn().mockResolvedValue({
+      agent: 'pr-composer',
+      success: true,
+      exitCode: 0,
+      timedOut: false,
+      duration: 100,
+      stdout: '',
+      stderr: '',
+      tokenUsage: null,
+      outputPath: '/tmp/pr-content.md',
+      outputExists: true,
+    });
+
+    vi.mocked(ResultParser).mockImplementationOnce(() => ({
+      parsePRContent: vi.fn().mockResolvedValue({
+        title: 'Fix: Test PR',
+        body: 'Clean PR body without cost.',
+        labels: [],
+      }),
+    }) as never);
+
+    // TokenTracker with no records → costReport is built but totalTokens = 0.
+    // The cost report is still non-null, so the section IS added even at 0 tokens.
+    // To truly have no costReport we make buildCostReportData throw.
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(0),
+      record: vi.fn(),
+      importRecords: vi.fn(),
+      getRecords: vi.fn().mockImplementation(() => { throw new Error('no records'); }),
+      getByPhase: vi.fn().mockReturnValue({}),
+      getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    config.pullRequest.autoCreate = true;
+    platform.createPullRequest = vi.fn().mockResolvedValue({
+      number: 1,
+      url: 'https://github.com/owner/repo/pull/1',
+      title: 'Fix: Test PR (#42)',
+      branch: 'cadre/issue-42',
+      state: 'open',
+    });
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(platform.createPullRequest).toHaveBeenCalledOnce();
+    const prBody = vi.mocked(platform.createPullRequest).mock.calls[0]?.[0]?.body as string;
+    expect(prBody).not.toContain('## Token Usage');
   });
 });
