@@ -37,7 +37,7 @@ export const AgentConfigSchema = z.object({
   copilot: z
     .object({
       cliCommand: z.string().default('copilot'),
-      agentDir: z.string().default('.github/agents'),
+      agentDir: z.string().default('.cadre/agents'),
       costOverrides: z
         .record(
           z.string(),
@@ -189,7 +189,7 @@ export const CadreConfigSchema = z.object({
     .object({
       cliCommand: z.string().default('copilot'),
       model: z.string().default('claude-sonnet-4.6'),
-      agentDir: z.string().default('.github/agents'),
+      agentDir: z.string().default('.cadre/agents'),
       timeout: z.number().int().default(300_000),
       costOverrides: z
         .record(
