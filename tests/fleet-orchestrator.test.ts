@@ -958,6 +958,233 @@ describe('FleetOrchestrator — checkpoint status determination', () => {
   });
 });
 
+describe('FleetOrchestrator — writeFleetProgress passes code-complete-no-pr status', () => {
+  let notifications: NotificationManager;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as unknown as NotificationManager;
+  });
+
+  it('passes code-complete-no-pr status from checkpoint to FleetProgressWriter.write', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Issue 1',
+        success: true,
+        codeComplete: true,
+        prCreated: false,
+        pr: undefined,
+        phases: [1],
+        totalDuration: 100,
+        tokenUsage: 100,
+      }),
+    }));
+
+    const { FleetCheckpointManager: FCM } = await import('../src/core/checkpoint.js');
+    (FCM as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      getIssueStatus: vi.fn().mockReturnValue({ status: 'code-complete-no-pr', lastPhase: 5 }),
+    }));
+
+    const mockWrite = vi.fn().mockResolvedValue(undefined);
+    const { FleetProgressWriter: FPW } = await import('../src/core/progress.js');
+    (FPW as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      write: mockWrite,
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config, issues, worktreeManager as any, launcher as any, platform as any, logger as any, notifications,
+    );
+    await fleet.run();
+
+    // writeFleetProgress is called once at the end; find the call where issueInfos is passed
+    const writeCalls = mockWrite.mock.calls as unknown[][];
+    expect(writeCalls.length).toBeGreaterThan(0);
+
+    // The final writeFleetProgress call passes IssueProgressInfo with status from checkpoint
+    const lastCall = writeCalls[writeCalls.length - 1];
+    const issueInfos = lastCall[0] as Array<{ issueNumber: number; status: string }>;
+    const issueInfo = issueInfos.find((i) => i.issueNumber === 1);
+    expect(issueInfo).toBeDefined();
+    expect(issueInfo!.status).toBe('code-complete-no-pr');
+  });
+
+  it('passes not-started status when checkpoint has no entry for the issue', async () => {
+    const { FleetCheckpointManager: FCM } = await import('../src/core/checkpoint.js');
+    (FCM as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      getIssueStatus: vi.fn().mockReturnValue(null),
+    }));
+
+    const mockWrite = vi.fn().mockResolvedValue(undefined);
+    const { FleetProgressWriter: FPW } = await import('../src/core/progress.js');
+    (FPW as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      write: mockWrite,
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config, issues, worktreeManager as any, launcher as any, platform as any, logger as any, notifications,
+    );
+    await fleet.run();
+
+    const writeCalls = mockWrite.mock.calls as unknown[][];
+    const lastCall = writeCalls[writeCalls.length - 1];
+    const issueInfos = lastCall[0] as Array<{ issueNumber: number; status: string }>;
+    const issueInfo = issueInfos.find((i) => i.issueNumber === 1);
+    expect(issueInfo).toBeDefined();
+    expect(issueInfo!.status).toBe('not-started');
+  });
+
+  it('fleet completion appendEvent message includes codeDoneNoPR count', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Issue 1',
+        success: true,
+        codeComplete: true,
+        prCreated: false,
+        pr: undefined,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 100,
+      }),
+    }));
+
+    const mockAppendEvent = vi.fn().mockResolvedValue(undefined);
+    const { FleetProgressWriter: FPW } = await import('../src/core/progress.js');
+    (FPW as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      write: vi.fn().mockResolvedValue(undefined),
+      appendEvent: mockAppendEvent,
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config, issues, worktreeManager as any, launcher as any, platform as any, logger as any, notifications,
+    );
+    await fleet.run();
+
+    // Find the fleet completion event call
+    const appendCalls = mockAppendEvent.mock.calls as [string][];
+    const completionCall = appendCalls.find(([msg]) => msg.includes('Fleet completed'));
+    expect(completionCall).toBeDefined();
+    // The message should include the codeDoneNoPR count (1 in this case)
+    expect(completionCall![0]).toMatch(/1 code-done-no-pr/);
+  });
+
+  it('fleet completion appendEvent message includes 0 codeDoneNoPR when no such issues', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Issue 1',
+        success: true,
+        codeComplete: true,
+        prCreated: true,
+        pr: { number: 42, url: 'https://github.com/owner/repo/pull/42', title: 'PR', headBranch: 'cadre/issue-1', baseBranch: 'main' },
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 100,
+      }),
+    }));
+
+    const mockAppendEvent = vi.fn().mockResolvedValue(undefined);
+    const { FleetProgressWriter: FPW } = await import('../src/core/progress.js');
+    (FPW as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      write: vi.fn().mockResolvedValue(undefined),
+      appendEvent: mockAppendEvent,
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config, issues, worktreeManager as any, launcher as any, platform as any, logger as any, notifications,
+    );
+    await fleet.run();
+
+    const appendCalls = mockAppendEvent.mock.calls as [string][];
+    const completionCall = appendCalls.find(([msg]) => msg.includes('Fleet completed'));
+    expect(completionCall).toBeDefined();
+    expect(completionCall![0]).toMatch(/0 code-done-no-pr/);
+  });
+
+  it('writeFleetProgressIncremental passes code-complete-no-pr status from checkpoint', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Issue 1',
+        success: true,
+        codeComplete: true,
+        prCreated: false,
+        pr: undefined,
+        phases: [1],
+        totalDuration: 100,
+        tokenUsage: 100,
+      }),
+    }));
+
+    const { FleetCheckpointManager: FCM } = await import('../src/core/checkpoint.js');
+    (FCM as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      // After setIssueStatus is called with 'code-complete-no-pr', getIssueStatus returns it
+      getIssueStatus: vi.fn().mockReturnValue({ status: 'code-complete-no-pr', lastPhase: 5 }),
+    }));
+
+    const mockWrite = vi.fn().mockResolvedValue(undefined);
+    const { FleetProgressWriter: FPW } = await import('../src/core/progress.js');
+    (FPW as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      write: mockWrite,
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+
+    const fleet = new FleetOrchestrator(
+      config, issues, worktreeManager as any, launcher as any, platform as any, logger as any, notifications,
+    );
+    await fleet.run();
+
+    // writeFleetProgressIncremental is called during processIssue; check any write call
+    expect(mockWrite).toHaveBeenCalled();
+    const allCalls = mockWrite.mock.calls as unknown[][];
+    // At least one call should have code-complete-no-pr status for issue 1
+    const callWithCodeCompleteNoPR = allCalls.find((args) => {
+      const issueInfos = args[0] as Array<{ issueNumber: number; status: string }>;
+      return issueInfos.some((i) => i.issueNumber === 1 && i.status === 'code-complete-no-pr');
+    });
+    expect(callWithCodeCompleteNoPR).toBeDefined();
+  });
+});
+
 describe('FleetOrchestrator — fleet completion event includes codeDoneNoPR count', () => {
   let notifications: NotificationManager;
 
