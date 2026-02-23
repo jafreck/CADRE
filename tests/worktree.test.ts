@@ -319,6 +319,8 @@ describe('WorktreeManager', () => {
       expect(mockGit.raw).toHaveBeenCalledWith([
         'worktree',
         'add',
+        '-B',
+        'cadre/issue-42',
         '/tmp/worktrees/issue-42',
         'origin/cadre/issue-42',
       ]);
