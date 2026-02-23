@@ -39,6 +39,16 @@ export function renderFleetStatus(
     copilotConfig ?? { cliCommand: 'copilot', model: 'claude-sonnet-4.6', agentDir: '.github/agents', timeout: 300_000 },
   );
 
+  const totalTokens = state.tokenUsage.total;
+  const totalCostEst = estimator.estimate(totalTokens, model ?? copilotConfig?.model);
+  const totalCostStr = totalTokens > 0 ? `$${totalCostEst.totalCost.toFixed(4)}` : '$0.0000';
+  const header = [
+    `Project: ${state.projectName}`,
+    `Total Tokens: ${totalTokens.toLocaleString()}`,
+    `Estimated Cost: ${totalCostStr}`,
+    `Last Checkpoint: ${formatElapsed(state.lastCheckpoint)}`,
+  ].join('  |  ');
+
   const rows: string[][] = [];
   for (const [issueNumStr, issue] of Object.entries(state.issues)) {
     const issueNum = Number(issueNumStr);
@@ -60,19 +70,18 @@ export function renderFleetStatus(
   }
 
   const headers = ['Issue', 'Title', 'Status', 'Phase', 'Tokens', 'Cost', 'Branch', 'Updated'];
-  return renderTable(headers, rows);
+  return header + '\n\n' + renderTable(headers, rows);
 }
 
 /**
  * Renders a per-issue phase breakdown table as a string.
- * Gate results only appear when verbose=true.
+ * Includes gate results and errors/warnings below the table.
  * No file I/O performed — all data passed as parameters.
  */
 export function renderIssueDetail(
   issueNumber: number,
   issueStatus: FleetIssueStatus,
   checkpoint: CheckpointState,
-  verbose = false,
 ): string {
   const rows: string[][] = [];
   for (let i = 0; i < phaseNames.length; i++) {
@@ -87,19 +96,24 @@ export function renderIssueDetail(
     } else {
       statusEmoji = '⏳';
     }
+    const gate = checkpoint.gateResults?.[phaseNum];
+    const gateStr = gate
+      ? gate.status === 'pass' ? '✅ pass' : gate.status === 'warn' ? '⚠️ warn' : '❌ fail'
+      : '—';
     rows.push([
       String(phaseNum),
       name,
       statusEmoji,
       tokens > 0 ? tokens.toLocaleString() : '—',
+      gateStr,
     ]);
   }
 
-  const headers = ['Phase', 'Name', 'Status', 'Tokens'];
+  const headers = ['Phase', 'Name', 'Status', 'Tokens', 'Gate'];
   let out = `Issue #${issueNumber}: ${issueStatus.issueTitle}\n`;
   out += renderTable(headers, rows);
 
-  if (verbose && checkpoint.gateResults) {
+  if (checkpoint.gateResults) {
     const gateEntries = Object.entries(checkpoint.gateResults);
     if (gateEntries.length > 0) {
       out += '\n\nGate Results:\n';
