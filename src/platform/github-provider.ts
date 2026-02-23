@@ -148,8 +148,9 @@ export class GitHubProvider implements PlatformProvider {
     return `Closes #${issueNumber}`;
   }
 
-  async listPRReviewComments(_prNumber: number): Promise<ReviewThread[]> {
-    throw new Error('listPRReviewComments: not yet implemented');
+  async listPRReviewComments(prNumber: number): Promise<ReviewThread[]> {
+    const raw = await this.getAPI().getPRReviewComments(prNumber);
+    return this.parseReviewThreads(prNumber, raw);
   }
 
   // ── Helpers ──
