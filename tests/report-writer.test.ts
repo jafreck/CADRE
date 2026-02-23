@@ -232,6 +232,134 @@ describe('ReportWriter', () => {
       const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
       expect(report.prsCreated).toBe(2);
     });
+
+    it('should set codeDoneNoPR to 0 when no issues have codeComplete set', () => {
+      const result = makeFleetResult({
+        issues: [
+          {
+            issueNumber: 1,
+            issueTitle: 'Issue 1',
+            success: true,
+            phases: [],
+            pr: { number: 10, url: '' },
+            totalDuration: 1000,
+            tokenUsage: 1000,
+            codeComplete: false,
+            prCreated: true,
+          },
+        ],
+      });
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+      expect(report.totals.codeDoneNoPR).toBe(0);
+    });
+
+    it('should count issues with codeComplete true and prCreated false in codeDoneNoPR', () => {
+      const result = makeFleetResult({
+        issues: [
+          {
+            issueNumber: 1,
+            issueTitle: 'Code done no PR',
+            success: true,
+            phases: [],
+            totalDuration: 1000,
+            tokenUsage: 1000,
+            codeComplete: true,
+            prCreated: false,
+          },
+          {
+            issueNumber: 2,
+            issueTitle: 'Code done with PR',
+            success: true,
+            phases: [],
+            pr: { number: 5, url: '' },
+            totalDuration: 2000,
+            tokenUsage: 500,
+            codeComplete: true,
+            prCreated: true,
+          },
+        ],
+        prsCreated: [{ number: 5, url: '' }],
+        failedIssues: [],
+        tokenUsage: {
+          total: 1500,
+          byIssue: { 1: 1000, 2: 500 },
+          byAgent: {},
+          byPhase: {},
+        },
+      });
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+      expect(report.totals.codeDoneNoPR).toBe(1);
+    });
+
+    it('should count all codeComplete-but-no-PR issues in codeDoneNoPR', () => {
+      const result = makeFleetResult({
+        issues: [
+          {
+            issueNumber: 1,
+            issueTitle: 'Code done no PR 1',
+            success: true,
+            phases: [],
+            totalDuration: 1000,
+            tokenUsage: 500,
+            codeComplete: true,
+            prCreated: false,
+          },
+          {
+            issueNumber: 2,
+            issueTitle: 'Code done no PR 2',
+            success: true,
+            phases: [],
+            totalDuration: 1000,
+            tokenUsage: 500,
+            codeComplete: true,
+            prCreated: false,
+          },
+          {
+            issueNumber: 3,
+            issueTitle: 'Failed issue',
+            success: false,
+            phases: [],
+            totalDuration: 500,
+            tokenUsage: 200,
+            codeComplete: false,
+            prCreated: false,
+            error: 'Timeout',
+          },
+        ],
+        prsCreated: [],
+        failedIssues: [{ issueNumber: 3, error: 'Timeout' }],
+        tokenUsage: {
+          total: 1200,
+          byIssue: { 1: 500, 2: 500, 3: 200 },
+          byAgent: {},
+          byPhase: {},
+        },
+      });
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+      expect(report.totals.codeDoneNoPR).toBe(2);
+    });
+
+    it('should set codeDoneNoPR to 0 when all issues have prCreated true', () => {
+      const result = makeFleetResult({
+        issues: [
+          {
+            issueNumber: 1,
+            issueTitle: 'PR created',
+            success: true,
+            phases: [],
+            pr: { number: 10, url: '' },
+            totalDuration: 2000,
+            tokenUsage: 1000,
+            codeComplete: true,
+            prCreated: true,
+          },
+        ],
+        prsCreated: [{ number: 10, url: '' }],
+        failedIssues: [],
+      });
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+      expect(report.totals.codeDoneNoPR).toBe(0);
+    });
   });
 
   describe('write', () => {
