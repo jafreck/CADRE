@@ -105,8 +105,8 @@ export class ResultParser {
     const complexityMatch = block.match(/^\*\*Complexity:\*\*\s*(simple|moderate|complex)/im);
     const complexity = (complexityMatch?.[1]?.toLowerCase() ?? 'moderate') as 'simple' | 'moderate' | 'complex';
 
-    // Parse acceptance criteria
-    const criteriaMatch = block.match(/^\*\*Acceptance Criteria:\*\*\s*([\s\S]*?)(?=\n\*\*|\n#{2,}|$)/m);
+    // Parse acceptance criteria (no `m` flag so `$` matches end-of-string, not end-of-line)
+    const criteriaMatch = block.match(/\*\*Acceptance Criteria:\*\*\s*([\s\S]*?)(?=\n\*\*|\n#{2,}|$)/);
     const criteriaStr = criteriaMatch?.[1]?.trim() ?? '';
     const acceptanceCriteria = criteriaStr
       .split('\n')
