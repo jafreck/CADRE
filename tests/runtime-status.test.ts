@@ -440,3 +440,66 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint prese
     expect(mockRenderFleetStatus).not.toHaveBeenCalled();
   });
 });
+
+describe('CadreRuntime.status() — with issueNumber, CheckpointManager.load() throws', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  const issueStatus = {
+    status: 'in-progress' as const,
+    issueTitle: 'Inaccessible issue',
+    worktreePath: '/tmp/inaccessible',
+    branchName: 'cadre/issue-8',
+    lastPhase: 1,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const fleetState = {
+    projectName: 'test-project',
+    issues: { 8: issueStatus },
+    tokenUsage: { total: 0, byIssue: {} },
+    lastCheckpoint: new Date().toISOString(),
+    resumeCount: 0,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Both fleet and issue checkpoint files exist, but load() throws
+    mockExists.mockResolvedValue(true);
+
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue(fleetState),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    MockCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockRejectedValue(new Error('EACCES: permission denied')),
+    }));
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+  });
+
+  it('prints graceful message when CheckpointManager.load() throws', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(8);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No per-issue checkpoint found for issue #8'));
+  });
+
+  it('does not call renderIssueDetail when load() throws', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(8);
+
+    expect(mockRenderIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('does not call renderFleetStatus when load() throws', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.status(8);
+
+    expect(mockRenderFleetStatus).not.toHaveBeenCalled();
+  });
+});
