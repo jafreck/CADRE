@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { AGENT_DEFINITIONS } from '../src/agents/types.js';
@@ -82,5 +82,56 @@ describe('Agent Template Files', () => {
         }
       });
     }
+  });
+
+  describe('pr-composer.md template content', () => {
+    let content: string;
+
+    beforeAll(() => {
+      content = readFileSync(join(TEMPLATES_DIR, 'pr-composer.md'), 'utf-8');
+    });
+
+    it('should instruct writing a Summary section', () => {
+      expect(content).toMatch(/##\s+Summary/i);
+    });
+
+    it('should instruct writing a Changes section', () => {
+      expect(content).toMatch(/##\s+Changes/i);
+    });
+
+    it('should instruct writing a Testing section', () => {
+      expect(content).toMatch(/##\s+Testing/i);
+    });
+
+    it('should mention payload.tokenSummary as the condition for Token Usage section', () => {
+      expect(content).toContain('payload.tokenSummary');
+    });
+
+    it('should instruct appending a Token Usage section', () => {
+      expect(content).toMatch(/##\s+Token Usage/i);
+    });
+
+    it('should instruct placing Token Usage at the end of the PR body', () => {
+      // "end" or "last" should appear near the Token Usage instructions
+      expect(content).toMatch(/end|last|after all/i);
+    });
+
+    it('should show total tokens in the Token Usage section', () => {
+      expect(content).toMatch(/total\s*tokens/i);
+    });
+
+    it('should describe a per-phase or per-agent breakdown', () => {
+      expect(content).toMatch(/byPhase|byAgent|by phase|by agent|breakdown/i);
+    });
+
+    it('should place Token Usage instructions after the standard sections', () => {
+      const summaryIdx = content.indexOf('Summary');
+      const changesIdx = content.indexOf('Changes');
+      const testingIdx = content.indexOf('Testing');
+      const tokenUsageIdx = content.indexOf('Token Usage');
+      expect(tokenUsageIdx).toBeGreaterThan(summaryIdx);
+      expect(tokenUsageIdx).toBeGreaterThan(changesIdx);
+      expect(tokenUsageIdx).toBeGreaterThan(testingIdx);
+    });
   });
 });

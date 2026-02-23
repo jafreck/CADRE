@@ -767,3 +767,142 @@ describe('IssueOrchestrator – cost report', () => {
     expect(commentArg).toMatch(/\$\d+\.\d+/); // contains a cost value
   });
 });
+
+describe('IssueOrchestrator – token record import on resume', () => {
+  let config: CadreConfig;
+  let issue: IssueDetail;
+  let worktree: WorktreeInfo;
+  let logger: Logger;
+  let platform: ReturnType<typeof makePlatform>;
+  let launcher: ReturnType<typeof makeLauncher>;
+
+  beforeEach(() => {
+    config = makeConfig();
+    issue = makeIssue();
+    worktree = makeWorktree();
+    logger = makeLogger();
+    platform = makePlatform();
+    launcher = makeLauncher();
+    vi.clearAllMocks();
+  });
+
+  it('should call importRecords with the token records from the checkpoint at run() start', async () => {
+    const savedRecords = [
+      { issueNumber: 42, agent: 'issue-analyst', phase: 1, tokens: 3000, timestamp: '2024-01-01T00:00:00Z' },
+      { issueNumber: 42, agent: 'codebase-scout', phase: 1, tokens: 4000, timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    const checkpoint = makeCheckpointMock({
+      getTokenRecords: vi.fn().mockReturnValue(savedRecords),
+    });
+
+    const importRecords = vi.fn();
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(7000),
+      record: vi.fn(),
+      importRecords,
+      getRecords: vi.fn().mockReturnValue(savedRecords),
+      getByPhase: vi.fn().mockReturnValue({ 1: 7000 }),
+      getSummary: vi.fn().mockReturnValue({ total: 7000, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 2 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(importRecords).toHaveBeenCalledOnce();
+    expect(importRecords).toHaveBeenCalledWith(savedRecords);
+  });
+
+  it('should call importRecords with an empty array on a fresh (non-resumed) run', async () => {
+    const checkpoint = makeCheckpointMock({
+      getTokenRecords: vi.fn().mockReturnValue([]),
+    });
+
+    const importRecords = vi.fn();
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(0),
+      record: vi.fn(),
+      importRecords,
+      getRecords: vi.fn().mockReturnValue([]),
+      getByPhase: vi.fn().mockReturnValue({}),
+      getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(importRecords).toHaveBeenCalledOnce();
+    expect(importRecords).toHaveBeenCalledWith([]);
+  });
+
+  it('should call getTokenRecords before runPipeline (importRecords called exactly once per run)', async () => {
+    const getTokenRecords = vi.fn().mockReturnValue([]);
+    const checkpoint = makeCheckpointMock({ getTokenRecords });
+
+    const importRecords = vi.fn();
+    vi.mocked(TokenTracker).mockImplementationOnce(() => ({
+      getTotal: vi.fn().mockReturnValue(0),
+      record: vi.fn(),
+      importRecords,
+      getRecords: vi.fn().mockReturnValue([]),
+      getByPhase: vi.fn().mockReturnValue({}),
+      getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 }),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    }) as never);
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    await orchestrator.run();
+
+    expect(getTokenRecords).toHaveBeenCalledOnce();
+    expect(importRecords).toHaveBeenCalledOnce();
+  });
+
+  it('should run successfully with restored token records (empty array is a no-op)', async () => {
+    const checkpoint = makeCheckpointMock({
+      getTokenRecords: vi.fn().mockReturnValue([]),
+    });
+
+    const orchestrator = new IssueOrchestrator(
+      config,
+      issue,
+      worktree,
+      checkpoint as never,
+      launcher as never,
+      platform as never,
+      logger,
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(true);
+    expect(result.issueNumber).toBe(42);
+  });
+});

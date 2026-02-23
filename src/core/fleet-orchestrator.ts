@@ -66,6 +66,12 @@ export class FleetOrchestrator {
     // Load fleet checkpoint
     await this.fleetCheckpoint.load();
 
+    // Restore token records from checkpoint on resume
+    if (this.config.options.resume) {
+      const records = this.fleetCheckpoint.getState().tokenUsage.records ?? [];
+      this.tokenTracker.importRecords(records);
+    }
+
     this.logger.info(`Fleet starting: ${this.issues.length} issues, max ${this.config.options.maxParallelIssues} parallel`);
     await this.fleetProgress.appendEvent(
       `Fleet started: ${this.issues.length} issues`,

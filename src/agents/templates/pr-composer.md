@@ -35,7 +35,8 @@ Format it as a collapsed `<details>` block to keep the PR body readable:
 <details>
 <summary>## Token Usage</summary>
 
-**Total tokens:** {total}
+**Total tokens:** {totalTokens}
+**Estimated cost:** {estimatedCost}
 
 **By phase:**
 | Phase | Tokens |
@@ -50,4 +51,6 @@ Format it as a collapsed `<details>` block to keep the PR body readable:
 </details>
 ```
 
-If `byPhase` or `byAgent` are not present (e.g., the summary is a `TokenSummary` with numeric keys), adapt accordingly — show whichever breakdowns are available. Always show total tokens at minimum.
+If `byPhase` or `byAgent` are not present (e.g., the summary is a `TokenSummary` with numeric keys), adapt accordingly — show whichever breakdowns are available. Always show `totalTokens` and `estimatedCost` at minimum.
+
+If `payload.tokenSummary` is **absent**, omit the `## Token Usage` section entirely.
