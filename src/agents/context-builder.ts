@@ -131,7 +131,7 @@ export class ContextBuilder {
       taskId: task.id,
       config: { commands: this.config.commands },
       inputFiles: [taskPlanPath, ...relevantFiles],
-      outputPath: worktreePath, // code-writer writes directly to worktree
+      outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload: {
         taskId: task.id,
         files: task.files,
@@ -161,7 +161,7 @@ export class ContextBuilder {
       taskId: task.id,
       config: { commands: this.config.commands },
       inputFiles: [...changedFiles, taskPlanPath],
-      outputPath: worktreePath,
+      outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload: {
         taskId: task.id,
         testFramework: this.detectTestFramework(),
@@ -220,7 +220,7 @@ export class ContextBuilder {
       taskId: task.id,
       config: { commands: this.config.commands },
       inputFiles: [feedbackPath, ...changedFiles],
-      outputPath: worktreePath,
+      outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload: {
         taskId: task.id,
         issueType,

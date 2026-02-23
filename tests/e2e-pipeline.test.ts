@@ -38,12 +38,24 @@ vi.mock('../src/git/commit.js', () => ({
   })),
 }));
 
-// Mock simple-git so ImplementationToIntegrationGate passes in a non-git temp dir
+// Mock simple-git so ImplementationToIntegrationGate (gate 3) can compute a
+// diff without a real git repository in the temp directory.
 vi.mock('simple-git', () => ({
   simpleGit: vi.fn().mockReturnValue({
-    diff: vi.fn().mockResolvedValue('diff --git a/src/core/issue-orchestrator.ts b/src/core/issue-orchestrator.ts\n--- a/src/core/issue-orchestrator.ts\n+++ b/src/core/issue-orchestrator.ts\n@@ -1,1 +1,1 @@\n-old\n+new'),
+    diff: vi.fn().mockResolvedValue('diff --git a/src/core/change.ts b/src/core/change.ts\n+// implementation change'),
   }),
 }));
+
+// Mock execShell so Phase 4 integration verification can run build/test
+// commands without actually executing them. This allows the integration
+// report to include build/test sections (required by gate 4).
+vi.mock('../src/util/process.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/util/process.js')>();
+  return {
+    ...original,
+    execShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: 'OK', stderr: '' }),
+  };
+});
 
 // ── Synthetic Content ─────────────────────────────────────────────────────────
 
@@ -282,11 +294,14 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfi
       maxRetriesPerTask: 2,
       maxParallelAgents: 2,
       dryRun: false,
-      buildVerification: false,
-      testVerification: false,
+      buildVerification: true,
+      testVerification: true,
       ...overrides,
     },
-    commands: {},
+    commands: {
+      build: 'echo build',
+      test: 'echo test',
+    },
   });
 }
 

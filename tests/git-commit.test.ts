@@ -4,29 +4,32 @@ import { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 
 // Mock simple-git
-vi.mock('simple-git', () => {
-  const mockGit = {
-    add: vi.fn().mockResolvedValue(undefined),
-    commit: vi.fn().mockResolvedValue({ commit: 'abc123' }),
-    push: vi.fn().mockResolvedValue(undefined),
-    diff: vi.fn().mockResolvedValue(''),
-    status: vi.fn().mockResolvedValue({ isClean: () => true, files: [] }),
-    reset: vi.fn().mockResolvedValue(undefined),
-    raw: vi.fn().mockResolvedValue(''),
-    revparse: vi.fn().mockResolvedValue('abc123'),
-    log: vi.fn().mockResolvedValue({ latest: { hash: 'abc123' } }),
-  };
-  return {
-    simpleGit: vi.fn(() => mockGit),
-    default: vi.fn(() => mockGit),
-  };
-});
+const mockGit = {
+  add: vi.fn().mockResolvedValue(undefined),
+  commit: vi.fn().mockResolvedValue({ commit: 'abc123' }),
+  push: vi.fn().mockResolvedValue(undefined),
+  diff: vi.fn().mockResolvedValue(''),
+  status: vi.fn().mockResolvedValue({ isClean: () => true, staged: [], files: [] }),
+  reset: vi.fn().mockResolvedValue(undefined),
+  raw: vi.fn().mockResolvedValue(''),
+  revparse: vi.fn().mockResolvedValue('abc123'),
+  log: vi.fn().mockResolvedValue({ latest: { hash: 'abc123' } }),
+};
+
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit),
+  default: vi.fn(() => mockGit),
+}));
 
 describe('CommitManager', () => {
   let manager: CommitManager;
   let mockLogger: Logger;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockGit.status.mockResolvedValue({ isClean: () => true, staged: [], files: [] });
+    mockGit.raw.mockResolvedValue('');
+
     mockLogger = {
       debug: vi.fn(),
       info: vi.fn(),
@@ -74,5 +77,44 @@ describe('CommitManager', () => {
 
   it('should have getDiff method', () => {
     expect(typeof manager.getDiff).toBe('function');
+  });
+
+  describe('artifact filtering', () => {
+    it('should call git restore --staged to unstage cadre artifacts after staging all', async () => {
+      // Return staged files so commit proceeds
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['src/index.ts'],
+        files: [{ path: 'src/index.ts' }],
+      });
+
+      await manager.commit('fix: something', 1, 'fix');
+
+      // git.add('-A') must be called first
+      expect(mockGit.add).toHaveBeenCalledWith(['-A']);
+
+      // Then cadre artifacts must be unstaged
+      const restoreCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (args: string[][]) =>
+          Array.isArray(args[0]) &&
+          args[0][0] === 'restore' &&
+          args[0].includes('--staged') &&
+          args[0].includes('.cadre/'),
+      );
+      expect(restoreCalls.length).toBeGreaterThan(0);
+    });
+
+    it('should not commit .cadre/ or task-*.md files', async () => {
+      // Only cadre artifacts staged — after restore they'd be removed, status shows empty
+      mockGit.status.mockResolvedValue({
+        isClean: () => true,
+        staged: [],
+        files: [],
+      });
+
+      const sha = await manager.commit('chore: update', 1);
+      expect(sha).toBe('');
+      expect(mockGit.commit).not.toHaveBeenCalled();
+    });
   });
 });
