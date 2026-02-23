@@ -35,6 +35,10 @@ export class CadreRuntime {
   private isShuttingDown = false;
   private activeIssueNumbers: number[] = [];
 
+  private get agentDir(): string {
+    return this.config.agent?.copilot?.agentDir ?? this.config.copilot.agentDir;
+  }
+
   constructor(private readonly config: CadreConfig) {
     this.cadreDir = join(config.repoPath, '.cadre');
     this.logger = new Logger({
@@ -116,6 +120,7 @@ export class CadreRuntime {
       this.config.baseBranch,
       this.config.branchTemplate,
       this.logger,
+      this.agentDir,
     );
 
     const launcher = new AgentLauncher(this.config, this.logger);
@@ -276,6 +281,7 @@ export class CadreRuntime {
       this.config.baseBranch,
       this.config.branchTemplate,
       this.logger,
+      this.agentDir,
     );
 
     const worktrees = await worktreeManager.listActive();
@@ -305,6 +311,7 @@ export class CadreRuntime {
       this.config.baseBranch,
       this.config.branchTemplate,
       this.logger,
+      this.agentDir,
     );
 
     const checkpointManager = new FleetCheckpointManager(

@@ -1,5 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
+import { copyFile, readdir } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir, readFileOrNull, atomicWriteFile } from '../util/fs.js';
 
@@ -35,6 +36,7 @@ export class WorktreeManager {
     private readonly baseBranch: string,
     private readonly branchTemplate: string,
     private readonly logger: Logger,
+    private readonly agentDir?: string,
   ) {
     this.git = simpleGit(repoPath);
   }
@@ -57,6 +59,7 @@ export class WorktreeManager {
         data: { path: worktreePath, branch },
       });
 
+      await this.syncAgentFiles(worktreePath, issueNumber);
       const baseCommit = await this.getBaseCommit(worktreePath);
       return {
         issueNumber,
@@ -82,6 +85,7 @@ export class WorktreeManager {
       await this.git.raw(['worktree', 'add', worktreePath, branch]);
 
       await this.initCadreDir(worktreePath, issueNumber);
+      await this.syncAgentFiles(worktreePath, issueNumber);
 
       const baseCommit = await this.getBaseCommit(worktreePath);
       this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
@@ -119,6 +123,7 @@ export class WorktreeManager {
 
     // 4. Bootstrap the worktree's .cadre/ directory and gitignore cadre artifacts
     await this.initCadreDir(worktreePath, issueNumber);
+    await this.syncAgentFiles(worktreePath, issueNumber);
 
     this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
       issueNumber,
@@ -149,6 +154,7 @@ export class WorktreeManager {
         data: { path: worktreePath, branch },
       });
 
+      await this.syncAgentFiles(worktreePath, issueNumber);
       const baseCommit = await this.getBaseCommit(worktreePath);
       return {
         issueNumber,
@@ -171,6 +177,7 @@ export class WorktreeManager {
 
     // Bootstrap the worktree's .cadre/ directory
     await this.initCadreDir(worktreePath, issueNumber);
+    await this.syncAgentFiles(worktreePath, issueNumber);
 
     const baseCommit = await this.getBaseCommit(worktreePath);
 
@@ -222,6 +229,37 @@ export class WorktreeManager {
         : `${existing}\n.cadre/\n`;
       await atomicWriteFile(gitignorePath, updated);
       this.logger.debug('Added .cadre/ to worktree .gitignore', { issueNumber });
+    }
+  }
+
+  /**
+   * Copy all agent files (*.agent.md) from agentDir into the worktree's
+   * .github/agents/ directory so the Copilot CLI can resolve them by name.
+   * No-op if agentDir is not configured or does not exist.
+   */
+  private async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<void> {
+    if (!this.agentDir) return;
+
+    if (!(await exists(this.agentDir))) {
+      this.logger.debug(`agentDir ${this.agentDir} does not exist — skipping agent sync`, { issueNumber });
+      return;
+    }
+
+    const destDir = join(worktreePath, '.github', 'agents');
+    await ensureDir(destDir);
+
+    const entries = await readdir(this.agentDir);
+    const agentFiles = entries.filter((f) => f.endsWith('.agent.md'));
+
+    for (const file of agentFiles) {
+      await copyFile(join(this.agentDir, file), join(destDir, file));
+    }
+
+    if (agentFiles.length > 0) {
+      this.logger.debug(
+        `Synced ${agentFiles.length} agent file(s) from ${this.agentDir} → ${destDir}`,
+        { issueNumber },
+      );
     }
   }
 
