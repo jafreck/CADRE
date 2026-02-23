@@ -6,6 +6,7 @@ import { CheckpointManager, FleetCheckpointManager } from '../src/core/checkpoin
 import type { CheckpointState, FleetIssueStatus } from '../src/core/checkpoint.js';
 import { Logger } from '../src/logging/logger.js';
 import type { GateResult } from '../src/agents/types.js';
+import type { TokenRecord } from '../src/budget/token-tracker.js';
 
 describe('CheckpointManager', () => {
   let mockLogger: Logger;
@@ -91,6 +92,100 @@ describe('CheckpointManager', () => {
     expect(state.tokenUsage.byAgent['issue-analyst']).toBe(3000);
   });
 
+  it('should initialize tokenUsage.records to [] on fresh checkpoint', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    const state = await manager.load('42');
+    expect(state.tokenUsage.records).toEqual([]);
+  });
+
+  it('should push a TokenRecord when recordTokenUsage is called', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordTokenUsage('issue-analyst', 1, 3000);
+
+    const state = manager.getState();
+    expect(state.tokenUsage.records).toHaveLength(1);
+    const rec = state.tokenUsage.records[0];
+    expect(rec.issueNumber).toBe(42);
+    expect(rec.agent).toBe('issue-analyst');
+    expect(rec.phase).toBe(1);
+    expect(rec.tokens).toBe(3000);
+    expect(typeof rec.timestamp).toBe('string');
+  });
+
+  it('should accumulate multiple TokenRecords in order', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordTokenUsage('issue-analyst', 1, 3000);
+    await manager.recordTokenUsage('codebase-scout', 2, 4000);
+
+    const records = manager.getTokenRecords();
+    expect(records).toHaveLength(2);
+    expect(records[0].agent).toBe('issue-analyst');
+    expect(records[1].agent).toBe('codebase-scout');
+  });
+
+  it('getTokenRecords should return stored records', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordTokenUsage('code-writer', 3, 5000);
+    const records = manager.getTokenRecords();
+
+    expect(records).toHaveLength(1);
+    expect(records[0].tokens).toBe(5000);
+  });
+
+  it('getTokenRecords should throw when checkpoint not loaded', () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    expect(() => manager.getTokenRecords()).toThrow('Checkpoint not loaded');
+  });
+
+  it('should persist TokenRecords across save and reload', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.recordTokenUsage('issue-analyst', 1, 3000);
+    await manager.recordTokenUsage('code-writer', 2, 2000);
+
+    const manager2 = new CheckpointManager(tempDir, mockLogger);
+    const state2 = await manager2.load('42');
+
+    expect(state2.tokenUsage.records).toHaveLength(2);
+    expect(state2.tokenUsage.records[0].agent).toBe('issue-analyst');
+    expect(state2.tokenUsage.records[1].agent).toBe('code-writer');
+  });
+
+  it('should default tokenUsage.records to [] when loading a legacy checkpoint without records field', async () => {
+    const legacyState = {
+      issueNumber: 42,
+      version: 1,
+      currentPhase: 1,
+      currentTask: null,
+      completedPhases: [1],
+      completedTasks: [],
+      failedTasks: [],
+      blockedTasks: [],
+      phaseOutputs: {},
+      tokenUsage: { total: 500, byPhase: { 1: 500 }, byAgent: { 'issue-analyst': 500 } },
+      worktreePath: '',
+      branchName: '',
+      baseCommit: '',
+      startedAt: new Date().toISOString(),
+      lastCheckpoint: new Date().toISOString(),
+      resumeCount: 0,
+    };
+    await writeFile(join(tempDir, 'checkpoint.json'), JSON.stringify(legacyState));
+
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    const state = await manager.load('42');
+
+    expect(state.tokenUsage.records).toEqual([]);
+    expect(state.tokenUsage.total).toBe(500);
+  });
+
   it('should provide resume point', async () => {
     const manager = new CheckpointManager(tempDir, mockLogger);
     await manager.load('42');
@@ -120,7 +215,7 @@ describe('CheckpointManager', () => {
       failedTasks: [],
       blockedTasks: [],
       phaseOutputs: {},
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+      tokenUsage: { total: 0, byPhase: {}, byAgent: {}, records: [] },
       worktreePath: '',
       branchName: '',
       baseCommit: '',
@@ -292,5 +387,74 @@ describe('FleetCheckpointManager', () => {
     await manager2.load();
     expect(manager2.getIssueStatus(7)?.status).toBe('budget-exceeded');
     expect(manager2.isIssueCompleted(7)).toBe(true);
+  });
+
+  it('should initialize fleet tokenUsage.records to []', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+    expect(state.tokenUsage.records).toEqual([]);
+  });
+
+  it('should push a TokenRecord with __fleet__ agent when recordTokenUsage is called', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+
+    await manager.recordTokenUsage(42, 5000);
+
+    const state = manager.getState();
+    expect(state.tokenUsage.records).toHaveLength(1);
+    const rec = state.tokenUsage.records[0];
+    expect(rec.issueNumber).toBe(42);
+    expect(rec.agent).toBe('__fleet__');
+    expect(rec.phase).toBe(0);
+    expect(rec.tokens).toBe(5000);
+    expect(typeof rec.timestamp).toBe('string');
+  });
+
+  it('should accumulate multiple fleet TokenRecords', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+
+    await manager.recordTokenUsage(1, 3000);
+    await manager.recordTokenUsage(2, 4000);
+
+    const state = manager.getState();
+    expect(state.tokenUsage.records).toHaveLength(2);
+    expect(state.tokenUsage.total).toBe(7000);
+    expect(state.tokenUsage.byIssue[1]).toBe(3000);
+    expect(state.tokenUsage.byIssue[2]).toBe(4000);
+  });
+
+  it('should persist fleet TokenRecords across reload', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+
+    await manager.recordTokenUsage(10, 6000);
+
+    const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state2 = await manager2.load();
+
+    expect(state2.tokenUsage.records).toHaveLength(1);
+    expect(state2.tokenUsage.records[0].issueNumber).toBe(10);
+    expect(state2.tokenUsage.records[0].tokens).toBe(6000);
+  });
+
+  it('should default fleet tokenUsage.records to [] when loading a legacy fleet checkpoint', async () => {
+    const legacyState = {
+      projectName: 'my-project',
+      version: 1,
+      issues: {},
+      tokenUsage: { total: 1000, byIssue: { 1: 1000 } },
+      startedAt: new Date().toISOString(),
+      lastCheckpoint: new Date().toISOString(),
+      resumeCount: 0,
+    };
+    await writeFile(join(tempDir, 'fleet-checkpoint.json'), JSON.stringify(legacyState));
+
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+
+    expect(state.tokenUsage.records).toEqual([]);
+    expect(state.tokenUsage.total).toBe(1000);
   });
 });
