@@ -3,6 +3,13 @@ import { join } from 'node:path';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir, readFileOrNull, atomicWriteFile } from '../util/fs.js';
 
+export class RemoteBranchMissingError extends Error {
+  constructor(branch: string) {
+    super(`Remote branch '${branch}' does not exist on origin`);
+    this.name = 'RemoteBranchMissingError';
+  }
+}
+
 export interface WorktreeInfo {
   /** Issue number this worktree is for. */
   issueNumber: number;
