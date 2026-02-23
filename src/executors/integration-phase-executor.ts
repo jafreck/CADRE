@@ -52,24 +52,28 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       });
       report += `## Build\n\n**Command:** \`${ctx.config.commands.build}\`\n`;
 
-      let buildRegressions = this.computeRegressions(
-        this.extractFailures(buildResult.stderr + buildResult.stdout),
-        baselineBuildFailures,
-      );
+      let buildOutput = buildResult.stderr + buildResult.stdout;
+      let buildFailures = this.extractFailures(buildOutput);
+      if (buildResult.exitCode !== 0 && buildFailures.length === 0) {
+        buildFailures = ['<build-failed-unrecognised-output>'];
+      }
+      let buildRegressions = this.computeRegressions(buildFailures, baselineBuildFailures);
       for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && buildRegressions.length > 0; round++) {
-        await this.tryFixIntegration(ctx, buildResult.stderr + buildResult.stdout, 'build');
+        await this.tryFixIntegration(ctx, buildOutput, 'build');
         buildResult = await execShell(ctx.config.commands.build, {
           cwd: ctx.worktree.path,
           timeout: 300_000,
         });
-        buildRegressions = this.computeRegressions(
-          this.extractFailures(buildResult.stderr + buildResult.stdout),
-          baselineBuildFailures,
-        );
+        buildOutput = buildResult.stderr + buildResult.stdout;
+        buildFailures = this.extractFailures(buildOutput);
+        if (buildResult.exitCode !== 0 && buildFailures.length === 0) {
+          buildFailures = ['<build-failed-unrecognised-output>'];
+        }
+        buildRegressions = this.computeRegressions(buildFailures, baselineBuildFailures);
       }
 
       allRegressionFailures.push(...buildRegressions);
-      allCurrentFailures.push(...this.extractFailures(buildResult.stderr + buildResult.stdout));
+      allCurrentFailures.push(...buildFailures);
       report += `**Exit Code:** ${buildResult.exitCode}\n`;
       report += `**Status:** ${buildResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (buildResult.exitCode !== 0) {
@@ -85,24 +89,28 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       });
       report += `## Test\n\n**Command:** \`${ctx.config.commands.test}\`\n`;
 
-      let testRegressions = this.computeRegressions(
-        this.extractFailures(testResult.stderr + testResult.stdout),
-        baselineTestFailures,
-      );
+      let testOutput = testResult.stderr + testResult.stdout;
+      let testFailures = this.extractFailures(testOutput);
+      if (testResult.exitCode !== 0 && testFailures.length === 0) {
+        testFailures = ['<test-failed-unrecognised-output>'];
+      }
+      let testRegressions = this.computeRegressions(testFailures, baselineTestFailures);
       for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && testRegressions.length > 0; round++) {
-        await this.tryFixIntegration(ctx, testResult.stderr + testResult.stdout, 'test');
+        await this.tryFixIntegration(ctx, testOutput, 'test');
         testResult = await execShell(ctx.config.commands.test, {
           cwd: ctx.worktree.path,
           timeout: 300_000,
         });
-        testRegressions = this.computeRegressions(
-          this.extractFailures(testResult.stderr + testResult.stdout),
-          baselineTestFailures,
-        );
+        testOutput = testResult.stderr + testResult.stdout;
+        testFailures = this.extractFailures(testOutput);
+        if (testResult.exitCode !== 0 && testFailures.length === 0) {
+          testFailures = ['<test-failed-unrecognised-output>'];
+        }
+        testRegressions = this.computeRegressions(testFailures, baselineTestFailures);
       }
 
       allRegressionFailures.push(...testRegressions);
-      allCurrentFailures.push(...this.extractFailures(testResult.stderr + testResult.stdout));
+      allCurrentFailures.push(...testFailures);
       report += `**Exit Code:** ${testResult.exitCode}\n`;
       report += `**Status:** ${testResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
       if (testResult.exitCode !== 0) {
@@ -138,8 +146,9 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     }
 
     report += `## New Regressions\n\n`;
-    if (allRegressionFailures.length > 0) {
-      report += allRegressionFailures.map((f) => `- ${f}`).join('\n') + '\n\n';
+    const uniqueRegressionFailures = [...new Set(allRegressionFailures)];
+    if (uniqueRegressionFailures.length > 0) {
+      report += uniqueRegressionFailures.map((f) => `- ${f}`).join('\n') + '\n\n';
     } else {
       report += '_None_\n\n';
     }
@@ -161,20 +170,24 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
   }
 
   private extractFailures(output: string): string[] {
-    const failures: string[] = [];
+    const failures = new Set<string>();
     for (const line of output.split('\n')) {
       const trimmed = line.trim();
       // Match common test failure indicators - strip prefix to produce the same format as AnalysisPhaseExecutor
       if (/^(FAIL|FAILED|✗|×)\s+/.test(trimmed)) {
         const match = trimmed.match(/^(?:FAIL|FAILED|✗|×)\s+(.+)/);
-        if (match) failures.push(match[1].trim());
+        if (match) failures.add(match[1].trim());
       }
       // Match TypeScript/build error lines (no prefix to strip)
       else if (/error TS\d+:/.test(trimmed)) {
-        failures.push(trimmed);
+        failures.add(trimmed);
+      }
+      // Match generic error lines (aligned with AnalysisPhaseExecutor)
+      else if (/^\s*(error|Error)\s*:/i.test(trimmed) && trimmed.length < 200) {
+        failures.add(trimmed);
       }
     }
-    return failures;
+    return Array.from(failures);
   }
 
   private computeRegressions(currentFailures: string[], baselineFailures: Set<string>): string[] {
