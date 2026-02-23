@@ -82,6 +82,7 @@ export function renderIssueDetail(
   issueNumber: number,
   issueStatus: FleetIssueStatus,
   checkpoint: CheckpointState,
+  verbose = false,
 ): string {
   const rows: string[][] = [];
   for (let i = 0; i < phaseNames.length; i++) {
@@ -96,7 +97,7 @@ export function renderIssueDetail(
     } else {
       statusEmoji = '⏳';
     }
-    const gate = checkpoint.gateResults?.[phaseNum];
+    const gate = verbose ? checkpoint.gateResults?.[phaseNum] : undefined;
     const gateStr = gate
       ? gate.status === 'pass' ? '✅ pass' : gate.status === 'warn' ? '⚠️ warn' : '❌ fail'
       : '—';
@@ -113,7 +114,7 @@ export function renderIssueDetail(
   let out = `Issue #${issueNumber}: ${issueStatus.issueTitle}\n`;
   out += renderTable(headers, rows);
 
-  if (checkpoint.gateResults) {
+  if (verbose && checkpoint.gateResults) {
     const gateEntries = Object.entries(checkpoint.gateResults);
     if (gateEntries.length > 0) {
       out += '\n\nGate Results:\n';
