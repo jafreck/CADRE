@@ -3,13 +3,14 @@ import type { CadreConfig } from '../config/schema.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
-import { FleetCheckpointManager } from './checkpoint.js';
+import { FleetCheckpointManager, CheckpointManager } from './checkpoint.js';
+import { exists } from '../util/fs.js';
+import { renderFleetStatus, renderIssueDetail } from '../cli/status-renderer.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
 import { TokenTracker } from '../budget/token-tracker.js';
-import { CostEstimator } from '../budget/cost-estimator.js';
-import { Logger } from '../logging/logger.js';
+
 import { killAllTrackedProcesses } from '../util/process.js';
 import { FleetProgressWriter } from './progress.js';
 import {
@@ -24,30 +25,6 @@ import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
 import { ISSUE_PHASES } from './phase-registry.js';
 
-/** Format an ISO timestamp as elapsed time (e.g. "2m ago"). */
-function formatElapsed(isoString: string): string {
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  if (diffMs < 0) return 'just now';
-  const secs = Math.floor(diffMs / 1000);
-  if (secs < 60) return `${secs}s ago`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-/** Map a fleet issue status to an emoji. */
-function statusToEmoji(status: string): string {
-  switch (status) {
-    case 'completed': return '✅';
-    case 'in-progress': return '🔄';
-    case 'failed': return '❌';
-    case 'blocked': return '🚫';
-    case 'budget-exceeded': return '💸';
-    default: return '⏳';
-  }
-}
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
