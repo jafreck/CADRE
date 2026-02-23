@@ -105,5 +105,23 @@ describe('implementation-planner.md template', () => {
       expect(content).toMatch(/\*\*Complexity:\*\*|\*\*Complexity\*\*:/);
       expect(content).toMatch(/\*\*Acceptance Criteria:\*\*|\*\*Acceptance Criteria\*\*:/);
     });
+
+    it('example should include at least one test file path in a Files list', () => {
+      expect(content).toMatch(/tests\/[^\s,]+\.test\.ts/);
+    });
+  });
+
+  describe('test file inclusion rule', () => {
+    it('should explicitly instruct that test files must be listed in the files array', () => {
+      expect(content).toMatch(/test file/i);
+    });
+
+    it('should reference tests/*.test.ts pattern or equivalent in the rules', () => {
+      expect(content).toMatch(/tests\/\*\.test\.ts|tests\/.*\.test\.ts/);
+    });
+
+    it('should clarify that files includes test files, not just source files', () => {
+      expect(content).toMatch(/not just source files|test files.*creates or modifies|creates or modifies.*test/i);
+    });
   });
 });
