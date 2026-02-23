@@ -27,6 +27,17 @@ If a `lint` command is configured, also run it and include the result.
 
 Report the raw exit code and a brief summary of any errors from stdout/stderr for each step.
 
+## Baseline Comparison
+
+Before reporting results, check if `.cadre/baseline-results.json` exists in the repository root.
+
+If it exists, read it. It contains a list of test/check names that were already failing before the current changes. Use it to classify failures:
+
+- **`baselineFailures`**: failures that appear in **both** the baseline and the current run (pre-existing, not caused by these changes)
+- **`regressionFailures`**: failures that appear in the **current run but not in the baseline** (new failures introduced by these changes)
+
+If `.cadre/baseline-results.json` does not exist, treat all failures as regressions.
+
 ## Output
 Respond with a JSON object matching the `IntegrationReport` structure:
 
@@ -40,9 +51,9 @@ Respond with a JSON object matching the `IntegrationReport` structure:
   },
   "testResult": {
     "command": "npx vitest run",
-    "exitCode": 0,
-    "pass": true,
-    "output": "All 42 tests passed"
+    "exitCode": 1,
+    "pass": false,
+    "output": "2 tests failed: foo, bar"
   },
   "lintResult": {
     "command": "npm run lint",
@@ -50,12 +61,16 @@ Respond with a JSON object matching the `IntegrationReport` structure:
     "pass": true,
     "output": ""
   },
-  "overallPass": true,
-  "summary": "Build, tests, and lint all passed."
+  "baselineFailures": ["foo"],
+  "regressionFailures": ["bar"],
+  "overallPass": false,
+  "summary": "Build and lint passed. 1 regression failure detected (bar). 1 pre-existing failure unchanged (foo)."
 }
 ```
 
-- `overallPass` is `true` only when **all** steps that were run have `pass: true`.
+- `overallPass` is `true` when there are **no regression failures** (new failures not present in the baseline). Pre-existing failures from the baseline do **not** cause `overallPass` to be `false`.
+- `baselineFailures` lists failures present in both the baseline and the current run (pre-existing).
+- `regressionFailures` lists failures present in the current run but **not** in the baseline (new regressions).
 - `lintResult` may be `null` if no lint command is configured.
 - Keep `output` to a short excerpt (last 20 lines) of the relevant output; do not include the full log.
 - If a step fails, include enough error output in `output` to diagnose the problem.
