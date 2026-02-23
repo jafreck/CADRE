@@ -9,8 +9,12 @@
     "dist/",
     "src/agents/templates/"
   ],
+  "main": "dist/index.js",
   "bin": {
     "cadre": "dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
