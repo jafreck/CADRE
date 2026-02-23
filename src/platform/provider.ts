@@ -46,6 +46,8 @@ export interface CreatePullRequestParams {
   head: string;
   base: string;
   draft?: boolean;
+  labels?: string[];
+  reviewers?: string[];
 }
 
 /**
