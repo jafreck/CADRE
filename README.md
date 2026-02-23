@@ -55,6 +55,8 @@ Create a `cadre.config.json`:
 }
 ```
 
+See [docs/config-schema.md](docs/config-schema.md) for the full schema reference.
+
 ### GitHub MCP Server
 
 CADRE uses the [GitHub MCP server](https://github.com/github/github-mcp-server) for all GitHub interactions (issues, pull requests, comments) and authenticates as a **GitHub App**.
