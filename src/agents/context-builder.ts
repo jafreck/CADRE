@@ -7,6 +7,8 @@ import type {
   ImplementationTask,
 } from './types.js';
 import type { IssueDetail } from '../platform/provider.js';
+import type { CostReport } from '../reporting/types.js';
+import type { TokenSummary } from '../budget/token-tracker.js';
 import { Logger } from '../logging/logger.js';
 
 /**
@@ -268,6 +270,7 @@ export class ContextBuilder {
     integrationReportPath: string,
     diffPath: string,
     progressDir: string,
+    tokenSummary?: CostReport | TokenSummary,
   ): Promise<string> {
     return this.writeContext(progressDir, 'pr-composer', issueNumber, {
       agent: 'pr-composer',
@@ -282,6 +285,7 @@ export class ContextBuilder {
       payload: {
         issueTitle: issue.title,
         issueBody: issue.body,
+        ...(tokenSummary !== undefined && { tokenSummary }),
       },
     });
   }

@@ -113,6 +113,14 @@ export class IssueFetcher {
   }
 
   /**
+   * Post a comment to the specified issue.
+   */
+  async postComment(issueNumber: number, body: string): Promise<void> {
+    this.logger.debug(`Posting comment to issue #${issueNumber}`, { issueNumber });
+    await this.api.addIssueComment(issueNumber, body);
+  }
+
+  /**
    * Parse raw `gh` JSON output into an IssueDetail.
    */
   private parseIssue(raw: Record<string, unknown>): IssueDetail {

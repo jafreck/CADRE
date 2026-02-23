@@ -780,6 +780,7 @@ export class IssueOrchestrator {
       integrationReportPath,
       diffPath,
       this.progressDir,
+      this.tokenTracker.getSummary(),
     );
 
     const composerResult = await this.launchWithRetry('pr-composer', {
