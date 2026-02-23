@@ -27,6 +27,7 @@ import { CommitManager } from '../git/commit.js';
 import { RetryExecutor } from '../execution/retry.js';
 import { TokenTracker } from '../budget/token-tracker.js';
 import { Logger } from '../logging/logger.js';
+import { IssueNotifier } from './issue-notifier.js';
 import { AnalysisPhaseExecutor } from '../executors/analysis-phase-executor.js';
 import { PlanningPhaseExecutor } from '../executors/planning-phase-executor.js';
 import { ImplementationPhaseExecutor } from '../executors/implementation-phase-executor.js';
@@ -63,9 +64,11 @@ export class IssueOrchestrator {
   private readonly retryExecutor: RetryExecutor;
   private readonly progressWriter: IssueProgressWriter;
   private readonly tokenTracker: TokenTracker;
+  private readonly notifier: IssueNotifier;
   private readonly registry: PhaseRegistry;
   private readonly phases: PhaseResult[] = [];
   private budgetExceeded = false;
+  private budgetWarningSent = false;
   private createdPR: PullRequestInfo | undefined;
 
   constructor(
@@ -99,6 +102,7 @@ export class IssueOrchestrator {
       logger,
     );
     this.tokenTracker = new TokenTracker();
+    this.notifier = new IssueNotifier(config, platform, logger);
     this.registry = new PhaseRegistry();
     this.registry.register(new AnalysisPhaseExecutor());
     this.registry.register(new PlanningPhaseExecutor());
@@ -120,6 +124,7 @@ export class IssueOrchestrator {
     });
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
+    void this.notifier.notifyStart(this.issue.number, this.issue.title);
 
     await this.notificationManager?.dispatch({
       type: 'issue-started',
@@ -169,6 +174,7 @@ export class IssueOrchestrator {
             { issueNumber: this.issue.number },
           );
           await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
+          void this.notifier.notifyFailed(this.issue.number, this.issue.title, undefined, undefined, 'Per-issue token budget exceeded');
           return this.buildResult(false, 'Per-issue token budget exceeded', startTime, true);
         }
         throw err;
@@ -221,12 +227,14 @@ export class IssueOrchestrator {
         }
 
         await this.updateProgress();
+        void this.notifier.notifyPhaseComplete(this.issue.number, executor.phaseId, executor.name, phaseResult.duration);
       } else if (phaseDef.critical) {
         this.logger.error(`Critical phase ${executor.phaseId} failed, aborting pipeline`, {
           issueNumber: this.issue.number,
           phase: executor.phaseId,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} failed`);
+        void this.notifier.notifyFailed(this.issue.number, this.issue.title, { id: executor.phaseId, name: executor.name }, undefined, phaseResult.error);
         await this.notificationManager?.dispatch({
           type: 'issue-failed',
           issueNumber: this.issue.number,
@@ -239,6 +247,7 @@ export class IssueOrchestrator {
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
     const successResult = this.buildResult(true, undefined, startTime);
+    void this.notifier.notifyComplete(this.issue.number, this.issue.title, undefined, successResult.tokenUsage ?? 0);
     await this.notificationManager?.dispatch({
       type: 'issue-completed',
       issueNumber: successResult.issueNumber,
@@ -376,6 +385,18 @@ export class IssueOrchestrator {
       this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'exceeded'
     ) {
       this.budgetExceeded = true;
+    }
+    if (
+      !this.budgetWarningSent &&
+      !this.budgetExceeded &&
+      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'warning'
+    ) {
+      this.budgetWarningSent = true;
+      void this.notifier.notifyBudgetWarning(
+        this.issue.number,
+        this.tokenTracker.getTotal() ?? 0,
+        this.config.options.tokenBudget ?? 0,
+      );
     }
   }
 
