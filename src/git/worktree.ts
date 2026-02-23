@@ -254,14 +254,13 @@ export class WorktreeManager {
     let syncCount = 0;
 
     if (this.backend === 'claude') {
-      // Claude agents live in subdirectories: <agentDir>/<name>/CLAUDE.md
-      for (const entry of entries) {
-        const claudeFile = join(this.agentDir, entry, 'CLAUDE.md');
-        if (await exists(claudeFile)) {
-          await ensureDir(join(destDir, entry));
-          await copyFile(claudeFile, join(destDir, entry, 'CLAUDE.md'));
-          syncCount++;
-        }
+      // Claude Code resolves sub-agents from flat *.md files in .claude/agents/
+      const claudeDestDir = join(worktreePath, '.claude', 'agents');
+      await ensureDir(claudeDestDir);
+      const agentFiles = entries.filter((f) => f.endsWith('.md'));
+      for (const file of agentFiles) {
+        await copyFile(join(this.agentDir, file), join(claudeDestDir, file));
+        syncCount++;
       }
     } else {
       // Copilot agents are flat *.agent.md files

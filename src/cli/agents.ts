@@ -18,7 +18,8 @@ function getTemplateDir(): string {
 /** Compute the output filename for an agent file given the backend. */
 function agentFilePath(agentDir: string, agentName: string, backend?: string): string {
   if (backend === 'claude') {
-    return join(agentDir, agentName, 'CLAUDE.md');
+    // Claude Code resolves sub-agents from flat *.md files in .claude/agents/
+    return join(agentDir, `${agentName}.md`);
   }
   if (backend === 'copilot') {
     // GitHub Copilot CLI resolves agents by the .agent.md convention
@@ -39,6 +40,14 @@ function resolveBackend(config: Awaited<ReturnType<typeof loadConfig>>): string 
  */
 function copilotFrontmatter(description: string): string {
   return `---\ndescription: "${description}"\ntools: ["*"]\n---\n`;
+}
+
+/**
+ * Return the YAML frontmatter block required by the Claude Code sub-agent format.
+ * `name` and `description` are the required fields; tools inherits all by default.
+ */
+function claudeFrontmatter(name: string, description: string): string {
+  return `---\nname: ${name}\ndescription: "${description}"\n---\n`;
 }
 
 /**
@@ -65,6 +74,8 @@ export async function scaffoldMissingAgentFiles(
     let content = await readFile(srcPath, 'utf-8');
     if (backend === 'copilot') {
       content = copilotFrontmatter(agent.description) + content;
+    } else if (backend === 'claude') {
+      content = claudeFrontmatter(agent.name, agent.description) + content;
     }
     await mkdir(dirname(destPath), { recursive: true });
     await writeFile(destPath, content, 'utf-8');
@@ -157,6 +168,8 @@ export function registerAgentsCommand(program: Command): void {
             let content = await readFile(srcPath, 'utf-8');
             if (effectiveBackend === 'copilot') {
               content = copilotFrontmatter(agent.description) + content;
+            } else if (effectiveBackend === 'claude') {
+              content = claudeFrontmatter(agent.name, agent.description) + content;
             }
             await mkdir(dirname(destPath), { recursive: true });
             await writeFile(destPath, content, 'utf-8');
