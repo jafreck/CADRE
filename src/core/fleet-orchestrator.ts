@@ -202,6 +202,7 @@ export class FleetOrchestrator {
         this.launcher,
         this.platform,
         this.logger.child(issue.number, join(this.cadreDir, 'logs')),
+        this.notifications,
       );
 
       // 6. Run the 5-phase pipeline
@@ -353,11 +354,13 @@ export class FleetOrchestrator {
       };
     });
 
-    const prRefs: PullRequestRef[] = result.prsCreated.map((pr) => ({
-      issueNumber: 0, // We'd need to track this mapping
-      prNumber: pr.number,
-      url: pr.url,
-    }));
+    const prRefs: PullRequestRef[] = result.issues
+      .filter((ir) => ir.pr != null)
+      .map((ir) => ({
+        issueNumber: ir.issueNumber,
+        prNumber: ir.pr!.number,
+        url: ir.pr!.url,
+      }));
 
     await this.fleetProgress.write(issueInfos, prRefs, {
       current: this.tokenTracker.getTotal(),

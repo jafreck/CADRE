@@ -194,6 +194,49 @@ describe('NotificationManager', () => {
       await expect(manager.dispatch(sampleEvent)).resolves.toBeUndefined();
     });
   });
+
+  describe('addProvider', () => {
+    it('should enable dispatching when manager was initially disabled', async () => {
+      const manager = new NotificationManager(undefined);
+      const notify = vi.fn().mockResolvedValue(undefined);
+      manager.addProvider({ notify });
+
+      await manager.dispatch(sampleEvent);
+
+      expect(notify).toHaveBeenCalledOnce();
+      expect(notify).toHaveBeenCalledWith(sampleEvent);
+    });
+
+    it('should add to existing providers when already enabled', async () => {
+      const webhookNotify = vi.fn().mockResolvedValue(undefined);
+      MockWebhookProvider.mockImplementation(() => ({ notify: webhookNotify }));
+
+      const manager = new NotificationManager(makeConfig({
+        providers: [{ type: 'webhook', url: 'https://example.com/hook' }],
+      }));
+
+      const extraNotify = vi.fn().mockResolvedValue(undefined);
+      manager.addProvider({ notify: extraNotify });
+
+      await manager.dispatch(sampleEvent);
+
+      expect(webhookNotify).toHaveBeenCalledOnce();
+      expect(extraNotify).toHaveBeenCalledOnce();
+    });
+
+    it('should call added provider alongside original providers', async () => {
+      const manager = new NotificationManager(makeConfig({ providers: [] }));
+      const notify1 = vi.fn().mockResolvedValue(undefined);
+      const notify2 = vi.fn().mockResolvedValue(undefined);
+      manager.addProvider({ notify: notify1 });
+      manager.addProvider({ notify: notify2 });
+
+      await manager.dispatch(sampleEvent);
+
+      expect(notify1).toHaveBeenCalledOnce();
+      expect(notify2).toHaveBeenCalledOnce();
+    });
+  });
 });
 
 describe('createNotificationManager', () => {

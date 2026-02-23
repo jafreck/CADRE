@@ -1,24 +1,24 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
-import type { AgentInvocation, AgentResult } from '../agents/types.js';
+import { launchWithRetry } from './helpers.js';
 
 export class PRCompositionPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 5;
   readonly name = 'PR Composition';
 
   async execute(ctx: PhaseContext): Promise<string> {
-    const analysisPath = join(ctx.progressDir, 'analysis.md');
-    const planPath = join(ctx.progressDir, 'implementation-plan.md');
-    const integrationReportPath = join(ctx.progressDir, 'integration-report.md');
+    const analysisPath = join(ctx.io.progressDir, 'analysis.md');
+    const planPath = join(ctx.io.progressDir, 'implementation-plan.md');
+    const integrationReportPath = join(ctx.io.progressDir, 'integration-report.md');
 
     // Generate diff
-    const diffPath = join(ctx.progressDir, 'full-diff.patch');
-    const diff = await ctx.commitManager.getDiff(ctx.worktree.baseCommit);
+    const diffPath = join(ctx.io.progressDir, 'full-diff.patch');
+    const diff = await ctx.io.commitManager.getDiff(ctx.worktree.baseCommit);
     await writeFile(diffPath, diff, 'utf-8');
 
     // Launch pr-composer
-    const composerContextPath = await ctx.contextBuilder.buildForPRComposer(
+    const composerContextPath = await ctx.services.contextBuilder.buildForPRComposer(
       ctx.issue.number,
       ctx.worktree.path,
       ctx.issue,
@@ -26,15 +26,15 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       planPath,
       integrationReportPath,
       diffPath,
-      ctx.progressDir,
+      ctx.io.progressDir,
     );
 
-    const composerResult = await this.launchWithRetry(ctx, 'pr-composer', {
+    const composerResult = await launchWithRetry(ctx, 'pr-composer', {
       agent: 'pr-composer',
       issueNumber: ctx.issue.number,
       phase: 5,
       contextPath: composerContextPath,
-      outputPath: join(ctx.progressDir, 'pr-content.md'),
+      outputPath: join(ctx.io.progressDir, 'pr-content.md'),
     });
 
     if (!composerResult.success) {
@@ -43,19 +43,19 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
 
     // Create PR if auto-create is enabled
     if (ctx.config.pullRequest.autoCreate) {
-      const prContentPath = join(ctx.progressDir, 'pr-content.md');
-      const prContent = await ctx.resultParser.parsePRContent(prContentPath);
+      const prContentPath = join(ctx.io.progressDir, 'pr-content.md');
+      const prContent = await ctx.services.resultParser.parsePRContent(prContentPath);
 
       // Squash if configured
       if (ctx.config.commits.squashBeforePR) {
-        await ctx.commitManager.squash(
+        await ctx.io.commitManager.squash(
           ctx.worktree.baseCommit,
           prContent.title || `Fix #${ctx.issue.number}: ${ctx.issue.title}`,
         );
       }
 
       // Push
-      await ctx.commitManager.push(true);
+      await ctx.io.commitManager.push(true);
 
       // Create PR
       try {
@@ -78,56 +78,12 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
         });
       } catch (err) {
         // Non-critical: the branch is pushed, PR can be created manually
-        ctx.logger.error(`Failed to create PR: ${err}`, {
+        ctx.services.logger.error(`Failed to create PR: ${err}`, {
           issueNumber: ctx.issue.number,
         });
       }
     }
 
-    return join(ctx.progressDir, 'pr-content.md');
-  }
-
-  private async launchWithRetry(
-    ctx: PhaseContext,
-    agentName: string,
-    invocation: Omit<AgentInvocation, 'timeout'>,
-  ): Promise<AgentResult> {
-    const result = await ctx.retryExecutor.execute<AgentResult>({
-      fn: async () => {
-        ctx.checkBudget();
-        const agentResult = await ctx.launcher.launchAgent(
-          invocation as AgentInvocation,
-          ctx.worktree.path,
-        );
-        ctx.recordTokens(agentName, agentResult.tokenUsage);
-        ctx.checkBudget();
-        if (!agentResult.success) {
-          throw new Error(agentResult.error ?? `Agent ${agentName} failed`);
-        }
-        return agentResult;
-      },
-      maxAttempts: ctx.config.options.maxRetriesPerTask,
-      description: agentName,
-    });
-
-    ctx.checkBudget();
-
-    if (!result.success || !result.result) {
-      return {
-        agent: invocation.agent,
-        success: false,
-        exitCode: 1,
-        timedOut: false,
-        duration: 0,
-        stdout: '',
-        stderr: result.error ?? 'Unknown failure',
-        tokenUsage: null,
-        outputPath: invocation.outputPath,
-        outputExists: false,
-        error: result.error,
-      };
-    }
-
-    return result.result;
+    return join(ctx.io.progressDir, 'pr-content.md');
   }
 }

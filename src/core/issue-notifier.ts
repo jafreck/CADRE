@@ -1,12 +1,17 @@
 import type { CadreConfig } from '../config/schema.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import type { Logger } from '../logging/logger.js';
+import type { CadreEvent } from '../logging/events.js';
+import type { NotificationProvider } from '../notifications/types.js';
 
 /**
  * Posts lifecycle comments to issues via the platform provider.
  * All methods are non-fatal — errors from `addIssueComment` are caught and logged.
+ *
+ * Implements `NotificationProvider` so it can be registered with `NotificationManager`
+ * and receive events through a single dispatch channel.
  */
-export class IssueNotifier {
+export class IssueNotifier implements NotificationProvider {
   private readonly updates: CadreConfig['issueUpdates'];
 
   constructor(
@@ -142,6 +147,39 @@ export class IssueNotifier {
     ].join('\n');
 
     await this.post(issueNumber, body);
+  }
+
+  /**
+   * NotificationProvider adapter — dispatches CadreEvent to the appropriate
+   * lifecycle method. Unknown event types are silently ignored.
+   */
+  async notify(event: CadreEvent): Promise<void> {
+    switch (event.type) {
+      case 'issue-started':
+        return this.notifyStart(event.issueNumber, event.issueTitle);
+      case 'phase-completed':
+        return this.notifyPhaseComplete(event.issueNumber, event.phase, event.phaseName, event.duration);
+      case 'issue-completed':
+        return this.notifyComplete(event.issueNumber, event.issueTitle, event.prUrl, event.tokenUsage);
+      case 'issue-failed':
+        return this.notifyFailed(
+          event.issueNumber,
+          event.issueTitle,
+          event.phaseName ? { id: event.phase, name: event.phaseName } : undefined,
+          event.failedTask,
+          event.error,
+        );
+      case 'budget-warning':
+        if (event.scope === 'issue' && event.issueNumber != null) {
+          return this.notifyBudgetWarning(event.issueNumber, event.currentUsage, event.budget);
+        }
+        return;
+      case 'ambiguity-detected':
+        return this.notifyAmbiguities(event.issueNumber, event.ambiguities);
+      default:
+        // Ignore events this provider doesn't handle
+        return;
+    }
   }
 
   private async post(issueNumber: number, body: string): Promise<void> {

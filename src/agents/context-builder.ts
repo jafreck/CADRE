@@ -223,11 +223,12 @@ export class ContextBuilder {
   async buildForFixSurgeon(
     issueNumber: number,
     worktreePath: string,
-    task: ImplementationTask,
+    taskId: string,
     feedbackPath: string,
     changedFiles: string[],
     progressDir: string,
     issueType: 'review' | 'test-failure' | 'build',
+    phase: 3 | 4,
   ): Promise<string> {
     return this.writeContext(progressDir, 'fix-surgeon', issueNumber, {
       agent: 'fix-surgeon',
@@ -235,13 +236,13 @@ export class ContextBuilder {
       projectName: this.config.projectName,
       repository: this.config.repository,
       worktreePath,
-      phase: 3,
-      taskId: task.id,
+      phase,
+      taskId,
       config: { commands: this.config.commands },
       inputFiles: [feedbackPath, ...changedFiles],
       outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload: {
-        taskId: task.id,
+        taskId,
         issueType,
       },
     });

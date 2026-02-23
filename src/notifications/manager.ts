@@ -7,7 +7,7 @@ import { LogProvider } from './log-provider.js';
 
 export class NotificationManager {
   private readonly providers: NotificationProvider[];
-  private readonly enabled: boolean;
+  private enabled: boolean;
 
   constructor(config?: NotificationsConfig) {
     if (!config || !config.enabled) {
@@ -27,6 +27,15 @@ export class NotificationManager {
           return new LogProvider({ logFile: p.logFile, events: p.events });
       }
     });
+  }
+
+  /**
+   * Register an additional notification provider at runtime.
+   * Automatically enables dispatching if it was previously disabled.
+   */
+  addProvider(provider: NotificationProvider): void {
+    this.providers.push(provider);
+    this.enabled = true;
   }
 
   async dispatch(event: CadreEvent): Promise<void> {

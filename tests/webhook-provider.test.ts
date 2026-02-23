@@ -153,6 +153,7 @@ describe('WebhookProvider', () => {
       const event: CadreEvent = {
         type: 'issue-completed',
         issueNumber: 42,
+        issueTitle: 'Fix bug',
         success: true,
         prNumber: 7,
         duration: 300,

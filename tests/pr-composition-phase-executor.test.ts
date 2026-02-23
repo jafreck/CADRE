@@ -73,6 +73,28 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     debug: vi.fn(),
   };
 
+  const services = {
+    launcher: launcher as never,
+    retryExecutor: retryExecutor as never,
+    tokenTracker: {} as never,
+    contextBuilder: contextBuilder as never,
+    resultParser: resultParser as never,
+    logger: logger as never,
+  };
+
+  const io = {
+    progressDir: '/tmp/progress',
+    progressWriter: {} as never,
+    checkpoint: {} as never,
+    commitManager: commitManager as never,
+  };
+
+  const callbacks = {
+    recordTokens,
+    checkBudget,
+    updateProgress: vi.fn().mockResolvedValue(undefined),
+  };
+
   return {
     issue: {
       number: 42,
@@ -92,21 +114,14 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
       commits: { squashBeforePR: false },
       baseBranch: 'main',
     } as never,
-    progressDir: '/tmp/progress',
-    contextBuilder: contextBuilder as never,
-    launcher: launcher as never,
-    resultParser: resultParser as never,
-    checkpoint: {} as never,
-    commitManager: commitManager as never,
-    retryExecutor: retryExecutor as never,
-    tokenTracker: {} as never,
-    progressWriter: {} as never,
     platform: platform as never,
-    recordTokens,
-    checkBudget,
-    logger: logger as never,
-    ...overrides,
-  };
+    services: { ...services, ...overrides.services } as never,
+    io: { ...io, ...overrides.io } as never,
+    callbacks: { ...callbacks, ...overrides.callbacks } as never,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([k]) => !['services', 'io', 'callbacks'].includes(k)),
+    ),
+  } as PhaseContext;
 }
 
 describe('PRCompositionPhaseExecutor', () => {
@@ -136,7 +151,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { getDiff: ReturnType<typeof vi.fn> }).getDiff,
+        (ctx.io.commitManager as never as { getDiff: ReturnType<typeof vi.fn> }).getDiff,
       ).toHaveBeenCalledWith('abc123');
     });
 
@@ -154,7 +169,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.contextBuilder as never as { buildForPRComposer: ReturnType<typeof vi.fn> }).buildForPRComposer,
+        (ctx.services.contextBuilder as never as { buildForPRComposer: ReturnType<typeof vi.fn> }).buildForPRComposer,
       ).toHaveBeenCalledWith(
         42,
         '/tmp/worktree',
@@ -171,7 +186,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'pr-composer',
@@ -193,13 +208,13 @@ describe('PRCompositionPhaseExecutor', () => {
     it('should record tokens for pr-composer', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.recordTokens).toHaveBeenCalledWith('pr-composer', 50);
+      expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('pr-composer', 50);
     });
 
     it('should check budget during execution', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect(ctx.checkBudget).toHaveBeenCalled();
+      expect(ctx.callbacks.checkBudget).toHaveBeenCalled();
     });
 
     it('should not create PR when autoCreate is false', async () => {
@@ -214,7 +229,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { push: ReturnType<typeof vi.fn> }).push,
+        (ctx.io.commitManager as never as { push: ReturnType<typeof vi.fn> }).push,
       ).not.toHaveBeenCalled();
     });
   });
@@ -236,7 +251,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeAutoCreateCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.resultParser as never as { parsePRContent: ReturnType<typeof vi.fn> }).parsePRContent,
+        (ctx.services.resultParser as never as { parsePRContent: ReturnType<typeof vi.fn> }).parsePRContent,
       ).toHaveBeenCalledWith(join('/tmp/progress', 'pr-content.md'));
     });
 
@@ -244,7 +259,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeAutoCreateCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { push: ReturnType<typeof vi.fn> }).push,
+        (ctx.io.commitManager as never as { push: ReturnType<typeof vi.fn> }).push,
       ).toHaveBeenCalledWith(true);
     });
 
@@ -267,7 +282,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const resultParser = {
         parsePRContent: vi.fn().mockResolvedValue({ title: '', body: 'Body text.' }),
       };
-      const ctx = makeAutoCreateCtx({ resultParser: resultParser as never });
+      const ctx = makeAutoCreateCtx({ services: { resultParser: resultParser } as never });
       await executor.execute(ctx);
       expect(
         (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
@@ -280,7 +295,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeAutoCreateCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
+        (ctx.io.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
       ).not.toHaveBeenCalled();
     });
 
@@ -295,7 +310,7 @@ describe('PRCompositionPhaseExecutor', () => {
       });
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
+        (ctx.io.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
       ).toHaveBeenCalledWith('abc123', 'Fix: resolve issue');
     });
 
@@ -310,11 +325,11 @@ describe('PRCompositionPhaseExecutor', () => {
           commits: { squashBeforePR: true },
           baseBranch: 'main',
         } as never,
-        resultParser: resultParser as never,
+        services: { resultParser: resultParser } as never,
       });
       await executor.execute(ctx);
       expect(
-        (ctx.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
+        (ctx.io.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
       ).toHaveBeenCalledWith('abc123', 'Fix #42: Test issue');
     });
 
@@ -446,7 +461,7 @@ describe('PRCompositionPhaseExecutor', () => {
         error: vi.fn(),
         debug: vi.fn(),
       };
-      const ctx = makeAutoCreateCtx({ platform: platform as never, logger: logger as never });
+      const ctx = makeAutoCreateCtx({ platform: platform as never, services: { logger: logger } as never });
       await executor.execute(ctx);
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to create PR'),
@@ -471,7 +486,7 @@ describe('PRCompositionPhaseExecutor', () => {
         error: 'composer error',
       };
       const launcher = { launchAgent: vi.fn().mockResolvedValue(failResult) };
-      const ctx = makeCtx({ launcher: launcher as never });
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('PR composer failed:');
     });
 
@@ -479,7 +494,7 @@ describe('PRCompositionPhaseExecutor', () => {
       const retryExecutor = {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'max retries exceeded' }),
       };
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('PR composer failed:');
     });
   });
@@ -492,7 +507,7 @@ describe('PRCompositionPhaseExecutor', () => {
           return { success: true, result };
         }),
       };
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
       expect(retryExecutor.execute).toHaveBeenCalledWith(
         expect.objectContaining({ maxAttempts: 3 }),
@@ -508,7 +523,7 @@ describe('PRCompositionPhaseExecutor', () => {
           return { success: true, result };
         }),
       };
-      const ctx = makeCtx({ retryExecutor: retryExecutor as never });
+      const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
       expect(descriptions).toContain('pr-composer');
     });
