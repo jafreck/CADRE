@@ -152,11 +152,14 @@ describe('AnalysisToPlanningGate', () => {
 
 describe('PlanningToImplementationGate', () => {
   let tempDir: string;
+  let worktreeDir: string;
   let gate: PlanningToImplementationGate;
 
   beforeEach(async () => {
     tempDir = join(tmpdir(), `cadre-gate-test-${Date.now()}`);
+    worktreeDir = join(tempDir, 'worktree');
     await mkdir(tempDir, { recursive: true });
+    await mkdir(worktreeDir, { recursive: true });
     gate = new PlanningToImplementationGate();
   });
 
@@ -166,8 +169,10 @@ describe('PlanningToImplementationGate', () => {
 
   it('should pass with a valid implementation plan', async () => {
     await writeFile(join(tempDir, 'implementation-plan.md'), VALID_PLAN);
+    await mkdir(join(worktreeDir, 'src/core'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/core/first.ts'), '');
 
-    const result = await gate.validate(makeContext(tempDir));
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
     expect(result.status).toBe('pass');
     expect(result.errors).toHaveLength(0);
   });
@@ -272,8 +277,11 @@ describe('PlanningToImplementationGate', () => {
 - Also works
 `;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
+    await mkdir(join(worktreeDir, 'src'), { recursive: true });
+    await writeFile(join(worktreeDir, 'src/first.ts'), '');
+    await writeFile(join(worktreeDir, 'src/second.ts'), '');
 
-    const result = await gate.validate(makeContext(tempDir));
+    const result = await gate.validate(makeContext(tempDir, worktreeDir));
     expect(result.status).toBe('pass');
     expect(result.errors).toHaveLength(0);
   });
