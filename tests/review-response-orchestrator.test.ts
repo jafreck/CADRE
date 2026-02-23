@@ -420,8 +420,6 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
     }));
 
     const { CommitManager } = await import('../src/git/commit.js');
-    const pushSpy = vi.fn().mockResolvedValue(undefined);
-    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({ push: pushSpy }));
 
     const config = makeConfig();
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -438,7 +436,7 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
 
     await orchestrator.run([1]);
 
-    expect(pushSpy).not.toHaveBeenCalled();
+    expect(CommitManager).not.toHaveBeenCalled();
     expect(platform.updatePullRequest).not.toHaveBeenCalled();
   });
 
@@ -464,6 +462,65 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
     await orchestrator.run([1]);
 
     expect(platform.addIssueComment).not.toHaveBeenCalled();
+  });
+
+  it('counts the issue as failed and logs when push throws', async () => {
+    const { CommitManager } = await import('../src/git/commit.js');
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      push: vi.fn().mockRejectedValue(new Error('push error')),
+    }));
+
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('push error'),
+      expect.objectContaining({ issueNumber: 1 }),
+    );
+  });
+
+  it('counts the issue as failed and logs when updatePullRequest throws', async () => {
+    const { CommitManager } = await import('../src/git/commit.js');
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      push: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const config = makeConfig();
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    platform.listPullRequests.mockResolvedValue([makePR({ number: 10 })]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+    platform.updatePullRequest.mockRejectedValue(new Error('update error'));
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    const result = await orchestrator.run([1]);
+
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('update error'),
+      expect.objectContaining({ issueNumber: 1 }),
+    );
   });
 
   it('increments failed count and logs error when pipeline throws', async () => {

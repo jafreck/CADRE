@@ -189,6 +189,7 @@ export class ReviewResponseOrchestrator {
               `Issue #${issueNumber}: push failed: ${pushErr}`,
               { issueNumber },
             );
+            throw pushErr;
           }
 
           // Update the existing PR body with the pr-composer's output
@@ -216,6 +217,7 @@ export class ReviewResponseOrchestrator {
               `Issue #${issueNumber}: failed to update PR #${pr.number}: ${updateErr}`,
               { issueNumber },
             );
+            throw updateErr;
           }
         }
 
