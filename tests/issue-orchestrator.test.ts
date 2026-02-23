@@ -47,6 +47,7 @@ vi.mock('../src/budget/token-tracker.js', () => ({
   TokenTracker: vi.fn().mockImplementation(() => ({
     getTotal: vi.fn().mockReturnValue(0),
     record: vi.fn(),
+    importRecords: vi.fn(),
     getRecords: vi.fn().mockReturnValue([]),
     getByPhase: vi.fn().mockReturnValue({}),
     getSummary: vi.fn().mockReturnValue({ total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 }),
@@ -72,6 +73,7 @@ vi.mock('node:fs/promises', () => ({
 // Default checkpoint mock – all phases are pre-completed so the phase loop skips everything.
 const makeCheckpointMock = (overrides: Record<string, unknown> = {}) => ({
   getResumePoint: vi.fn().mockReturnValue({ phase: 6, task: null }),
+  getTokenRecords: vi.fn().mockReturnValue([]),
   isPhaseCompleted: vi.fn().mockReturnValue(true),
   isTaskCompleted: vi.fn().mockReturnValue(false),
   startPhase: vi.fn().mockResolvedValue(undefined),
