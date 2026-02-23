@@ -40,7 +40,7 @@ export interface CheckpointState {
 // ── Fleet Checkpoint ──
 
 export interface FleetIssueStatus {
-  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded';
+  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete-no-pr';
   worktreePath: string;
   branchName: string;
   lastPhase: number;
@@ -402,7 +402,7 @@ export class FleetCheckpointManager {
 
   isIssueCompleted(issueNumber: number): boolean {
     const status = this.state?.issues[issueNumber]?.status;
-    return status === 'completed' || status === 'budget-exceeded';
+    return status === 'completed' || status === 'budget-exceeded' || status === 'code-complete-no-pr';
   }
 
   private async save(): Promise<void> {

@@ -13,7 +13,7 @@ export interface PullRequestRef {
 export interface IssueProgressInfo {
   issueNumber: number;
   issueTitle: string;
-  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded';
+  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete-no-pr';
   currentPhase: number;
   totalPhases: number;
   prNumber?: number;
@@ -76,6 +76,7 @@ export class FleetProgressWriter {
         failed: '❌',
         blocked: '🚫',
         'budget-exceeded': '💸',
+        'code-complete-no-pr': '🔀',
       }[issue.status];
       md += `\n| #${issue.issueNumber} | ${issue.issueTitle} | ${statusEmoji} ${issue.status} | ${issue.currentPhase}/${issue.totalPhases} | ${prLink} |`;
     }

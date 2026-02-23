@@ -288,6 +288,7 @@ export class IssueOrchestrator {
         platform: this.platform,
         recordTokens: (agent, tokens) => this.recordTokens(agent, tokens),
         checkBudget: () => this.checkBudget(),
+        setPR: (pr) => { this.createdPR = pr; },
         logger: this.logger,
       };
 

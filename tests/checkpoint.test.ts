@@ -335,6 +335,23 @@ describe('FleetCheckpointManager', () => {
     expect(manager.isIssueCompleted(999)).toBe(false);
   });
 
+  it('isIssueCompleted should return true for code-complete-no-pr status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(10, 'code-complete-no-pr', '/path', 'branch', 5);
+    expect(manager.isIssueCompleted(10)).toBe(true);
+  });
+
+  it('FleetIssueStatus should accept code-complete-no-pr as a valid status', () => {
+    const status: FleetIssueStatus = {
+      status: 'code-complete-no-pr',
+      worktreePath: '/path',
+      branchName: 'branch',
+      lastPhase: 5,
+    };
+    expect(status.status).toBe('code-complete-no-pr');
+  });
+
   it('FleetIssueStatus should accept budget-exceeded as a valid status', () => {
     const status: FleetIssueStatus = {
       status: 'budget-exceeded',
