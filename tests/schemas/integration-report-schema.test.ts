@@ -25,13 +25,19 @@ describe('commandResultSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('should accept exitCode: null (process killed by signal)', () => {
+    const result = commandResultSchema.safeParse({ ...valid, exitCode: null, signal: 'SIGTERM', pass: false });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.exitCode).toBeNull();
+  });
+
   it('should accept a failing CommandResult', () => {
     const result = commandResultSchema.safeParse({ ...valid, exitCode: 1, pass: false });
     expect(result.success).toBe(true);
   });
 
   it('should accept a CommandResult with a signal (killed by OS)', () => {
-    const result = commandResultSchema.safeParse({ ...valid, exitCode: -1, signal: 'SIGTERM', pass: false });
+    const result = commandResultSchema.safeParse({ ...valid, exitCode: null, signal: 'SIGTERM', pass: false });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.signal).toBe('SIGTERM');
   });
