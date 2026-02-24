@@ -139,18 +139,16 @@ vi.mock('node:fs/promises', () => ({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Build an analysis.md string with the given ambiguity items listed under "## Ambiguities". */
+/** Build an analysis.md string with a cadre-json block containing the given ambiguities. */
 function buildAnalysisMd(ambiguities: string[]): string {
-  if (ambiguities.length === 0) return '# Analysis\n\nNo ambiguities.\n';
-  return [
-    '# Analysis',
-    '',
-    '## Ambiguities',
-    ...ambiguities,
-    '',
-    '## Next Section',
-    'Other content.',
-  ].join('\n');
+  const cadreJson = JSON.stringify({
+    requirements: ['Some requirement'],
+    changeType: 'bug-fix',
+    scope: 'small',
+    affectedAreas: ['src/foo.ts'],
+    ambiguities,
+  });
+  return `# Analysis\n\nSome prose.\n\n\`\`\`cadre-json\n${cadreJson}\n\`\`\`\n`;
 }
 
 function makeConfig(overrides: Record<string, unknown> = {}) {
@@ -348,7 +346,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
   });
 
   it('should log each ambiguity at warn level after phase 1 succeeds', async () => {
-    mockReadFile.mockResolvedValue(buildAnalysisMd(['- Unclear requirement A', '- Missing scope for B']));
+    mockReadFile.mockResolvedValue(buildAnalysisMd(['Unclear requirement A', 'Missing scope for B']));
     const logger = makeLogger();
     const orchestrator = makeOrchestrator({}, logger);
 
@@ -360,7 +358,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
   });
 
   it('should call notifyAmbiguities with all ambiguities when the list is non-empty', async () => {
-    const ambiguities = ['- Unclear requirement A', '- Missing scope for B'];
+    const ambiguities = ['Unclear requirement A', 'Missing scope for B'];
     mockReadFile.mockResolvedValue(buildAnalysisMd(ambiguities));
     const orchestrator = makeOrchestrator();
 
@@ -386,7 +384,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
 
   it('should halt the pipeline when haltOnAmbiguity is true and count exceeds threshold', async () => {
     // threshold=2, count=3 → should halt
-    const ambiguities = ['- A', '- B', '- C'];
+    const ambiguities = ['A', 'B', 'C'];
     mockReadFile.mockResolvedValue(buildAnalysisMd(ambiguities));
     const orchestrator = makeOrchestrator({ ambiguityThreshold: 2, haltOnAmbiguity: true });
 
@@ -397,7 +395,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
   });
 
   it('should include the ambiguity count and threshold in the halt message', async () => {
-    const ambiguities = ['- A', '- B', '- C'];
+    const ambiguities = ['A', 'B', 'C'];
     mockReadFile.mockResolvedValue(buildAnalysisMd(ambiguities));
     const orchestrator = makeOrchestrator({ ambiguityThreshold: 2, haltOnAmbiguity: true });
 
@@ -408,7 +406,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
   });
 
   it('should append a halt event to the progress log when pipeline is halted for ambiguities', async () => {
-    const ambiguities = ['- A', '- B', '- C'];
+    const ambiguities = ['A', 'B', 'C'];
     mockReadFile.mockResolvedValue(buildAnalysisMd(ambiguities));
     const orchestrator = makeOrchestrator({ ambiguityThreshold: 2, haltOnAmbiguity: true });
 
@@ -420,7 +418,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
 
   it('should continue the pipeline when haltOnAmbiguity is false even if count exceeds threshold', async () => {
     // threshold=2, count=3, haltOnAmbiguity=false → should NOT halt
-    const ambiguities = ['- A', '- B', '- C'];
+    const ambiguities = ['A', 'B', 'C'];
     mockReadFile.mockResolvedValue(buildAnalysisMd(ambiguities));
     const orchestrator = makeOrchestrator({ ambiguityThreshold: 2, haltOnAmbiguity: false });
 
@@ -431,7 +429,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
 
   it('should continue the pipeline when count is exactly at the threshold (not strictly exceeding)', async () => {
     // threshold=2, count=2 → count is not > threshold, so should NOT halt even with haltOnAmbiguity=true
-    const ambiguities = ['- A', '- B'];
+    const ambiguities = ['A', 'B'];
     mockReadFile.mockResolvedValue(buildAnalysisMd(ambiguities));
     const orchestrator = makeOrchestrator({ ambiguityThreshold: 2, haltOnAmbiguity: true });
 
@@ -441,7 +439,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
   });
 
   it('should still log ambiguities and call notifyAmbiguities before halting the pipeline', async () => {
-    const ambiguities = ['- A', '- B', '- C'];
+    const ambiguities = ['A', 'B', 'C'];
     mockReadFile.mockResolvedValue(buildAnalysisMd(ambiguities));
     const logger = makeLogger();
     const orchestrator = makeOrchestrator({ ambiguityThreshold: 2, haltOnAmbiguity: true }, logger);
@@ -451,7 +449,7 @@ describe('IssueOrchestrator – Ambiguity Logic (task-004)', () => {
     expect(result.success).toBe(false);
     // Ambiguities should still be logged and notified before halting
     const warnMessages = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.map(([msg]: [string]) => msg);
-    expect(warnMessages.some((m) => m.includes('- A'))).toBe(true);
+    expect(warnMessages.some((m) => m.includes('A'))).toBe(true);
     expect(mockNotifyAmbiguities).toHaveBeenCalledTimes(1);
   });
 

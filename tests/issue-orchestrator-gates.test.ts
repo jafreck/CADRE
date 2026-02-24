@@ -799,17 +799,16 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
 // ── Ambiguity gating tests ────────────────────────────────────────────────────
 
 describe('IssueOrchestrator – Ambiguity Gating', () => {
-  /** Build an analysis.md string with ambiguity items under "## Ambiguities". */
+  /** Build an analysis.md string with a cadre-json block containing the given ambiguities. */
   function buildAnalysisMd(ambiguities: string[]): string {
-    return [
-      '# Analysis',
-      '',
-      '## Ambiguities',
-      ...ambiguities,
-      '',
-      '## Next Section',
-      'Other content.',
-    ].join('\n');
+    const cadreJson = JSON.stringify({
+      requirements: ['Some requirement'],
+      changeType: 'bug-fix',
+      scope: 'small',
+      affectedAreas: ['src/foo.ts'],
+      ambiguities,
+    });
+    return `# Analysis\n\nSome prose.\n\n\`\`\`cadre-json\n${cadreJson}\n\`\`\`\n`;
   }
 
   /** Config with haltOnAmbiguity enabled and a small threshold. */
@@ -845,7 +844,7 @@ describe('IssueOrchestrator – Ambiguity Gating', () => {
   });
 
   it('should call logger.warn for each ambiguity after Phase 1 succeeds', async () => {
-    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- Ambiguity one', '- Ambiguity two']));
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['Ambiguity one', 'Ambiguity two']));
 
     const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
@@ -867,7 +866,7 @@ describe('IssueOrchestrator – Ambiguity Gating', () => {
   });
 
   it('should invoke notifyAmbiguities when analysis contains ambiguities', async () => {
-    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- Unclear requirement']));
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['Unclear requirement']));
 
     const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
     const orchestrator = makeOrchestrator(checkpoint);
@@ -879,7 +878,7 @@ describe('IssueOrchestrator – Ambiguity Gating', () => {
   });
 
   it('should return failure without running Phase 2 when haltOnAmbiguity is true and threshold is exceeded', async () => {
-    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- A', '- B']));
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['A', 'B']));
 
     const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
     const orchestrator = new IssueOrchestrator(
@@ -901,7 +900,7 @@ describe('IssueOrchestrator – Ambiguity Gating', () => {
   });
 
   it('should continue normally when haltOnAmbiguity is false even if threshold is exceeded', async () => {
-    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['- A', '- B']));
+    mockFsReadFile.mockResolvedValue(buildAnalysisMd(['A', 'B']));
 
     const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
     const orchestrator = makeOrchestrator(checkpoint); // haltOnAmbiguity defaults to false
