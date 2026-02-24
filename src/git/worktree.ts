@@ -608,6 +608,13 @@ export class WorktreeManager {
   private async getBaseCommit(worktreePath: string): Promise<string> {
     try {
       const worktreeGit = simpleGit(worktreePath);
+      // Use merge-base with origin/baseBranch (or local baseBranch as fallback) so
+      // this always returns the fork point, not the latest implementation commit.
+      for (const ref of [`origin/${this.baseBranch}`, this.baseBranch]) {
+        const result = await worktreeGit.raw(['merge-base', 'HEAD', ref]).catch(() => '');
+        if (result.trim()) return result.trim();
+      }
+      // Fall back to HEAD for newly created worktrees that have no commits yet
       const head = await worktreeGit.revparse(['HEAD']);
       return head.trim();
     } catch {

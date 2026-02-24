@@ -414,7 +414,9 @@ describe('WorktreeManager', () => {
       const result = await manager.provisionFromBranch(42, 'cadre/issue-42');
 
       expect(mockGit.fetch).not.toHaveBeenCalled();
-      expect(mockGit.raw).not.toHaveBeenCalled();
+      // raw IS called for merge-base (to find the fork point), but not for worktree add
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls;
+      expect(rawCalls.every((args: string[][]) => !args[0].includes('worktree'))).toBe(true);
       expect(result).toMatchObject({
         issueNumber: 42,
         path: '/tmp/worktrees/issue-42',

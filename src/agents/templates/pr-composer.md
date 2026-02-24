@@ -14,7 +14,7 @@ Read all task result summaries before composing the PR. Understand the full scop
 
 ## Output Contract
 
-Return a `PRContent` object in a `cadre-json` fenced block. **The fence language must be `cadre-json` exactly — cadre uses this marker to parse the output; a plain `json` block will not be detected.**
+Write a `pr-content.md` file at the path specified by `outputPath` in your context file. The file must contain a `cadre-json` fenced block with the PR content. **The fence language must be `cadre-json` exactly — cadre uses this marker to parse the output; a plain `json` block will not be detected.**
 
 ```cadre-json
 {
@@ -23,6 +23,8 @@ Return a `PRContent` object in a `cadre-json` fenced block. **The fence language
   "labels": ["array", "of", "label", "strings"]
 }
 ```
+
+**You MUST write this file before finishing.** If the file is not written, the pipeline will fail.
 
 ### PR Body Structure
 
