@@ -8,6 +8,7 @@ import type {
   ListIssuesParams,
   ReviewThread,
   PRComment,
+  PRReview,
 } from './provider.js';
 import { GitHubMCPClient, type MCPServerConfig } from '../github/mcp-client.js';
 import { GitHubAPI } from '../github/api.js';
@@ -162,6 +163,39 @@ export class GitHubProvider implements PlatformProvider {
   async listPRComments(prNumber: number): Promise<PRComment[]> {
     const raw = await this.getAPI().getPRComments(prNumber);
     return this.parsePRComments(raw);
+  }
+
+  async listPRReviews(prNumber: number): Promise<PRReview[]> {
+    const raw = await this.getAPI().getPRReviews(prNumber);
+    return this.parsePRReviews(prNumber, raw);
+  }
+
+  private parsePRReviews(_prNumber: number, raw: unknown): PRReview[] {
+    let items: unknown[];
+    if (Array.isArray(raw)) {
+      items = raw;
+    } else if (raw !== null && typeof raw === 'object') {
+      const envelope = raw as Record<string, unknown>;
+      // Some MCP versions wrap reviews in an envelope
+      items = Array.isArray(envelope.reviews) ? envelope.reviews : [];
+    } else {
+      return [];
+    }
+
+    return items.map((item) => {
+      const r = item as Record<string, unknown>;
+      const userObj = (r.user ?? r.author ?? {}) as Record<string, unknown>;
+      const login = String(userObj.login ?? userObj.Login ?? 'unknown');
+      const isBot = login.includes('[bot]') || String(userObj.type ?? '').toLowerCase() === 'bot';
+      return {
+        id: String(r.id ?? ''),
+        author: login,
+        isBot,
+        body: String(r.body ?? ''),
+        state: String(r.state ?? ''),
+        submittedAt: String(r.submitted_at ?? r.submittedAt ?? ''),
+      };
+    });
   }
 
   private parsePRComments(raw: unknown): PRComment[] {

@@ -63,6 +63,20 @@ export interface ReviewComment {
 }
 
 /**
+ * A top-level pull request review (submitted via the Reviews API, with an optional body).
+ */
+export interface PRReview {
+  id: string;
+  author: string;
+  /** Whether the author account is a bot (e.g. github-actions[bot]). */
+  isBot: boolean;
+  body: string;
+  /** Review state: APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, etc. */
+  state: string;
+  submittedAt: string;
+}
+
+/**
  * A regular (non-review) pull request comment (issue-style comment on the PR conversation).
  */
 export interface PRComment {
@@ -159,6 +173,8 @@ export interface PlatformProvider {
   listPRReviewComments(prNumber: number): Promise<ReviewThread[]>;
   /** List regular (non-review) conversation comments on a pull request. */
   listPRComments(prNumber: number): Promise<PRComment[]>;
+  /** List top-level pull request reviews (review bodies, not inline thread comments). */
+  listPRReviews(prNumber: number): Promise<PRReview[]>;
 
   // ── Issue Linking ──
 
