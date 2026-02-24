@@ -129,6 +129,77 @@ describe('WorktreeManager', () => {
     });
   });
 
+  describe('provision (fresh path)', () => {
+    let mockGit: ReturnType<typeof simpleGit>;
+
+    beforeEach(() => {
+      mockGit = simpleGit('/tmp/repo');
+      vi.clearAllMocks();
+      vi.mocked(fsUtils.exists).mockResolvedValue(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('basesha');
+      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: [] });
+      (mockGit.branch as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
+    });
+
+    it('should create a fresh worktree when resume is false and worktree does not exist', async () => {
+      const result = await manager.provision(42, 'my issue');
+
+      expect(result.issueNumber).toBe(42);
+      expect(result.exists).toBe(true);
+      expect(result.branch).toBe('cadre/issue-42');
+    });
+
+    it('should call git worktree add with the correct path', async () => {
+      await manager.provision(42, 'my issue');
+
+      expect(mockGit.raw).toHaveBeenCalledWith(
+        expect.arrayContaining(['worktree', 'add', '/tmp/worktrees/issue-42']),
+      );
+    });
+
+    it('should create branch from base commit when branch does not exist locally', async () => {
+      await manager.provision(42, 'my issue');
+
+      expect(mockGit.branch).toHaveBeenCalledWith(
+        expect.arrayContaining(['cadre/issue-42', 'basesha']),
+      );
+    });
+
+    it('should skip branch creation when branch already exists locally', async () => {
+      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: ['cadre/issue-42'] });
+
+      await manager.provision(42, 'my issue');
+
+      expect(mockGit.branch).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to local base branch when origin/<base> revparse fails', async () => {
+      (mockGit.revparse as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new Error('unknown revision origin/main'))
+        .mockResolvedValueOnce('localsha');
+
+      const result = await manager.provision(42, 'my issue');
+
+      expect(result.baseCommit).toBe('localsha');
+    });
+
+    it('should return syncedAgentFiles in the result', async () => {
+      const result = await manager.provision(42, 'my issue');
+
+      expect(Array.isArray(result.syncedAgentFiles)).toBe(true);
+    });
+
+    it('should log info after provisioning', async () => {
+      await manager.provision(42, 'my issue');
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Provisioned worktree for issue #42'),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe('provision (resume path)', () => {
     let mockGit: ReturnType<typeof simpleGit>;
 
