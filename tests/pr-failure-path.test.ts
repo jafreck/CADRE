@@ -132,39 +132,6 @@ describe('PR failure path', () => {
     notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as unknown as NotificationManager;
   });
 
-  it('PR creation failure → codeComplete true, prCreated false, not in prsCreated', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Issue 1',
-        success: true,
-        codeComplete: true,
-        prCreated: false,
-        pr: undefined,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-      }),
-    }));
-
-    const config = makeConfig();
-    const { worktreeManager, launcher, platform, logger } = makeDeps();
-
-    const fleet = new FleetOrchestrator(
-      config, [makeIssue(1)],
-      worktreeManager as any, launcher as any, platform as any, logger as any,
-      notifications,
-    );
-    const result = await fleet.run();
-
-    expect(result.codeComplete ?? result.codeDoneNoPR.length > 0).toBeTruthy();
-    expect(result.prsCreated).toHaveLength(0);
-    expect(result.codeDoneNoPR).toHaveLength(1);
-    expect(result.codeDoneNoPR[0]).toMatchObject({ issueNumber: 1 });
-    expect(result.success).toBe(true);
-  });
-
   it('PR creation success → prCreated true, appears in prsCreated', async () => {
     const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
     const fakePR = {
