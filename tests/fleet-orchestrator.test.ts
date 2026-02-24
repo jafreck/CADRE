@@ -657,6 +657,56 @@ describe('FleetOrchestrator — runReviewResponse', () => {
     expect(result.failedIssues).toHaveLength(1);
     expect(result.failedIssues[0].issueNumber).toBe(5);
   });
+
+  it('populates codeDoneNoPR when an issue result has codeComplete=true and prCreated=false', async () => {
+    const { ReviewResponseOrchestrator } = await import('../src/core/review-response-orchestrator.js');
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        processed: 1,
+        skipped: 0,
+        succeeded: 1,
+        failed: 0,
+        issues: [
+          {
+            issueNumber: 10,
+            skipped: false,
+            result: {
+              issueNumber: 10,
+              issueTitle: 'Issue 10',
+              success: true,
+              codeComplete: true,
+              prCreated: false,
+              phases: [],
+              totalDuration: 100,
+              tokenUsage: 200,
+            },
+          },
+        ],
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(10)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.runReviewResponse();
+
+    expect(result.codeDoneNoPR).toHaveLength(1);
+    expect(result.codeDoneNoPR[0]).toMatchObject({ issueNumber: 10, issueTitle: 'Issue 10' });
+    expect(result.prsCreated).toHaveLength(0);
+    expect(result.failedIssues).toHaveLength(0);
+  });
 });
 
 

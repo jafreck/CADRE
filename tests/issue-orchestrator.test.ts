@@ -907,7 +907,7 @@ describe('IssueOrchestrator – codeComplete and prCreated fields', () => {
     expect(result.pr).toBeUndefined();
   });
 
-  it('should wire onPRFailed callback to set prFailed flag', async () => {
+  it('should wire onPRFailed callback that is callable without throwing', async () => {
     const checkpoint = makeCheckpointMock();
     const orchestrator = new IssueOrchestrator(
       makeConfig(),
@@ -921,12 +921,11 @@ describe('IssueOrchestrator – codeComplete and prCreated fields', () => {
 
     await orchestrator.run();
 
-    expect((orchestrator as any).prFailed).toBe(false);
-    (orchestrator as any).ctx.callbacks.onPRFailed();
-    expect((orchestrator as any).prFailed).toBe(true);
+    // onPRFailed is a no-op; PR failure is surfaced via prCreated=false
+    expect(() => (orchestrator as any).ctx.callbacks.onPRFailed()).not.toThrow();
   });
 
-  it('should not set prFailed when onPRFailed is not invoked', async () => {
+  it('should surface PR failure via prCreated=false rather than a prFailed flag', async () => {
     const checkpoint = makeCheckpointMock();
     const orchestrator = new IssueOrchestrator(
       makeConfig(),
@@ -940,7 +939,9 @@ describe('IssueOrchestrator – codeComplete and prCreated fields', () => {
 
     await orchestrator.run();
 
-    expect((orchestrator as any).prFailed).toBe(false);
+    // PR failure is communicated via prCreated being false, not a separate prFailed property
+    const result = (orchestrator as any).buildResult(true, undefined, Date.now() - 100);
+    expect(result.prCreated).toBe(false);
   });
 
   it('should have onPRFailed defined in ctx.callbacks after run()', async () => {
