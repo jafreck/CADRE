@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import { registerAgentsCommand } from '../src/cli/agents.js';
 
@@ -19,7 +19,8 @@ function buildProgram(): Command {
     .option('-i, --issue <numbers...>', 'Override: process specific issue numbers')
     .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
     .option('--no-pr', 'Skip PR creation')
-    .option('--respond-to-reviews', 'Respond to pull request reviews instead of processing new issues');
+    .option('--respond-to-reviews', 'Respond to pull request reviews instead of processing new issues')
+    .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files');
   program.command('status').description('Show current pipeline status');
   program.command('reset').description('Reset pipeline state');
   program.command('worktrees').description('List or prune CADRE-managed worktrees');
@@ -144,5 +145,98 @@ describe('src/index.ts command registration', () => {
     const opts = runCmd.opts();
     expect(opts.respondToReviews).toBe(true);
     expect(opts.issue).toEqual(['42', '97']);
+  });
+
+  it('(a) should register --no-autoscaffold option on the run command', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    const optionNames = runCmd.options.map((o) => o.long);
+    expect(optionNames).toContain('--no-autoscaffold');
+  });
+
+  it('(b) should default autoscaffold to true when --no-autoscaffold is not provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions([]);
+    expect(runCmd.opts().autoscaffold).toBe(true);
+  });
+
+  it('(c) should set autoscaffold to false when --no-autoscaffold is provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions(['--no-autoscaffold']);
+    expect(runCmd.opts().autoscaffold).toBe(false);
+  });
+});
+
+describe('cadre run autoscaffold behavior', () => {
+  const originalArgv = process.argv;
+
+  let validateAgentFilesMock: ReturnType<typeof vi.fn>;
+  let scaffoldMissingAgentsMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    validateAgentFilesMock = vi.fn();
+    scaffoldMissingAgentsMock = vi.fn();
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  async function loadRunWith(args: string[]) {
+    process.argv = ['node', 'index.js', 'run', ...args];
+    vi.resetModules();
+    vi.doMock('../src/config/loader.js', () => ({
+      loadConfig: vi.fn().mockResolvedValue({
+        copilot: { agentDir: '/agent-dir' },
+        agent: { backend: 'copilot' },
+      }),
+      applyOverrides: vi.fn((c: unknown) => c),
+    }));
+    vi.doMock('../src/core/runtime.js', () => ({
+      CadreRuntime: vi.fn().mockImplementation(() => ({
+        run: vi.fn().mockResolvedValue({ success: true }),
+      })),
+    }));
+    vi.doMock('../src/core/agent-launcher.js', () => ({
+      AgentLauncher: { validateAgentFiles: validateAgentFilesMock },
+    }));
+    vi.doMock('../src/cli/agents.js', () => ({
+      registerAgentsCommand: vi.fn(),
+      scaffoldMissingAgents: scaffoldMissingAgentsMock,
+    }));
+    await import('../src/index.js').catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  it('(b) autoscaffold: calls scaffoldMissingAgents, logs notice, and does not exit 1 when all issues resolve', async () => {
+    validateAgentFilesMock
+      .mockResolvedValueOnce(['  ❌ Missing: /agent-dir/some-agent.agent.md'])
+      .mockResolvedValueOnce([]);
+    scaffoldMissingAgentsMock.mockResolvedValue(1);
+
+    await loadRunWith([]);
+
+    expect(scaffoldMissingAgentsMock).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining('Auto-scaffolded 1 missing agent file(s)'),
+    );
+    expect(process.exit).not.toHaveBeenCalledWith(1);
+  });
+
+  it('(c) --no-autoscaffold: does not call scaffoldMissingAgents and exits 1', async () => {
+    validateAgentFilesMock.mockResolvedValue(['  ❌ Missing: /agent-dir/some-agent.agent.md']);
+    scaffoldMissingAgentsMock.mockResolvedValue(0);
+
+    await loadRunWith(['--no-autoscaffold']);
+
+    expect(scaffoldMissingAgentsMock).not.toHaveBeenCalled();
+    expect(process.exit).toHaveBeenCalledWith(1);
   });
 });
