@@ -23,6 +23,8 @@ export interface FleetResult {
   issues: IssueResult[];
   /** Issues that completed and had PRs opened. */
   prsCreated: PullRequestInfo[];
+  /** Issues where code was completed but no PR was created. */
+  codeDoneNoPR: Array<{ issueNumber: number; issueTitle: string }>;
   /** Issues that failed or were blocked. */
   failedIssues: Array<{ issueNumber: number; error: string }>;
   /** Total duration across all pipelines. */
@@ -115,7 +117,7 @@ export class FleetOrchestrator {
     // Write final progress
     await this.writeFleetProgress(fleetResult);
     await this.fleetProgress.appendEvent(
-      `Fleet completed: ${fleetResult.prsCreated.length} PRs, ${fleetResult.failedIssues.length} failures`,
+      `Fleet completed: ${fleetResult.prsCreated.length} PRs, ${fleetResult.codeDoneNoPR.length} code-done-no-pr, ${fleetResult.failedIssues.length} failures`,
     );
     await this.notifications.dispatch({
       type: 'fleet-completed',
@@ -163,6 +165,7 @@ export class FleetOrchestrator {
       success: failedIssues.length === 0,
       issues: issueResults,
       prsCreated,
+      codeDoneNoPR: [],
       failedIssues,
       totalDuration: Date.now() - startTime,
       tokenUsage: this.tokenTracker.getSummary(),
@@ -294,9 +297,11 @@ export class FleetOrchestrator {
       // 7. Update fleet checkpoint
       const status = result.budgetExceeded
         ? 'budget-exceeded'
-        : result.success
-          ? 'completed'
-          : 'failed';
+        : result.success && result.codeComplete && !result.prCreated
+          ? 'code-complete-no-pr'
+          : result.success
+            ? 'completed'
+            : 'failed';
       await this.fleetCheckpoint.setIssueStatus(
         issue.number,
         status,
@@ -410,20 +415,26 @@ export class FleetOrchestrator {
   ): FleetResult {
     const issueResults: IssueResult[] = [];
     const prsCreated: PullRequestInfo[] = [];
+    const codeDoneNoPR: Array<{ issueNumber: number; issueTitle: string }> = [];
     const failedIssues: Array<{ issueNumber: number; error: string }> = [];
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
-        issueResults.push(result.value);
+        const ir = result.value;
+        issueResults.push(ir);
 
-        if (result.value.pr) {
-          prsCreated.push(result.value.pr);
+        if (ir.pr != null) {
+          prsCreated.push(ir.pr);
         }
 
-        if (!result.value.success) {
+        if (ir.codeComplete === true && ir.prCreated !== true) {
+          codeDoneNoPR.push({ issueNumber: ir.issueNumber, issueTitle: ir.issueTitle });
+        }
+
+        if (!ir.success) {
           failedIssues.push({
-            issueNumber: result.value.issueNumber,
-            error: result.value.error ?? 'Unknown error',
+            issueNumber: ir.issueNumber,
+            error: ir.error ?? 'Unknown error',
           });
         }
       } else {
@@ -441,6 +452,7 @@ export class FleetOrchestrator {
       success,
       issues: issueResults,
       prsCreated,
+      codeDoneNoPR,
       failedIssues,
       totalDuration: Date.now() - startTime,
       tokenUsage: this.tokenTracker.getSummary(),
