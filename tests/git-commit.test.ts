@@ -315,4 +315,197 @@ describe('CommitManager', () => {
       await expect(manager.stripCadreFiles('base123')).resolves.toBeUndefined();
     });
   });
+
+  describe('commit with sign', () => {
+    it('should pass -S option when sign is enabled', async () => {
+      const signedConfig = {
+        conventional: false,
+        sign: true,
+        commitPerPhase: true,
+        squashBeforePR: false,
+      } as CadreConfig['commits'];
+      const signedManager = new CommitManager('/tmp/worktree', signedConfig, mockLogger);
+
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['src/index.ts'],
+        files: [{ path: 'src/index.ts' }],
+      });
+
+      await signedManager.commit('chore: signed commit', 1);
+
+      expect(mockGit.commit).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        expect.objectContaining({ '-S': null }),
+      );
+    });
+  });
+
+  describe('unstageArtifacts error handling', () => {
+    it('should log debug and continue when git restore --staged throws', async () => {
+      mockGit.raw.mockRejectedValueOnce(new Error('git restore not supported'));
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['src/index.ts'],
+        files: [{ path: 'src/index.ts' }],
+      });
+
+      // Should not throw
+      await expect(manager.commit('fix: something', 1)).resolves.toBeDefined();
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Could not unstage'),
+        expect.any(Object),
+      );
+    });
+  });
+
+  describe('commitFiles', () => {
+    it('should return empty string when files list is empty', async () => {
+      const result = await manager.commitFiles([], 'chore: nothing', 1);
+      expect(result).toBe('');
+      expect(mockGit.add).not.toHaveBeenCalled();
+    });
+
+    it('should return empty string when nothing is staged after adding files', async () => {
+      mockGit.status.mockResolvedValue({ isClean: () => true, staged: [], files: [] });
+
+      const result = await manager.commitFiles(['src/foo.ts'], 'fix: something', 1);
+      expect(result).toBe('');
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Nothing to commit after staging'),
+        expect.any(Object),
+      );
+    });
+
+    it('should stage specified files and commit them', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['src/foo.ts'],
+        files: [{ path: 'src/foo.ts' }],
+      });
+      mockGit.commit.mockResolvedValueOnce({ commit: 'deadbeef' });
+
+      const result = await manager.commitFiles(['src/foo.ts'], 'fix: something', 42);
+
+      expect(mockGit.add).toHaveBeenCalledWith(['src/foo.ts']);
+      expect(mockGit.commit).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        expect.objectContaining({ '--no-verify': null }),
+      );
+      expect(result).toBe('deadbeef');
+    });
+  });
+
+  describe('push', () => {
+    it('should push without force by default', async () => {
+      await manager.push(false, 'feature/my-branch');
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
+      const pushCall = rawCalls.find(([args]) => args[0] === 'push');
+      expect(pushCall).toBeDefined();
+      expect(pushCall![0]).toContain('HEAD:refs/heads/feature/my-branch');
+      expect(pushCall![0]).not.toContain('--force-with-lease');
+      expect(pushCall![0]).toContain('--set-upstream');
+    });
+
+    it('should include --force-with-lease when force is true', async () => {
+      await manager.push(true, 'feature/my-branch');
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
+      const pushCall = rawCalls.find(([args]) => args[0] === 'push');
+      expect(pushCall![0]).toContain('--force-with-lease');
+    });
+  });
+
+  describe('squash', () => {
+    it('should soft-reset to base and create a single commit', async () => {
+      mockGit.commit.mockResolvedValueOnce({ commit: 'squashed123' });
+
+      const result = await manager.squash('base456', 'feat: squashed message');
+
+      expect(mockGit.reset).toHaveBeenCalledWith(['--soft', 'base456']);
+      expect(mockGit.commit).toHaveBeenCalledWith(
+        'feat: squashed message',
+        undefined,
+        expect.objectContaining({ '--no-verify': null }),
+      );
+      expect(result).toBe('squashed123');
+    });
+
+    it('should return empty string when commit returns no sha', async () => {
+      mockGit.commit.mockResolvedValueOnce({ commit: '' });
+
+      const result = await manager.squash('base456', 'feat: squashed');
+      expect(result).toBe('');
+    });
+  });
+
+  describe('getChangedFiles', () => {
+    it('should return all changed files across all status categories', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: [],
+        modified: ['src/a.ts'],
+        created: ['src/b.ts'],
+        deleted: ['src/c.ts'],
+        renamed: [{ from: 'src/d.ts', to: 'src/e.ts' }],
+        not_added: ['src/f.ts'],
+        files: [],
+      });
+
+      const result = await manager.getChangedFiles();
+
+      expect(result).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/e.ts', 'src/f.ts']);
+    });
+
+    it('should return empty array when working tree is clean', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: () => true,
+        staged: [],
+        modified: [],
+        created: [],
+        deleted: [],
+        renamed: [],
+        not_added: [],
+        files: [],
+      });
+
+      const result = await manager.getChangedFiles();
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('isClean', () => {
+    it('should return true when working tree is clean', async () => {
+      mockGit.status.mockResolvedValue({ isClean: () => true, staged: [], files: [] });
+      expect(await manager.isClean()).toBe(true);
+    });
+
+    it('should return false when there are uncommitted changes', async () => {
+      mockGit.status.mockResolvedValue({ isClean: () => false, staged: ['src/foo.ts'], files: [] });
+      expect(await manager.isClean()).toBe(false);
+    });
+  });
+
+  describe('getDiff', () => {
+    it('should call diff with baseCommit range when baseCommit is provided', async () => {
+      mockGit.diff.mockResolvedValueOnce('diff output');
+
+      const result = await manager.getDiff('abc123');
+
+      expect(mockGit.diff).toHaveBeenCalledWith(['abc123..HEAD']);
+      expect(result).toBe('diff output');
+    });
+
+    it('should call diff with no args when baseCommit is not provided', async () => {
+      mockGit.diff.mockResolvedValueOnce('unstaged diff');
+
+      const result = await manager.getDiff();
+
+      expect(mockGit.diff).toHaveBeenCalledWith();
+      expect(result).toBe('unstaged diff');
+    });
+  });
 });
