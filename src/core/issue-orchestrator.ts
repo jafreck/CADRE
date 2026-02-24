@@ -1,7 +1,14 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { RuntimeConfig } from '../config/loader.js';
-import type { PhaseResult } from '../agents/types.js';
+import type { CadreConfig } from '../config/schema.js';
+import type {
+  AgentInvocation,
+  AgentResult,
+  ImplementationTask,
+  PhaseResult,
+  TokenUsageDetail,
+} from '../agents/types.js';
 import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';
@@ -391,18 +398,62 @@ export class IssueOrchestrator {
 
   // ── Helper Methods ──
 
-  private recordTokens(agent: string, tokens: number | null): void {
-    if (tokens != null && tokens > 0) {
+  private async launchWithRetry(
+    agentName: string,
+    invocation: Omit<AgentInvocation, 'timeout'>,
+  ): Promise<AgentResult> {
+    const result = await this.retryExecutor.execute<AgentResult>({
+      fn: async () => {
+        this.checkBudget();
+        const agentResult = await this.launcher.launchAgent(
+          invocation as AgentInvocation,
+          this.worktree.path,
+        );
+        this.recordTokens(agentName, agentResult.tokenUsage);
+        this.checkBudget();
+        if (!agentResult.success) {
+          throw new Error(agentResult.error ?? `Agent ${agentName} failed`);
+        }
+        return agentResult;
+      },
+      maxAttempts: this.config.options.maxRetriesPerTask,
+      description: agentName,
+    });
+
+    this.checkBudget();
+
+    if (!result.success || !result.result) {
+      return {
+        agent: invocation.agent,
+        success: false,
+        exitCode: 1,
+        timedOut: false,
+        duration: 0,
+        stdout: '',
+        stderr: result.error ?? 'Unknown failure',
+        tokenUsage: null,
+        outputPath: invocation.outputPath,
+        outputExists: false,
+        error: result.error,
+      };
+    }
+
+    return result.result;
+  }
+
+  private recordTokens(agent: string, tokens: TokenUsageDetail | number | null): void {
+    const tokenCount = typeof tokens === 'object' && tokens !== null ? tokens.input + tokens.output : tokens;
+    if (tokenCount != null && tokenCount > 0) {
       this.tokenTracker.record(
         this.issue.number,
         agent,
         this.checkpoint.getState().currentPhase,
-        tokens,
+        tokenCount,
       );
       void this.checkpoint.recordTokenUsage(
         agent,
         this.checkpoint.getState().currentPhase,
-        tokens,
+        tokenCount,
       );
     }
     if (
