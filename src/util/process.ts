@@ -48,9 +48,11 @@ export function spawnProcess(
     env: opts.env as NodeJS.ProcessEnv,
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: opts.shell,
+    detached: true,
   };
 
   const child = spawn(command, args, spawnOpts);
+  child.unref();
 
   const promise = new Promise<ProcessResult>((resolve) => {
     const stdoutChunks: Buffer[] = [];
