@@ -1029,3 +1029,106 @@ describe('ReviewResponseOrchestrator — mapIssuesToPRs (via run)', () => {
     expect(worktreeManager.provisionFromBranch).toHaveBeenCalledWith(1, 'cadre/issue-1');
   });
 });
+
+describe('ReviewResponseOrchestrator — isCadreSelfRun label guarantee', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls ensureLabel and applyLabels when isCadreSelfRun is true and pipeline succeeds', async () => {
+    const selfRunConfig = makeRuntimeConfig({
+      repository: 'jafreck/cadre',
+      stateDir: '/tmp/cadre-state',
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [1] },
+      pullRequest: { autoCreate: true, draft: true, labels: [], reviewers: [], linkIssue: false },
+      reviewResponse: { autoReplyOnResolved: false },
+    });
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const ensureLabel = vi.fn().mockResolvedValue(undefined);
+    const applyLabels = vi.fn().mockResolvedValue(undefined);
+    (platform as any).ensureLabel = ensureLabel;
+    (platform as any).applyLabels = applyLabels;
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      selfRunConfig,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(ensureLabel).toHaveBeenCalledWith('cadre-generated');
+    expect(applyLabels).toHaveBeenCalledWith(10, ['cadre-generated']);
+  });
+
+  it('does not call ensureLabel or applyLabels when isCadreSelfRun is false', async () => {
+    const config = makeConfig(); // repository: 'owner/repo' — not cadre self-run
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const ensureLabel = vi.fn().mockResolvedValue(undefined);
+    const applyLabels = vi.fn().mockResolvedValue(undefined);
+    (platform as any).ensureLabel = ensureLabel;
+    (platform as any).applyLabels = applyLabels;
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      config,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(ensureLabel).not.toHaveBeenCalled();
+    expect(applyLabels).not.toHaveBeenCalled();
+  });
+
+  it('does not call ensureLabel or applyLabels when isCadreSelfRun is true but pipeline fails', async () => {
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        success: false,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 0,
+      }),
+    }));
+
+    const selfRunConfig = makeRuntimeConfig({
+      repository: 'jafreck/cadre',
+      stateDir: '/tmp/cadre-state',
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [1] },
+      pullRequest: { autoCreate: true, draft: true, labels: [], reviewers: [], linkIssue: false },
+      reviewResponse: { autoReplyOnResolved: false },
+    });
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const ensureLabel = vi.fn().mockResolvedValue(undefined);
+    const applyLabels = vi.fn().mockResolvedValue(undefined);
+    (platform as any).ensureLabel = ensureLabel;
+    (platform as any).applyLabels = applyLabels;
+    platform.listPullRequests.mockResolvedValue([makePR()]);
+    platform.listPRReviewComments.mockResolvedValue([makeThread()]);
+
+    const orchestrator = new ReviewResponseOrchestrator(
+      selfRunConfig,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+    );
+
+    await orchestrator.run([1]);
+
+    expect(ensureLabel).not.toHaveBeenCalled();
+    expect(applyLabels).not.toHaveBeenCalled();
+  });
+});

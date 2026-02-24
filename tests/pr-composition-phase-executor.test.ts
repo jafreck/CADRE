@@ -499,6 +499,117 @@ describe('PRCompositionPhaseExecutor', () => {
     });
   });
 
+  describe('execute() with isCadreSelfRun — label injection', () => {
+    function makeSelfRunCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
+      return makeCtx({
+        config: {
+          repository: 'jafreck/cadre',
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: [], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        ...overrides,
+      });
+    }
+
+    it('should call ensureLabel before createPullRequest when isCadreSelfRun is true', async () => {
+      const ensureLabel = vi.fn().mockResolvedValue(undefined);
+      const createPullRequest = vi.fn().mockResolvedValue(undefined);
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        ensureLabel,
+        createPullRequest,
+      };
+      const ctx = makeSelfRunCtx({ platform: platform as never });
+      await executor.execute(ctx);
+      expect(ensureLabel).toHaveBeenCalledWith('cadre-generated');
+      const ensureLabelOrder = ensureLabel.mock.invocationCallOrder[0];
+      const createPROrder = createPullRequest.mock.invocationCallOrder[0];
+      expect(ensureLabelOrder).toBeLessThan(createPROrder);
+    });
+
+    it('should inject cadre-generated into labels when isCadreSelfRun is true and labels is empty', async () => {
+      const createPullRequest = vi.fn().mockResolvedValue(undefined);
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        ensureLabel: vi.fn().mockResolvedValue(undefined),
+        createPullRequest,
+      };
+      const ctx = makeSelfRunCtx({ platform: platform as never });
+      await executor.execute(ctx);
+      expect(createPullRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ labels: expect.arrayContaining(['cadre-generated']) }),
+      );
+    });
+
+    it('should not duplicate cadre-generated if already in labels when isCadreSelfRun is true', async () => {
+      const createPullRequest = vi.fn().mockResolvedValue(undefined);
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        ensureLabel: vi.fn().mockResolvedValue(undefined),
+        createPullRequest,
+      };
+      const ctx = makeCtx({
+        config: {
+          repository: 'jafreck/cadre',
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: ['cadre-generated', 'bug'], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+      await executor.execute(ctx);
+      const callArgs = createPullRequest.mock.calls[0][0];
+      const cadreCount = callArgs.labels.filter((l: string) => l === 'cadre-generated').length;
+      expect(cadreCount).toBe(1);
+    });
+
+    it('should not call ensureLabel when isCadreSelfRun is false', async () => {
+      const ensureLabel = vi.fn().mockResolvedValue(undefined);
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        ensureLabel,
+        createPullRequest: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeCtx({
+        config: {
+          repository: 'other-owner/other-repo',
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: [], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+      await executor.execute(ctx);
+      expect(ensureLabel).not.toHaveBeenCalled();
+    });
+
+    it('should pass labels unchanged when isCadreSelfRun is false', async () => {
+      const createPullRequest = vi.fn().mockResolvedValue(undefined);
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest,
+      };
+      const ctx = makeCtx({
+        config: {
+          repository: 'other-owner/other-repo',
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false, labels: ['my-label'], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+      await executor.execute(ctx);
+      expect(createPullRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ labels: ['my-label'] }),
+      );
+    });
+  });
+
   describe('execute() error handling', () => {
     it('should throw if pr-composer agent fails', async () => {
       const failResult: AgentResult = {

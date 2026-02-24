@@ -401,6 +401,14 @@ export class AzureDevOpsProvider implements PlatformProvider {
     return `AB#${issueNumber}`;
   }
 
+  async ensureLabel(_labelName: string, _color?: string): Promise<void> {
+    this.logger.warn('ensureLabel: label management is not yet supported on Azure DevOps');
+  }
+
+  async applyLabels(_prNumber: number, _labels: string[]): Promise<void> {
+    this.logger.warn('applyLabels: label management is not yet supported on Azure DevOps');
+  }
+
   async listPRReviewComments(_prNumber: number): Promise<ReviewThread[]> {
     this.logger.warn('listPRReviewComments: review-response mode is not yet supported on Azure DevOps');
     return [];

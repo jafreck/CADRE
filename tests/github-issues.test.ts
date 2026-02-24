@@ -128,6 +128,120 @@ describe('GitHubAPI', () => {
     });
   });
 
+  describe('ensureLabel', () => {
+    it('should call create_label with default color when no color provided', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({});
+
+      await api.ensureLabel('cadre-generated');
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('create_label', {
+        owner: 'owner',
+        repo: 'repo',
+        name: 'cadre-generated',
+        color: 'ededed',
+      });
+    });
+
+    it('should call create_label with provided color', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({});
+
+      await api.ensureLabel('bug', 'ff0000');
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('create_label', {
+        owner: 'owner',
+        repo: 'repo',
+        name: 'bug',
+        color: 'ff0000',
+      });
+    });
+
+    it('should silently ignore 422 already-exists errors', async () => {
+      vi.mocked(mockMCP.callTool).mockRejectedValue(new Error('422 Unprocessable Entity'));
+
+      await expect(api.ensureLabel('bug')).resolves.toBeUndefined();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should silently ignore errors containing "already exists"', async () => {
+      vi.mocked(mockMCP.callTool).mockRejectedValue(new Error('Label already exists'));
+
+      await expect(api.ensureLabel('bug')).resolves.toBeUndefined();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should warn for non-422 errors', async () => {
+      vi.mocked(mockMCP.callTool).mockRejectedValue(new Error('Network error'));
+
+      await api.ensureLabel('bug');
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to create label "bug"'),
+      );
+    });
+  });
+
+  describe('applyLabels', () => {
+    it('should call issue_write with the given labels when PR has no existing labels', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({});
+
+      await api.applyLabels(42, ['bug', 'enhancement']);
+
+      expect(mockMCP.callTool).toHaveBeenCalledWith('issue_write', {
+        method: 'update',
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 42,
+        labels: ['bug', 'enhancement'],
+      });
+    });
+
+    it('should merge new labels with existing PR labels without clobbering', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({ labels: [{ name: 'existing-label' }, { name: 'other' }] }) // issue_read
+        .mockResolvedValueOnce({}); // issue_write
+
+      await api.applyLabels(42, ['cadre-generated']);
+
+      expect(mockMCP.callTool).toHaveBeenLastCalledWith('issue_write', {
+        method: 'update',
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 42,
+        labels: expect.arrayContaining(['existing-label', 'other', 'cadre-generated']),
+      });
+    });
+
+    it('should deduplicate labels when the label is already present', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({ labels: [{ name: 'cadre-generated' }] }) // issue_read
+        .mockResolvedValueOnce({}); // issue_write
+
+      await api.applyLabels(42, ['cadre-generated']);
+
+      const issueWriteCall = vi.mocked(mockMCP.callTool).mock.calls.find(
+        (c) => c[0] === 'issue_write',
+      )!;
+      const appliedLabels = (issueWriteCall[1] as Record<string, unknown>).labels as string[];
+      expect(appliedLabels.filter((l) => l === 'cadre-generated')).toHaveLength(1);
+    });
+
+    it('should not call issue_write when labels array is empty', async () => {
+      await api.applyLabels(42, []);
+
+      expect(mockMCP.callTool).not.toHaveBeenCalled();
+    });
+
+    it('should warn when issue_write fails', async () => {
+      vi.mocked(mockMCP.callTool).mockRejectedValue(new Error('Forbidden'));
+
+      await api.applyLabels(42, ['bug']);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to apply labels to PR #42'),
+      );
+    });
+  });
+
   describe('createPullRequest', () => {
     it('should create a PR via MCP', async () => {
       vi.mocked(mockMCP.callTool).mockResolvedValue({
