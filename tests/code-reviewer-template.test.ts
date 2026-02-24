@@ -96,8 +96,8 @@ describe('code-reviewer.md template', () => {
       expect(content).toMatch(/"verdict"/);
     });
 
-    it('should show a JSON code block example', () => {
-      expect(content).toMatch(/```json/);
+    it('should show a cadre-json code block example', () => {
+      expect(content).toMatch(/```cadre-json/);
     });
   });
 });
