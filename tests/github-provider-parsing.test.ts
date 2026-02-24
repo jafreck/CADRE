@@ -665,6 +665,7 @@ describe('GitHubProvider – findOpenPR', () => {
     expect(callArgs[0]).toBe('list_pull_requests');
     const payload = callArgs[1] as Record<string, unknown>;
     expect(payload.state).toBe('open');
+    expect(payload.head).toBe('owner:my-feature-branch');
   });
 
   it('should return the first matching PR when multiple PRs match the branch', async () => {
