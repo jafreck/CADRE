@@ -5,6 +5,7 @@ import type {
   ListPullRequestsParams,
   PlatformProvider,
   PullRequestInfo,
+  ReviewThread,
 } from '../../src/platform/provider.js';
 
 const DEFAULT_ISSUE: IssueDetail = {
@@ -73,6 +74,14 @@ export class MockPlatformProvider implements PlatformProvider {
   ): Promise<void> {}
 
   async listPullRequests(_filters?: ListPullRequestsParams): Promise<PullRequestInfo[]> {
+    return [];
+  }
+
+  async findOpenPR(_issueNumber: number, _branch: string): Promise<PullRequestInfo | null> {
+    return null;
+  }
+
+  async listPRReviewComments(_prNumber: number): Promise<ReviewThread[]> {
     return [];
   }
 
