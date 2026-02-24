@@ -105,7 +105,16 @@ export class ReviewResponseOrchestrator {
         this.logger.warn(`Issue #${issueNumber}: could not fetch PR comments: ${err}`, { issueNumber });
       }
 
-      if (activeThreads.length === 0 && actionableComments.length === 0) {
+      // 4c. Also fetch top-level PR reviews with non-empty bodies (non-bot).
+      let actionableReviews: import('../platform/provider.js').PRReview[] = [];
+      try {
+        const prReviews = await this.platform.listPRReviews(pr.number);
+        actionableReviews = prReviews.filter((r) => !r.isBot && r.body.trim().length > 0);
+      } catch (err) {
+        this.logger.warn(`Issue #${issueNumber}: could not fetch PR reviews: ${err}`, { issueNumber });
+      }
+
+      if (activeThreads.length === 0 && actionableComments.length === 0 && actionableReviews.length === 0) {
         this.logger.info(
           `Issue #${issueNumber} (PR #${pr.number}): all review threads resolved or outdated, skipping`,
           { issueNumber },
@@ -278,7 +287,23 @@ export class ReviewResponseOrchestrator {
           };
         });
 
-        const planTasks = [...threadTasks, ...commentTasks];
+        const reviewBodyTasks = actionableReviews.map((review, idx) => {
+          const taskIdx = activeThreads.length + actionableComments.length + idx + 1;
+          return {
+            id: `task-${String(taskIdx).padStart(3, '0')}`,
+            name: `Address PR review from ${review.author}`,
+            description: review.body,
+            files: [] as string[],
+            dependencies: [] as string[],
+            complexity: 'simple' as const,
+            acceptanceCriteria: [
+              'PR review feedback addressed as described',
+              'Existing tests continue to pass',
+            ],
+          };
+        });
+
+        const planTasks = [...threadTasks, ...commentTasks, ...reviewBodyTasks];
         const planContent = [
           '# Review-Response Implementation Plan',
           '',

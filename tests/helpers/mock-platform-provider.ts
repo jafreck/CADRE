@@ -4,6 +4,7 @@ import type {
   ListIssuesParams,
   ListPullRequestsParams,
   PRComment,
+  PRReview,
   PlatformProvider,
   PullRequestInfo,
   ReviewThread,
@@ -87,6 +88,10 @@ export class MockPlatformProvider implements PlatformProvider {
   }
 
   async listPRComments(_prNumber: number): Promise<PRComment[]> {
+    return [];
+  }
+
+  async listPRReviews(_prNumber: number): Promise<PRReview[]> {
     return [];
   }
 

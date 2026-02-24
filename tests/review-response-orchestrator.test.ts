@@ -126,6 +126,7 @@ function makeMockDeps() {
     listPullRequests: vi.fn().mockResolvedValue([]),
     listPRReviewComments: vi.fn().mockResolvedValue([]),
     listPRComments: vi.fn().mockResolvedValue([]),
+    listPRReviews: vi.fn().mockResolvedValue([]),
     getIssue: vi.fn().mockResolvedValue({
       number: 1,
       title: 'Issue 1',

@@ -230,6 +230,18 @@ export class GitHubAPI {
   }
 
   /**
+   * Get top-level reviews for a pull request (review bodies, not inline threads).
+   */
+  async getPRReviews(prNumber: number): Promise<unknown> {
+    return this.mcp.callTool<unknown>('pull_request_read', {
+      method: 'get_reviews',
+      owner: this.owner,
+      repo: this.repo,
+      pullNumber: prNumber,
+    });
+  }
+
+  /**
    * List pull requests, optionally filtered by head branch.
    */
   async listPullRequests(filters?: {
