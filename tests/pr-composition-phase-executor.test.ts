@@ -233,6 +233,13 @@ describe('PRCompositionPhaseExecutor', () => {
         (ctx.io.commitManager as never as { push: ReturnType<typeof vi.fn> }).push,
       ).not.toHaveBeenCalled();
     });
+
+    it('should not call ctx.callbacks.setPR when autoCreate is false', async () => {
+      const setPR = vi.fn();
+      const ctx = makeCtx({ callbacks: { setPR } as never });
+      await executor.execute(ctx);
+      expect(setPR).not.toHaveBeenCalled();
+    });
   });
 
   describe('execute() with autoCreate enabled', () => {
