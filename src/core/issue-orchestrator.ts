@@ -442,13 +442,16 @@ export class IssueOrchestrator {
   }
 
   private recordTokens(agent: string, tokens: TokenUsageDetail | number | null): void {
-    const tokenCount = typeof tokens === 'object' && tokens !== null ? tokens.input + tokens.output : tokens;
+    const isDetail = typeof tokens === 'object' && tokens !== null;
+    const tokenCount = isDetail ? tokens.input + tokens.output : tokens;
     if (tokenCount != null && tokenCount > 0) {
       this.tokenTracker.record(
         this.issue.number,
         agent,
         this.checkpoint.getState().currentPhase,
         tokenCount,
+        isDetail ? tokens.input : undefined,
+        isDetail ? tokens.output : undefined,
       );
       void this.checkpoint.recordTokenUsage(
         agent,

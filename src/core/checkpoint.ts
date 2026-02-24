@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { atomicWriteJSON, readJSON, exists, ensureDir } from '../util/fs.js';
 import { Logger } from '../logging/logger.js';
 import { GateResult } from '../agents/types.js';
+import type { TokenRecord } from '../budget/token-tracker.js';
 
 // ── Per-Issue Checkpoint ──
 
@@ -29,6 +30,7 @@ export interface CheckpointState {
     byAgent: Record<string, number>;
   };
   budgetExceeded?: boolean;
+  tokenRecords?: TokenRecord[];
   worktreePath: string;
   branchName: string;
   baseCommit: string;
@@ -310,6 +312,23 @@ export class CheckpointManager {
       }
     }
     await this.save();
+  }
+
+  /**
+   * Persist detailed token records (input/output splits) to the checkpoint.
+   */
+  async saveTokenRecords(records: TokenRecord[]): Promise<void> {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+    this.state.tokenRecords = records;
+    await this.save();
+  }
+
+  /**
+   * Load detailed token records from the checkpoint.
+   * Returns an empty array when the field is absent (migration safety).
+   */
+  loadTokenRecords(): TokenRecord[] {
+    return this.state?.tokenRecords ?? [];
   }
 
   /**
