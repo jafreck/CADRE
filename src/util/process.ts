@@ -63,11 +63,19 @@ export function spawnProcess(
     if (opts.timeout && opts.timeout > 0) {
       timer = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGTERM');
+        try {
+          process.kill(-child.pid!, 'SIGTERM');
+        } catch {
+          child.kill('SIGTERM');
+        }
         // Force kill after 5 seconds if still alive
         setTimeout(() => {
           if (!child.killed) {
-            child.kill('SIGKILL');
+            try {
+              process.kill(-child.pid!, 'SIGKILL');
+            } catch {
+              child.kill('SIGKILL');
+            }
           }
         }, 5000);
       }, opts.timeout);

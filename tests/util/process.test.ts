@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { stripVSCodeEnv, spawnProcess, exec, execShell, trackProcess, killAllTrackedProcesses, getTrackedProcessCount } from '../../src/util/process.js';
 
 describe('stripVSCodeEnv', () => {
@@ -166,5 +166,95 @@ describe('trackProcess / killAllTrackedProcesses / getTrackedProcessCount', () =
     expect(getTrackedProcessCount()).toBe(2);
     killAllTrackedProcesses();
     expect(getTrackedProcessCount()).toBe(0);
+  });
+});
+
+describe('spawnProcess timeout group-kill', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should call process.kill with negative pid (group SIGTERM) on timeout', async () => {
+    const killSpy = vi.spyOn(process, 'kill');
+    const { promise } = spawnProcess('sleep', ['10'], { timeout: 100 });
+    const result = await promise;
+
+    const groupSigtermCalls = killSpy.mock.calls.filter(
+      ([pid, sig]) => typeof pid === 'number' && pid < 0 && sig === 'SIGTERM',
+    );
+    expect(groupSigtermCalls.length).toBeGreaterThan(0);
+    expect(result.timedOut).toBe(true);
+  });
+
+  it('should fall back to child.kill(SIGTERM) when process.kill throws for group kill', async () => {
+    vi.spyOn(process, 'kill').mockImplementation((pid, _signal) => {
+      if (typeof pid === 'number' && pid < 0) {
+        throw new Error('Operation not permitted');
+      }
+      return true;
+    });
+
+    const { process: child, promise } = spawnProcess('sleep', ['10'], { timeout: 100 });
+    // Spy before the timeout fires (timeout is 100ms so we have time)
+    const childKillSpy = vi.spyOn(child, 'kill');
+    const result = await promise;
+
+    expect(result.timedOut).toBe(true);
+    expect(childKillSpy).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('should call process.kill with negative pid (group SIGKILL) after grace period', async () => {
+    vi.useFakeTimers();
+    const killSpy = vi.spyOn(process, 'kill');
+
+    // Spy on spawn so we control the child
+    const { process: child, promise } = spawnProcess('sleep', ['10'], { timeout: 50 });
+
+    // Advance past the initial SIGTERM timeout
+    await vi.advanceTimersByTimeAsync(60);
+
+    // Simulate the child not being killed yet so SIGKILL fires
+    Object.defineProperty(child, 'killed', { get: () => false, configurable: true });
+
+    // Advance past the 5-second SIGKILL grace period
+    await vi.advanceTimersByTimeAsync(5100);
+
+    const groupSigkillCalls = killSpy.mock.calls.filter(
+      ([pid, sig]) => typeof pid === 'number' && pid < 0 && sig === 'SIGKILL',
+    );
+    expect(groupSigkillCalls.length).toBeGreaterThan(0);
+
+    vi.useRealTimers();
+    // Allow the real process to be cleaned up
+    child.kill('SIGKILL');
+    await promise.catch(() => {});
+  });
+
+  it('should fall back to child.kill(SIGKILL) when process.kill throws for group SIGKILL', async () => {
+    vi.useFakeTimers();
+
+    vi.spyOn(process, 'kill').mockImplementation((pid, _signal) => {
+      if (typeof pid === 'number' && pid < 0) {
+        throw new Error('Operation not permitted');
+      }
+      return true;
+    });
+
+    const { process: child, promise } = spawnProcess('sleep', ['10'], { timeout: 50 });
+    const childKillSpy = vi.spyOn(child, 'kill');
+
+    // Advance past initial SIGTERM timeout
+    await vi.advanceTimersByTimeAsync(60);
+
+    Object.defineProperty(child, 'killed', { get: () => false, configurable: true });
+
+    // Advance past 5-second grace period
+    await vi.advanceTimersByTimeAsync(5100);
+
+    expect(childKillSpy).toHaveBeenCalledWith('SIGKILL');
+
+    vi.useRealTimers();
+    child.kill('SIGKILL');
+    await promise.catch(() => {});
   });
 });
