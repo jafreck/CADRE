@@ -427,6 +427,7 @@ export class CadreRuntime {
     console.log(`  Duration: ${duration}s`);
     console.log(`  Issues: ${result.issues.length} total`);
     console.log(`  PRs Created: ${result.prsCreated.length}`);
+    console.log(`  Code Done (No PR): ${result.codeDoneNoPR.length}`);
     console.log(`  Failed: ${result.failedIssues.length}`);
     console.log(`  Tokens: ${result.tokenUsage.total.toLocaleString()}`);
 
@@ -434,6 +435,13 @@ export class CadreRuntime {
       console.log('\n  PRs:');
       for (const pr of result.prsCreated) {
         console.log(`    #${pr.number}: ${pr.url}`);
+      }
+    }
+
+    if (result.codeDoneNoPR.length > 0) {
+      console.log('\n  Code Done (No PR):');
+      for (const item of result.codeDoneNoPR) {
+        console.log(`    #${item.issueNumber}`);
       }
     }
 

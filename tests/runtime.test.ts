@@ -49,6 +49,7 @@ vi.mock('../src/core/fleet-orchestrator.js', () => ({
       success: true,
       issues: [],
       prsCreated: [],
+      codeDoneNoPR: [],
       failedIssues: [],
       totalDuration: 100,
       tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
@@ -57,6 +58,7 @@ vi.mock('../src/core/fleet-orchestrator.js', () => ({
       success: true,
       issues: [],
       prsCreated: [],
+      codeDoneNoPR: [],
       failedIssues: [],
       totalDuration: 100,
       tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
@@ -223,6 +225,7 @@ describe('CadreRuntime — NotificationManager wiring', () => {
         success: true,
         issues: [],
         prsCreated: [],
+        codeDoneNoPR: [],
         failedIssues: [],
         totalDuration: 100,
         tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
@@ -320,6 +323,7 @@ describe('CadreRuntime — review-response routing', () => {
         success: true,
         issues: [],
         prsCreated: [],
+        codeDoneNoPR: [],
         failedIssues: [],
         totalDuration: 100,
         tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
@@ -328,6 +332,7 @@ describe('CadreRuntime — review-response routing', () => {
         success: true,
         issues: [],
         prsCreated: [],
+        codeDoneNoPR: [],
         failedIssues: [],
         totalDuration: 100,
         tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
@@ -419,6 +424,7 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
         success: true,
         issues: [],
         prsCreated: [],
+        codeDoneNoPR: [],
         failedIssues: [],
         totalDuration: 100,
         tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
@@ -689,5 +695,95 @@ describe('CadreRuntime — status() rendering', () => {
     expect(output).toContain('Issue #42');
     expect(output).toContain('Fix the widget bug');
     expect(output).toContain('Implementation'); // phaseNames[2] for phase 3
+  });
+});
+
+describe('CadreRuntime — printSummary code-done-no-pr display', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    MockCreateNotificationManager.mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    });
+
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      getIssue: vi.fn().mockResolvedValue({
+        number: 1,
+        title: 'Test issue',
+        body: '',
+        labels: [],
+        state: 'open',
+        url: 'https://github.com/owner/repo/issues/1',
+        author: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+      }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    processOnSpy.mockRestore();
+  });
+
+  it('prints "Code Done (No PR): N" line and lists affected issue numbers', async () => {
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        codeDoneNoPR: [
+          { issueNumber: 7, issueTitle: 'Add feature' },
+          { issueNumber: 13, issueTitle: 'Fix bug' },
+        ],
+        failedIssues: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+      }),
+    }));
+
+    const config = makeConfig([1]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('Code Done (No PR): 2');
+    expect(output).toContain('Code Done (No PR):');
+    expect(output).toContain('#7');
+    expect(output).toContain('#13');
+  });
+
+  it('does not print code-done-no-pr section when list is empty', async () => {
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        codeDoneNoPR: [],
+        failedIssues: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+      }),
+    }));
+
+    const config = makeConfig([1]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('Code Done (No PR): 0');
+    // The section header should not appear (only the summary line)
+    expect(output).not.toContain('Code Done (No PR):\n');
   });
 });
