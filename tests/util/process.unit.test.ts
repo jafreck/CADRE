@@ -28,7 +28,7 @@ function makeMockChild(pid = 12345): ChildProcess {
 }
 
 // Import after mocks are set up
-import { spawnProcess, trackProcess, killAllTrackedProcesses, getTrackedProcessCount } from '../src/util/process.js';
+import { spawnProcess, trackProcess, killAllTrackedProcesses, getTrackedProcessCount } from '../../src/util/process.js';
 
 describe('spawnProcess — timeout kills process group with SIGTERM then SIGKILL', () => {
   let processKillSpy: ReturnType<typeof vi.spyOn>;
@@ -92,6 +92,29 @@ describe('spawnProcess — timeout kills process group with SIGTERM then SIGKILL
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
 
     (child as unknown as EventEmitter).emit('close', null, 'SIGTERM');
+    await promise;
+  });
+
+  it('falls back to child.kill() when process.kill throws on SIGKILL', async () => {
+    const child = makeMockChild(7000);
+    mockSpawn.mockReturnValue(child);
+    // Throw for all negative-pid (group) kill calls — both SIGTERM and SIGKILL paths
+    processKillSpy.mockImplementation((pid) => {
+      if (typeof pid === 'number' && pid < 0) throw new Error('ESRCH');
+      return true;
+    });
+
+    const { promise } = spawnProcess('echo', ['hello'], { timeout: 100 });
+
+    // Fire the SIGTERM timeout
+    vi.advanceTimersByTime(200);
+    // child.killed stays false (vi.fn() never sets it) so the grace-period SIGKILL fires
+    vi.advanceTimersByTime(5100);
+
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+
+    (child as unknown as EventEmitter).emit('close', null, 'SIGKILL');
     await promise;
   });
 
