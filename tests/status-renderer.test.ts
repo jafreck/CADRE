@@ -146,7 +146,7 @@ describe('renderFleetStatus', () => {
 
   it('should show the correct status emoji for each status', () => {
     const statuses: Array<FleetIssueStatus['status']> = [
-      'not-started', 'in-progress', 'completed', 'failed', 'blocked', 'budget-exceeded',
+      'not-started', 'in-progress', 'completed', 'failed', 'blocked', 'budget-exceeded', 'code-complete-no-pr',
     ];
     const emojis: Record<string, string> = {
       'not-started': '⏳',
@@ -155,6 +155,7 @@ describe('renderFleetStatus', () => {
       failed: '❌',
       blocked: '🚫',
       'budget-exceeded': '💸',
+      'code-complete-no-pr': '🔀',
     };
     for (const status of statuses) {
       const state = makeFleetState({
@@ -163,6 +164,15 @@ describe('renderFleetStatus', () => {
       const output = renderFleetStatus(state);
       expect(output).toContain(emojis[status]);
     }
+  });
+
+  it('should show 🔀 emoji for code-complete-no-pr status', () => {
+    const state = makeFleetState({
+      issues: { 1: makeIssueStatus({ status: 'code-complete-no-pr', issueTitle: 'Code complete no PR' }) },
+    });
+    const output = renderFleetStatus(state);
+    expect(output).toContain('🔀');
+    expect(output).toContain('code-complete-no-pr');
   });
 
   it('should show human-readable phase name (not just phase number)', () => {
