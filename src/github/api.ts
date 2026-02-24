@@ -191,7 +191,11 @@ export class GitHubAPI {
   }
 
   /**
-   * Get review comments for a pull request.
+   * Get review comments for a pull request, grouped into thread-shaped objects.
+   *
+   * Octokit returns flat comment objects; this method groups them by thread
+   * (root comment + replies) so that parseReviewThreads in github-provider.ts
+   * can consume them correctly.
    */
   async getPRReviewComments(prNumber: number): Promise<unknown> {
     const { data } = await this.octokit.rest.pulls.listReviewComments({
@@ -199,7 +203,42 @@ export class GitHubAPI {
       repo: this.repo,
       pull_number: prNumber,
     });
-    return data;
+
+    // Group flat comments into thread-shaped objects.
+    // Root comments have no in_reply_to_id; replies reference the root via in_reply_to_id.
+    type RawComment = (typeof data)[number];
+    const threadComments = new Map<number, RawComment[]>();
+    const rootComments: RawComment[] = [];
+
+    for (const comment of data) {
+      if (!comment.in_reply_to_id) {
+        rootComments.push(comment);
+        if (!threadComments.has(comment.id)) {
+          threadComments.set(comment.id, [comment]);
+        }
+      } else {
+        const existing = threadComments.get(comment.in_reply_to_id);
+        if (existing) {
+          existing.push(comment);
+        } else {
+          threadComments.set(comment.in_reply_to_id, [comment]);
+        }
+      }
+    }
+
+    return rootComments.map((root) => ({
+      id: String(root.id),
+      isResolved: false,
+      isOutdated: false,
+      comments: (threadComments.get(root.id) ?? [root]).map((c) => ({
+        id: String(c.id),
+        author: { login: c.user?.login ?? 'unknown' },
+        body: c.body,
+        createdAt: c.created_at,
+        path: c.path,
+        line: c.line ?? c.original_line,
+      })),
+    }));
   }
 
   /**

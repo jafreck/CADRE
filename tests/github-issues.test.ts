@@ -146,8 +146,8 @@ describe('GitHubAPI', () => {
   });
 
   describe('getPRReviewComments', () => {
-    it('should call listReviewComments on pulls', async () => {
-      const mockComments = [{ id: 1, body: 'Looks good' }];
+    it('should call listReviewComments on pulls and return thread-shaped objects', async () => {
+      const mockComments = [{ id: 1, body: 'Looks good', in_reply_to_id: undefined, user: { login: 'reviewer' }, created_at: '2024-01-01', path: 'src/foo.ts', line: 10, original_line: 10 }];
       vi.mocked(mockOctokit.rest.pulls.listReviewComments).mockResolvedValue({ data: mockComments } as never);
 
       const result = await api.getPRReviewComments(42);
@@ -157,7 +157,23 @@ describe('GitHubAPI', () => {
         repo: 'repo',
         pull_number: 42,
       });
-      expect(result).toEqual(mockComments);
+      expect(result).toEqual([
+        {
+          id: '1',
+          isResolved: false,
+          isOutdated: false,
+          comments: [
+            {
+              id: '1',
+              author: { login: 'reviewer' },
+              body: 'Looks good',
+              createdAt: '2024-01-01',
+              path: 'src/foo.ts',
+              line: 10,
+            },
+          ],
+        },
+      ]);
     });
   });
 
