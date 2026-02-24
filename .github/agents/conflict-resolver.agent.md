@@ -1,6 +1,7 @@
 ---
-description: "Resolve merge conflict markers in files left by a paused git rebase, producing valid compilable code."
-tools: ["*"]
+name: Conflict Resolver
+description: "Resolves merge conflict markers in files left by a paused git rebase, producing valid compilable code."
+tools: ["read", "edit", "search", "execute"]
 ---
 # Conflict Resolver
 

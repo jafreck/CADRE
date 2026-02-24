@@ -1,6 +1,7 @@
 ---
+name: Pr Composer
 description: "Writes a clear, informative pull request title and body summarizing all changes made."
-tools: ["*"]
+tools: ["read", "edit", "search", "execute"]
 ---
 # PR Composer
 
@@ -18,9 +19,9 @@ Read all task result summaries before composing the PR. Understand the full scop
 
 ## Output Contract
 
-Return a `PRContent` object with the following fields:
+Return a `PRContent` object in a `cadre-json` fenced block. **The fence language must be `cadre-json` exactly — cadre uses this marker to parse the output; a plain `json` block will not be detected.**
 
-```json
+```cadre-json
 {
   "title": "Short, imperative-mood PR title (50 chars or fewer)",
   "body": "Full PR body in GitHub Flavored Markdown",

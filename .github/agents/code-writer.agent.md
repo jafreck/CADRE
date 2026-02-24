@@ -1,6 +1,7 @@
 ---
+name: Code Writer
 description: "Implements a single task from the implementation plan by modifying or creating source files."
-tools: ["*"]
+tools: ["read", "edit", "search", "execute"]
 ---
 # Code Writer
 

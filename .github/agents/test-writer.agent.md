@@ -1,6 +1,7 @@
 ---
+name: Test Writer
 description: "Writes unit and integration tests for changes made by the code-writer."
-tools: ["*"]
+tools: ["read", "edit", "search", "execute"]
 ---
 # Test Writer
 

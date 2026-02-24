@@ -1,6 +1,7 @@
 ---
+name: Fix Surgeon
 description: "Applies targeted, minimal fixes to resolve issues identified by code review or failing tests."
-tools: ["*"]
+tools: ["read", "edit", "search", "execute"]
 ---
 # Fix Surgeon
 

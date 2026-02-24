@@ -1,6 +1,7 @@
 ---
+name: Codebase Scout
 description: "Scans the repository to locate relevant files, map dependencies, and identify related tests."
-tools: ["*"]
+tools: ["read", "edit", "search", "execute"]
 ---
 # Codebase Scout
 
@@ -51,6 +52,12 @@ A list of existing test files that cover the relevant source files. Note any gap
 
 A short paragraph or bullet list estimating how many files need to change, which are most complex, and any risk areas (e.g., shared utilities with many dependents, complex type hierarchies).
 
+## Machine-readable output (MANDATORY)
+
+After all human-readable sections, you MUST append a `cadre-json` fenced block containing the structured scout report. **cadre does not read the markdown prose — it reads only this block. If the block is missing or uses a different fence language (e.g. plain `json`), the pipeline will fail.**
+
+The block must match the `ScoutReport` schema: `relevantFiles` (array of `{ path, reason }`), `dependencyMap` (object mapping file path → array of imported file paths), `testFiles` (array of strings), `estimatedChanges` (array of `{ path, linesEstimate }`).
+
 ## Example Output
 
 ```markdown
@@ -79,4 +86,28 @@ A short paragraph or bullet list estimating how many files need to change, which
 ## Estimated Change Surface
 
 3 files require changes. `runner.ts` is the most complex (dispatches agent tasks). `types.ts` change is low-risk (additive interface). Config change is minimal. No shared utilities are affected.
+```
+
+```cadre-json
+{
+  "relevantFiles": [
+    { "path": "src/agents/runner.ts", "reason": "Entry point that must be updated to support new agent type" },
+    { "path": "src/agents/types.ts", "reason": "Shared type definitions; new interface needed here" },
+    { "path": "src/config.ts", "reason": "Reads config file; new config key must be added" }
+  ],
+  "dependencyMap": {
+    "src/agents/runner.ts": ["src/agents/types.ts", "src/config.ts"],
+    "src/agents/types.ts": [],
+    "src/config.ts": []
+  },
+  "testFiles": [
+    "tests/runner.test.ts",
+    "tests/config.test.ts"
+  ],
+  "estimatedChanges": [
+    { "path": "src/agents/runner.ts", "linesEstimate": 50 },
+    { "path": "src/agents/types.ts", "linesEstimate": 15 },
+    { "path": "src/config.ts", "linesEstimate": 5 }
+  ]
+}
 ```
