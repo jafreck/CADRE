@@ -9,15 +9,14 @@ const DIST_TEMPLATES_DIR = resolve(__dirname, '../dist/agents/templates');
 
 const EXPECTED_TEMPLATES = [
   'adjudicator.md',
-  'cadre-runner.md',
   'code-reviewer.md',
   'code-writer.md',
   'codebase-scout.md',
+  'conflict-resolver.md',
   'fix-surgeon.md',
   'implementation-planner.md',
   'integration-checker.md',
   'issue-analyst.md',
-  'issue-orchestrator.md',
   'pr-composer.md',
   'test-writer.md',
 ];
@@ -47,9 +46,9 @@ describe('dist/agents/templates/ after build', () => {
     expect(existsSync(DIST_TEMPLATES_DIR)).toBe(true);
   });
 
-  it.skipIf(!existsSync(DIST_TEMPLATES_DIR))('should contain exactly 13 .md template files', () => {
+  it.skipIf(!existsSync(DIST_TEMPLATES_DIR))('should contain exactly 11 .md template files', () => {
     const files = readdirSync(DIST_TEMPLATES_DIR).filter((f) => f.endsWith('.md'));
-    expect(files).toHaveLength(13);
+    expect(files).toHaveLength(11);
   });
 
   it.each(EXPECTED_TEMPLATES)('%s should be present in dist/agents/templates/', (template) => {

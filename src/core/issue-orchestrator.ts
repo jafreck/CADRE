@@ -100,7 +100,7 @@ export class IssueOrchestrator {
       logger,
     );
     this.contextBuilder = new ContextBuilder(config, logger);
-    this.resultParser = new ResultParser(logger);
+    this.resultParser = new ResultParser();
     this.retryExecutor = new RetryExecutor(logger);
     this.progressWriter = new IssueProgressWriter(
       this.progressDir,

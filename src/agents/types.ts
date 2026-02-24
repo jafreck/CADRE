@@ -14,9 +14,7 @@ export type AgentName =
   | 'fix-surgeon'
   | 'integration-checker'
   | 'pr-composer'
-  | 'conflict-resolver'
-  | 'issue-orchestrator'
-  | 'cadre-runner';
+  | 'conflict-resolver';
 
 /** Metadata describing a single CADRE agent. */
 export interface AgentDefinition {
@@ -28,24 +26,8 @@ export interface AgentDefinition {
   templateFile: string;
 }
 
-/** Registry of all 12 CADRE agents with their metadata. */
+/** Registry of all 11 CADRE agents with their metadata. */
 export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
-  {
-    name: 'cadre-runner',
-    phase: 0,
-    phaseName: 'Orchestration',
-    description: 'Top-level agent describing the CADRE fleet execution model and runtime behavior.',
-    hasStructuredOutput: false,
-    templateFile: 'cadre-runner.md',
-  },
-  {
-    name: 'issue-orchestrator',
-    phase: 0,
-    phaseName: 'Orchestration',
-    description: 'Reference agent describing the per-issue 5-phase development pipeline.',
-    hasStructuredOutput: false,
-    templateFile: 'issue-orchestrator.md',
-  },
   {
     name: 'issue-analyst',
     phase: 1,
@@ -239,7 +221,8 @@ export interface IntegrationReport {
 
 export interface CommandResult {
   command: string;
-  exitCode: number;
+  exitCode: number | null;
+  signal?: string | null;
   output: string;
   pass: boolean;
 }

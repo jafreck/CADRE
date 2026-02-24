@@ -25,35 +25,27 @@ function makeContext(progressDir: string, worktreePath = '/tmp/worktree', baseCo
 }
 
 const VALID_ANALYSIS = `# Analysis
-## Requirements
-- Implement feature X
-## Change Type
-feat
-## Scope
-src/core
+\`\`\`cadre-json
+{"requirements":["Implement feature X"],"changeType":"feature","scope":"medium","affectedAreas":["src/core"],"ambiguities":[]}
+\`\`\`
 `;
 
 const VALID_SCOUT = `# Scout Report
-## Relevant Files
-- src/core/checkpoint.ts
-- src/agents/types.ts
+\`\`\`cadre-json
+{"relevantFiles":[{"path":"src/core/checkpoint.ts","reason":"Core checkpoint logic"},{"path":"src/agents/types.ts","reason":"Agent type definitions"}],"dependencyMap":{},"testFiles":[],"estimatedChanges":[]}
+\`\`\`
 `;
 
 const VALID_PLAN = `# Implementation Plan
 
-## Task: task-001 - First Task
-**Description:** Do the first thing.
-**Files:** src/core/first.ts
-**Dependencies:** none
-**Acceptance Criteria:**
-- It works
+\`\`\`cadre-json
+[{"id":"task-001","name":"First Task","description":"Do the first thing.","files":["src/core/first.ts"],"dependencies":[],"acceptanceCriteria":["It works"]}]
+\`\`\`
 `;
 
-const VALID_INTEGRATION_REPORT = `# Integration Report
-## Build Result
-Build succeeded.
-## Test Result
-All tests passed.
+const VALID_INTEGRATION_REPORT = `\`\`\`cadre-json
+{"buildResult":{"command":"npm run build","exitCode":0,"output":"Build succeeded.","pass":true},"testResult":{"command":"npm test","exitCode":0,"output":"All tests passed.","pass":true},"overallPass":true,"regressionFailures":[],"baselineFailures":[]}
+\`\`\`
 `;
 
 // ── AnalysisToPlanningGate ────────────────────────────────────────────────────
@@ -97,8 +89,28 @@ describe('AnalysisToPlanningGate', () => {
     expect(result.errors.some((e) => e.includes('scout-report.md is missing'))).toBe(true);
   });
 
-  it('should fail when analysis.md has no requirements section', async () => {
+  it('should fail when analysis.md has no cadre-json block', async () => {
     await writeFile(join(tempDir, 'analysis.md'), '## Change Type\nfeat\n## Scope\nsrc/\n');
+    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('cadre-json'))).toBe(true);
+  });
+
+  it('should fail when analysis.md cadre-json has an invalid changeType', async () => {
+    const invalid = JSON.stringify({ requirements: ['Do something'], changeType: 'invalid-type', scope: 'medium', affectedAreas: [], ambiguities: [] });
+    await writeFile(join(tempDir, 'analysis.md'), `\`\`\`cadre-json\n${invalid}\n\`\`\``);
+    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('changeType'))).toBe(true);
+  });
+
+  it('should fail when analysis.md cadre-json has empty requirements', async () => {
+    const empty = JSON.stringify({ requirements: [], changeType: 'feature', scope: 'medium', affectedAreas: [], ambiguities: [] });
+    await writeFile(join(tempDir, 'analysis.md'), `\`\`\`cadre-json\n${empty}\n\`\`\``);
     await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -106,37 +118,14 @@ describe('AnalysisToPlanningGate', () => {
     expect(result.errors.some((e) => e.includes('requirements'))).toBe(true);
   });
 
-  it('should fail when analysis.md has no change type', async () => {
-    await writeFile(
-      join(tempDir, 'analysis.md'),
-      '## Requirements\n- Something\n## Scope\nsrc/\n',
-    );
-    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
-
-    const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).toBe('fail');
-    expect(result.errors.some((e) => e.includes('change type'))).toBe(true);
-  });
-
-  it('should fail when analysis.md has no scope', async () => {
-    await writeFile(
-      join(tempDir, 'analysis.md'),
-      '## Requirements\n- Something\n## Change Type\nfeat\n',
-    );
-    await writeFile(join(tempDir, 'scout-report.md'), VALID_SCOUT);
-
-    const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).toBe('fail');
-    expect(result.errors.some((e) => e.includes('scope'))).toBe(true);
-  });
-
-  it('should fail when scout-report.md lists no file paths', async () => {
+  it('should fail when scout-report.md cadre-json has empty relevantFiles', async () => {
+    const empty = JSON.stringify({ relevantFiles: [], dependencyMap: {}, testFiles: [], estimatedChanges: [] });
     await writeFile(join(tempDir, 'analysis.md'), VALID_ANALYSIS);
-    await writeFile(join(tempDir, 'scout-report.md'), '# Scout Report\nNo files found.\n');
+    await writeFile(join(tempDir, 'scout-report.md'), `\`\`\`cadre-json\n${empty}\n\`\`\``);
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('fail');
-    expect(result.errors.some((e) => e.includes('relevant files'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('relevantFiles'))).toBe(true);
   });
 
   it('should accumulate multiple errors when both files have problems', async () => {
@@ -184,8 +173,16 @@ describe('PlanningToImplementationGate', () => {
     expect(result.errors.some((e) => e.includes('implementation-plan.md is missing'))).toBe(true);
   });
 
-  it('should fail when the plan contains no tasks', async () => {
-    await writeFile(join(tempDir, 'implementation-plan.md'), '# Plan\nNo tasks here.\n');
+  it('should fail when implementation-plan.md has no cadre-json block', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), '# Plan\nNo cadre-json block here.\n');
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('missing a cadre-json block'))).toBe(true);
+  });
+
+  it('should fail when the cadre-json block contains no tasks', async () => {
+    await writeFile(join(tempDir, 'implementation-plan.md'), '```cadre-json\n[]\n```\n');
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('fail');
@@ -193,13 +190,8 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should fail when a task is missing a description', async () => {
-    const plan = `# Plan
-## Task: task-001 - My Task
-**Files:** src/foo.ts
-**Dependencies:** none
-**Acceptance Criteria:**
-- Works
-`;
+    const task = { id: 'task-001', name: 'My Task', description: '', files: ['src/foo.ts'], dependencies: [], acceptanceCriteria: ['Works'] };
+    const plan = `\`\`\`cadre-json\n${JSON.stringify([task])}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -208,14 +200,8 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should fail when a task has no files', async () => {
-    // Omit the **Files:** field entirely so the parser finds no files
-    const plan = `# Plan
-## Task: task-001 - My Task
-**Description:** Do something.
-**Dependencies:** none
-**Acceptance Criteria:**
-- Works
-`;
+    const task = { id: 'task-001', name: 'My Task', description: 'Do something.', files: [], dependencies: [], acceptanceCriteria: ['Works'] };
+    const plan = `\`\`\`cadre-json\n${JSON.stringify([task])}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -224,13 +210,8 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should fail when a task has no acceptance criteria', async () => {
-    const plan = `# Plan
-## Task: task-001 - My Task
-**Description:** Do something.
-**Files:** src/foo.ts
-**Dependencies:** none
-**Acceptance Criteria:**
-`;
+    const task = { id: 'task-001', name: 'My Task', description: 'Do something.', files: ['src/foo.ts'], dependencies: [], acceptanceCriteria: [] };
+    const plan = `\`\`\`cadre-json\n${JSON.stringify([task])}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -239,21 +220,11 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should fail when tasks have a circular dependency', async () => {
-    const plan = `# Plan
-## Task: task-001 - First
-**Description:** Do first.
-**Files:** src/first.ts
-**Dependencies:** task-002
-**Acceptance Criteria:**
-- Works
-
-## Task: task-002 - Second
-**Description:** Do second.
-**Files:** src/second.ts
-**Dependencies:** task-001
-**Acceptance Criteria:**
-- Works
-`;
+    const tasks = [
+      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/first.ts'], dependencies: ['task-002'], acceptanceCriteria: ['Works'] },
+      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/second.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Works'] },
+    ];
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -262,21 +233,11 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should pass with multiple valid tasks and linear dependencies', async () => {
-    const plan = `# Plan
-## Task: task-001 - First
-**Description:** Do first.
-**Files:** src/first.ts
-**Dependencies:** none
-**Acceptance Criteria:**
-- Works
-
-## Task: task-002 - Second
-**Description:** Do second.
-**Files:** src/second.ts
-**Dependencies:** task-001
-**Acceptance Criteria:**
-- Also works
-`;
+    const tasks = [
+      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/first.ts'], dependencies: [], acceptanceCriteria: ['Works'] },
+      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/second.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Also works'] },
+    ];
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
     await mkdir(join(worktreeDir, 'src'), { recursive: true });
     await writeFile(join(worktreeDir, 'src/first.ts'), '');
@@ -298,21 +259,11 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should warn for every missing file across all tasks', async () => {
-    const plan = `# Plan
-## Task: task-001 - First
-**Description:** Do first.
-**Files:** src/first.ts
-**Dependencies:** none
-**Acceptance Criteria:**
-- Works
-
-## Task: task-002 - Second
-**Description:** Do second.
-**Files:** src/second.ts
-**Dependencies:** task-001
-**Acceptance Criteria:**
-- Also works
-`;
+    const tasks = [
+      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/first.ts'], dependencies: [], acceptanceCriteria: ['Works'] },
+      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/second.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Also works'] },
+    ];
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
     // Create worktreeDir but no source files
 
@@ -324,21 +275,11 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should warn only for missing files when some exist and some do not', async () => {
-    const plan = `# Plan
-## Task: task-001 - First
-**Description:** Do first.
-**Files:** src/exists.ts
-**Dependencies:** none
-**Acceptance Criteria:**
-- Works
-
-## Task: task-002 - Second
-**Description:** Do second.
-**Files:** src/missing.ts
-**Dependencies:** task-001
-**Acceptance Criteria:**
-- Also works
-`;
+    const tasks = [
+      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/exists.ts'], dependencies: [], acceptanceCriteria: ['Works'] },
+      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/missing.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Also works'] },
+    ];
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
     await mkdir(join(worktreeDir, 'src'), { recursive: true });
     await writeFile(join(worktreeDir, 'src/exists.ts'), '');
@@ -444,78 +385,76 @@ describe('IntegrationToPRGate', () => {
     expect(result.errors.some((e) => e.includes('integration-report.md is missing'))).toBe(true);
   });
 
-  it('should pass with warning when report has no build section', async () => {
-    await writeFile(
-      join(tempDir, 'integration-report.md'),
-      '# Integration Report\n## Test Result\nAll tests passed.\n',
-    );
+  it('should fail when build result did not pass', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 1, output: 'Build failed.', pass: false },
+      testResult: { command: 'npm test', exitCode: 0, output: 'All tests passed.', pass: true },
+      overallPass: false,
+      regressionFailures: [],
+      baselineFailures: [],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
 
     const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).not.toBe('fail');
-    expect(result.warnings.some((w) => w.includes('build result section'))).toBe(true);
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('build failed'))).toBe(true);
   });
 
-  it('should pass with warning when report has no test section', async () => {
-    await writeFile(
-      join(tempDir, 'integration-report.md'),
-      '# Integration Report\n## Build Result\nBuild succeeded.\n',
-    );
+  it('should fail when test result did not pass', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 0, output: 'Build succeeded.', pass: true },
+      testResult: { command: 'npm test', exitCode: 1, output: '3 tests failed.', pass: false },
+      overallPass: false,
+      regressionFailures: [],
+      baselineFailures: [],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
 
     const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).not.toBe('fail');
-    expect(result.warnings.some((w) => w.includes('test result section'))).toBe(true);
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('tests failed'))).toBe(true);
   });
 
-  it('should pass with multiple warnings when both sections are missing', async () => {
+  it('should fail when integration-report.md has no cadre-json block', async () => {
     await writeFile(join(tempDir, 'integration-report.md'), '# Integration Report\nNothing here.\n');
 
     const result = await gate.validate(makeContext(tempDir));
-    expect(result.status).not.toBe('fail');
-    expect(result.warnings.length).toBe(2);
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('cadre-json'))).toBe(true);
   });
 
-  it('should fail when New Regressions section contains failures', async () => {
-    const report = `# Integration Report
-## Build Result
-Build succeeded.
-## Test Result
-All tests passed.
-## New Regressions
-- test-foo: AssertionError
-`;
-    await writeFile(join(tempDir, 'integration-report.md'), report);
+  it('should fail when regressionFailures contains entries', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 0, output: 'Build succeeded.', pass: true },
+      testResult: { command: 'npm test', exitCode: 0, output: 'Some passed.', pass: true },
+      overallPass: false,
+      regressionFailures: ['test-foo: AssertionError'],
+      baselineFailures: [],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('fail');
     expect(result.errors.some((e) => e.includes('new regression failures'))).toBe(true);
   });
 
-  it('should pass when New Regressions section is _none_', async () => {
-    const report = `# Integration Report
-## Build Result
-Build succeeded.
-## Test Result
-All tests passed.
-## New Regressions
-_none_
-`;
-    await writeFile(join(tempDir, 'integration-report.md'), report);
+  it('should pass when regressionFailures is empty', async () => {
+    await writeFile(join(tempDir, 'integration-report.md'), VALID_INTEGRATION_REPORT);
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('pass');
     expect(result.errors).toHaveLength(0);
   });
 
-  it('should warn but not fail when only Pre-existing Failures are present', async () => {
-    const report = `# Integration Report
-## Build Result
-Build succeeded.
-## Test Result
-All tests passed.
-## Pre-existing Failures
-- test-legacy: known failure
-`;
-    await writeFile(join(tempDir, 'integration-report.md'), report);
+  it('should warn but not fail when baselineFailures contains entries', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 0, output: 'Build succeeded.', pass: true },
+      testResult: { command: 'npm test', exitCode: 0, output: 'All tests passed.', pass: true },
+      overallPass: true,
+      regressionFailures: [],
+      baselineFailures: ['test-legacy: known failure'],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).not.toBe('fail');
@@ -523,34 +462,23 @@ All tests passed.
     expect(result.errors).toHaveLength(0);
   });
 
-  it('should pass without warning when Pre-existing Failures section is _none_', async () => {
-    const report = `# Integration Report
-## Build Result
-Build succeeded.
-## Test Result
-All tests passed.
-## Pre-existing Failures
-_none_
-`;
-    await writeFile(join(tempDir, 'integration-report.md'), report);
+  it('should pass without warning when baselineFailures is empty', async () => {
+    await writeFile(join(tempDir, 'integration-report.md'), VALID_INTEGRATION_REPORT);
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('pass');
     expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(false);
   });
 
-  it('should fail with errors and include pre-existing warning when both sections have content', async () => {
-    const report = `# Integration Report
-## Build Result
-Build succeeded.
-## Test Result
-All tests passed.
-## New Regressions
-- test-new: broken
-## Pre-existing Failures
-- test-old: known issue
-`;
-    await writeFile(join(tempDir, 'integration-report.md'), report);
+  it('should fail with errors and warn when both regressionFailures and baselineFailures are populated', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 0, output: 'Build succeeded.', pass: true },
+      testResult: { command: 'npm test', exitCode: 0, output: 'Some passed.', pass: true },
+      overallPass: false,
+      regressionFailures: ['test-new: broken'],
+      baselineFailures: ['test-old: known issue'],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('fail');
