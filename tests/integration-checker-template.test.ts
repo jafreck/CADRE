@@ -22,6 +22,20 @@ describe('integration-checker.md template', () => {
     expect(nonEmptyLines.length).toBeGreaterThanOrEqual(30);
   });
 
+  describe('background context section', () => {
+    it('should have a Background context (read-only) section', () => {
+      expect(content).toMatch(/## Background context \(read-only\)/i);
+    });
+
+    it('should document baseline-results.json as a conditionally provided input', () => {
+      expect(content).toMatch(/baseline-results\.json.*conditionally provided|conditionally provided.*baseline-results\.json/is);
+    });
+
+    it('should state that background context file is read-only', () => {
+      expect(content).toMatch(/read-only/i);
+    });
+  });
+
   describe('input contract', () => {
     it('should describe commands from config as input', () => {
       expect(content).toMatch(/commands|config/i);
