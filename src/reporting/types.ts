@@ -24,6 +24,33 @@ export interface RunTotals {
   failures: number;
 }
 
+export interface CostReportAgentEntry {
+  agent: string;
+  tokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+}
+
+export interface CostReportPhaseEntry {
+  phase: number;
+  phaseName: string;
+  tokens: number;
+  estimatedCost: number;
+}
+
+export interface CostReport {
+  issueNumber: number;
+  generatedAt: string;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  model: string;
+  byAgent: CostReportAgentEntry[];
+  byPhase: CostReportPhaseEntry[];
+}
+
 export interface RunReport {
   runId: string;
   project: string;

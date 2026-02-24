@@ -136,6 +136,13 @@ export interface AgentInvocation {
   timeout?: number;
 }
 
+/** Detailed token usage split by input/output tokens and model. */
+export interface TokenUsageDetail {
+  input: number;
+  output: number;
+  model: string;
+}
+
 /** Result of an agent invocation. */
 export interface AgentResult {
   /** Which agent was invoked. */
@@ -153,7 +160,7 @@ export interface AgentResult {
   /** Full stderr from the agent process. */
   stderr: string;
   /** Token usage (parsed from output if available), or null if not reported. */
-  tokenUsage: number | null;
+  tokenUsage: TokenUsageDetail | number | null;
   /** Path to the output file(s) the agent produced. */
   outputPath: string;
   /** Whether the expected output file exists. */
@@ -262,7 +269,7 @@ export interface PhaseResult {
   phaseName: string;
   success: boolean;
   duration: number;
-  tokenUsage: number | null;
+  tokenUsage: TokenUsageDetail | number | null;
   outputPath?: string;
   error?: string;
   gateResult?: GateResult;
