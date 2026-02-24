@@ -8,6 +8,10 @@ vi.mock('../src/util/fs.js', () => ({
   ensureDir: vi.fn(),
 }));
 
+vi.mock('../src/cli/agents.js', () => ({
+  scaffoldMissingAgents: vi.fn(),
+}));
+
 vi.mock('../src/cli/prompts.js', () => ({
   collectAnswers: vi.fn(),
 }));
@@ -17,6 +21,7 @@ vi.mock('@inquirer/prompts', () => ({
 }));
 
 import { exists, atomicWriteJSON, atomicWriteFile, readFileOrNull, ensureDir } from '../src/util/fs.js';
+import { scaffoldMissingAgents } from '../src/cli/agents.js';
 import { collectAnswers } from '../src/cli/prompts.js';
 import { confirm } from '@inquirer/prompts';
 import { runInit } from '../src/cli/init.js';
@@ -26,6 +31,7 @@ const mockAtomicWriteJSON = vi.mocked(atomicWriteJSON);
 const mockAtomicWriteFile = vi.mocked(atomicWriteFile);
 const mockReadFileOrNull = vi.mocked(readFileOrNull);
 const mockEnsureDir = vi.mocked(ensureDir);
+const mockScaffoldMissingAgents = vi.mocked(scaffoldMissingAgents);
 const mockCollectAnswers = vi.mocked(collectAnswers);
 const mockConfirm = vi.mocked(confirm);
 

@@ -4,6 +4,7 @@ import { confirm } from '@inquirer/prompts';
 import { CadreConfigSchema } from '../config/schema.js';
 import { collectAnswers } from './prompts.js';
 import { atomicWriteJSON, atomicWriteFile, exists, ensureDir, readFileOrNull } from '../util/fs.js';
+import { scaffoldMissingAgents } from './agents.js';
 
 export async function runInit(opts: { yes: boolean; repoPath?: string }): Promise<void> {
   const repoPath = opts.repoPath ?? process.cwd();
@@ -89,11 +90,17 @@ export async function runInit(opts: { yes: boolean; repoPath?: string }): Promis
     await atomicWriteFile(gitignorePath, `${gitignoreContent}${separator}.cadre/\n`);
   }
 
-  // 8. Create .github/agents/ directory
-  await ensureDir(join(repoPath, '.github', 'agents'));
+  // 8. Create .github/agents/ directory and scaffold missing agent files
+  const agentDir = join(repoPath, '.github', 'agents');
+  await ensureDir(agentDir);
+  const scaffolded = await scaffoldMissingAgents(agentDir);
 
   // 9. Print success summary
   console.log('');
+  if (scaffolded > 0) {
+    console.log(chalk.blue(`ℹ️  Auto-scaffolded ${scaffolded} missing agent file(s)`));
+    console.log('');
+  }
   console.log(chalk.green('✓ cadre initialized successfully!'));
   console.log('');
   console.log(`  ${chalk.bold('Project:')}  ${config.projectName}`);
