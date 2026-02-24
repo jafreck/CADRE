@@ -316,6 +316,10 @@ export class ReviewResponseOrchestrator {
         // 8. Set up per-issue checkpoint and run the reduced pipeline (phases 3–5)
         const checkpoint = new CheckpointManager(progressDir, this.logger);
         await checkpoint.load(String(issueNumber));
+        // Reset phases 3–5 so they re-execute against the new review-response
+        // implementation plan.  Without this, IssueOrchestrator sees them as
+        // already completed and skips them entirely.
+        await checkpoint.resetPhases(REVIEW_RESPONSE_PHASES);
         await checkpoint.setWorktreeInfo(worktree.path, worktree.branch, worktree.baseCommit);
 
         const issueOrchestrator = new IssueOrchestrator(
