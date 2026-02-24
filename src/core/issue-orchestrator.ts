@@ -76,7 +76,6 @@ export class IssueOrchestrator {
   private readonly registry: PhaseRegistry;
   private ctx!: PhaseContext;
   private readonly phases: PhaseResult[] = [];
-  private readonly executedPhaseIds = new Set<number>();
   private budgetExceeded = false;
   private budgetWarningSent = false;
   private createdPR: PullRequestInfo | undefined;
@@ -349,7 +348,6 @@ export class IssueOrchestrator {
    * Execute a single phase.
    */
   private async executePhase(executor: PhaseExecutor): Promise<PhaseResult> {
-    this.executedPhaseIds.add(executor.phaseId);
     const phaseStart = Date.now();
     await this.checkpoint.startPhase(executor.phaseId);
     await this.progressWriter.appendEvent(`Phase ${executor.phaseId} started: ${executor.name}`);
@@ -561,7 +559,7 @@ export class IssueOrchestrator {
       issueNumber: this.issue.number,
       issueTitle: this.issue.title,
       success,
-      codeComplete: this.executedPhaseIds.has(4) && this.phases.some((p) => p.phase === 4 && p.success),
+      codeComplete: this.phases.some((p) => p.phase === 4 && p.success),
       phases: this.phases,
       pr: this.createdPR,
       totalDuration: startTime ? Date.now() - startTime : 0,
