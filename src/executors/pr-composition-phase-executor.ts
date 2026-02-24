@@ -59,30 +59,23 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       await ctx.io.commitManager.push(true, ctx.worktree.branch);
 
       // Create PR
-      try {
-        const prTitle = `${prContent.title || ctx.issue.title} (#${ctx.issue.number})`;
-        let prBody = prContent.body;
+      const prTitle = `${prContent.title || ctx.issue.title} (#${ctx.issue.number})`;
+      let prBody = prContent.body;
 
-        // Add issue link if configured
-        if (ctx.config.pullRequest.linkIssue) {
-          prBody += `\n\n${ctx.platform.issueLinkSuffix(ctx.issue.number)}`;
-        }
-
-        await ctx.platform.createPullRequest({
-          title: prTitle,
-          body: prBody,
-          head: ctx.worktree.branch,
-          base: ctx.config.baseBranch,
-          draft: ctx.config.pullRequest.draft,
-          labels: ctx.config.pullRequest.labels,
-          reviewers: ctx.config.pullRequest.reviewers,
-        });
-      } catch (err) {
-        // Non-critical: the branch is pushed, PR can be created manually
-        ctx.services.logger.error(`Failed to create PR: ${err}`, {
-          issueNumber: ctx.issue.number,
-        });
+      // Add issue link if configured
+      if (ctx.config.pullRequest.linkIssue) {
+        prBody += `\n\n${ctx.platform.issueLinkSuffix(ctx.issue.number)}`;
       }
+
+      await ctx.platform.createPullRequest({
+        title: prTitle,
+        body: prBody,
+        head: ctx.worktree.branch,
+        base: ctx.config.baseBranch,
+        draft: ctx.config.pullRequest.draft,
+        labels: ctx.config.pullRequest.labels,
+        reviewers: ctx.config.pullRequest.reviewers,
+      });
     }
 
     return join(ctx.io.progressDir, 'pr-content.md');
