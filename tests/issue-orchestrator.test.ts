@@ -906,4 +906,36 @@ describe('IssueOrchestrator – codeComplete and prCreated fields', () => {
     expect(result.prCreated).toBe(false);
     expect(result.pr).toBeUndefined();
   });
+
+  it('should set codeComplete=true and prCreated=false when phase 5 succeeds but PR creation fails', async () => {
+    // Simulate: all phases run and succeed, but onPRCreated is never invoked
+    // (because createPullRequest threw inside the executor — the executor swallows
+    // the error so the phase still reports success, but prCreated stays false).
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    vi.spyOn(orchestrator as unknown as { executePhase: (e: any) => Promise<unknown> }, 'executePhase')
+      .mockImplementation(async (executor: any) => ({
+        phase: executor.phaseId,
+        phaseName: executor.name,
+        success: true,
+        duration: 100,
+        tokenUsage: 0,
+        outputPath: '',
+      }));
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(true);
+    expect(result.codeComplete).toBe(true);
+    expect(result.prCreated).toBe(false);
+  });
 });
