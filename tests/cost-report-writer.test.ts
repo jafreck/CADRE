@@ -139,7 +139,7 @@ describe('CostReportWriter', () => {
       const report = writer.build(1, tracker, 'gpt-4o');
       const progressDir = '/some/dir/.cadre/issues/1';
 
-      await writer.write(1, report, progressDir);
+      await writer.write(report, progressDir);
 
       const expectedPath = join(progressDir, 'cost-report.json');
       expect(fsUtil.atomicWriteJSON).toHaveBeenCalledWith(expectedPath, report);
@@ -152,7 +152,7 @@ describe('CostReportWriter', () => {
       const report = writer.build(7, tracker, 'gpt-4o');
       const progressDir = '/tmp/cadre/issues/7';
 
-      await writer.write(7, report, progressDir);
+      await writer.write(report, progressDir);
 
       const [, writtenData] = vi.mocked(fsUtil.atomicWriteJSON).mock.calls[0] as [string, typeof report];
       expect(writtenData.issueNumber).toBe(7);

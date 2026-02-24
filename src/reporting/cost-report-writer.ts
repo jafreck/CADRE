@@ -97,7 +97,7 @@ export class CostReportWriter {
   /**
    * Write a CostReport as JSON to `{progressDir}/cost-report.json` atomically.
    */
-  async write(issueNumber: number, report: CostReport, progressDir: string): Promise<void> {
+  async write(report: CostReport, progressDir: string): Promise<void> {
     const filePath = join(progressDir, 'cost-report.json');
     await atomicWriteJSON(filePath, report);
   }
