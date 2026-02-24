@@ -64,12 +64,15 @@ export class ResultParser {
     this.logger.warn(`[deprecated] parseImplementationPlan: no cadre-json block found in ${planPath}; falling back to regex parsing`);
     const tasks: ImplementationTask[] = [];
 
-    // Split into task blocks: ## Task: task-xxx - Name  or  ### Task: task-xxx - Name
-    const taskBlocks = content.split(/^#{2,3}\s+Task:\s+/m).slice(1);
+    // Split into task blocks — support both formats:
+    //   ## task-001 – Name   (current template format, em-dash)
+    //   ## task-001 - Name   (hyphen variant)
+    //   ## Task: task-001 - Name  (legacy format)
+    const taskBlocks = content.split(/^#{2,3}\s+(?:Task:\s+)?task-/im).slice(1);
 
     for (const block of taskBlocks) {
       try {
-        const task = this.parseTaskBlock(block);
+        const task = this.parseTaskBlock('task-' + block);
         tasks.push(task);
       } catch (err) {
         this.logger.warn(`Failed to parse task block: ${err}`);
@@ -77,7 +80,11 @@ export class ResultParser {
     }
 
     if (tasks.length === 0) {
-      this.logger.warn(`No tasks found in implementation plan: ${planPath}`);
+      this.logger.warn(
+        `No tasks found in implementation plan: ${planPath}. ` +
+        `The implementation-planner agent must emit a \`\`\`cadre-json\`\`\` fenced block ` +
+        `containing a JSON array of task objects. See the agent template for the required schema.`,
+      );
     }
 
     return tasks;
@@ -91,7 +98,8 @@ export class ResultParser {
     const headerLine = lines[0].trim();
 
     // Parse "task-001 - Task Name" from the header
-    const headerMatch = headerLine.match(/^(task-\d+)\s*-\s*(.+)/);
+    // Support both em-dash (–) and hyphen (-) separators as the template uses em-dash
+    const headerMatch = headerLine.match(/^(task-\d+)\s*[\-–]\s*(.+)/);
     const id = headerMatch?.[1] ?? `task-${Date.now()}`;
     const name = headerMatch?.[2]?.trim() ?? headerLine;
 

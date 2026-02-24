@@ -36,7 +36,12 @@ export class PlanningPhaseExecutor implements PhaseExecutor {
     const tasks = await ctx.services.resultParser.parseImplementationPlan(planPath);
 
     if (tasks.length === 0) {
-      throw new Error('Implementation plan produced zero tasks');
+      throw new Error(
+        'Implementation plan produced zero tasks. ' +
+        'The implementation-planner agent did not emit a valid `cadre-json` block or any parseable task sections. ' +
+        `Check ${join(ctx.io.progressDir, 'implementation-plan.md')} — the agent must output a ` +
+        '```cadre-json``` fenced block containing a JSON array of task objects (see agent template for schema).',
+      );
     }
 
     // Validate dependency graph is acyclic
