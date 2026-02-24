@@ -42,7 +42,7 @@ function resolveAgentDir(
  */
 export async function scaffoldMissingAgents(
   agentDir: string,
-  backend = 'copilot',
+  backend: string,
   templateDir?: string,
 ): Promise<number> {
   const resolvedTemplateDir = templateDir ?? getTemplateDir();

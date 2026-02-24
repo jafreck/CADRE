@@ -93,7 +93,8 @@ export async function runInit(opts: { yes: boolean; repoPath?: string }): Promis
   // 8. Create .github/agents/ directory and scaffold missing agent files
   const agentDir = join(repoPath, '.github', 'agents');
   await ensureDir(agentDir);
-  const scaffolded = await scaffoldMissingAgents(agentDir);
+  const backend = config.agent?.backend ?? 'copilot';
+  const scaffolded = await scaffoldMissingAgents(agentDir, backend);
 
   // 9. Print success summary
   console.log('');
