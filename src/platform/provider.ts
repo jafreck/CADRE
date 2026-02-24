@@ -35,6 +35,8 @@ export interface PullRequestInfo {
   title: string;
   headBranch: string;
   baseBranch: string;
+  /** Lifecycle state of the PR. Undefined when the provider did not return state information. */
+  state?: 'open' | 'closed' | 'merged';
 }
 
 /**

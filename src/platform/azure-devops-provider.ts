@@ -213,6 +213,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
   async createPullRequest(params: CreatePullRequestParams): Promise<PullRequestInfo> {
     this.ensureConnected();
 
+    // Note: result always starts as open
     const repoName = this.adoConfig.repositoryName ?? this.adoConfig.project;
     const url =
       `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/git/repositories/${repoName}/pullrequests?api-version=${this.apiVersion}`;
@@ -289,6 +290,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
       title: params.title,
       headBranch: params.head,
       baseBranch: params.base,
+      state: 'open',
     };
   }
 
@@ -301,12 +303,14 @@ export class AzureDevOpsProvider implements PlatformProvider {
 
     const result = await this.fetch(url);
 
+    const adoStatus = result.status as string | undefined;
     return {
       number: result.pullRequestId as number,
       url: `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_git/${repoName}/pullrequest/${result.pullRequestId}`,
       title: (result.title as string) ?? '',
       headBranch: this.stripRefPrefix((result.sourceRefName as string) ?? ''),
       baseBranch: this.stripRefPrefix((result.targetRefName as string) ?? ''),
+      state: adoStatus === 'completed' ? 'merged' : adoStatus === 'abandoned' ? 'closed' : 'open',
     };
   }
 
@@ -372,13 +376,17 @@ export class AzureDevOpsProvider implements PlatformProvider {
     const result = await this.fetch(url);
     const prs = (result.value ?? []) as Array<Record<string, unknown>>;
 
-    return prs.map((pr) => ({
-      number: pr.pullRequestId as number,
-      url: `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_git/${repoName}/pullrequest/${pr.pullRequestId}`,
-      title: (pr.title as string) ?? '',
-      headBranch: this.stripRefPrefix((pr.sourceRefName as string) ?? ''),
-      baseBranch: this.stripRefPrefix((pr.targetRefName as string) ?? ''),
-    }));
+    return prs.map((pr) => {
+      const adoStatus = pr.status as string | undefined;
+      return {
+        number: pr.pullRequestId as number,
+        url: `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_git/${repoName}/pullrequest/${pr.pullRequestId}`,
+        title: (pr.title as string) ?? '',
+        headBranch: this.stripRefPrefix((pr.sourceRefName as string) ?? ''),
+        baseBranch: this.stripRefPrefix((pr.targetRefName as string) ?? ''),
+        state: adoStatus === 'completed' ? 'merged' : adoStatus === 'abandoned' ? 'closed' : 'open',
+      };
+    });
   }
 
   async findOpenPR(_issueNumber: number, branch: string): Promise<PullRequestInfo | null> {

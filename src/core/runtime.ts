@@ -312,6 +312,11 @@ export class CadreRuntime {
 
   /**
    * Prune worktrees for completed/merged issues.
+   *
+   * A worktree is pruned when either:
+   *   1. The local fleet checkpoint records its status as 'completed', OR
+   *   2. The platform reports the associated branch's PR as closed or merged
+   *      (i.e. the work is done even if the checkpoint was never updated).
    */
   async pruneWorktrees(): Promise<void> {
     const worktreeManager = new WorktreeManager(
@@ -330,17 +335,41 @@ export class CadreRuntime {
       this.logger,
     );
     const state = await checkpointManager.load();
-
     const worktrees = await worktreeManager.listActive();
     let pruned = 0;
 
-    for (const wt of worktrees) {
-      const issueStatus = state.issues[wt.issueNumber];
-      if (issueStatus?.status === 'completed') {
-        await worktreeManager.remove(wt.issueNumber);
-        pruned++;
-        console.log(`  Pruned: issue #${wt.issueNumber}`);
+    // Connect to platform provider so we can query live PR state
+    await this.provider.connect();
+    try {
+      for (const wt of worktrees) {
+        const locallyCompleted = state.issues[wt.issueNumber]?.status === 'completed';
+
+        // Check whether the branch's PR is closed or merged on the platform
+        let prDone = false;
+        try {
+          const prs = await this.provider.listPullRequests({ head: wt.branch, state: 'all' });
+          const matching = prs.find((pr) => pr.headBranch === wt.branch);
+          if (matching) {
+            prDone = matching.state === 'closed' || matching.state === 'merged';
+          }
+        } catch (err) {
+          this.logger.warn(
+            `Could not fetch PR state for issue #${wt.issueNumber} (branch ${wt.branch}): ${err}`,
+            { issueNumber: wt.issueNumber },
+          );
+        }
+
+        if (locallyCompleted || prDone) {
+          const reason = prDone ? 'PR closed/merged on platform' : 'locally completed';
+          await worktreeManager.remove(wt.issueNumber);
+          pruned++;
+          console.log(`  Pruned: issue #${wt.issueNumber} (${reason})`);
+        } else {
+          console.log(`  Skipped: issue #${wt.issueNumber} (PR still open or no PR found)`);
+        }
       }
+    } finally {
+      await this.provider.disconnect();
     }
 
     console.log(`\nPruned ${pruned} worktrees`);
