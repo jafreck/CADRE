@@ -55,7 +55,7 @@ program
           const scaffoldableIssues = issues.filter((i) => i.includes('Missing:'));
           const nonScaffoldable = issues.filter((i) => !i.includes('Missing:'));
 
-          if (opts.autoscaffold && scaffoldableIssues.length > 0 && nonScaffoldable.length === 0) {
+          if (opts.autoscaffold && scaffoldableIssues.length > 0) {
             const n = await scaffoldMissingAgents(agentDir, backend);
             console.log(`ℹ️ Auto-scaffolded ${n} missing agent file(s) — continuing.`);
             issues = await AgentLauncher.validateAgentFiles(agentDir, backend);
