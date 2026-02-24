@@ -162,4 +162,69 @@ describe('PhaseContext', () => {
     ctx.callbacks.checkBudget();
     expect(checkBudget).toHaveBeenCalledOnce();
   });
+
+  it('PhaseCallbacks.setPR is optional and can be omitted', () => {
+    const ctx: PhaseContext = {
+      issue: {} as never,
+      worktree: {} as never,
+      config: {} as never,
+      platform: {} as never,
+      services: {
+        launcher: {} as never,
+        retryExecutor: {} as never,
+        tokenTracker: {} as never,
+        contextBuilder: {} as never,
+        resultParser: {} as never,
+        logger: {} as never,
+      },
+      io: {
+        progressDir: '',
+        progressWriter: {} as never,
+        checkpoint: {} as never,
+        commitManager: {} as never,
+      },
+      callbacks: {
+        recordTokens: vi.fn(),
+        checkBudget: vi.fn(),
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+        // setPR intentionally omitted
+      },
+    };
+
+    expect(ctx.callbacks.setPR).toBeUndefined();
+  });
+
+  it('PhaseCallbacks.setPR is callable when provided', () => {
+    const setPR = vi.fn();
+    const ctx: PhaseContext = {
+      issue: {} as never,
+      worktree: {} as never,
+      config: {} as never,
+      platform: {} as never,
+      services: {
+        launcher: {} as never,
+        retryExecutor: {} as never,
+        tokenTracker: {} as never,
+        contextBuilder: {} as never,
+        resultParser: {} as never,
+        logger: {} as never,
+      },
+      io: {
+        progressDir: '',
+        progressWriter: {} as never,
+        checkpoint: {} as never,
+        commitManager: {} as never,
+      },
+      callbacks: {
+        recordTokens: vi.fn(),
+        checkBudget: vi.fn(),
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+        setPR,
+      },
+    };
+
+    const prInfo = { number: 99, url: 'https://github.com/owner/repo/pull/99', title: 'Fix bug' } as never;
+    ctx.callbacks.setPR?.(prInfo);
+    expect(setPR).toHaveBeenCalledWith(prInfo);
+  });
 });

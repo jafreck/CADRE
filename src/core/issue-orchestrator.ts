@@ -44,6 +44,7 @@ export interface IssueResult {
   issueNumber: number;
   issueTitle: string;
   success: boolean;
+  codeComplete: boolean;
   phases: PhaseResult[];
   pr?: PullRequestInfo;
   totalDuration: number;
@@ -164,6 +165,7 @@ export class IssueOrchestrator {
         recordTokens: (agent, tokens) => this.recordTokens(agent, tokens),
         checkBudget: () => this.checkBudget(),
         updateProgress: () => this.updateProgress(),
+        setPR: (pr) => { this.createdPR = pr; },
       },
     };
 
@@ -557,6 +559,7 @@ export class IssueOrchestrator {
       issueNumber: this.issue.number,
       issueTitle: this.issue.title,
       success,
+      codeComplete: this.phases.some((p) => p.phase === 4 && p.success),
       phases: this.phases,
       pr: this.createdPR,
       totalDuration: startTime ? Date.now() - startTime : 0,

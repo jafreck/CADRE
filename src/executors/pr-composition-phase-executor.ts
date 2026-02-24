@@ -67,7 +67,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
         prBody += `\n\n${ctx.platform.issueLinkSuffix(ctx.issue.number)}`;
       }
 
-      await ctx.platform.createPullRequest({
+      const pr = await ctx.platform.createPullRequest({
         title: prTitle,
         body: prBody,
         head: ctx.worktree.branch,
@@ -76,6 +76,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
         labels: ctx.config.pullRequest.labels,
         reviewers: ctx.config.pullRequest.reviewers,
       });
+      ctx.callbacks.setPR?.(pr);
     }
 
     return join(ctx.io.progressDir, 'pr-content.md');

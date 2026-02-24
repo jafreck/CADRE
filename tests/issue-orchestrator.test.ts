@@ -758,3 +758,64 @@ describe('IssueOrchestrator notifier integration', () => {
     await expect(orchestrator.run()).resolves.toMatchObject({ success: false, budgetExceeded: true });
   });
 });
+
+describe('IssueOrchestrator — codeComplete field', () => {
+  it('should include codeComplete field in the result', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result).toHaveProperty('codeComplete');
+    expect(typeof result.codeComplete).toBe('boolean');
+  });
+
+  it('should return codeComplete: true when all phases pre-completed (phase 4 succeeded)', async () => {
+    // Default mock: all phases pre-completed → phase 4 is included with success: true
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result.codeComplete).toBe(true);
+  });
+
+  it('should return codeComplete: false when a critical phase (phase 1) fails before phase 4', async () => {
+    // Only phase 1 runs and fails → phase 4 never runs → codeComplete is false
+    const checkpoint = makeCheckpointMock({
+      isPhaseCompleted: vi.fn(() => false),
+    });
+    vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('simulated phase 1 failure'));
+
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(false);
+    expect(result.codeComplete).toBe(false);
+  });
+});
