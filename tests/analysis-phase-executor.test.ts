@@ -527,7 +527,7 @@ describe('AnalysisPhaseExecutor', () => {
     });
   });
 
-
+  describe('captureBaseline()', () => {
     const baselinePath = '/tmp/worktree/.cadre/baseline-results.json';
 
     it('should write baseline with zeros and empty arrays when no commands configured', async () => {
