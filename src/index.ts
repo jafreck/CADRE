@@ -25,6 +25,7 @@ program
   .option('-i, --issue <numbers...>', 'Override: process specific issue numbers')
   .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
   .option('--no-pr', 'Skip PR creation')
+  .option('--respond-to-reviews', 'Address open PR review comments instead of starting a new pipeline')
   .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
   .option('--skip-validation', 'Skip pre-run validation checks')
   .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files')
@@ -38,6 +39,7 @@ program
         maxParallelIssues: opts.parallel,
         skipValidation: opts.skipValidation,
         noPr: !opts.pr,
+        respondToReviews: opts.respondToReviews,
       });
 
       if (opts.dryRun) {
