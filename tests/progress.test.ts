@@ -167,6 +167,76 @@ describe('FleetProgressWriter', () => {
     expect(content).toContain('Issue #1 started');
     expect(content).toContain('Event Log');
   });
+
+  it('should emit ⚠️ emoji for code-complete status', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 10, status: 'code-complete', branch: 'cadre/issue-10' }),
+    ];
+
+    await writer.write(issues, [], { current: 0 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).toContain('⚠️ code-complete');
+  });
+
+  it('should include Code Complete — PR Needed section when an issue has code-complete status', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 11, issueTitle: 'Fix auth bug', status: 'code-complete', branch: 'cadre/issue-11' }),
+    ];
+
+    await writer.write(issues, [], { current: 0 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).toContain('## Code Complete — PR Needed');
+    expect(content).toContain('#11 Fix auth bug');
+    expect(content).toContain('cadre/issue-11');
+  });
+
+  it('should NOT include Code Complete — PR Needed section when no issues have code-complete status', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 1, status: 'completed' }),
+      makeIssue({ issueNumber: 2, status: 'failed' }),
+    ];
+
+    await writer.write(issues, [], { current: 0 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).not.toContain('## Code Complete — PR Needed');
+  });
+
+  it('should list all code-complete issues in the Code Complete section with their branch names', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 20, issueTitle: 'Issue A', status: 'code-complete', branch: 'cadre/issue-20' }),
+      makeIssue({ issueNumber: 21, issueTitle: 'Issue B', status: 'code-complete', branch: 'cadre/issue-21' }),
+      makeIssue({ issueNumber: 22, issueTitle: 'Issue C', status: 'completed' }),
+    ];
+
+    await writer.write(issues, [], { current: 0 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).toContain('#20 Issue A');
+    expect(content).toContain('cadre/issue-20');
+    expect(content).toContain('#21 Issue B');
+    expect(content).toContain('cadre/issue-21');
+    // completed issue should not appear in the Code Complete section
+    expect(content).not.toContain('#22 Issue C — branch');
+  });
+
+  it('should use "unknown" as branch name when branch is undefined for code-complete issues', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 30, issueTitle: 'No Branch', status: 'code-complete' }),
+    ];
+
+    await writer.write(issues, [], { current: 0 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).toContain('unknown');
+  });
 });
 
 describe('phaseNames', () => {
@@ -210,6 +280,17 @@ describe('IssueProgressInfo status type', () => {
       totalPhases: 5,
     };
     expect(info.status).toBe('budget-exceeded');
+  });
+
+  it('should accept code-complete as a valid status', () => {
+    const info: IssueProgressInfo = {
+      issueNumber: 8,
+      issueTitle: 'Code complete issue',
+      status: 'code-complete',
+      currentPhase: 4,
+      totalPhases: 5,
+    };
+    expect(info.status).toBe('code-complete');
   });
 });
 

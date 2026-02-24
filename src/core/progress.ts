@@ -21,10 +21,11 @@ export interface PullRequestRef {
 export interface IssueProgressInfo {
   issueNumber: number;
   issueTitle: string;
-  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded';
+  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete';
   currentPhase: number;
   totalPhases: number;
   prNumber?: number;
+  branch?: string;
   error?: string;
 }
 
@@ -84,8 +85,17 @@ export class FleetProgressWriter {
         failed: '❌',
         blocked: '🚫',
         'budget-exceeded': '💸',
+        'code-complete': '⚠️',
       }[issue.status];
       md += `\n| #${issue.issueNumber} | ${issue.issueTitle} | ${statusEmoji} ${issue.status} | ${issue.currentPhase}/${issue.totalPhases} | ${prLink} |`;
+    }
+
+    const codeCompleteIssues = issues.filter((i) => i.status === 'code-complete');
+    if (codeCompleteIssues.length > 0) {
+      md += `\n\n## Code Complete — PR Needed\n\n`;
+      for (const issue of codeCompleteIssues) {
+        md += `- #${issue.issueNumber} ${issue.issueTitle} — branch: \`${issue.branch ?? 'unknown'}\`\n`;
+      }
     }
 
     if (this.events.length > 0) {

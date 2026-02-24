@@ -25,6 +25,8 @@ export interface FleetResult {
   prsCreated: PullRequestInfo[];
   /** Issues that failed or were blocked. */
   failedIssues: Array<{ issueNumber: number; error: string }>;
+  /** Issues where code is complete but no PR was created. */
+  codeDoneNoPR: Array<{ issueNumber: number; branch: string }>;
   /** Total duration across all pipelines. */
   totalDuration: number;
   /** Aggregate token usage. */
@@ -164,6 +166,7 @@ export class FleetOrchestrator {
       issues: issueResults,
       prsCreated,
       failedIssues,
+      codeDoneNoPR: [],
       totalDuration: Date.now() - startTime,
       tokenUsage: this.tokenTracker.getSummary(),
     };
@@ -191,6 +194,7 @@ export class FleetOrchestrator {
         issueNumber: issue.number,
         issueTitle: issue.title,
         success: false,
+        codeComplete: false,
         budgetExceeded: true,
         phases: [],
         totalDuration: 0,
@@ -225,6 +229,7 @@ export class FleetOrchestrator {
             issueNumber: issue.number,
             issueTitle: issue.title,
             success: true,
+            codeComplete: false,
             pr: existingPR,
             phases: [],
             totalDuration: 0,
@@ -292,7 +297,9 @@ export class FleetOrchestrator {
         ? 'budget-exceeded'
         : result.success
           ? 'completed'
-          : 'failed';
+          : result.codeComplete
+            ? 'code-complete'
+            : 'failed';
       await this.fleetCheckpoint.setIssueStatus(
         issue.number,
         status,
@@ -359,6 +366,7 @@ export class FleetOrchestrator {
           issueNumber: issue.number,
           issueTitle: issue.title,
           success: false,
+          codeComplete: false,
           phases: [],
           totalDuration: 0,
           tokenUsage: 0,
@@ -385,6 +393,7 @@ export class FleetOrchestrator {
         issueNumber: issue.number,
         issueTitle: issue.title,
         success: false,
+        codeComplete: false,
         phases: [],
         totalDuration: 0,
         tokenUsage: 0,
@@ -403,6 +412,7 @@ export class FleetOrchestrator {
     const issueResults: IssueResult[] = [];
     const prsCreated: PullRequestInfo[] = [];
     const failedIssues: Array<{ issueNumber: number; error: string }> = [];
+    const codeDoneNoPR: Array<{ issueNumber: number; branch: string }> = [];
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
@@ -416,6 +426,14 @@ export class FleetOrchestrator {
           failedIssues.push({
             issueNumber: result.value.issueNumber,
             error: result.value.error ?? 'Unknown error',
+          });
+        }
+
+        if (result.value.codeComplete && !result.value.success) {
+          const checkpointStatus = this.fleetCheckpoint.getIssueStatus(result.value.issueNumber);
+          codeDoneNoPR.push({
+            issueNumber: result.value.issueNumber,
+            branch: checkpointStatus?.branchName ?? '',
           });
         }
       } else {
@@ -434,6 +452,7 @@ export class FleetOrchestrator {
       issues: issueResults,
       prsCreated,
       failedIssues,
+      codeDoneNoPR,
       totalDuration: Date.now() - startTime,
       tokenUsage: this.tokenTracker.getSummary(),
     };
@@ -453,6 +472,7 @@ export class FleetOrchestrator {
         currentPhase: status?.lastPhase ?? 0,
         totalPhases: getPhaseCount(),
         prNumber: ir?.pr?.number,
+        branch: status?.branchName,
         error: ir?.error,
       };
     });
@@ -483,6 +503,7 @@ export class FleetOrchestrator {
         status: status?.status ?? 'not-started',
         currentPhase: status?.lastPhase ?? 0,
         totalPhases: getPhaseCount(),
+        branch: status?.branchName,
       };
     });
 
