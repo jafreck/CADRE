@@ -681,6 +681,49 @@ describe('CadreConfigSchema', () => {
     });
   });
 
+  describe('postCostComment', () => {
+    it('should default postCostComment to false when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.postCostComment).toBe(false);
+    });
+
+    it('should accept postCostComment set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { postCostComment: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.postCostComment).toBe(true);
+      }
+    });
+
+    it('should accept postCostComment set to false explicitly', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { postCostComment: false },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.postCostComment).toBe(false);
+      }
+    });
+
+    it('should reject a non-boolean postCostComment', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { postCostComment: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should allow existing config without postCostComment to parse successfully', () => {
+      const configWithoutPostCostComment = { ...validConfig };
+      const result = CadreConfigSchema.safeParse(configWithoutPostCostComment);
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe('reviewResponse', () => {
     it('should default reviewResponse.autoReplyOnResolved to false when omitted', () => {
       const result = CadreConfigSchema.parse(validConfig);
