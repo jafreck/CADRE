@@ -24,6 +24,7 @@ vi.mock('../src/cli/agents.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/cli/agents.js')>();
   return {
     ...actual,
+    refreshAgentsFromTemplates: vi.fn().mockResolvedValue(10),
     scaffoldMissingAgents: vi.fn().mockResolvedValue(1),
   };
 });
@@ -299,6 +300,7 @@ describe('cadre run autoscaffold behavior', () => {
     }));
     vi.doMock('../src/cli/agents.js', () => ({
       registerAgentsCommand: vi.fn(),
+      refreshAgentsFromTemplates: vi.fn().mockResolvedValue(10),
       scaffoldMissingAgents: scaffoldMissingAgentsMock,
     }));
     await import('../src/index.js').catch(() => {});

@@ -42,6 +42,35 @@ export function agentFileName(name: string): string {
 }
 
 /**
+ * Refresh all agent instruction files in `agentDir` from the bundled templates,
+ * always overwriting existing files. Called on every `run` so that updates to
+ * bundled templates are picked up without requiring a manual scaffold.
+ *
+ * Returns the count of files written.
+ */
+export async function refreshAgentsFromTemplates(
+  agentDir: string,
+  templateDir?: string,
+): Promise<number> {
+  const resolvedTemplateDir = templateDir ?? getTemplateDir();
+  let written = 0;
+
+  for (const agent of AGENT_DEFINITIONS) {
+    const srcPath = join(resolvedTemplateDir, agent.templateFile);
+    const destPath = join(agentDir, agentFileName(agent.name));
+
+    if (!(await exists(srcPath))) continue;
+
+    const content = await readFile(srcPath, 'utf-8');
+    await mkdir(dirname(destPath), { recursive: true });
+    await writeFile(destPath, content, 'utf-8');
+    written++;
+  }
+
+  return written;
+}
+
+/**
  * Scaffold agent instruction files that are currently missing from `agentDir`.
  * Skips files that already exist; returns the count of files written.
  *

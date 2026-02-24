@@ -223,9 +223,14 @@ export class WorktreeManager {
   }
 
   /**
-   * Bootstrap the worktree's `.cadre/` directory and add it to the worktree's
-   * private git exclude file (`{git-dir}/info/exclude`) so it is never tracked
-   * or accidentally committed — without touching the repo's `.gitignore`.
+   * Bootstrap the worktree's `.cadre/` directory and add both `.cadre/` and
+   * the backend-specific agent directory to the worktree's private git exclude
+   * file (`{git-dir}/info/exclude`) so they are never tracked or accidentally
+   * committed — without touching the repo's `.gitignore`.
+   *
+   * The agent directory (`.github/agents/` for Copilot, `.claude/agents/` for
+   * Claude) is added as a primary defence; `CommitManager.unstageArtifacts`
+   * is the belt-and-suspenders secondary defence.
    */
   private async initCadreDir(worktreePath: string, issueNumber: number): Promise<void> {
     const cadreDir = join(worktreePath, '.cadre');
@@ -234,10 +239,15 @@ export class WorktreeManager {
     // Ensure cadre's tasks scratch dir exists too so agents can write there
     await ensureDir(join(cadreDir, 'tasks'));
 
-    // Write `.cadre/` to the worktree-local git exclude instead of .gitignore
-    // so the exclusion is never staged or committed.
+    // Write exclusions to the worktree-local git exclude instead of .gitignore
+    // so the exclusions are never staged or committed.
     try {
-      const gitDir = (await this.git.raw(['rev-parse', '--git-dir'])).trim();
+      // Use a git instance rooted at the *worktree* so that
+      // `git rev-parse --git-dir` returns the worktree's own git-dir path
+      // (e.g. /path/to/repo/.git/worktrees/issue-N), not the main repo's `.git`.
+      const { simpleGit: makeGit } = await import('simple-git');
+      const worktreeGit = makeGit(worktreePath);
+      const gitDir = (await worktreeGit.raw(['rev-parse', '--git-dir'])).trim();
       const excludePath = join(
         gitDir.startsWith('/') ? gitDir : join(worktreePath, gitDir),
         'info',
@@ -246,16 +256,29 @@ export class WorktreeManager {
       await ensureDir(join(excludePath, '..'));
       const { readFile: readFileNode, writeFile } = await import('node:fs/promises');
       const existing = await readFileNode(excludePath, 'utf-8').catch(() => '');
-      if (!existing.split('\n').some((line) => line.trim() === '.cadre/')) {
+      const existingLines = existing.split('\n').map((l) => l.trim());
+
+      // Entries to protect: cadre state dir + backend-specific agent directory.
+      const agentExcludeDir =
+        this.backend === 'claude' ? '.claude/agents/' : '.github/agents/';
+      const entriesToAdd = ['.cadre/', agentExcludeDir].filter(
+        (entry) => !existingLines.some((l) => l === entry),
+      );
+
+      if (entriesToAdd.length > 0) {
+        const suffix = entriesToAdd.join('\n') + '\n';
         const updated =
           existing === '' || existing.endsWith('\n')
-            ? `${existing}.cadre/\n`
-            : `${existing}\n.cadre/\n`;
+            ? existing + suffix
+            : `${existing}\n${suffix}`;
         await writeFile(excludePath, updated, 'utf-8');
-        this.logger.debug('Added .cadre/ to worktree git exclude', { issueNumber });
+        this.logger.debug(
+          `Added ${entriesToAdd.join(', ')} to worktree git exclude`,
+          { issueNumber },
+        );
       }
-    } catch (err) {
-      // Non-fatal: belt-and-suspenders; CommitManager.unstageArtifacts also guards .cadre/
+    } catch {
+      // Non-fatal: CommitManager.unstageArtifacts provides the secondary guard.
       this.logger.debug('Could not write worktree git exclude; relying on unstageArtifacts', { issueNumber });
     }
   }
@@ -608,6 +631,13 @@ export class WorktreeManager {
   private async getBaseCommit(worktreePath: string): Promise<string> {
     try {
       const worktreeGit = simpleGit(worktreePath);
+      // Use merge-base with origin/baseBranch (or local baseBranch as fallback) so
+      // this always returns the fork point, not the latest implementation commit.
+      for (const ref of [`origin/${this.baseBranch}`, this.baseBranch]) {
+        const result = await worktreeGit.raw(['merge-base', 'HEAD', ref]).catch(() => '');
+        if (result.trim()) return result.trim();
+      }
+      // Fall back to HEAD for newly created worktrees that have no commits yet
       const head = await worktreeGit.revparse(['HEAD']);
       return head.trim();
     } catch {
