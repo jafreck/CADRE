@@ -58,6 +58,7 @@ function setupHappyPath() {
   mockAtomicWriteJSON.mockResolvedValue(undefined);
   mockAtomicWriteFile.mockResolvedValue(undefined);
   mockEnsureDir.mockResolvedValue(undefined);
+  mockScaffoldMissingAgents.mockResolvedValue(0);
   mockCollectAnswers.mockResolvedValue(DEFAULT_ANSWERS);
 }
 
@@ -359,6 +360,34 @@ describe('runInit', () => {
       await runInit({ yes: true, repoPath: REPO_PATH });
 
       expect(mockEnsureDir).toHaveBeenCalledWith(`${REPO_PATH}/.github/agents`);
+    });
+
+    it('should call scaffoldMissingAgents with the resolved agent directory path', async () => {
+      setupHappyPath();
+
+      await runInit({ yes: true, repoPath: REPO_PATH });
+
+      expect(mockScaffoldMissingAgents).toHaveBeenCalledWith(`${REPO_PATH}/.github/agents`);
+    });
+
+    it('should print a notice when scaffoldMissingAgents creates files', async () => {
+      setupHappyPath();
+      mockScaffoldMissingAgents.mockResolvedValue(3);
+
+      await runInit({ yes: true, repoPath: REPO_PATH });
+
+      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+      expect(logCalls).toContain('Auto-scaffolded 3 missing agent file(s)');
+    });
+
+    it('should not print a scaffold notice when all agent files already exist', async () => {
+      setupHappyPath();
+      mockScaffoldMissingAgents.mockResolvedValue(0);
+
+      await runInit({ yes: true, repoPath: REPO_PATH });
+
+      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+      expect(logCalls).not.toContain('Auto-scaffolded');
     });
   });
 
