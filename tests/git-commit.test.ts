@@ -127,6 +127,7 @@ describe('CommitManager', () => {
 
       expect(mockGit.add).toHaveBeenCalledWith(['-A']);
 
+      // Each pattern is now restored individually, so collect all per-pattern args.
       const restoreCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls.filter(
         (args: string[][]) =>
           Array.isArray(args[0]) &&
@@ -135,9 +136,11 @@ describe('CommitManager', () => {
       );
       expect(restoreCalls.length).toBeGreaterThan(0);
 
-      const restoreArgs: string[] = restoreCalls[0][0];
-      expect(restoreArgs).toContain('.cadre/');
-      expect(restoreArgs).toContain('task-*.md');
+      const allPatterns: string[] = restoreCalls.flatMap(
+        (call: string[][]) => call[0].slice(call[0].indexOf('--') + 1),
+      );
+      expect(allPatterns).toContain('.cadre/');
+      expect(allPatterns).toContain('task-*.md');
     });
 
     it('should unstage exact agent file paths passed at construction, not whole directories', async () => {
@@ -166,14 +169,17 @@ describe('CommitManager', () => {
           args[0][0] === 'restore' &&
           args[0].includes('--staged'),
       );
-      const restoreArgs: string[] = restoreCalls[0][0];
+      // Each pattern is restored in its own call — collect all path args.
+      const allPatterns: string[] = restoreCalls.flatMap(
+        (call: string[][]) => call[0].slice(call[0].indexOf('--') + 1),
+      );
 
       // Exact file paths — not broad directory patterns
-      expect(restoreArgs).toContain('.github/agents/code-writer.agent.md');
-      expect(restoreArgs).toContain('.github/agents/codebase-scout.agent.md');
+      expect(allPatterns).toContain('.github/agents/code-writer.agent.md');
+      expect(allPatterns).toContain('.github/agents/codebase-scout.agent.md');
       // Must NOT use broad patterns that would affect the target repo's own agents
-      expect(restoreArgs).not.toContain('.github/agents/');
-      expect(restoreArgs).not.toContain('.claude/agents/');
+      expect(allPatterns).not.toContain('.github/agents/');
+      expect(allPatterns).not.toContain('.claude/agents/');
     });
 
     it('should not commit .cadre/ or task-*.md files', async () => {
@@ -197,12 +203,14 @@ describe('CommitManager', () => {
       const restoreCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls.filter(
         (args: string[][]) => Array.isArray(args[0]) && args[0][0] === 'restore',
       );
-      const restoreArgs: string[] = restoreCalls[0][0];
-      expect(restoreArgs).toContain('.cadre/');
-      expect(restoreArgs).toContain('task-*.md');
-      // No extra paths beyond the two core patterns + surrounding restore args
-      const pathArgs = restoreArgs.slice(restoreArgs.indexOf('--') + 1);
-      expect(pathArgs).toEqual(['.cadre/', 'task-*.md']);
+      // Each pattern is its own call; collect all path args from --staged calls.
+      const allPatterns: string[] = restoreCalls
+        .filter((call: string[][]) => call[0].includes('--staged'))
+        .flatMap((call: string[][]) => call[0].slice(call[0].indexOf('--') + 1));
+      expect(allPatterns).toContain('.cadre/');
+      expect(allPatterns).toContain('task-*.md');
+      // No extra paths beyond the two core patterns
+      expect(allPatterns).toEqual(['.cadre/', 'task-*.md']);
     });
   });
 
@@ -258,11 +266,12 @@ describe('CommitManager', () => {
 
       await managerWithAgents.stripCadreFiles('base123');
 
+      // Each pattern is its own restore call — collect all patterns from --staged calls.
       const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
-      const stagedRestoreCall = rawCalls.find(
-        ([args]) => args.includes('restore') && args.includes('--staged'),
-      );
-      expect(stagedRestoreCall![0]).toContain('.github/agents/code-writer.agent.md');
+      const allPatterns: string[] = rawCalls
+        .filter(([args]) => args.includes('restore') && args.includes('--staged'))
+        .flatMap(([args]) => args.slice(args.indexOf('--') + 1));
+      expect(allPatterns).toContain('.github/agents/code-writer.agent.md');
     });
 
     it('should drop a cadre-only commit and not call commit -C for it', async () => {
@@ -343,18 +352,23 @@ describe('CommitManager', () => {
   });
 
   describe('unstageArtifacts error handling', () => {
-    it('should log debug and continue when git restore --staged throws', async () => {
-      mockGit.raw.mockRejectedValueOnce(new Error('git restore not supported'));
+    it('should continue without throwing when git restore --staged throws for a pattern', async () => {
+      // First raw call in the commit path is git restore for the first pattern (.cadre/) — make it fail.
+      // The remaining patterns should still be attempted individually.
+      mockGit.raw
+        .mockRejectedValueOnce(new Error('git restore not supported'))
+        .mockResolvedValue(''); // subsequent restore calls succeed
       mockGit.status.mockResolvedValue({
         isClean: () => false,
         staged: ['src/index.ts'],
         files: [{ path: 'src/index.ts' }],
       });
 
-      // Should not throw
+      // Should not throw — individual restore errors are swallowed per-pattern.
       await expect(manager.commit('fix: something', 1)).resolves.toBeDefined();
+      // The overall completion debug message should still be logged.
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Could not unstage'),
+        expect.stringContaining('Unstaged'),
         expect.any(Object),
       );
     });
