@@ -58,6 +58,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   const commitManager = {
     getDiff: vi.fn().mockResolvedValue('diff content'),
     squash: vi.fn().mockResolvedValue(undefined),
+    stripCadreFiles: vi.fn().mockResolvedValue(undefined),
     push: vi.fn().mockResolvedValue(undefined),
   };
 
@@ -291,15 +292,15 @@ describe('PRCompositionPhaseExecutor', () => {
       );
     });
 
-    it('should not squash when squashBeforePR is false', async () => {
+    it('should always call stripCadreFiles regardless of squashBeforePR', async () => {
       const ctx = makeAutoCreateCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.io.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
-      ).not.toHaveBeenCalled();
+        (ctx.io.commitManager as never as { stripCadreFiles: ReturnType<typeof vi.fn> }).stripCadreFiles,
+      ).toHaveBeenCalledWith('abc123');
     });
 
-    it('should squash when squashBeforePR is true', async () => {
+    it('should call stripCadreFiles even when squashBeforePR is true', async () => {
       const ctx = makeAutoCreateCtx({
         config: {
           options: { maxRetriesPerTask: 3 },
@@ -310,27 +311,21 @@ describe('PRCompositionPhaseExecutor', () => {
       });
       await executor.execute(ctx);
       expect(
-        (ctx.io.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
-      ).toHaveBeenCalledWith('abc123', 'Fix: resolve issue');
+        (ctx.io.commitManager as never as { stripCadreFiles: ReturnType<typeof vi.fn> }).stripCadreFiles,
+      ).toHaveBeenCalledWith('abc123');
     });
 
-    it('should use issue title as squash message fallback when PR title is empty', async () => {
+    it('should use issue title as stripCadreFiles message fallback when PR title is empty', async () => {
       const resultParser = {
         parsePRContent: vi.fn().mockResolvedValue({ title: '', body: 'Body.' }),
       };
       const ctx = makeAutoCreateCtx({
-        config: {
-          options: { maxRetriesPerTask: 3 },
-          pullRequest: { autoCreate: true, linkIssue: false, draft: false },
-          commits: { squashBeforePR: true },
-          baseBranch: 'main',
-        } as never,
         services: { resultParser: resultParser } as never,
       });
       await executor.execute(ctx);
       expect(
-        (ctx.io.commitManager as never as { squash: ReturnType<typeof vi.fn> }).squash,
-      ).toHaveBeenCalledWith('abc123', 'Fix #42: Test issue');
+        (ctx.io.commitManager as never as { stripCadreFiles: ReturnType<typeof vi.fn> }).stripCadreFiles,
+      ).toHaveBeenCalledWith('abc123');
     });
 
     it('should append issue link suffix when linkIssue is true', async () => {
@@ -496,6 +491,26 @@ describe('PRCompositionPhaseExecutor', () => {
       };
       const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('PR composer failed:');
+    });
+
+    it('should throw if pr-composer exits successfully but outputExists is false', async () => {
+      const noOutputResult: AgentResult = {
+        agent: 'pr-composer',
+        success: true,
+        exitCode: 0,
+        timedOut: false,
+        duration: 100,
+        stdout: '',
+        stderr: '',
+        tokenUsage: 50,
+        outputPath: '/progress/pr-content.md',
+        outputExists: false,
+      };
+      const launcher = { launchAgent: vi.fn().mockResolvedValue(noOutputResult) };
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
+      await expect(executor.execute(ctx)).rejects.toThrow(
+        'pr-composer exited successfully but did not write pr-content.md',
+      );
     });
   });
 

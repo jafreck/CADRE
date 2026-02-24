@@ -12,6 +12,12 @@ export class CommitManager {
     private readonly worktreePath: string,
     private readonly config: CadreConfig['commits'],
     private readonly logger: Logger,
+    /**
+     * Worktree-relative paths of agent instruction files written by
+     * `WorktreeManager.syncAgentFiles`.  Only these exact files are unstaged
+     * before every commit — the target repo's own agent files are untouched.
+     */
+    private readonly syncedAgentFiles: string[] = [],
   ) {
     this.git = simpleGit(worktreePath);
   }
@@ -63,10 +69,15 @@ export class CommitManager {
 
   /**
    * Unstage any cadre internal artifact files that should never be committed.
-   * Covers the `.cadre/` directory and common top-level scratch patterns.
+   *
+   * Core cadre directories (`.cadre/`, scratch `task-*.md` files) are always
+   * excluded.  Agent instruction files are identified by the exact paths passed
+   * in at construction time from `WorktreeManager.syncAgentFiles`, so only
+   * those specific files are unstaged — the target repo's own agent files
+   * in the same directories are completely untouched.
    */
   private async unstageArtifacts(issueNumber: number): Promise<void> {
-    const artifactPatterns = ['.cadre/', 'task-*.md'];
+    const artifactPatterns = ['.cadre/', 'task-*.md', ...this.syncedAgentFiles];
     try {
       // `git restore --staged` silently succeeds even if the path doesn't exist
       await this.git.raw(['restore', '--staged', '--', ...artifactPatterns]);
@@ -126,6 +137,69 @@ export class CommitManager {
     });
     this.logger.info(`Squashed commits into ${result.commit}`);
     return result.commit || '';
+  }
+
+  /**
+   * Replay every commit between `baseCommit` and HEAD, removing cadre-internal
+   * artifact files from each one, while preserving the original commit message,
+   * author, and timestamps.
+   *
+   * Algorithm per commit:
+   *   1. `cherry-pick --no-commit <sha>` — stage that commit's diff without advancing HEAD.
+   *   2. `restore --staged` + `restore` — drop cadre artefacts from index and working tree.
+   *   3a. If nothing remains staged the commit consisted purely of cadre files — drop it.
+   *   3b. Otherwise `commit -C <sha>` — create a new commit reusing the original
+   *       author name, email, date, and message verbatim.
+   *
+   * This preserves individual commit granularity in the PR, unlike a squash approach.
+   */
+  async stripCadreFiles(baseCommit: string): Promise<void> {
+    const logOutput = (
+      await this.git.raw(['log', '--format=%H', '--reverse', `${baseCommit}..HEAD`])
+    ).trim();
+
+    if (!logOutput) {
+      this.logger.debug('stripCadreFiles: no commits between base and HEAD');
+      return;
+    }
+
+    const shas = logOutput.split('\n').filter(Boolean);
+    const cadrePatterns = ['.cadre/', 'task-*.md', ...this.syncedAgentFiles];
+
+    // Hard-reset to the branch point; commits will be replayed one by one.
+    await this.git.reset(['--hard', baseCommit]);
+
+    let rewritten = 0;
+    let dropped = 0;
+
+    for (const sha of shas) {
+      // Stage this commit's diff without advancing HEAD.
+      // Ignore exit code: conflicts are acceptable since we remove the offending files next.
+      await this.git.raw(['cherry-pick', '--no-commit', sha]).catch(() => {});
+
+      // Remove cadre artefacts from index and working tree.
+      await this.git.raw(['restore', '--staged', '--', ...cadrePatterns]).catch(() => {});
+      await this.git.raw(['restore', '--', ...cadrePatterns]).catch(() => {});
+
+      const status = await this.git.status();
+      if (status.staged.length === 0) {
+        // Commit consisted entirely of cadre files — drop it and clean up.
+        await this.git.reset(['--hard', 'HEAD']).catch(() => {});
+        // --quit removes CHERRY_PICK_HEAD without reverting index/working tree.
+        await this.git.raw(['cherry-pick', '--quit']).catch(() => {});
+        dropped++;
+        this.logger.debug(`stripCadreFiles: dropped cadre-only commit ${sha.slice(0, 8)}`);
+        continue;
+      }
+
+      // -C reuses the original commit's author name, email, timestamp, and message.
+      await this.git.raw(['commit', '-C', sha]);
+      rewritten++;
+    }
+
+    this.logger.info(
+      `stripCadreFiles: rewrote ${rewritten} commit(s), dropped ${dropped} cadre-only commit(s)`,
+    );
   }
 
   /**

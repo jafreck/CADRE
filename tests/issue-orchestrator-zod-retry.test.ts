@@ -27,6 +27,7 @@ const {
   mockCommitCommit,
   mockCommitPush,
   mockCommitSquash,
+  mockCommitStripCadreFiles,
   mockResultParserParsePlan,
   mockResultParserParseReview,
   mockRetryExecutorExecute,
@@ -61,6 +62,7 @@ const {
   mockCommitCommit: vi.fn().mockResolvedValue(undefined),
   mockCommitPush: vi.fn().mockResolvedValue(undefined),
   mockCommitSquash: vi.fn().mockResolvedValue(undefined),
+  mockCommitStripCadreFiles: vi.fn().mockResolvedValue(undefined),
   mockResultParserParsePlan: vi.fn().mockResolvedValue([]),
   mockResultParserParseReview: vi.fn(),
   mockRetryExecutorExecute: vi.fn(),
@@ -126,6 +128,7 @@ vi.mock('../src/git/commit.js', () => ({
     commit: mockCommitCommit,
     push: mockCommitPush,
     squash: mockCommitSquash,
+    stripCadreFiles: mockCommitStripCadreFiles,
   })),
 }));
 
