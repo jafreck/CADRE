@@ -80,6 +80,24 @@ describe('code-writer.md template', () => {
     });
   });
 
+  describe('background context section', () => {
+    it('should have a Background context (read-only) section', () => {
+      expect(content).toMatch(/## Background context \(read-only\)/i);
+    });
+
+    it('should document analysis.md as a conditionally provided input', () => {
+      expect(content).toMatch(/analysis\.md.*conditionally provided|conditionally provided.*analysis\.md/is);
+    });
+
+    it('should document scout-report.md as a conditionally provided input', () => {
+      expect(content).toMatch(/scout-report\.md.*conditionally provided|conditionally provided.*scout-report\.md/is);
+    });
+
+    it('should state that background context files are read-only', () => {
+      expect(content).toMatch(/read-only/i);
+    });
+  });
+
   describe('style constraints', () => {
     it('should mention making minimal changes', () => {
       expect(content).toMatch(/minimal|smallest possible change/i);

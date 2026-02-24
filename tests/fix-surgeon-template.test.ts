@@ -34,6 +34,26 @@ describe('fix-surgeon.md template', () => {
     it('should mention scout report as background context', () => {
       expect(content).toMatch(/[Ss]cout report/);
     });
+
+    it('should have a Background context (read-only) section', () => {
+      expect(content).toMatch(/## Background context \(read-only\)/i);
+    });
+
+    it('should document analysis.md as a conditionally provided input', () => {
+      expect(content).toMatch(/analysis\.md.*conditionally provided|conditionally provided.*analysis\.md/is);
+    });
+
+    it('should document scout-report.md as a conditionally provided input', () => {
+      expect(content).toMatch(/scout-report\.md.*conditionally provided|conditionally provided.*scout-report\.md/is);
+    });
+
+    it('should document the session plan or implementation-plan.md as a conditionally provided input', () => {
+      expect(content).toMatch(/implementation-plan\.md.*conditionally provided|conditionally provided.*implementation-plan\.md/is);
+    });
+
+    it('should state that background context files are read-only', () => {
+      expect(content).toMatch(/read-only/i);
+    });
   });
 
   describe('output contract', () => {

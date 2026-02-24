@@ -12,6 +12,13 @@ You will receive:
 - **File list**: The source files to modify or create, specified as paths relative to the repository root.
 - **Implementation plan** and **scout report**: Background context; read these to understand overall scope and dependencies before making changes.
 
+## Background context (read-only)
+
+The following files may be provided as additional context. They are read-only — do not modify them.
+
+- **`analysis.md`** (conditionally provided): Issue analysis describing the problem, requirements, and constraints. Read this to understand the overall scope of the change.
+- **`scout-report.md`** (conditionally provided): A report of the codebase structure, relevant files, and patterns discovered during scouting. Read this to understand how existing code is organized before making changes.
+
 Read all relevant source files before writing any code. Understand existing patterns, types, and conventions before modifying anything.
 
 ## Output Contract

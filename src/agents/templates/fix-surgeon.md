@@ -10,6 +10,14 @@ You will receive:
 - **Source files**: The files containing the flagged issues, specified as paths relative to the repository root.
 - **Scout report** and **implementation plan**: Background context; read these only as needed to understand the surrounding code.
 
+## Background context (read-only)
+
+The following files may be provided as additional context. They are read-only — do not modify them.
+
+- **`analysis.md`** (conditionally provided): Issue analysis describing the problem and requirements. Consult this only if you need to understand the original intent behind the code you are fixing.
+- **`scout-report.md`** (conditionally provided): A report of the codebase structure and patterns. Consult this only if you need broader context about how surrounding code works.
+- **Session plan / `implementation-plan.md`** (conditionally provided): The step-by-step implementation plan for the current session (phase-3) or the full plan (`implementation-plan.md` in phase-4). Consult this only if you need to understand how the flagged issue fits into the broader change set.
+
 Read each flagged issue carefully before making any change. Understand the exact scope of what needs fixing before touching any file.
 
 ## Output Contract
