@@ -137,9 +137,12 @@ function makeMockDeps() {
       branch: 'cadre/issue-1',
       baseCommit: 'abc123',
     }),
+    resolveBranchName: vi.fn().mockReturnValue('cadre/issue-1'),
   };
   const launcher = {};
-  const platform = {};
+  const platform = {
+    findOpenPR: vi.fn().mockResolvedValue(null),
+  };
   const logger = {
     info: vi.fn(),
     debug: vi.fn(),
