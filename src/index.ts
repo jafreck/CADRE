@@ -6,7 +6,7 @@ import { runInit } from './cli/init.js';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
 import { AgentLauncher } from './core/agent-launcher.js';
-import { registerAgentsCommand, scaffoldMissingAgents } from './cli/agents.js';
+import { registerAgentsCommand, scaffoldMissingAgents, refreshAgentsFromTemplates } from './cli/agents.js';
 
 const program = new Command();
 
@@ -54,6 +54,11 @@ program
           backend === 'claude'
             ? config.agent.claude.agentDir
             : config.agent.copilot.agentDir;
+
+        // Always refresh agentDir from bundled templates so worktree syncs pick
+        // up template changes without requiring a manual `cadre agents scaffold`.
+        await refreshAgentsFromTemplates(agentDir);
+
         let issues = await AgentLauncher.validateAgentFiles(agentDir);
 
         if (issues.length > 0) {

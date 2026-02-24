@@ -37,8 +37,8 @@ describe('pr-composer.md template', () => {
   });
 
   describe('output contract', () => {
-    it('should describe a PRContent output object', () => {
-      expect(content).toMatch(/PRContent/);
+    it('should describe writing pr-content.md at the outputPath', () => {
+      expect(content).toMatch(/pr-content\.md/);
     });
 
     it('should describe a title field', () => {
