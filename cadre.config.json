@@ -44,7 +44,7 @@
   "copilot": {
     "cliCommand": "copilot",
     "model": "claude-sonnet-4.6",
-    "timeout": 1200000
+    "timeout": 1800000
   },
   "environment": {
     "inheritShellPath": true,
