@@ -92,12 +92,14 @@ describe('RunTotals', () => {
       estimatedCost: 0.5,
       issues: 5,
       prsCreated: 4,
+      codeDoneNoPR: 1,
       failures: 1,
     };
     expect(totals.tokens).toBe(10000);
     expect(totals.estimatedCost).toBe(0.5);
     expect(totals.issues).toBe(5);
     expect(totals.prsCreated).toBe(4);
+    expect(totals.codeDoneNoPR).toBe(1);
     expect(totals.failures).toBe(1);
   });
 
@@ -107,6 +109,7 @@ describe('RunTotals', () => {
       estimatedCost: 0,
       issues: 0,
       prsCreated: 0,
+      codeDoneNoPR: 0,
       failures: 0,
     };
     expect(totals.failures).toBe(0);
@@ -119,6 +122,7 @@ describe('RunReport', () => {
     estimatedCost: 0.25,
     issues: 2,
     prsCreated: 2,
+    codeDoneNoPR: 0,
     failures: 0,
   };
 
@@ -183,6 +187,7 @@ describe('RunReport', () => {
         estimatedCost: 0,
         issues: 0,
         prsCreated: 0,
+        codeDoneNoPR: 0,
         failures: 0,
       },
     };
@@ -211,7 +216,7 @@ describe('RunReport', () => {
       totalTokens: 2600,
       estimatedCost: 0.13,
       prsCreated: 1,
-      totals: { tokens: 2600, estimatedCost: 0.13, issues: 2, prsCreated: 1, failures: 1 },
+      totals: { tokens: 2600, estimatedCost: 0.13, issues: 2, prsCreated: 1, codeDoneNoPR: 0, failures: 1 },
     };
     expect(report.issues).toHaveLength(2);
     expect(report.issues[1].success).toBe(false);

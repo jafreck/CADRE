@@ -57,6 +57,7 @@ export class ReportWriter {
     );
 
     const prsCreated = result.prsCreated.length;
+    const codeDoneNoPR = result.codeDoneNoPR.length;
     const failures = result.failedIssues.length;
 
     const totals: RunTotals = {
@@ -64,6 +65,7 @@ export class ReportWriter {
       estimatedCost: totalCostEstimate.totalCost,
       issues: result.issues.length,
       prsCreated,
+      codeDoneNoPR,
       failures,
     };
 

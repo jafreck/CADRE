@@ -21,6 +21,7 @@ export interface RunTotals {
   estimatedCost: number;
   issues: number;
   prsCreated: number;
+  codeDoneNoPR: number;
   failures: number;
 }
 
