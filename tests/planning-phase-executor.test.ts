@@ -45,6 +45,13 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const resultParser = {
+    parseAnalysis: vi.fn().mockResolvedValue({
+      scope: 'medium',
+      changeType: 'feature',
+      requirements: [],
+      affectedAreas: [],
+      ambiguities: [],
+    }),
     parseImplementationPlan: vi.fn().mockResolvedValue([
       { id: 'task-001', name: 'Task 1', dependencies: [] },
       { id: 'task-002', name: 'Task 2', dependencies: ['task-001'] },
@@ -141,6 +148,45 @@ describe('PlanningPhaseExecutor', () => {
         join('/tmp/progress', 'analysis.md'),
         join('/tmp/progress', 'scout-report.md'),
         '/tmp/progress',
+        'medium',
+        'feature',
+        6,
+      );
+    });
+
+    it('should call parseAnalysis with analysis.md path', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+      expect(
+        (ctx.services.resultParser as never as { parseAnalysis: ReturnType<typeof vi.fn> }).parseAnalysis,
+      ).toHaveBeenCalledWith(join('/tmp/progress', 'analysis.md'));
+    });
+
+    it.each([
+      ['small', 3],
+      ['medium', 6],
+      ['large', 10],
+    ] as const)('scope=%s should pass maxTasksHint=%i to buildForImplementationPlanner', async (scope, expectedHint) => {
+      const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue({ scope, changeType: 'feature', requirements: [], affectedAreas: [], ambiguities: [] }),
+        parseImplementationPlan: vi.fn().mockResolvedValue([
+          { id: 'task-001', name: 'Task 1', dependencies: [] },
+        ]),
+      };
+      const ctx = makeCtx({ services: { resultParser: resultParser } as never });
+      await executor.execute(ctx);
+      expect(
+        (ctx.services.contextBuilder as never as { buildForImplementationPlanner: ReturnType<typeof vi.fn> })
+          .buildForImplementationPlanner,
+      ).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        scope,
+        'feature',
+        expectedHint,
       );
     });
 
@@ -224,6 +270,7 @@ describe('PlanningPhaseExecutor', () => {
 
     it('should throw if parsed plan has zero tasks', async () => {
       const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue({ scope: 'small', changeType: 'bug-fix', requirements: [], affectedAreas: [], ambiguities: [] }),
         parseImplementationPlan: vi.fn().mockResolvedValue([]),
       };
       const ctx = makeCtx({ services: { resultParser: resultParser } as never });
@@ -232,6 +279,7 @@ describe('PlanningPhaseExecutor', () => {
 
     it('should throw if the dependency graph has a cycle', async () => {
       const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue({ scope: 'small', changeType: 'bug-fix', requirements: [], affectedAreas: [], ambiguities: [] }),
         parseImplementationPlan: vi.fn().mockResolvedValue([
           { id: 'task-001', name: 'Task 1', dependencies: ['task-002'] },
           { id: 'task-002', name: 'Task 2', dependencies: ['task-001'] },

@@ -395,7 +395,139 @@ describe('AnalysisPhaseExecutor', () => {
     });
   });
 
-  describe('captureBaseline()', () => {
+  describe('skipScoutForSmallIssues', () => {
+    function makeSkipCtx(overrides: {
+      skipScoutForSmallIssues?: boolean;
+      parseAnalysisResult?: { scope: string; affectedAreas: string[] };
+      launcherOverride?: { launchAgent: ReturnType<typeof vi.fn> };
+    } = {}) {
+      const {
+        skipScoutForSmallIssues = true,
+        parseAnalysisResult = { scope: 'small', affectedAreas: ['src/foo.ts', 'src/bar.ts'] },
+        launcherOverride,
+      } = overrides;
+
+      const analystResult = makeSuccessAgentResult('issue-analyst');
+      const scoutResult = makeSuccessAgentResult('codebase-scout');
+
+      const launcher = launcherOverride ?? {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(analystResult)
+          .mockResolvedValueOnce(scoutResult),
+      };
+
+      const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue(parseAnalysisResult),
+      };
+
+      const ctx = makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3, skipScoutForSmallIssues },
+          commands: {},
+        } as never,
+        services: {
+          launcher: launcher as never,
+          resultParser: resultParser as never,
+        } as never,
+      });
+
+      return { ctx, launcher, resultParser };
+    }
+
+    it('should write synthetic scout-report.md and skip codebase-scout when conditions met', async () => {
+      const { ctx, launcher, resultParser } = makeSkipCtx({
+        parseAnalysisResult: { scope: 'small', affectedAreas: ['src/foo.ts', 'src/bar.ts'] },
+      });
+
+      const result = await executor.execute(ctx);
+
+      // Scout agent should NOT be launched
+      expect((launcher.launchAgent as ReturnType<typeof vi.fn>)).not.toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'codebase-scout' }),
+        expect.anything(),
+      );
+
+      // resultParser.parseAnalysis should be called
+      expect(resultParser.parseAnalysis).toHaveBeenCalledWith(join('/tmp/progress', 'analysis.md'));
+
+      // writeFile should be called with the synthetic scout report
+      const writeFileMock = vi.mocked(writeFile);
+      const scoutWriteCall = writeFileMock.mock.calls.find(
+        (call) => call[0] === join('/tmp/progress', 'scout-report.md'),
+      );
+      expect(scoutWriteCall).toBeDefined();
+      const content = scoutWriteCall![1] as string;
+      expect(content).toContain('```cadre-json');
+      const parsed = JSON.parse(content.match(/```cadre-json\s*\n([\s\S]*?)```/)![1]);
+      expect(parsed.relevantFiles).toEqual([
+        { path: 'src/foo.ts', reason: 'Identified as affected area by issue-analyst' },
+        { path: 'src/bar.ts', reason: 'Identified as affected area by issue-analyst' },
+      ]);
+      expect(parsed.dependencyMap).toEqual({});
+      expect(parsed.testFiles).toEqual([]);
+      expect(parsed.estimatedChanges).toEqual([]);
+
+      expect(result).toBe(join('/tmp/progress', 'scout-report.md'));
+    });
+
+    it('should still launch codebase-scout when scope is not "small"', async () => {
+      const { ctx, launcher } = makeSkipCtx({
+        skipScoutForSmallIssues: true,
+        parseAnalysisResult: { scope: 'medium', affectedAreas: ['src/foo.ts'] },
+      });
+
+      await executor.execute(ctx);
+
+      expect((launcher.launchAgent as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'codebase-scout' }),
+        expect.anything(),
+      );
+    });
+
+    it('should still launch codebase-scout when skipScoutForSmallIssues is false', async () => {
+      const analystResult = makeSuccessAgentResult('issue-analyst');
+      const scoutResult = makeSuccessAgentResult('codebase-scout');
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(analystResult)
+          .mockResolvedValueOnce(scoutResult),
+      };
+
+      const ctx = makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3, skipScoutForSmallIssues: false },
+          commands: {},
+        } as never,
+        services: { launcher: launcher as never } as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect((launcher.launchAgent as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'codebase-scout' }),
+        expect.anything(),
+      );
+    });
+
+    it('should still launch codebase-scout when affectedAreas.length > 3', async () => {
+      const { ctx, launcher } = makeSkipCtx({
+        skipScoutForSmallIssues: true,
+        parseAnalysisResult: {
+          scope: 'small',
+          affectedAreas: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
+        },
+      });
+
+      await executor.execute(ctx);
+
+      expect((launcher.launchAgent as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'codebase-scout' }),
+        expect.anything(),
+      );
+    });
+  });
+
+
     const baselinePath = '/tmp/worktree/.cadre/baseline-results.json';
 
     it('should write baseline with zeros and empty arrays when no commands configured', async () => {

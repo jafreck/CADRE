@@ -44,32 +44,72 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
       throw new Error(`Issue analyst failed: ${analystResult.error}`);
     }
 
-    // Build context for codebase-scout (needs analysis.md)
-    const scoutContextPath = await ctx.services.contextBuilder.buildForCodebaseScout(
-      ctx.issue.number,
-      ctx.worktree.path,
-      join(ctx.io.progressDir, 'analysis.md'),
-      fileTreePath,
-      ctx.io.progressDir,
-    );
+    // Check if we should skip codebase-scout for small issues
+    const scoutReportPath = join(ctx.io.progressDir, 'scout-report.md');
+    let scoutSkipped = false;
 
-    // Launch codebase-scout
-    const scoutResult = await launchWithRetry(ctx, 'codebase-scout', {
-      agent: 'codebase-scout',
-      issueNumber: ctx.issue.number,
-      phase: 1,
-      contextPath: scoutContextPath,
-      outputPath: join(ctx.io.progressDir, 'scout-report.md'),
-    });
+    if (ctx.config.options?.skipScoutForSmallIssues) {
+      try {
+        const analysis = await ctx.services.resultParser.parseAnalysis(
+          join(ctx.io.progressDir, 'analysis.md'),
+        );
+        if (analysis.scope === 'small' && analysis.affectedAreas.length <= 3) {
+          const relevantFiles = analysis.affectedAreas.map((area) => ({
+            path: area,
+            reason: 'Identified as affected area by issue-analyst',
+          }));
+          const syntheticReport = {
+            relevantFiles,
+            dependencyMap: {},
+            testFiles: [],
+            estimatedChanges: [],
+          };
+          const reportContent = [
+            '# Scout Report (Synthetic)',
+            '',
+            'Skipped codebase-scout for small issue.',
+            '',
+            '```cadre-json',
+            JSON.stringify(syntheticReport, null, 2),
+            '```',
+            '',
+          ].join('\n');
+          await writeFile(scoutReportPath, reportContent, 'utf-8');
+          scoutSkipped = true;
+        }
+      } catch {
+        // Fall through to normal scout execution if analysis parse fails
+      }
+    }
 
-    if (!scoutResult.success) {
-      throw new Error(`Codebase scout failed: ${scoutResult.error}`);
+    if (!scoutSkipped) {
+      // Build context for codebase-scout (needs analysis.md)
+      const scoutContextPath = await ctx.services.contextBuilder.buildForCodebaseScout(
+        ctx.issue.number,
+        ctx.worktree.path,
+        join(ctx.io.progressDir, 'analysis.md'),
+        fileTreePath,
+        ctx.io.progressDir,
+      );
+
+      // Launch codebase-scout
+      const scoutResult = await launchWithRetry(ctx, 'codebase-scout', {
+        agent: 'codebase-scout',
+        issueNumber: ctx.issue.number,
+        phase: 1,
+        contextPath: scoutContextPath,
+        outputPath: scoutReportPath,
+      });
+
+      if (!scoutResult.success) {
+        throw new Error(`Codebase scout failed: ${scoutResult.error}`);
+      }
     }
 
     // Capture baseline build/test results
     await this.captureBaseline(ctx);
 
-    return join(ctx.io.progressDir, 'scout-report.md');
+    return scoutReportPath;
   }
 
   private async captureBaseline(ctx: PhaseContext): Promise<void> {

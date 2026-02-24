@@ -11,12 +11,20 @@ export class PlanningPhaseExecutor implements PhaseExecutor {
     const analysisPath = join(ctx.io.progressDir, 'analysis.md');
     const scoutReportPath = join(ctx.io.progressDir, 'scout-report.md');
 
+    const analysis = await ctx.services.resultParser.parseAnalysis(analysisPath);
+
+    const maxTasksHintMap = { small: 3, medium: 6, large: 10 } as const;
+    const maxTasksHint = maxTasksHintMap[analysis.scope];
+
     const plannerContextPath = await ctx.services.contextBuilder.buildForImplementationPlanner(
       ctx.issue.number,
       ctx.worktree.path,
       analysisPath,
       scoutReportPath,
       ctx.io.progressDir,
+      analysis.scope,
+      analysis.changeType,
+      maxTasksHint,
     );
 
     const plannerResult = await launchWithRetry(ctx, 'implementation-planner', {
