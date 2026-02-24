@@ -348,7 +348,8 @@ export class AzureDevOpsProvider implements PlatformProvider {
       // Azure DevOps PR status: active, completed, abandoned, all
       const statusMap: Record<string, string> = {
         open: 'active',
-        closed: 'completed',
+        merged: 'completed',   // ADO "completed" means merged
+        closed: 'abandoned',   // ADO "abandoned" means closed without merge
         all: 'all',
       };
       params.set(

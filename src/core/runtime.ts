@@ -360,10 +360,13 @@ export class CadreRuntime {
         }
 
         if (locallyCompleted || prDone) {
-          const reason = prDone ? 'PR closed/merged on platform' : 'locally completed';
+          const reasons = [
+            locallyCompleted ? 'locally completed' : '',
+            prDone ? 'PR closed/merged on platform' : '',
+          ].filter(Boolean).join(', ');
           await worktreeManager.remove(wt.issueNumber);
           pruned++;
-          console.log(`  Pruned: issue #${wt.issueNumber} (${reason})`);
+          console.log(`  Pruned: issue #${wt.issueNumber} (${reasons})`);
         } else {
           console.log(`  Skipped: issue #${wt.issueNumber} (PR still open or no PR found)`);
         }

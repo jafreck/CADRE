@@ -141,7 +141,7 @@ export class GitHubProvider implements PlatformProvider {
     const result = await this.getAPI().listPullRequests(filters);
     return result.map((pr) => {
       const ghState = asString(pr.state);
-      const merged = !!(pr.merged || pr.merged_at);
+      const merged = !!pr.merged_at;
       const prState: PullRequestInfo['state'] = merged ? 'merged' : ghState === 'closed' ? 'closed' : 'open';
       return {
         number: asNumber(pr.number),
