@@ -123,7 +123,7 @@ export class GitHubAPI {
     // Add labels via the Issues API (PRs are a type of issue in GitHub).
     if (params.labels && params.labels.length > 0) {
       try {
-        await this.octokit.rest.issues.update({
+        await this.octokit.rest.issues.addLabels({
           owner: this.owner,
           repo: this.repo,
           issue_number: prNumber,
@@ -266,33 +266,16 @@ export class GitHubAPI {
 
   /**
    * Add labels to a pull request without clobbering existing ones.
-   * Fetches current labels first, merges, then updates.
+   * Uses the addLabels API which appends to (not replaces) the existing label set.
    */
   async applyLabels(prNumber: number, labels: string[]): Promise<void> {
     if (labels.length === 0) return;
     try {
-      let existingLabels: string[] = [];
-      try {
-        const { data: issue } = await this.octokit.rest.issues.get({
-          owner: this.owner,
-          repo: this.repo,
-          issue_number: prNumber,
-        });
-        const rawLabels = issue.labels;
-        if (Array.isArray(rawLabels)) {
-          existingLabels = rawLabels
-            .map((l) => (typeof l === 'string' ? l : (l as Record<string, unknown>).name as string))
-            .filter(Boolean);
-        }
-      } catch {
-        // If we can't fetch current labels, proceed with only the supplied ones.
-      }
-      const merged = Array.from(new Set([...existingLabels, ...labels]));
-      await this.octokit.rest.issues.update({
+      await this.octokit.rest.issues.addLabels({
         owner: this.owner,
         repo: this.repo,
         issue_number: prNumber,
-        labels: merged,
+        labels,
       });
     } catch (err) {
       this.logger.warn(`Failed to apply labels to PR #${prNumber}: ${err}`);

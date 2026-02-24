@@ -82,6 +82,15 @@ describe('GitHubAPI', () => {
       const issue = await api.getIssue(42);
       expect(issue.comments).toHaveLength(1);
     });
+
+    it('should return issue with empty comments when listComments throws', async () => {
+      vi.mocked(mockOctokit.rest.issues.get).mockResolvedValue({ data: { number: 42, title: 'Fix login' } } as never);
+      vi.mocked(mockOctokit.rest.issues.listComments).mockRejectedValue(new Error('Network error'));
+
+      const issue = await api.getIssue(42);
+      expect(issue.comments).toEqual([]);
+      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('#42'));
+    });
   });
 
   describe('listIssues', () => {
@@ -422,6 +431,123 @@ describe('GitHubAPI', () => {
       ).resolves.toBeDefined();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to set reviewers on PR #101'));
+    });
+  });
+
+  describe('addIssueComment', () => {
+    it('should call issues.createComment with the given body', async () => {
+      vi.mocked(mockOctokit.rest.issues.createComment).mockResolvedValue({ data: {} } as never);
+
+      await api.addIssueComment(42, 'Hello from test');
+
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 42,
+        body: 'Hello from test',
+      });
+    });
+  });
+
+  describe('getPullRequest', () => {
+    it('should return PR data from octokit.rest.pulls.get', async () => {
+      const prData = { number: 10, title: 'My PR', state: 'open' };
+      vi.mocked(mockOctokit.rest.pulls.get).mockResolvedValue({ data: prData } as never);
+
+      const result = await api.getPullRequest(10);
+
+      expect(result).toEqual(prData);
+      expect(mockOctokit.rest.pulls.get).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 10,
+      });
+    });
+  });
+
+  describe('updatePullRequest', () => {
+    it('should call pulls.update with the supplied updates', async () => {
+      vi.mocked(mockOctokit.rest.pulls.update).mockResolvedValue({ data: {} } as never);
+
+      await api.updatePullRequest(10, { title: 'New title', body: 'New body' });
+
+      expect(mockOctokit.rest.pulls.update).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 10,
+        title: 'New title',
+        body: 'New body',
+      });
+    });
+  });
+
+  describe('getPRComments', () => {
+    it('should return issue-style comments via issues.listComments', async () => {
+      const comments = [{ id: 1, body: 'Nice work' }];
+      vi.mocked(mockOctokit.rest.issues.listComments).mockResolvedValue({ data: comments } as never);
+
+      const result = await api.getPRComments(10);
+
+      expect(result).toEqual(comments);
+      expect(mockOctokit.rest.issues.listComments).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 10,
+      });
+    });
+  });
+
+  describe('getPRReviews', () => {
+    it('should return reviews via pulls.listReviews', async () => {
+      const reviews = [{ id: 1, state: 'APPROVED', body: 'LGTM' }];
+      vi.mocked(mockOctokit.rest.pulls.listReviews).mockResolvedValue({ data: reviews } as never);
+
+      const result = await api.getPRReviews(10);
+
+      expect(result).toEqual(reviews);
+      expect(mockOctokit.rest.pulls.listReviews).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 10,
+      });
+    });
+  });
+
+  describe('listPullRequests', () => {
+    it('should return PRs from pulls.list with no filters', async () => {
+      const prs = [{ number: 1 }, { number: 2 }];
+      vi.mocked(mockOctokit.rest.pulls.list).mockResolvedValue({ data: prs } as never);
+
+      const result = await api.listPullRequests();
+
+      expect(result).toEqual(prs);
+      expect(mockOctokit.rest.pulls.list).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+      });
+    });
+
+    it('should prefix head filter with owner', async () => {
+      vi.mocked(mockOctokit.rest.pulls.list).mockResolvedValue({ data: [] } as never);
+
+      await api.listPullRequests({ head: 'feature-branch', state: 'open' });
+
+      expect(mockOctokit.rest.pulls.list).toHaveBeenCalledWith(
+        expect.objectContaining({
+          head: 'owner:feature-branch',
+          state: 'open',
+        }),
+      );
+    });
+
+    it('should pass base filter through directly', async () => {
+      vi.mocked(mockOctokit.rest.pulls.list).mockResolvedValue({ data: [] } as never);
+
+      await api.listPullRequests({ base: 'main' });
+
+      expect(mockOctokit.rest.pulls.list).toHaveBeenCalledWith(
+        expect.objectContaining({ base: 'main' }),
+      );
     });
   });
 
