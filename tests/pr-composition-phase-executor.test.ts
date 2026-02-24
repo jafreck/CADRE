@@ -436,32 +436,13 @@ describe('PRCompositionPhaseExecutor', () => {
       );
     });
 
-    it('should not throw when createPullRequest fails (non-critical)', async () => {
+    it('should throw when createPullRequest fails', async () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
         createPullRequest: vi.fn().mockRejectedValue(new Error('API rate limit')),
       };
       const ctx = makeAutoCreateCtx({ platform: platform as never });
-      await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'pr-content.md'));
-    });
-
-    it('should log error when createPullRequest fails', async () => {
-      const platform = {
-        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
-        createPullRequest: vi.fn().mockRejectedValue(new Error('API rate limit')),
-      };
-      const logger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      };
-      const ctx = makeAutoCreateCtx({ platform: platform as never, services: { logger: logger } as never });
-      await executor.execute(ctx);
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to create PR'),
-        expect.objectContaining({ issueNumber: 42 }),
-      );
+      await expect(executor.execute(ctx)).rejects.toThrow('API rate limit');
     });
   });
 
