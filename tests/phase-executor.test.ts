@@ -141,6 +141,38 @@ describe('PhaseContext', () => {
     expect(callbacks.onPRCreated).toBeUndefined();
   });
 
+  it('should accept PhaseCallbacks without onPRFailed (it is optional)', () => {
+    const callbacks: PhaseCallbacks = {
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+    };
+    expect(callbacks.onPRFailed).toBeUndefined();
+  });
+
+  it('should accept PhaseCallbacks with onPRFailed defined', () => {
+    const onPRFailed = vi.fn();
+    const callbacks: PhaseCallbacks = {
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      onPRFailed,
+    };
+    expect(typeof callbacks.onPRFailed).toBe('function');
+  });
+
+  it('onPRFailed should be callable with no arguments', () => {
+    const onPRFailed = vi.fn();
+    const callbacks: PhaseCallbacks = {
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      onPRFailed,
+    };
+    callbacks.onPRFailed!();
+    expect(onPRFailed).toHaveBeenCalledOnce();
+  });
+
   it('should accept PhaseCallbacks with onPRCreated defined', () => {
     const onPRCreated = vi.fn();
     const callbacks: PhaseCallbacks = {

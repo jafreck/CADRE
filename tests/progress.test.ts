@@ -101,18 +101,20 @@ describe('FleetProgressWriter', () => {
       makeIssue({ issueNumber: 4, status: 'blocked' }),
       makeIssue({ issueNumber: 5, status: 'not-started' }),
       makeIssue({ issueNumber: 6, status: 'budget-exceeded' }),
+      makeIssue({ issueNumber: 7, status: 'code-complete-no-pr' }),
     ];
 
     await writer.write(issues, [], { current: 2000 });
 
     const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
-    expect(content).toContain('6 total');
+    expect(content).toContain('7 total');
     expect(content).toContain('1 completed');
     expect(content).toContain('1 in-progress');
     expect(content).toContain('1 failed');
     expect(content).toContain('1 blocked');
     expect(content).toContain('1 not-started');
     expect(content).toContain('1 budget-exceeded');
+    expect(content).toContain('1 code-complete-no-pr');
   });
 
   it('should show correct emojis for all statuses', async () => {
@@ -124,6 +126,7 @@ describe('FleetProgressWriter', () => {
       makeIssue({ issueNumber: 4, status: 'failed' }),
       makeIssue({ issueNumber: 5, status: 'blocked' }),
       makeIssue({ issueNumber: 6, status: 'budget-exceeded' }),
+      makeIssue({ issueNumber: 7, status: 'code-complete-no-pr' }),
     ];
 
     await writer.write(issues, [], { current: 100 });
@@ -135,6 +138,47 @@ describe('FleetProgressWriter', () => {
     expect(content).toContain('❌ failed');
     expect(content).toContain('🚫 blocked');
     expect(content).toContain('💸 budget-exceeded');
+    expect(content).toContain('🔀 code-complete-no-pr');
+  });
+
+  it('should emit 🔀 emoji for code-complete-no-pr status', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 1, status: 'code-complete-no-pr' }),
+    ];
+
+    await writer.write(issues, [], { current: 1000 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).toContain('🔀 code-complete-no-pr');
+  });
+
+  it('should count code-complete-no-pr issues in fleet summary', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 1, status: 'completed' }),
+      makeIssue({ issueNumber: 2, status: 'code-complete-no-pr' }),
+      makeIssue({ issueNumber: 3, status: 'code-complete-no-pr' }),
+    ];
+
+    await writer.write(issues, [], { current: 5000 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).toContain('2 code-complete-no-pr');
+    expect(content).toContain('1 completed');
+  });
+
+  it('should show 0 code-complete-no-pr when none present', async () => {
+    const writer = new FleetProgressWriter(tempDir, logger);
+    const issues: IssueProgressInfo[] = [
+      makeIssue({ issueNumber: 1, status: 'completed' }),
+      makeIssue({ issueNumber: 2, status: 'failed' }),
+    ];
+
+    await writer.write(issues, [], { current: 500 });
+
+    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
+    expect(content).toContain('0 code-complete-no-pr');
   });
 
   it('should display token usage with budget', async () => {
@@ -210,6 +254,17 @@ describe('IssueProgressInfo status type', () => {
       totalPhases: 5,
     };
     expect(info.status).toBe('budget-exceeded');
+  });
+
+  it('should accept code-complete-no-pr as a valid status', () => {
+    const info: IssueProgressInfo = {
+      issueNumber: 8,
+      issueTitle: 'Code complete no PR',
+      status: 'code-complete-no-pr',
+      currentPhase: 5,
+      totalPhases: 5,
+    };
+    expect(info.status).toBe('code-complete-no-pr');
   });
 });
 

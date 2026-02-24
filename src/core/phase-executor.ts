@@ -35,6 +35,7 @@ export type PhaseCallbacks = {
   checkBudget: () => void;
   updateProgress: () => Promise<void>;
   onPRCreated?: (pr: PullRequestInfo) => void;
+  onPRFailed?: () => void;
 };
 
 /**

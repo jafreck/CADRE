@@ -59,6 +59,7 @@ export class FleetProgressWriter {
     const blocked = issues.filter((i) => i.status === 'blocked').length;
     const notStarted = issues.filter((i) => i.status === 'not-started').length;
     const budgetExceeded = issues.filter((i) => i.status === 'budget-exceeded').length;
+    const codeCompleteNoPR = issues.filter((i) => i.status === 'code-complete-no-pr').length;
 
     const budgetStr = tokenUsage.budget
       ? `${tokenUsage.current.toLocaleString()} / ${tokenUsage.budget.toLocaleString()}`
@@ -66,7 +67,7 @@ export class FleetProgressWriter {
 
     let md = `# CADRE Progress\n\n`;
     md += `## Fleet Status\n`;
-    md += `- **Issues**: ${total} total | ${completed} completed | ${inProgress} in-progress | ${failed} failed | ${blocked} blocked | ${notStarted} not-started | ${budgetExceeded} budget-exceeded\n`;
+    md += `- **Issues**: ${total} total | ${completed} completed | ${inProgress} in-progress | ${failed} failed | ${blocked} blocked | ${notStarted} not-started | ${budgetExceeded} budget-exceeded | ${codeCompleteNoPR} code-complete-no-pr\n`;
     md += `- **PRs Created**: ${prs.length}\n`;
     md += `- **Token Usage**: ${budgetStr}\n`;
     md += `- **Last Updated**: ${new Date().toISOString()}\n\n`;

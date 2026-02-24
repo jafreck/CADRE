@@ -165,7 +165,9 @@ export class FleetOrchestrator {
       success: failedIssues.length === 0,
       issues: issueResults,
       prsCreated,
-      codeDoneNoPR: [],
+      codeDoneNoPR: issueResults
+        .filter((r) => r.codeComplete === true && r.prCreated !== true)
+        .map((r) => ({ issueNumber: r.issueNumber, issueTitle: r.issueTitle })),
       failedIssues,
       totalDuration: Date.now() - startTime,
       tokenUsage: this.tokenTracker.getSummary(),
