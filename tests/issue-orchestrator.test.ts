@@ -818,4 +818,23 @@ describe('IssueOrchestrator — codeComplete field', () => {
     expect(result.success).toBe(false);
     expect(result.codeComplete).toBe(false);
   });
+
+  it('should return result.pr as undefined when no PR was created', async () => {
+    // Default: all phases pre-completed, no actual PR phase runs → pr is undefined
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result).toHaveProperty('pr');
+    expect(result.pr).toBeUndefined();
+  });
 });
