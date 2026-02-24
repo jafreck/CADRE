@@ -27,6 +27,7 @@ vi.mock('../src/core/checkpoint.js', () => ({
   CheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue(undefined),
     resetPhases: vi.fn().mockResolvedValue(undefined),
+    completePhase: vi.fn().mockResolvedValue(undefined),
     setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
   })),
 }));

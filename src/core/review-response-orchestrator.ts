@@ -320,6 +320,11 @@ export class ReviewResponseOrchestrator {
         // implementation plan.  Without this, IssueOrchestrator sees them as
         // already completed and skips them entirely.
         await checkpoint.resetPhases(REVIEW_RESPONSE_PHASES);
+        // Ensure phases 1 and 2 are marked completed so IssueOrchestrator starts
+        // at phase 3.  On a fresh worktree the checkpoint has no completed phases,
+        // which would cause the orchestrator to fall back to phase 1.
+        await checkpoint.completePhase(1, '');
+        await checkpoint.completePhase(2, join(progressDir, 'implementation-plan.md'));
         await checkpoint.setWorktreeInfo(worktree.path, worktree.branch, worktree.baseCommit);
 
         const issueOrchestrator = new IssueOrchestrator(
