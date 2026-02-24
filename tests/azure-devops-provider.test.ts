@@ -657,3 +657,457 @@ describe('AzureDevOpsProvider.createPullRequest()', () => {
     });
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// listIssues
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('AzureDevOpsProvider.listIssues()', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('uses NOT IN condition for state: "open"', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    // WIQL result with no IDs → easy to test without extra mocks
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'open' });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    const body = JSON.parse(wiqlCall[1].body as string) as { query: string };
+    expect(body.query).toContain(`NOT IN ('Closed', 'Done', 'Resolved', 'Removed')`);
+  });
+
+  it('uses IN condition for state: "closed"', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'closed' });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    const body = JSON.parse(wiqlCall[1].body as string) as { query: string };
+    expect(body.query).toContain(`IN ('Closed', 'Done', 'Resolved')`);
+  });
+
+  it('adds a Tags Contains condition for each label', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'open', labels: ['bug', 'help-wanted'] });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    const body = JSON.parse(wiqlCall[1].body as string) as { query: string };
+    expect(body.query).toContain(`[System.Tags] Contains 'bug'`);
+    expect(body.query).toContain(`[System.Tags] Contains 'help-wanted'`);
+  });
+
+  it('adds an IterationPath UNDER condition for milestone', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'open', milestone: 'Sprint 5' });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    const body = JSON.parse(wiqlCall[1].body as string) as { query: string };
+    expect(body.query).toContain(`[System.IterationPath] UNDER 'my-project\\Sprint 5'`);
+  });
+
+  it('adds an AssignedTo condition for assignee', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'open', assignee: 'alice@example.com' });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    const body = JSON.parse(wiqlCall[1].body as string) as { query: string };
+    expect(body.query).toContain(`[System.AssignedTo] = 'alice@example.com'`);
+  });
+
+  it('returns empty array when WIQL result has no work item IDs', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    const result = await provider.listIssues({ state: 'open' });
+
+    expect(result).toEqual([]);
+    // Only 2 total calls: checkAuth + WIQL (no batch fetch)
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+  });
+
+  it('batch-fetches work items when IDs are returned by WIQL', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    // WIQL returns two IDs
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [{ id: 1 }, { id: 2 }] }));
+    // Batch fetch
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        value: [
+          {
+            id: 1,
+            fields: {
+              'System.Title': 'Bug fix',
+              'System.State': 'Active',
+              'System.Description': '',
+              'System.Tags': '',
+              'System.CreatedDate': '2024-01-01',
+              'System.ChangedDate': '2024-01-02',
+            },
+          },
+          {
+            id: 2,
+            fields: {
+              'System.Title': 'Feature work',
+              'System.State': 'Active',
+              'System.Description': '',
+              'System.Tags': '',
+              'System.CreatedDate': '2024-01-01',
+              'System.ChangedDate': '2024-01-02',
+            },
+          },
+        ],
+      }),
+    );
+
+    const result = await provider.listIssues({ state: 'open' });
+
+    expect(result).toHaveLength(2);
+    expect(result[0].number).toBe(1);
+    expect(result[0].title).toBe('Bug fix');
+    expect(result[1].number).toBe(2);
+    // 3 total calls: checkAuth + WIQL + batch
+    expect(fetchStub).toHaveBeenCalledTimes(3);
+  });
+
+  it('passes $top=limit to the WIQL endpoint', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'open', limit: 5 });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    expect(wiqlCall[0]).toContain('$top=5');
+  });
+
+  it('defaults limit to 30 when not specified', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'open' });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    expect(wiqlCall[0]).toContain('$top=30');
+  });
+
+  it('POSTs to the WIQL endpoint', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ workItems: [] }));
+
+    await provider.listIssues({ state: 'open' });
+
+    const wiqlCall = fetchStub.mock.calls[1];
+    expect(wiqlCall[0]).toContain('_apis/wit/wiql');
+    expect(wiqlCall[1].method).toBe('POST');
+  });
+
+  it('throws when not connected', async () => {
+    const provider = makeProvider();
+    vi.stubGlobal('fetch', fetchStub);
+
+    await expect(provider.listIssues({ state: 'open' })).rejects.toThrow('not connected');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// getPullRequest
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('AzureDevOpsProvider.getPullRequest()', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('GETs from the correct PR URL', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        pullRequestId: 77,
+        title: 'My PR',
+        sourceRefName: 'refs/heads/feature',
+        targetRefName: 'refs/heads/main',
+      }),
+    );
+
+    await provider.getPullRequest(77);
+
+    const getCall = fetchStub.mock.calls[1];
+    expect(getCall[0]).toContain('/pullrequests/77');
+    expect(getCall[1]?.method ?? 'GET').toBe('GET');
+  });
+
+  it('maps response fields to PullRequestInfo correctly', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        pullRequestId: 42,
+        title: 'Fix everything',
+        sourceRefName: 'refs/heads/cadre/issue-42',
+        targetRefName: 'refs/heads/develop',
+      }),
+    );
+
+    const result = await provider.getPullRequest(42);
+
+    expect(result.number).toBe(42);
+    expect(result.title).toBe('Fix everything');
+    expect(result.headBranch).toBe('cadre/issue-42');
+    expect(result.baseBranch).toBe('develop');
+    expect(result.url).toContain('42');
+  });
+
+  it('throws when not connected', async () => {
+    const provider = makeProvider();
+    vi.stubGlobal('fetch', fetchStub);
+
+    await expect(provider.getPullRequest(1)).rejects.toThrow('not connected');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// listPullRequests
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('AzureDevOpsProvider.listPullRequests()', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns mapped PullRequestInfo for each PR in the response', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        value: [
+          {
+            pullRequestId: 10,
+            title: 'PR one',
+            sourceRefName: 'refs/heads/feature-a',
+            targetRefName: 'refs/heads/main',
+          },
+          {
+            pullRequestId: 11,
+            title: 'PR two',
+            sourceRefName: 'refs/heads/feature-b',
+            targetRefName: 'refs/heads/main',
+          },
+        ],
+      }),
+    );
+
+    const result = await provider.listPullRequests();
+
+    expect(result).toHaveLength(2);
+    expect(result[0].number).toBe(10);
+    expect(result[0].headBranch).toBe('feature-a');
+    expect(result[1].number).toBe(11);
+  });
+
+  it('filters by source branch when head is provided', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+    await provider.listPullRequests({ head: 'my-feature' });
+
+    const listCall = fetchStub.mock.calls[1];
+    expect(listCall[0]).toContain('searchCriteria.sourceRefName=refs%2Fheads%2Fmy-feature');
+  });
+
+  it('maps state "open" to ADO status "active"', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+    await provider.listPullRequests({ state: 'open' });
+
+    const listCall = fetchStub.mock.calls[1];
+    expect(listCall[0]).toContain('searchCriteria.status=active');
+  });
+
+  it('maps state "closed" to ADO status "completed"', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+    await provider.listPullRequests({ state: 'closed' });
+
+    const listCall = fetchStub.mock.calls[1];
+    expect(listCall[0]).toContain('searchCriteria.status=completed');
+  });
+
+  it('returns empty array when API returns no PRs', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+    const result = await provider.listPullRequests();
+
+    expect(result).toEqual([]);
+  });
+
+  it('throws when not connected', async () => {
+    const provider = makeProvider();
+    vi.stubGlobal('fetch', fetchStub);
+
+    await expect(provider.listPullRequests()).rejects.toThrow('not connected');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// updatePullRequest
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('AzureDevOpsProvider.updatePullRequest()', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('PATCHes the PR URL with title and description', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({}));
+
+    await provider.updatePullRequest(99, { title: 'Updated title', body: 'New description' });
+
+    const patchCall = fetchStub.mock.calls[1];
+    expect(patchCall[0]).toContain('/pullrequests/99');
+    expect(patchCall[1].method).toBe('PATCH');
+    const body = JSON.parse(patchCall[1].body as string);
+    expect(body.title).toBe('Updated title');
+    expect(body.description).toBe('New description');
+  });
+
+  it('sends only title when body is omitted', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({}));
+
+    await provider.updatePullRequest(99, { title: 'Just title' });
+
+    const patchCall = fetchStub.mock.calls[1];
+    const body = JSON.parse(patchCall[1].body as string);
+    expect(body.title).toBe('Just title');
+    expect(body.description).toBeUndefined();
+  });
+
+  it('throws when not connected', async () => {
+    const provider = makeProvider();
+    vi.stubGlobal('fetch', fetchStub);
+
+    await expect(provider.updatePullRequest(1, { title: 'x' })).rejects.toThrow('not connected');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// listPRComments / listPRReviews (stubs)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('AzureDevOpsProvider.listPRComments()', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns an empty array', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+    const result = await provider.listPRComments(1);
+    expect(result).toEqual([]);
+  });
+
+  it('logs a warning when called', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+    await provider.listPRComments(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('not yet supported on Azure DevOps'),
+    );
+  });
+});
+
+describe('AzureDevOpsProvider.listPRReviews()', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns an empty array', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+    const result = await provider.listPRReviews(1);
+    expect(result).toEqual([]);
+  });
+
+  it('logs a warning when called', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+    await provider.listPRReviews(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('not yet supported on Azure DevOps'),
+    );
+  });
+});

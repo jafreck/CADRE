@@ -108,4 +108,170 @@ describe('ParallelExecutor', () => {
     expect(results[0].success).toBe(true);
     expect(results[1].success).toBe(false);
   });
+
+  // ── execute() with delayMs ─────────────────────────────────────────────
+
+  it('should call setTimeout for indices > 0 when delayMs is provided', async () => {
+    vi.useFakeTimers();
+
+    vi.mocked(mockLauncher.launchAgent).mockImplementation(async (inv) =>
+      makeResult(inv.agent, true),
+    );
+
+    const executor = new ParallelExecutor(mockLauncher, 3, mockLogger);
+    const promise = executor.execute(
+      [
+        makeInvocation('code-writer', 'task-001'),
+        makeInvocation('test-writer', 'task-002'),
+        makeInvocation('code-writer', 'task-003'),
+      ],
+      '/tmp/worktree',
+      { delayMs: 500 },
+    );
+
+    // Advance timers so the delayed invocations can resolve
+    await vi.runAllTimersAsync();
+    const results = await promise;
+
+    expect(results).toHaveLength(3);
+    results.forEach((r) => expect(r.success).toBe(true));
+
+    vi.useRealTimers();
+  });
+
+  it('should not add delay for the first invocation (index 0)', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    vi.mocked(mockLauncher.launchAgent).mockImplementation(async (inv) =>
+      makeResult(inv.agent, true),
+    );
+
+    const executor = new ParallelExecutor(mockLauncher, 3, mockLogger);
+    const promise = executor.execute(
+      [
+        makeInvocation('code-writer', 'task-001'),
+        makeInvocation('test-writer', 'task-002'),
+      ],
+      '/tmp/worktree',
+      { delayMs: 200 },
+    );
+
+    await vi.runAllTimersAsync();
+    await promise;
+
+    // setTimeout should be called for index=1 only (not for index=0)
+    const delayedCalls = setTimeoutSpy.mock.calls.filter((args) => {
+      const ms = args[1] as number;
+      return ms > 0;
+    });
+    expect(delayedCalls.length).toBeGreaterThanOrEqual(1);
+
+    setTimeoutSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  // ── executeSettled() ──────────────────────────────────────────────────
+
+  describe('executeSettled()', () => {
+    it('should return all results even when some invocations throw', async () => {
+      vi.mocked(mockLauncher.launchAgent)
+        .mockResolvedValueOnce(makeResult('code-writer', true))
+        .mockRejectedValueOnce(new Error('agent crashed'))
+        .mockResolvedValueOnce(makeResult('code-writer', true));
+
+      const executor = new ParallelExecutor(mockLauncher, 3, mockLogger);
+      const results = await executor.executeSettled(
+        [
+          makeInvocation('code-writer', 'task-001'),
+          makeInvocation('test-writer', 'task-002'),
+          makeInvocation('code-writer', 'task-003'),
+        ],
+        '/tmp/worktree',
+      );
+
+      expect(results).toHaveLength(3);
+    });
+
+    it('should map fulfilled results to their AgentResult', async () => {
+      vi.mocked(mockLauncher.launchAgent).mockResolvedValueOnce(
+        makeResult('code-writer', true),
+      );
+
+      const executor = new ParallelExecutor(mockLauncher, 2, mockLogger);
+      const results = await executor.executeSettled(
+        [makeInvocation('code-writer', 'task-001')],
+        '/tmp/worktree',
+      );
+
+      expect(results[0].success).toBe(true);
+      expect(results[0].agent).toBe('code-writer');
+    });
+
+    it('should map rejected invocations to a synthetic failure AgentResult with success: false', async () => {
+      vi.mocked(mockLauncher.launchAgent).mockRejectedValueOnce(
+        new Error('timeout'),
+      );
+
+      const executor = new ParallelExecutor(mockLauncher, 2, mockLogger);
+      const results = await executor.executeSettled(
+        [makeInvocation('test-writer', 'task-fail')],
+        '/tmp/worktree',
+      );
+
+      expect(results[0].success).toBe(false);
+    });
+
+    it('should set the correct agent name on synthetic failure result', async () => {
+      vi.mocked(mockLauncher.launchAgent).mockRejectedValueOnce(
+        new Error('exploded'),
+      );
+
+      const executor = new ParallelExecutor(mockLauncher, 2, mockLogger);
+      const results = await executor.executeSettled(
+        [makeInvocation('test-writer', 'task-fail')],
+        '/tmp/worktree',
+      );
+
+      expect(results[0].agent).toBe('test-writer');
+    });
+
+    it('should include the rejection reason string in the error field', async () => {
+      vi.mocked(mockLauncher.launchAgent).mockRejectedValueOnce(
+        new Error('something went very wrong'),
+      );
+
+      const executor = new ParallelExecutor(mockLauncher, 2, mockLogger);
+      const results = await executor.executeSettled(
+        [makeInvocation('code-writer', 'task-fail')],
+        '/tmp/worktree',
+      );
+
+      expect(results[0].error).toContain('something went very wrong');
+    });
+
+    it('should preserve order of results matching input invocations array', async () => {
+      vi.mocked(mockLauncher.launchAgent)
+        .mockResolvedValueOnce(makeResult('code-writer', true))
+        .mockRejectedValueOnce(new Error('second failed'))
+        .mockResolvedValueOnce(makeResult('issue-analyst', true));
+
+      const executor = new ParallelExecutor(mockLauncher, 3, mockLogger);
+      const results = await executor.executeSettled(
+        [
+          makeInvocation('code-writer', 'task-001'),
+          makeInvocation('test-writer', 'task-002'),
+          makeInvocation('issue-analyst', 'task-003'),
+        ],
+        '/tmp/worktree',
+      );
+
+      expect(results[0].agent).toBe('code-writer');
+      expect(results[0].success).toBe(true);
+      expect(results[1].agent).toBe('test-writer');
+      expect(results[1].success).toBe(false);
+      expect(results[2].agent).toBe('issue-analyst');
+      expect(results[2].success).toBe(true);
+    });
+  });
 });
