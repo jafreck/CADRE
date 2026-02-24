@@ -25,9 +25,9 @@ Do **not** flag issues for:
 - Personal preferences
 
 ## Output
-Respond with a JSON object matching the `ReviewResult` structure:
+Respond with a `cadre-json` fenced block matching the `ReviewResult` structure. **The fence language must be `cadre-json` exactly — cadre uses this marker to parse the output; a plain `json` block will not be detected.**
 
-```json
+```cadre-json
 {
   "verdict": "pass" | "needs-fixes",
   "summary": "One or two sentences summarizing your findings.",

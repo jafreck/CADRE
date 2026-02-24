@@ -39,9 +39,9 @@ If it exists, read it. It contains a list of test/check names that were already 
 If `.cadre/baseline-results.json` does not exist, treat all failures as regressions.
 
 ## Output
-Respond with a JSON object matching the `IntegrationReport` structure:
+Respond with a `cadre-json` fenced block matching the `IntegrationReport` structure. **The fence language must be `cadre-json` exactly — cadre uses this marker to parse the output.**
 
-```json
+```cadre-json
 {
   "buildResult": {
     "command": "npm run build",
@@ -63,8 +63,7 @@ Respond with a JSON object matching the `IntegrationReport` structure:
   },
   "baselineFailures": ["foo"],
   "regressionFailures": ["bar"],
-  "overallPass": false,
-  "summary": "Build and lint passed. 1 regression failure detected (bar). 1 pre-existing failure unchanged (foo)."
+  "overallPass": false
 }
 ```
 
