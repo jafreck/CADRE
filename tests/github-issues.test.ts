@@ -265,6 +265,166 @@ describe('GitHubAPI', () => {
     });
   });
 
+  describe('addIssueComment', () => {
+    it('should call issues.createComment with the correct params', async () => {
+      vi.mocked(mockOctokit.rest.issues.createComment).mockResolvedValue({ data: {} } as never);
+
+      await api.addIssueComment(42, 'Hello world');
+
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 42,
+        body: 'Hello world',
+      });
+    });
+  });
+
+  describe('getPullRequest', () => {
+    it('should return PR data via octokit.rest.pulls.get', async () => {
+      const prData = { number: 5, title: 'My PR', state: 'open' };
+      vi.mocked(mockOctokit.rest.pulls.get).mockResolvedValue({ data: prData } as never);
+
+      const result = await api.getPullRequest(5);
+
+      expect(result).toEqual(prData);
+      expect(mockOctokit.rest.pulls.get).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 5,
+      });
+    });
+  });
+
+  describe('updatePullRequest', () => {
+    it('should call octokit.rest.pulls.update with provided updates', async () => {
+      vi.mocked(mockOctokit.rest.pulls.update).mockResolvedValue({ data: {} } as never);
+
+      await api.updatePullRequest(5, { title: 'New title', body: 'New body' });
+
+      expect(mockOctokit.rest.pulls.update).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 5,
+        title: 'New title',
+        body: 'New body',
+      });
+    });
+
+    it('should call pulls.update with only title when body is omitted', async () => {
+      vi.mocked(mockOctokit.rest.pulls.update).mockResolvedValue({ data: {} } as never);
+
+      await api.updatePullRequest(5, { title: 'New title' });
+
+      expect(mockOctokit.rest.pulls.update).toHaveBeenCalledWith(
+        expect.objectContaining({ pull_number: 5, title: 'New title' }),
+      );
+    });
+  });
+
+  describe('getPRComments', () => {
+    it('should return issue comments for the given PR number', async () => {
+      const comments = [{ id: 1, body: 'LGTM' }];
+      vi.mocked(mockOctokit.rest.issues.listComments).mockResolvedValue({ data: comments } as never);
+
+      const result = await api.getPRComments(5);
+
+      expect(result).toEqual(comments);
+      expect(mockOctokit.rest.issues.listComments).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 5,
+      });
+    });
+  });
+
+  describe('getPRReviews', () => {
+    it('should return reviews for the given PR number', async () => {
+      const reviews = [{ id: 1, state: 'APPROVED', body: 'Ship it' }];
+      vi.mocked(mockOctokit.rest.pulls.listReviews).mockResolvedValue({ data: reviews } as never);
+
+      const result = await api.getPRReviews(5);
+
+      expect(result).toEqual(reviews);
+      expect(mockOctokit.rest.pulls.listReviews).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 5,
+      });
+    });
+  });
+
+  describe('listPullRequests', () => {
+    it('should call pulls.list with no filters when none provided', async () => {
+      const prs = [{ number: 1 }, { number: 2 }];
+      vi.mocked(mockOctokit.rest.pulls.list).mockResolvedValue({ data: prs } as never);
+
+      const result = await api.listPullRequests();
+
+      expect(result).toEqual(prs);
+      expect(mockOctokit.rest.pulls.list).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+      });
+    });
+
+    it('should prefix owner to head filter', async () => {
+      vi.mocked(mockOctokit.rest.pulls.list).mockResolvedValue({ data: [] } as never);
+
+      await api.listPullRequests({ head: 'my-branch' });
+
+      expect(mockOctokit.rest.pulls.list).toHaveBeenCalledWith(
+        expect.objectContaining({ head: 'owner:my-branch' }),
+      );
+    });
+
+    it('should pass base and state filters through unchanged', async () => {
+      vi.mocked(mockOctokit.rest.pulls.list).mockResolvedValue({ data: [] } as never);
+
+      await api.listPullRequests({ base: 'main', state: 'closed' });
+
+      expect(mockOctokit.rest.pulls.list).toHaveBeenCalledWith(
+        expect.objectContaining({ base: 'main', state: 'closed' }),
+      );
+    });
+  });
+
+  describe('getIssue (error paths)', () => {
+    it('should return issue with empty comments when listComments throws', async () => {
+      vi.mocked(mockOctokit.rest.issues.get).mockResolvedValue({ data: { number: 1 } } as never);
+      vi.mocked(mockOctokit.rest.issues.listComments).mockRejectedValue(new Error('Not found'));
+
+      const issue = await api.getIssue(1);
+
+      expect(issue.comments).toEqual([]);
+      expect(mockLogger.debug).toHaveBeenCalled();
+    });
+  });
+
+  describe('createPullRequest (error paths)', () => {
+    it('should warn but not throw when issues.update fails for labels', async () => {
+      vi.mocked(mockOctokit.rest.pulls.create).mockResolvedValue({ data: { number: 100 } } as never);
+      vi.mocked(mockOctokit.rest.issues.update).mockRejectedValue(new Error('Forbidden'));
+
+      await expect(
+        api.createPullRequest({ title: 'T', body: 'B', head: 'h', base: 'main', labels: ['bug'] }),
+      ).resolves.toBeDefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to set labels on PR #100'));
+    });
+
+    it('should warn but not throw when requestReviewers fails', async () => {
+      vi.mocked(mockOctokit.rest.pulls.create).mockResolvedValue({ data: { number: 101 } } as never);
+      vi.mocked(mockOctokit.rest.pulls.requestReviewers).mockRejectedValue(new Error('Forbidden'));
+
+      await expect(
+        api.createPullRequest({ title: 'T', body: 'B', head: 'h', base: 'main', reviewers: ['alice'] }),
+      ).resolves.toBeDefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to set reviewers on PR #101'));
+    });
+  });
+
   describe('createPullRequest', () => {
     it('should create a PR via Octokit', async () => {
       vi.mocked(mockOctokit.rest.pulls.create).mockResolvedValue({
