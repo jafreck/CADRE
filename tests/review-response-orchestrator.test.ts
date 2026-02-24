@@ -1035,10 +1035,6 @@ describe('ReviewResponseOrchestrator — isCadreSelfRun label guarantee', () => 
     vi.clearAllMocks();
   });
 
-  function makeSelfRunConfig() {
-    return makeConfig({ autoReplyOnResolved: false } as never);
-  }
-
   it('calls ensureLabel and applyLabels when isCadreSelfRun is true and pipeline succeeds', async () => {
     const selfRunConfig = makeRuntimeConfig({
       repository: 'jafreck/cadre',

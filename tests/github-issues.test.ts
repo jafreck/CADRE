@@ -181,7 +181,7 @@ describe('GitHubAPI', () => {
   });
 
   describe('applyLabels', () => {
-    it('should call issue_write with the given labels', async () => {
+    it('should call issue_write with the given labels when PR has no existing labels', async () => {
       vi.mocked(mockMCP.callTool).mockResolvedValue({});
 
       await api.applyLabels(42, ['bug', 'enhancement']);
@@ -193,6 +193,36 @@ describe('GitHubAPI', () => {
         issue_number: 42,
         labels: ['bug', 'enhancement'],
       });
+    });
+
+    it('should merge new labels with existing PR labels without clobbering', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({ labels: [{ name: 'existing-label' }, { name: 'other' }] }) // issue_read
+        .mockResolvedValueOnce({}); // issue_write
+
+      await api.applyLabels(42, ['cadre-generated']);
+
+      expect(mockMCP.callTool).toHaveBeenLastCalledWith('issue_write', {
+        method: 'update',
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 42,
+        labels: expect.arrayContaining(['existing-label', 'other', 'cadre-generated']),
+      });
+    });
+
+    it('should deduplicate labels when the label is already present', async () => {
+      vi.mocked(mockMCP.callTool)
+        .mockResolvedValueOnce({ labels: [{ name: 'cadre-generated' }] }) // issue_read
+        .mockResolvedValueOnce({}); // issue_write
+
+      await api.applyLabels(42, ['cadre-generated']);
+
+      const issueWriteCall = vi.mocked(mockMCP.callTool).mock.calls.find(
+        (c) => c[0] === 'issue_write',
+      )!;
+      const appliedLabels = (issueWriteCall[1] as Record<string, unknown>).labels as string[];
+      expect(appliedLabels.filter((l) => l === 'cadre-generated')).toHaveLength(1);
     });
 
     it('should not call issue_write when labels array is empty', async () => {

@@ -183,7 +183,7 @@ export interface PlatformProvider {
   /** Ensure a label exists in the repository, creating it if it does not. */
   ensureLabel(labelName: string, color?: string): Promise<void>;
 
-  /** Apply labels to a pull request. */
+  /** Add labels to a pull request without clobbering any existing ones. */
   applyLabels(prNumber: number, labels: string[]): Promise<void>;
 
   // ── Issue Linking ──

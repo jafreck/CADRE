@@ -291,17 +291,38 @@ export class GitHubAPI {
   }
 
   /**
-   * Apply labels to a pull request (via the Issues API).
+   * Add labels to a pull request without clobbering existing ones.
+   * Fetches current labels first, merges, then updates.
    */
   async applyLabels(prNumber: number, labels: string[]): Promise<void> {
     if (labels.length === 0) return;
     try {
+      // Fetch current labels so we don't clobber them — GitHub's issue update
+      // API replaces the full label set when `labels` is provided.
+      let existingLabels: string[] = [];
+      try {
+        const issue = await this.mcp.callTool<Record<string, unknown>>('issue_read', {
+          method: 'get',
+          owner: this.owner,
+          repo: this.repo,
+          issue_number: prNumber,
+        });
+        const rawLabels = issue.labels;
+        if (Array.isArray(rawLabels)) {
+          existingLabels = rawLabels
+            .map((l) => (typeof l === 'string' ? l : (l as Record<string, unknown>).name as string))
+            .filter(Boolean);
+        }
+      } catch {
+        // If we can't fetch current labels, proceed with only the supplied ones.
+      }
+      const merged = Array.from(new Set([...existingLabels, ...labels]));
       await this.mcp.callTool('issue_write', {
         method: 'update',
         owner: this.owner,
         repo: this.repo,
         issue_number: prNumber,
-        labels,
+        labels: merged,
       });
     } catch (err) {
       this.logger.warn(`Failed to apply labels to PR #${prNumber}: ${err}`);
