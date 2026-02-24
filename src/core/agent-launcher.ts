@@ -24,16 +24,11 @@ export class AgentLauncher {
    * Validate that all agent instruction files exist and are non-empty.
    * Returns an array of error strings for any missing or empty files.
    */
-  static async validateAgentFiles(agentDir: string, backend = 'copilot'): Promise<string[]> {
+  static async validateAgentFiles(agentDir: string): Promise<string[]> {
     const resolvedDir = resolve(agentDir);
     const issues: string[] = [];
     for (const agent of AGENT_DEFINITIONS) {
-      const fileName =
-        backend === 'claude'
-          ? join(agent.name, 'CLAUDE.md')
-          : backend === 'copilot'
-            ? `${agent.name}.agent.md`
-            : `${agent.name}.md`;
+      const fileName = `${agent.name}.md`;
       const filePath = join(resolvedDir, fileName);
       const fileStat = await statOrNull(filePath);
       if (fileStat === null) {

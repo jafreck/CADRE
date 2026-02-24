@@ -338,23 +338,10 @@ describe('CopilotBackend', () => {
     expect(result.tokenUsage).toBe(1234);
   });
 
-  it('should fall back to legacy config.copilot settings when config.agent is absent', async () => {
-    const legacyConfig = {
-      projectName: 'test',
-      repository: 'owner/repo',
-      repoPath: '/tmp/repo',
-      baseBranch: 'main',
-      issues: { ids: [1] },
-      copilot: {
-        cliCommand: 'legacy-copilot',
-        agentDir: '.github/agents',
-        timeout: 120_000,
-        model: 'legacy-model',
-      },
-      environment: { inheritShellPath: true, extraPath: [] },
-    } as unknown as CadreConfig;
+  it('should use config.agent.copilot.cliCommand for the CLI invocation', async () => {
+    const customConfig = makeConfig({ cliCommand: 'legacy-copilot' });
 
-    const backend = new CopilotBackend(legacyConfig, logger as never);
+    const backend = new CopilotBackend(customConfig, logger as never);
     setupSpawn(makeProcessResult());
     await backend.invoke(makeInvocation(), '/tmp/worktree');
     const [cmd] = mockSpawnProcess.mock.calls[0];

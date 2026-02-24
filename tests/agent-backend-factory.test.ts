@@ -69,20 +69,8 @@ describe('createAgentBackend', () => {
     expect(backend).toBeInstanceOf(ClaudeBackend);
   });
 
-  it('returns a CopilotBackend when config.agent is absent (defaults to "copilot")', () => {
-    const config = {
-      projectName: 'test',
-      repository: 'owner/repo',
-      repoPath: '/tmp/repo',
-      baseBranch: 'main',
-      issues: { ids: [1] },
-      copilot: {
-        cliCommand: 'copilot',
-        agentDir: '.github/agents',
-        timeout: 300_000,
-      },
-      environment: { inheritShellPath: true, extraPath: [] },
-    } as unknown as CadreConfig;
+  it('returns a CopilotBackend when config.agent.backend is omitted (defaults to "copilot")', () => {
+    const config = makeConfig('copilot');
     const backend = createAgentBackend(config, makeLogger());
     expect(backend).toBeInstanceOf(CopilotBackend);
   });

@@ -177,7 +177,18 @@ function makeConfig(issueIds = [1]): CadreConfig {
       skipValidation: true,
     },
     commands: {},
-    copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4', agentDir: '.github/agents', timeout: 300000, costOverrides: {} },
+    copilot: {
+      cliCommand: 'copilot',
+      model: 'claude-sonnet-4',
+      agentDir: '.github/agents',
+      timeout: 300000,
+      costOverrides: {},
+    },
+    agent: {
+      backend: 'copilot',
+      copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
+      claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+    },
     notifications: { enabled: false, providers: [] },
   } as unknown as CadreConfig;
 }

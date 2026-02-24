@@ -134,7 +134,7 @@ export class CopilotBackend implements AgentBackend {
   ) {
     // Prefer config.agent.copilot settings, fall back to legacy config.copilot
     this.cliCommand = config.agent?.copilot?.cliCommand ?? config.copilot.cliCommand;
-    this.agentDir = config.agent?.copilot?.agentDir ?? config.copilot.agentDir;
+    this.agentDir = config.agent!.copilot.agentDir;
     this.defaultTimeout = config.agent?.timeout ?? config.copilot.timeout;
     this.defaultModel = config.agent?.model ?? config.copilot.model;
   }

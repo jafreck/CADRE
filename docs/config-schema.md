@@ -123,7 +123,7 @@ Controls the GitHub Copilot CLI backend.
 |---|---|---|---|
 | `cliCommand` | `string` | `"copilot"` | Executable name for the Copilot CLI. |
 | `model` | `string` | `"claude-sonnet-4.6"` | Model identifier passed to the Copilot CLI. |
-| `agentDir` | `string` | `".github/agents"` | Directory containing `.agent.md` files. |
+| `agentDir` | `string` | `".github/agents"` | Directory containing `.md` agent files. |
 | `timeout` | `number` | `300000` | Timeout in milliseconds for a single agent invocation. |
 | `costOverrides` | `Record<string, { input: number, output: number }>` | — | Per-model cost overrides ($/1K tokens) for token budget accounting. Keys are model names. |
 
