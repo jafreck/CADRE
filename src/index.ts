@@ -6,7 +6,7 @@ import { runInit } from './cli/init.js';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
 import { AgentLauncher } from './core/agent-launcher.js';
-import { registerAgentsCommand } from './cli/agents.js';
+import { registerAgentsCommand, scaffoldMissingAgents } from './cli/agents.js';
 
 const program = new Command();
 
@@ -27,6 +27,7 @@ program
   .option('--no-pr', 'Skip PR creation')
   .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
   .option('--skip-validation', 'Skip pre-run validation checks')
+  .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files')
   .action(async (opts) => {
     try {
       let config = await loadConfig(opts.config);
@@ -47,16 +48,29 @@ program
 
       if (!opts.skipAgentValidation) {
         const backend = config.agent?.backend ?? 'copilot';
-        const issues = await AgentLauncher.validateAgentFiles(config.copilot.agentDir, backend);
+        const agentDir = config.copilot.agentDir;
+        let issues = await AgentLauncher.validateAgentFiles(agentDir, backend);
+
         if (issues.length > 0) {
-          console.error(
-            chalk.red(`❌ Agent validation failed — ${issues.length} issue(s) found:\n`) +
-              issues.join('\n'),
-          );
-          console.error(
-            chalk.yellow(`\nRun 'cadre agents scaffold' to create missing files, or use --skip-agent-validation to bypass.`),
-          );
-          process.exit(1);
+          const scaffoldableIssues = issues.filter((i) => i.includes('Missing:'));
+          const nonScaffoldable = issues.filter((i) => !i.includes('Missing:'));
+
+          if (opts.autoscaffold && scaffoldableIssues.length > 0) {
+            const n = await scaffoldMissingAgents(agentDir, backend);
+            console.log(`ℹ️ Auto-scaffolded ${n} missing agent file(s) — continuing.`);
+            issues = await AgentLauncher.validateAgentFiles(agentDir, backend);
+          }
+
+          if (issues.length > 0) {
+            console.error(
+              chalk.red(`❌ Agent validation failed — ${issues.length} issue(s) found:\n`) +
+                issues.join('\n'),
+            );
+            console.error(
+              chalk.yellow(`\nRun 'cadre agents scaffold' to create missing files, or use --skip-agent-validation to bypass.`),
+            );
+            process.exit(1);
+          }
         }
       }
 
