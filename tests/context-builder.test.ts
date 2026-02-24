@@ -5,7 +5,7 @@ import type { IssueDetail } from '../src/github/issues.js';
 import type { ReviewThread } from '../src/platform/provider.js';
 import type { AgentSession } from '../src/agents/types.js';
 import { Logger } from '../src/logging/logger.js';
-import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, access } from 'node:fs/promises';
 
 vi.mock('node:fs/promises');
 
@@ -64,6 +64,8 @@ describe('ContextBuilder', () => {
     vi.mocked(mkdir).mockResolvedValue(undefined);
     vi.mocked(writeFile).mockResolvedValue(undefined);
     vi.mocked(rename).mockResolvedValue(undefined);
+    // Default: files do not exist
+    vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
   });
 
   /** Helper: returns the context object written by the last writeFile call. */
@@ -330,6 +332,127 @@ describe('ContextBuilder', () => {
       await builder.buildForFixSurgeon(42, '/tmp/worktree', task.id, '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
+    });
+  });
+
+  describe('conditional inputFiles injection', () => {
+    const session: AgentSession = {
+      id: 'session-001',
+      name: 'Fix login',
+      rationale: 'Fix the login handler',
+      dependencies: [],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
+    };
+
+    describe('buildForCodeWriter', () => {
+      it('includes analysis.md and scout-report.md in inputFiles when they exist', async () => {
+        vi.mocked(access).mockResolvedValue(undefined);
+        await builder.buildForCodeWriter(42, '/tmp/worktree', session, '/tmp/task-plan.md', [], '/tmp/progress');
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).toContain('/tmp/progress/scout-report.md');
+      });
+
+      it('excludes analysis.md and scout-report.md from inputFiles when they do not exist', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForCodeWriter(42, '/tmp/worktree', session, '/tmp/task-plan.md', [], '/tmp/progress');
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).not.toContain('/tmp/progress/scout-report.md');
+      });
+    });
+
+    describe('buildForCodeReviewer', () => {
+      it('includes analysis.md and scout-report.md in inputFiles when they exist', async () => {
+        vi.mocked(access).mockResolvedValue(undefined);
+        await builder.buildForCodeReviewer(42, '/tmp/worktree', session, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress');
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).toContain('/tmp/progress/scout-report.md');
+      });
+
+      it('excludes analysis.md and scout-report.md from inputFiles when they do not exist', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForCodeReviewer(42, '/tmp/worktree', session, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress');
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).not.toContain('/tmp/progress/scout-report.md');
+      });
+    });
+
+    describe('buildForFixSurgeon', () => {
+      it('includes phase-3 session plan when phase===3 and file exists', async () => {
+        vi.mocked(access).mockResolvedValue(undefined);
+        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/progress/session-session-001.md');
+        expect(inputFiles).not.toContain('/tmp/progress/implementation-plan.md');
+      });
+
+      it('includes implementation-plan.md when phase===4 and file exists', async () => {
+        vi.mocked(access).mockResolvedValue(undefined);
+        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 4);
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/progress/implementation-plan.md');
+        expect(inputFiles).not.toContain('/tmp/progress/session-session-001.md');
+      });
+
+      it('excludes plan file from inputFiles when it does not exist', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).not.toContain('/tmp/progress/session-session-001.md');
+      });
+
+      it('includes analysis.md and scout-report.md when they exist', async () => {
+        vi.mocked(access).mockResolvedValue(undefined);
+        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).toContain('/tmp/progress/scout-report.md');
+      });
+
+      it('excludes analysis.md and scout-report.md when they do not exist', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).not.toContain('/tmp/progress/scout-report.md');
+      });
+    });
+
+    describe('buildForIntegrationChecker', () => {
+      it('includes baseline-results.json in inputFiles when it exists', async () => {
+        vi.mocked(access).mockResolvedValue(undefined);
+        await builder.buildForIntegrationChecker(42, '/tmp/worktree', '/tmp/progress');
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/worktree/.cadre/baseline-results.json');
+      });
+
+      it('excludes baseline-results.json from inputFiles when it does not exist', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForIntegrationChecker(42, '/tmp/worktree', '/tmp/progress');
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).not.toContain('/tmp/worktree/.cadre/baseline-results.json');
+      });
     });
   });
 

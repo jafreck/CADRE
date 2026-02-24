@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { atomicWriteJSON, ensureDir } from '../util/fs.js';
+import { atomicWriteJSON, ensureDir, exists } from '../util/fs.js';
 import type { CadreConfig } from '../config/schema.js';
 import type {
   AgentName,
@@ -142,6 +142,13 @@ export class ContextBuilder {
     if (siblingFiles && siblingFiles.length > 0) {
       payload.siblingFiles = siblingFiles;
     }
+    const inputFiles = [sessionPlanPath, ...relevantFiles];
+    if (await exists(join(progressDir, 'analysis.md'))) {
+      inputFiles.push(join(progressDir, 'analysis.md'));
+    }
+    if (await exists(join(progressDir, 'scout-report.md'))) {
+      inputFiles.push(join(progressDir, 'scout-report.md'));
+    }
     return this.writeContext(progressDir, 'code-writer', issueNumber, {
       agent: 'code-writer',
       issueNumber,
@@ -151,7 +158,7 @@ export class ContextBuilder {
       phase: 3,
       sessionId: session.id,
       config: { commands: this.config.commands },
-      inputFiles: [sessionPlanPath, ...relevantFiles],
+      inputFiles,
       outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload,
     });
@@ -199,6 +206,13 @@ export class ContextBuilder {
   ): Promise<string> {
     // Aggregate acceptance criteria from all steps in the session
     const acceptanceCriteria = session.steps.flatMap((s) => s.acceptanceCriteria);
+    const inputFiles = [diffPath, sessionPlanPath];
+    if (await exists(join(progressDir, 'analysis.md'))) {
+      inputFiles.push(join(progressDir, 'analysis.md'));
+    }
+    if (await exists(join(progressDir, 'scout-report.md'))) {
+      inputFiles.push(join(progressDir, 'scout-report.md'));
+    }
     return this.writeContext(progressDir, 'code-reviewer', issueNumber, {
       agent: 'code-reviewer',
       issueNumber,
@@ -208,7 +222,7 @@ export class ContextBuilder {
       phase: 3,
       sessionId: session.id,
       config: { commands: this.config.commands },
-      inputFiles: [diffPath, sessionPlanPath],
+      inputFiles,
       outputPath: join(progressDir, `review-${session.id}.md`),
       payload: {
         sessionId: session.id,
@@ -231,6 +245,19 @@ export class ContextBuilder {
     issueType: 'review' | 'test-failure' | 'build',
     phase: 3 | 4,
   ): Promise<string> {
+    const inputFiles = [feedbackPath, ...changedFiles];
+    const planFile = phase === 3
+      ? join(progressDir, `session-${sessionId}.md`)
+      : join(progressDir, 'implementation-plan.md');
+    if (await exists(planFile)) {
+      inputFiles.push(planFile);
+    }
+    if (await exists(join(progressDir, 'analysis.md'))) {
+      inputFiles.push(join(progressDir, 'analysis.md'));
+    }
+    if (await exists(join(progressDir, 'scout-report.md'))) {
+      inputFiles.push(join(progressDir, 'scout-report.md'));
+    }
     return this.writeContext(progressDir, 'fix-surgeon', issueNumber, {
       agent: 'fix-surgeon',
       issueNumber,
@@ -240,7 +267,7 @@ export class ContextBuilder {
       phase,
       sessionId,
       config: { commands: this.config.commands },
-      inputFiles: [feedbackPath, ...changedFiles],
+      inputFiles,
       outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload: {
         sessionId,
@@ -257,6 +284,11 @@ export class ContextBuilder {
     worktreePath: string,
     progressDir: string,
   ): Promise<string> {
+    const inputFiles = [worktreePath];
+    const baselinePath = join(worktreePath, '.cadre', 'baseline-results.json');
+    if (await exists(baselinePath)) {
+      inputFiles.push(baselinePath);
+    }
     return this.writeContext(progressDir, 'integration-checker', issueNumber, {
       agent: 'integration-checker',
       issueNumber,
@@ -265,7 +297,7 @@ export class ContextBuilder {
       worktreePath,
       phase: 4,
       config: { commands: this.config.commands },
-      inputFiles: [worktreePath],
+      inputFiles,
       outputPath: join(progressDir, 'integration-report.md'),
       payload: {
         commands: {
