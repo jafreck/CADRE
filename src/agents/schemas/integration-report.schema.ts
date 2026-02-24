@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const commandResultSchema = z.object({
   command: z.string(),
   exitCode: z.number(),
+  signal: z.string().nullable().optional(),
   output: z.string(),
   pass: z.boolean(),
 });

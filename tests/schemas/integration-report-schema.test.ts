@@ -29,6 +29,24 @@ describe('commandResultSchema', () => {
     const result = commandResultSchema.safeParse({ ...valid, exitCode: 1, pass: false });
     expect(result.success).toBe(true);
   });
+
+  it('should accept a CommandResult with a signal (killed by OS)', () => {
+    const result = commandResultSchema.safeParse({ ...valid, exitCode: -1, signal: 'SIGTERM', pass: false });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.signal).toBe('SIGTERM');
+  });
+
+  it('should accept a CommandResult with signal: null', () => {
+    const result = commandResultSchema.safeParse({ ...valid, signal: null });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.signal).toBeNull();
+  });
+
+  it('should accept a CommandResult without the signal field (backwards compat)', () => {
+    const result = commandResultSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.signal).toBeUndefined();
+  });
 });
 
 describe('integrationReportSchema', () => {

@@ -15,9 +15,9 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     let report = '';
 
     // Structured results for the cadre-json block appended at the end
-    let structuredBuildResult: { command: string; exitCode: number; output: string; pass: boolean } | null = null;
-    let structuredTestResult: { command: string; exitCode: number; output: string; pass: boolean } | null = null;
-    let structuredLintResult: { command: string; exitCode: number; output: string; pass: boolean } | null = null;
+    let structuredBuildResult: { command: string; exitCode: number; signal: string | null; output: string; pass: boolean } | null = null;
+    let structuredTestResult: { command: string; exitCode: number; signal: string | null; output: string; pass: boolean } | null = null;
+    let structuredLintResult: { command: string; exitCode: number; signal: string | null; output: string; pass: boolean } | null = null;
 
     // Read baseline results (null-safe: missing baseline treats all failures as regressions)
     const baselineResultsPath = join(ctx.worktree.path, '.cadre', 'baseline-results.json');
@@ -87,6 +87,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       structuredBuildResult = {
         command: ctx.config.commands.build ?? '',
         exitCode: buildResult.exitCode ?? -1,
+        signal: buildResult.signal ?? null,
         output: (buildResult.stdout + buildResult.stderr).slice(0, 500),
         pass: buildResult.exitCode === 0,
       };
@@ -128,6 +129,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       structuredTestResult = {
         command: ctx.config.commands.test ?? '',
         exitCode: testResult.exitCode ?? -1,
+        signal: testResult.signal ?? null,
         output: (testResult.stdout + testResult.stderr).slice(0, 500),
         pass: testResult.exitCode === 0,
       };
@@ -146,6 +148,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       structuredLintResult = {
         command: ctx.config.commands.lint ?? '',
         exitCode: lintResult.exitCode ?? -1,
+        signal: lintResult.signal ?? null,
         output: (lintResult.stdout + lintResult.stderr).slice(0, 500),
         pass: lintResult.exitCode === 0,
       };
@@ -172,8 +175,8 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
 
     // Write integration report with structured cadre-json block
     const cadreJson = {
-      buildResult: structuredBuildResult ?? { command: ctx.config.commands.build ?? '', exitCode: 0, output: '', pass: true },
-      testResult: structuredTestResult ?? { command: ctx.config.commands.test ?? '', exitCode: 0, output: '', pass: true },
+      buildResult: structuredBuildResult ?? { command: ctx.config.commands.build ?? '', exitCode: 0, signal: null, output: '', pass: true },
+      testResult: structuredTestResult ?? { command: ctx.config.commands.test ?? '', exitCode: 0, signal: null, output: '', pass: true },
       ...(structuredLintResult ? { lintResult: structuredLintResult } : {}),
       overallPass: uniqueRegressionFailures.length === 0,
       regressionFailures: uniqueRegressionFailures,
