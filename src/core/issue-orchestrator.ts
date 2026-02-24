@@ -110,13 +110,19 @@ export class IssueOrchestrator {
     );
     this.tokenTracker = new TokenTracker();
 
-    // Ensure we always have a NotificationManager so dispatch calls are unconditional.
-    this.notificationManager = notificationManager ?? new NotificationManager();
-
-    // Register IssueNotifier as a provider so issue comments go through the
-    // unified dispatch channel alongside webhooks / Slack / log providers.
+    // Create a fresh, private NotificationManager for this IssueOrchestrator so
+    // that IssueNotifier instances do not accumulate on the shared fleet-level
+    // manager across multiple issues.  The shared manager (if any) is reached via
+    // a lightweight forwarding provider, preserving webhook / Slack / log events
+    // without mutating the caller's provider list.
+    this.notificationManager = new NotificationManager();
     const notifier = new IssueNotifier(config, platform, logger);
     this.notificationManager.addProvider(notifier);
+    if (notificationManager) {
+      this.notificationManager.addProvider({
+        notify: (event) => notificationManager.dispatch(event),
+      });
+    }
 
     this.registry = new PhaseRegistry();
     this.registry.register(new AnalysisPhaseExecutor());
