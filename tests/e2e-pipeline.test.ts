@@ -90,75 +90,37 @@ const SYNTHETIC_SCOUT_REPORT = `# Scout Report
 
 const SYNTHETIC_IMPLEMENTATION_PLAN = `# Implementation Plan: Issue
 
-## Tasks
-
-### Task: task-001 - Implement core changes
-
-**Description:** Make the primary code changes required by the issue.
-**Files:** src/core/issue-orchestrator.ts
-**Dependencies:** none
-**Complexity:** moderate
-**Acceptance Criteria:**
-- Core changes implemented correctly
-
-### Task: task-002 - Add tests
-
-**Description:** Write tests for the changes.
-**Files:** tests/issue-orchestrator.test.ts
-**Dependencies:** task-001
-**Complexity:** simple
-**Acceptance Criteria:**
-- Tests cover new functionality
+\`\`\`cadre-json
+${JSON.stringify([
+  { id: 'task-001', name: 'Implement core changes', description: 'Make the primary code changes required by the issue.', files: ['src/core/issue-orchestrator.ts'], dependencies: [], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented correctly'] },
+  { id: 'task-002', name: 'Add tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], dependencies: ['task-001'], complexity: 'simple', acceptanceCriteria: ['Tests cover new functionality'] },
+])}
+\`\`\`
 `;
 
 const SYNTHETIC_REVIEW = `# Code Review
 
-**Verdict:** pass
-
-## Summary
-The implementation looks correct and follows existing patterns.
+\`\`\`cadre-json
+${JSON.stringify({ verdict: 'pass', issues: [], summary: 'The implementation looks correct and follows existing patterns.' })}
+\`\`\`
 `;
 
-const SYNTHETIC_PR_CONTENT = `---
-title: "Implement requested changes"
-labels: ["enhancement"]
----
+const SYNTHETIC_PR_CONTENT = `# PR Content
 
-## Summary
-
-This PR implements the changes requested in the issue.
+\`\`\`cadre-json
+${JSON.stringify({ title: 'Implement requested changes', body: '## Summary\n\nThis PR implements the changes requested in the issue.', labels: ['enhancement'] })}
+\`\`\`
 `;
 
 const THREE_TASK_PLAN = `# Implementation Plan: Issue
 
-## Tasks
-
-### Task: task-001 - Implement core changes
-
-**Description:** Make the primary code changes.
-**Files:** src/core/issue-orchestrator.ts
-**Dependencies:** none
-**Complexity:** moderate
-**Acceptance Criteria:**
-- Core changes implemented
-
-### Task: task-002 - Add tests
-
-**Description:** Write tests for the changes.
-**Files:** tests/issue-orchestrator.test.ts
-**Dependencies:** none
-**Complexity:** simple
-**Acceptance Criteria:**
-- Tests pass
-
-### Task: task-003 - Always blocked task
-
-**Description:** This task is configured to always fail in the test.
-**Files:** src/blocked.ts
-**Dependencies:** none
-**Complexity:** simple
-**Acceptance Criteria:**
-- Will never pass (for testing blocked-task behavior)
+\`\`\`cadre-json
+${JSON.stringify([
+  { id: 'task-001', name: 'Implement core changes', description: 'Make the primary code changes.', files: ['src/core/issue-orchestrator.ts'], dependencies: [], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented'] },
+  { id: 'task-002', name: 'Add tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['Tests pass'] },
+  { id: 'task-003', name: 'Always blocked task', description: 'This task is configured to always fail in the test.', files: ['src/blocked.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['Will never pass (for testing blocked-task behavior)'] },
+])}
+\`\`\`
 `;
 
 // ── E2E Launcher ──────────────────────────────────────────────────────────────

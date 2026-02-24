@@ -303,7 +303,7 @@ export class ReviewResponseOrchestrator {
           // Update the existing PR body with the pr-composer's output
           const prContentPath = join(progressDir, 'pr-content.md');
           try {
-            const resultParser = new ResultParser(this.logger);
+            const resultParser = new ResultParser();
             const prContent = await resultParser.parsePRContent(prContentPath);
             const newTitle = prContent.title
               ? `${prContent.title} (#${issueNumber})`

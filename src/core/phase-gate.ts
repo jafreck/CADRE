@@ -115,68 +115,40 @@ export class PlanningToImplementationGate implements PhaseGate {
       return fail(['implementation-plan.md is missing from the progress directory']);
     }
 
-    // Heuristic parse: split on task headings
-    const taskBlocks = planContent.split(/^#{2,3}\s+Task:\s+/m).slice(1);
+    // Primary: parse from cadre-json block
+    const cadreJsonMatch = planContent.match(/```cadre-json\s*\n([\s\S]*?)```/);
 
-    if (taskBlocks.length === 0) {
-      return fail(['implementation-plan.md contains no tasks']);
+    if (!cadreJsonMatch) {
+      return fail(['implementation-plan.md is missing a cadre-json block; the implementation-planner agent must emit a ```cadre-json``` fenced block containing a JSON array of task objects']);
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cadreJsonMatch[1].trim());
+    } catch {
+      return fail(['implementation-plan.md cadre-json block contains invalid JSON']);
+    }
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return fail(['implementation-plan.md cadre-json block contains no tasks']);
     }
 
     const tasks: ImplementationTask[] = [];
 
-    for (const block of taskBlocks) {
-      const headerLine = block.split('\n')[0].trim();
-      const headerMatch = headerLine.match(/^(task-\d+)\s*-\s*(.+)/);
-      const id = headerMatch?.[1] ?? `task-unknown-${tasks.length + 1}`;
-      const name = headerMatch?.[2]?.trim() ?? headerLine;
+    for (let i = 0; i < (parsed as unknown[]).length; i++) {
+      const t = (parsed as Record<string, unknown>[])[i];
+      const id = String(t['id'] ?? `task-unknown-${i + 1}`);
+      const name = String(t['name'] ?? id);
+      const description = String(t['description'] ?? '');
+      const files = Array.isArray(t['files']) ? (t['files'] as string[]) : [];
+      const dependencies = Array.isArray(t['dependencies']) ? (t['dependencies'] as string[]) : [];
+      const acceptanceCriteria = Array.isArray(t['acceptanceCriteria']) ? (t['acceptanceCriteria'] as string[]) : [];
 
-      const descMatch = block.match(/\*\*Description:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/s);
-      const description = descMatch?.[1]?.trim() ?? '';
+      if (!description) errors.push(`Task ${id} (${name}) is missing a description`);
+      if (files.length === 0) errors.push(`Task ${id} (${name}) does not list any files`);
+      if (acceptanceCriteria.length === 0) errors.push(`Task ${id} (${name}) has no acceptance criteria`);
 
-      const filesMatch = block.match(/\*\*Files:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/s);
-      const filesStr = filesMatch?.[1]?.trim() ?? '';
-      const files = filesStr
-        .split(/[,\n]/)
-        .map((f) => f.replace(/^[\s`*-]+|[\s`*]+$/g, '').trim())
-        .filter(Boolean);
-
-      const depsMatch = block.match(/\*\*Dependencies:\*\*\s*(.+?)(?=\n\*\*|\n#{2,}|$)/s);
-      const depsStr = depsMatch?.[1]?.trim() ?? 'none';
-      const dependencies =
-        depsStr.toLowerCase() === 'none'
-          ? []
-          : depsStr
-              .split(/[,\n]/)
-              .map((d) => d.replace(/^[\s`*-]+|[\s`*]+$/g, '').trim())
-              .filter(Boolean);
-
-      const criteriaMatch = block.match(/\*\*Acceptance Criteria:\*\*\s*([\s\S]*?)(?=\n\*\*|\n#{2,}|$)/);
-      const criteriaStr = criteriaMatch?.[1]?.trim() ?? '';
-      const acceptanceCriteria = criteriaStr
-        .split('\n')
-        .map((l) => l.replace(/^[\s*-]+/, '').trim())
-        .filter(Boolean);
-
-      // Validate this task
-      if (!description) {
-        errors.push(`Task ${id} (${name}) is missing a description`);
-      }
-      if (files.length === 0) {
-        errors.push(`Task ${id} (${name}) does not list any files`);
-      }
-      if (acceptanceCriteria.length === 0) {
-        errors.push(`Task ${id} (${name}) has no acceptance criteria`);
-      }
-
-      tasks.push({
-        id,
-        name,
-        description,
-        files,
-        dependencies,
-        complexity: 'moderate',
-        acceptanceCriteria,
-      });
+      tasks.push({ id, name, description, files, dependencies, complexity: 'moderate', acceptanceCriteria });
     }
 
     // Verify dependency DAG is acyclic
