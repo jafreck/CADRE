@@ -79,8 +79,8 @@ const SYNTHETIC_IMPLEMENTATION_PLAN = `# Implementation Plan: Issue
 
 \`\`\`cadre-json
 ${JSON.stringify([
-  { id: 'task-001', name: 'Implement core changes', description: 'Make the primary code changes required by the issue.', files: ['src/core/issue-orchestrator.ts'], dependencies: [], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented correctly'] },
-  { id: 'task-002', name: 'Add tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], dependencies: ['task-001'], complexity: 'simple', acceptanceCriteria: ['Tests cover new functionality'] },
+  { id: 'session-001', name: 'Implement core changes', rationale: 'Make the primary code changes required by the issue.', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Core implementation', description: 'Make the primary code changes.', files: ['src/core/issue-orchestrator.ts'], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented correctly'] }] },
+  { id: 'session-002', name: 'Add tests', rationale: 'Write tests for the changes.', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Write tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], complexity: 'simple', acceptanceCriteria: ['Tests cover new functionality'] }] },
 ])}
 \`\`\`
 `;
@@ -110,9 +110,9 @@ const THREE_TASK_PLAN = `# Implementation Plan: Issue
 
 \`\`\`cadre-json
 ${JSON.stringify([
-  { id: 'task-001', name: 'Implement core changes', description: 'Make the primary code changes.', files: ['src/core/issue-orchestrator.ts'], dependencies: [], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented'] },
-  { id: 'task-002', name: 'Add tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['Tests pass'] },
-  { id: 'task-003', name: 'Always blocked task', description: 'This task is configured to always fail in the test.', files: ['src/blocked.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['Will never pass (for testing blocked-task behavior)'] },
+  { id: 'session-001', name: 'Implement core changes', rationale: 'Make the primary code changes.', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Core implementation', description: 'Make the primary code changes.', files: ['src/core/issue-orchestrator.ts'], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented'] }] },
+  { id: 'session-002', name: 'Add tests', rationale: 'Write tests for the changes.', dependencies: [], steps: [{ id: 'session-002-step-001', name: 'Write tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], complexity: 'simple', acceptanceCriteria: ['Tests pass'] }] },
+  { id: 'session-003', name: 'Always blocked task', rationale: 'This task is configured to always fail in the test.', dependencies: [], steps: [{ id: 'session-003-step-001', name: 'Blocked step', description: 'This task is configured to always fail in the test.', files: ['src/blocked.ts'], complexity: 'simple', acceptanceCriteria: ['Will never pass (for testing blocked-task behavior)'] }] },
 ])}
 \`\`\`
 `;
@@ -341,7 +341,7 @@ describe('e2e pipeline', () => {
     let task001Calls = 0;
 
     launcher.addOverride(async (inv) => {
-      if (inv.agent === 'code-writer' && inv.taskId === 'task-001') {
+      if (inv.agent === 'code-writer' && inv.sessionId === 'session-001') {
         task001Calls++;
         if (task001Calls === 1) {
           return E2ELauncher.failResult(inv, 'Simulated first-attempt failure');
@@ -381,7 +381,7 @@ describe('e2e pipeline', () => {
         };
       }
       // task-003 code-writer always fails
-      if (inv.agent === 'code-writer' && inv.taskId === 'task-003') {
+      if (inv.agent === 'code-writer' && inv.sessionId === 'session-003') {
         return E2ELauncher.failResult(inv, 'Blocked task always fails');
       }
       return null;
@@ -395,7 +395,7 @@ describe('e2e pipeline', () => {
     // At least task-003 should be blocked in checkpoint state
     const cpState = checkpoint.getState();
     expect(cpState.blockedTasks.length).toBeGreaterThanOrEqual(1);
-    expect(cpState.blockedTasks).toContain('task-003');
+    expect(cpState.blockedTasks).toContain('session-003');
   });
 
   it('resume: phases 1 and 2 are skipped on second run with tokenUsage === 0', async () => {

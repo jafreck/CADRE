@@ -3,6 +3,7 @@ import { ContextBuilder } from '../src/agents/context-builder.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
 import type { ReviewThread } from '../src/platform/provider.js';
+import type { AgentSession } from '../src/agents/types.js';
 import { Logger } from '../src/logging/logger.js';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 
@@ -111,20 +112,25 @@ describe('ContextBuilder', () => {
   });
 
   it('should build context for code-writer', async () => {
-    const task = {
-      id: 'task-001',
+    const session: AgentSession = {
+      id: 'session-001',
       name: 'Fix login',
-      description: 'Fix the login handler',
-      files: ['src/auth/login.ts'],
+      rationale: 'Fix the login handler',
       dependencies: [],
-      complexity: 'simple' as const,
-      acceptanceCriteria: ['Login works'],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
     };
 
     const ctx = await builder.buildForCodeWriter(
       42,
       '/tmp/worktree',
-      task,
+      session,
       '/tmp/task-plan.md',
       ['src/auth/login.ts'],
       '/tmp/progress',
@@ -135,20 +141,25 @@ describe('ContextBuilder', () => {
   });
 
   it('should build context for code-reviewer', async () => {
-    const task = {
-      id: 'task-001',
+    const session: AgentSession = {
+      id: 'session-001',
       name: 'Fix login',
-      description: 'Fix the login handler',
-      files: ['src/auth/login.ts'],
+      rationale: 'Fix the login handler',
       dependencies: [],
-      complexity: 'simple' as const,
-      acceptanceCriteria: ['Login works'],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
     };
 
     const ctx = await builder.buildForCodeReviewer(
       42,
       '/tmp/worktree',
-      task,
+      session,
       '/tmp/diff.patch',
       '/tmp/task-plan.md',
       '/tmp/progress',
@@ -175,14 +186,19 @@ describe('ContextBuilder', () => {
   });
 
   describe('outputSchema inclusion', () => {
-    const task = {
-      id: 'task-001',
+    const task: AgentSession = {
+      id: 'session-001',
       name: 'Fix login',
-      description: 'Fix the login handler',
-      files: ['src/auth/login.ts'],
+      rationale: 'Fix the login handler',
       dependencies: [],
-      complexity: 'simple' as const,
-      acceptanceCriteria: ['Login works'],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
     };
 
     it('should include outputSchema for issue-analyst', async () => {
@@ -242,14 +258,19 @@ describe('ContextBuilder', () => {
   });
 
   describe('buildForCodeWriter siblingFiles', () => {
-    const task = {
-      id: 'task-001',
+    const task: AgentSession = {
+      id: 'session-001',
       name: 'Fix login',
-      description: 'Fix the login handler',
-      files: ['src/auth/login.ts'],
+      rationale: 'Fix the login handler',
       dependencies: [],
-      complexity: 'simple' as const,
-      acceptanceCriteria: ['Login works'],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
     };
 
     it('should include siblingFiles in payload when provided and non-empty', async () => {
@@ -274,25 +295,29 @@ describe('ContextBuilder', () => {
       expect(payload.siblingFiles).toBeUndefined();
     });
 
-    it('should always include taskId, files, and acceptanceCriteria in payload regardless of siblingFiles', async () => {
+    it('should always include sessionId and steps in payload regardless of siblingFiles', async () => {
       await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress', ['src/other.ts']);
       const ctx = captureWrittenContext();
       const payload = ctx.payload as Record<string, unknown>;
-      expect(payload.taskId).toBe(task.id);
-      expect(payload.files).toEqual(task.files);
-      expect(payload.acceptanceCriteria).toEqual(task.acceptanceCriteria);
+      expect(payload.sessionId).toBe(task.id);
+      expect(Array.isArray(payload.steps)).toBe(true);
     });
   });
 
   describe('outputSchema exclusions', () => {
-    const task = {
-      id: 'task-001',
+    const task: AgentSession = {
+      id: 'session-001',
       name: 'Fix login',
-      description: 'Fix the login handler',
-      files: ['src/auth/login.ts'],
+      rationale: 'Fix the login handler',
       dependencies: [],
-      complexity: 'simple' as const,
-      acceptanceCriteria: ['Login works'],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
     };
 
     it('should NOT include outputSchema for test-writer', async () => {

@@ -39,7 +39,7 @@ const VALID_SCOUT = `# Scout Report
 const VALID_PLAN = `# Implementation Plan
 
 \`\`\`cadre-json
-[{"id":"task-001","name":"First Task","description":"Do the first thing.","files":["src/core/first.ts"],"dependencies":[],"acceptanceCriteria":["It works"]}]
+[{"id":"session-001","name":"First Session","rationale":"Initial implementation","dependencies":[],"steps":[{"id":"session-001-step-001","name":"First Step","description":"Do the first thing.","files":["src/core/first.ts"],"complexity":"simple","acceptanceCriteria":["It works"]}]}]
 \`\`\`
 `;
 
@@ -186,12 +186,12 @@ describe('PlanningToImplementationGate', () => {
 
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('fail');
-    expect(result.errors.some((e) => e.includes('no tasks'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('no sessions'))).toBe(true);
   });
 
   it('should fail when a task is missing a description', async () => {
-    const task = { id: 'task-001', name: 'My Task', description: '', files: ['src/foo.ts'], dependencies: [], acceptanceCriteria: ['Works'] };
-    const plan = `\`\`\`cadre-json\n${JSON.stringify([task])}\n\`\`\``;
+    const session = { id: 'session-001', name: 'My Session', rationale: 'Test', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: '', files: ['src/foo.ts'], complexity: 'simple', acceptanceCriteria: ['Works'] }] };
+    const plan = `\`\`\`cadre-json\n${JSON.stringify([session])}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -200,8 +200,8 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should fail when a task has no files', async () => {
-    const task = { id: 'task-001', name: 'My Task', description: 'Do something.', files: [], dependencies: [], acceptanceCriteria: ['Works'] };
-    const plan = `\`\`\`cadre-json\n${JSON.stringify([task])}\n\`\`\``;
+    const session = { id: 'session-001', name: 'My Session', rationale: 'Test', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'Do something.', files: [], complexity: 'simple', acceptanceCriteria: ['Works'] }] };
+    const plan = `\`\`\`cadre-json\n${JSON.stringify([session])}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -210,8 +210,8 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should fail when a task has no acceptance criteria', async () => {
-    const task = { id: 'task-001', name: 'My Task', description: 'Do something.', files: ['src/foo.ts'], dependencies: [], acceptanceCriteria: [] };
-    const plan = `\`\`\`cadre-json\n${JSON.stringify([task])}\n\`\`\``;
+    const session = { id: 'session-001', name: 'My Session', rationale: 'Test', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'Do something.', files: ['src/foo.ts'], complexity: 'simple', acceptanceCriteria: [] }] };
+    const plan = `\`\`\`cadre-json\n${JSON.stringify([session])}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -220,11 +220,11 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should fail when tasks have a circular dependency', async () => {
-    const tasks = [
-      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/first.ts'], dependencies: ['task-002'], acceptanceCriteria: ['Works'] },
-      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/second.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Works'] },
+    const sessions = [
+      { id: 'session-001', name: 'First', rationale: 'First', dependencies: ['session-002'], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'Do first.', files: ['src/first.ts'], complexity: 'simple', acceptanceCriteria: ['Works'] }] },
+      { id: 'session-002', name: 'Second', rationale: 'Second', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'Do second.', files: ['src/second.ts'], complexity: 'simple', acceptanceCriteria: ['Works'] }] },
     ];
-    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(sessions)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
 
     const result = await gate.validate(makeContext(tempDir));
@@ -233,11 +233,11 @@ describe('PlanningToImplementationGate', () => {
   });
 
   it('should pass with multiple valid tasks and linear dependencies', async () => {
-    const tasks = [
-      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/first.ts'], dependencies: [], acceptanceCriteria: ['Works'] },
-      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/second.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Also works'] },
+    const sessions = [
+      { id: 'session-001', name: 'First', rationale: 'First session', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'Do first.', files: ['src/first.ts'], complexity: 'simple', acceptanceCriteria: ['Works'] }] },
+      { id: 'session-002', name: 'Second', rationale: 'Second session', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'Do second.', files: ['src/second.ts'], complexity: 'simple', acceptanceCriteria: ['Also works'] }] },
     ];
-    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(sessions)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
     await mkdir(join(worktreeDir, 'src'), { recursive: true });
     await writeFile(join(worktreeDir, 'src/first.ts'), '');
@@ -255,31 +255,31 @@ describe('PlanningToImplementationGate', () => {
     const result = await gate.validate(makeContext(tempDir, worktreeDir));
     expect(result.status).toBe('warn');
     expect(result.errors).toHaveLength(0);
-    expect(result.warnings.some((w) => w.includes('task-001') && w.includes('src/core/first.ts'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('session-001') && w.includes('src/core/first.ts'))).toBe(true);
   });
 
   it('should warn for every missing file across all tasks', async () => {
-    const tasks = [
-      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/first.ts'], dependencies: [], acceptanceCriteria: ['Works'] },
-      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/second.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Also works'] },
+    const sessions = [
+      { id: 'session-001', name: 'First', rationale: 'First', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'Do first.', files: ['src/first.ts'], complexity: 'simple', acceptanceCriteria: ['Works'] }] },
+      { id: 'session-002', name: 'Second', rationale: 'Second', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'Do second.', files: ['src/second.ts'], complexity: 'simple', acceptanceCriteria: ['Also works'] }] },
     ];
-    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(sessions)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
     // Create worktreeDir but no source files
 
     const result = await gate.validate(makeContext(tempDir, worktreeDir));
     expect(result.status).toBe('warn');
     expect(result.errors).toHaveLength(0);
-    expect(result.warnings.some((w) => w.includes('task-001') && w.includes('src/first.ts'))).toBe(true);
-    expect(result.warnings.some((w) => w.includes('task-002') && w.includes('src/second.ts'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('session-001') && w.includes('src/first.ts'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('session-002') && w.includes('src/second.ts'))).toBe(true);
   });
 
   it('should warn only for missing files when some exist and some do not', async () => {
-    const tasks = [
-      { id: 'task-001', name: 'First', description: 'Do first.', files: ['src/exists.ts'], dependencies: [], acceptanceCriteria: ['Works'] },
-      { id: 'task-002', name: 'Second', description: 'Do second.', files: ['src/missing.ts'], dependencies: ['task-001'], acceptanceCriteria: ['Also works'] },
+    const sessions = [
+      { id: 'session-001', name: 'First', rationale: 'First', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'Do first.', files: ['src/exists.ts'], complexity: 'simple', acceptanceCriteria: ['Works'] }] },
+      { id: 'session-002', name: 'Second', rationale: 'Second', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'Do second.', files: ['src/missing.ts'], complexity: 'simple', acceptanceCriteria: ['Also works'] }] },
     ];
-    const plan = `\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\``;
+    const plan = `\`\`\`cadre-json\n${JSON.stringify(sessions)}\n\`\`\``;
     await writeFile(join(tempDir, 'implementation-plan.md'), plan);
     await mkdir(join(worktreeDir, 'src'), { recursive: true });
     await writeFile(join(worktreeDir, 'src/exists.ts'), '');

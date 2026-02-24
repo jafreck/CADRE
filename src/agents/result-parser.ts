@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { extractCadreJson } from '../util/cadre-json.js';
 import type {
-  ImplementationTask,
+  AgentSession,
   AnalysisResult,
   ScoutReport,
   ReviewResult,
@@ -39,9 +39,9 @@ export class ResultParser {
   }
 
   /**
-   * Parse an implementation plan markdown into a list of ImplementationTasks.
+   * Parse an implementation plan markdown into a list of AgentSessions.
    */
-  async parseImplementationPlan(planPath: string): Promise<ImplementationTask[]> {
+  async parseImplementationPlan(planPath: string): Promise<AgentSession[]> {
     const content = await readFile(planPath, 'utf-8');
 
     const parsed = extractCadreJson(content);

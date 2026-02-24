@@ -87,7 +87,7 @@ export class Logger {
   private buildEntry(
     level: LogLevel,
     message: string,
-    context?: { issueNumber?: number; phase?: number; taskId?: string; data?: Record<string, unknown> },
+    context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> },
   ): LogEntry {
     return {
       timestamp: new Date().toISOString(),
@@ -98,19 +98,19 @@ export class Logger {
     };
   }
 
-  debug(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; data?: Record<string, unknown> }): void {
+  debug(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('debug', message, context));
   }
 
-  info(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; data?: Record<string, unknown> }): void {
+  info(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('info', message, context));
   }
 
-  warn(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; data?: Record<string, unknown> }): void {
+  warn(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('warn', message, context));
   }
 
-  error(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; data?: Record<string, unknown> }): void {
+  error(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('error', message, context));
   }
 

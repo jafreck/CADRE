@@ -14,26 +14,56 @@ describe('ResultParser', () => {
 
   describe('parseImplementationPlan', () => {
     it('should parse tasks from a cadre-json block', async () => {
-      const tasks = [
-        { id: 'task-001', name: 'Add timeout types', description: 'Add TypeScript types for timeout config', files: ['src/config/types.ts', 'src/config/schema.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['TimeoutConfig interface defined', 'Config validates positive integers'] },
-        { id: 'task-002', name: 'Implement middleware', description: 'Create timeout middleware', files: ['src/middleware/timeout.ts'], dependencies: ['task-001'], complexity: 'moderate', acceptanceCriteria: ['Middleware times out after configured duration', 'Returns 408 on timeout'] },
+      const sessions = [
+        {
+          id: 'session-001',
+          name: 'Add timeout types',
+          rationale: 'Required for type-safe config',
+          dependencies: [],
+          steps: [
+            {
+              id: 'session-001-step-001',
+              name: 'Add TypeScript types',
+              description: 'Add TypeScript types for timeout config',
+              files: ['src/config/types.ts', 'src/config/schema.ts'],
+              complexity: 'simple',
+              acceptanceCriteria: ['TimeoutConfig interface defined', 'Config validates positive integers'],
+            },
+          ],
+        },
+        {
+          id: 'session-002',
+          name: 'Implement middleware',
+          rationale: 'Add timeout handling',
+          dependencies: ['session-001'],
+          steps: [
+            {
+              id: 'session-002-step-001',
+              name: 'Create timeout middleware',
+              description: 'Create timeout middleware',
+              files: ['src/middleware/timeout.ts'],
+              complexity: 'moderate',
+              acceptanceCriteria: ['Middleware times out after configured duration', 'Returns 408 on timeout'],
+            },
+          ],
+        },
       ];
-      const content = `# Plan\n\n\`\`\`cadre-json\n${JSON.stringify(tasks)}\n\`\`\`\n`;
+      const content = `# Plan\n\n\`\`\`cadre-json\n${JSON.stringify(sessions)}\n\`\`\`\n`;
       vi.mocked(readFile).mockResolvedValue(content);
 
       const result = await parser.parseImplementationPlan('/tmp/plan.md');
 
       expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('task-001');
+      expect(result[0].id).toBe('session-001');
       expect(result[0].name).toBe('Add timeout types');
-      expect(result[0].files).toContain('src/config/types.ts');
-      expect(result[0].files).toContain('src/config/schema.ts');
+      expect(result[0].steps[0].files).toContain('src/config/types.ts');
+      expect(result[0].steps[0].files).toContain('src/config/schema.ts');
       expect(result[0].dependencies).toEqual([]);
-      expect(result[0].complexity).toBe('simple');
-      expect(result[0].acceptanceCriteria).toHaveLength(2);
-      expect(result[1].id).toBe('task-002');
-      expect(result[1].dependencies).toEqual(['task-001']);
-      expect(result[1].complexity).toBe('moderate');
+      expect(result[0].steps[0].complexity).toBe('simple');
+      expect(result[0].steps[0].acceptanceCriteria).toHaveLength(2);
+      expect(result[1].id).toBe('session-002');
+      expect(result[1].dependencies).toEqual(['session-001']);
+      expect(result[1].steps[0].complexity).toBe('moderate');
     });
 
     it('should throw when cadre-json block is missing', async () => {

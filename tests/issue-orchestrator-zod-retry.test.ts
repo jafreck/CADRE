@@ -141,20 +141,28 @@ vi.mock('../src/execution/retry.js', () => ({
 vi.mock('../src/execution/task-queue.js', () => {
   // selectNonOverlappingBatch is a static method on the TaskQueue class, so it must be
   // attached to the mock constructor function itself (not as a module-level export).
-  const TaskQueueMock = Object.assign(
-    vi.fn(() => ({
-      topologicalSort: vi.fn().mockReturnValue([]),
-      isComplete: mockIsComplete,
-      getReady: mockGetReady,
-      getCounts: vi.fn().mockReturnValue({ total: 1, completed: 0, blocked: 0 }),
-      restoreState: vi.fn(),
-      start: vi.fn(),
-      complete: vi.fn(),
-      markBlocked: vi.fn(),
-    })),
-    { selectNonOverlappingBatch: mockSelectNonOverlappingBatch },
-  );
-  return { TaskQueue: TaskQueueMock };
+  const QueueFactory = vi.fn(() => ({
+    topologicalSort: vi.fn().mockReturnValue([]),
+    isComplete: mockIsComplete,
+    getReady: mockGetReady,
+    getCounts: vi.fn().mockReturnValue({ total: 1, completed: 0, blocked: 0 }),
+    restoreState: vi.fn(),
+    start: vi.fn(),
+    complete: vi.fn(),
+    markBlocked: vi.fn(),
+  }));
+  const TaskQueueMock = Object.assign(QueueFactory, { selectNonOverlappingBatch: mockSelectNonOverlappingBatch });
+  const SessionQueueMock = Object.assign(vi.fn(() => ({
+    topologicalSort: vi.fn().mockReturnValue([]),
+    isComplete: mockIsComplete,
+    getReady: mockGetReady,
+    getCounts: vi.fn().mockReturnValue({ total: 1, completed: 0, blocked: 0 }),
+    restoreState: vi.fn(),
+    start: vi.fn(),
+    complete: vi.fn(),
+    markBlocked: vi.fn(),
+  })), { selectNonOverlappingBatch: mockSelectNonOverlappingBatch });
+  return { TaskQueue: TaskQueueMock, SessionQueue: SessionQueueMock };
 });
 
 vi.mock('../src/budget/token-tracker.js', () => ({
@@ -330,15 +338,20 @@ function makeMockLogger(): Logger {
   } as unknown as Logger;
 }
 
-/** Single task returned from parseImplementationPlan */
+/** Single session returned from parseImplementationPlan */
 const SAMPLE_TASK = {
-  id: 'task-001',
+  id: 'session-001',
   name: 'Fix login handler',
-  description: 'Implement timeout handling',
-  files: ['src/auth/login.ts'],
+  rationale: 'Implement timeout handling',
   dependencies: [],
-  complexity: 'simple' as const,
-  acceptanceCriteria: ['Timeout works'],
+  steps: [{
+    id: 'session-001-step-001',
+    name: 'Fix login handler step',
+    description: 'Implement timeout handling',
+    files: ['src/auth/login.ts'],
+    complexity: 'simple' as const,
+    acceptanceCriteria: ['Timeout works'],
+  }],
 };
 
 /**
@@ -487,7 +500,7 @@ describe('IssueOrchestrator – ZodError retry handling in executeTask', () => {
     expect(warnCall).toBeDefined();
     // Second arg is the metadata object – should contain taskId
     const meta = warnCall?.[1] as Record<string, unknown>;
-    expect(meta).toHaveProperty('taskId', 'task-001');
+    expect(meta).toHaveProperty('sessionId', 'session-001');
   });
 
   it('should NOT call logger.warn with validation message when parseReview throws a non-ZodError', async () => {

@@ -257,49 +257,67 @@ export class ReviewResponseOrchestrator {
         const threadTasks = activeThreads.map((thread, idx) => {
           const files = [...new Set(thread.comments.map((c) => c.path).filter(Boolean))];
           const description = thread.comments.map((c) => c.body).join('\n\n');
+          const sessionId = `session-${String(idx + 1).padStart(3, '0')}`;
           return {
-            id: `task-${String(idx + 1).padStart(3, '0')}`,
+            id: sessionId,
             name: `Address review comment${files.length ? ` in ${files[0]}` : ''}`,
-            description,
-            files: files.length ? files : [],
+            rationale: 'Address code review thread',
             dependencies: [] as string[],
-            complexity: 'simple' as const,
-            acceptanceCriteria: [
-              'Review comment addressed as described',
-              'Existing tests continue to pass',
-            ],
+            steps: [{
+              id: `${sessionId}-step-001`,
+              name: `Address review comment${files.length ? ` in ${files[0]}` : ''}`,
+              description,
+              files: files.length ? files : [],
+              complexity: 'simple' as const,
+              acceptanceCriteria: [
+                'Review comment addressed as described',
+                'Existing tests continue to pass',
+              ],
+            }],
           };
         });
 
         const commentTasks = actionableComments.map((comment, idx) => {
-          const taskIdx = activeThreads.length + idx + 1;
+          const sessionIdx = activeThreads.length + idx + 1;
+          const sessionId = `session-${String(sessionIdx).padStart(3, '0')}`;
           return {
-            id: `task-${String(taskIdx).padStart(3, '0')}`,
+            id: sessionId,
             name: `Address PR comment from ${comment.author}`,
-            description: comment.body,
-            files: [] as string[],
+            rationale: 'Address PR comment',
             dependencies: [] as string[],
-            complexity: 'simple' as const,
-            acceptanceCriteria: [
-              'PR comment addressed as described',
-              'Existing tests continue to pass',
-            ],
+            steps: [{
+              id: `${sessionId}-step-001`,
+              name: `Address PR comment from ${comment.author}`,
+              description: comment.body,
+              files: [] as string[],
+              complexity: 'simple' as const,
+              acceptanceCriteria: [
+                'PR comment addressed as described',
+                'Existing tests continue to pass',
+              ],
+            }],
           };
         });
 
         const reviewBodyTasks = actionableReviews.map((review, idx) => {
-          const taskIdx = activeThreads.length + actionableComments.length + idx + 1;
+          const sessionIdx = activeThreads.length + actionableComments.length + idx + 1;
+          const sessionId = `session-${String(sessionIdx).padStart(3, '0')}`;
           return {
-            id: `task-${String(taskIdx).padStart(3, '0')}`,
+            id: sessionId,
             name: `Address PR review from ${review.author}`,
-            description: review.body,
-            files: [] as string[],
+            rationale: 'Address PR review feedback',
             dependencies: [] as string[],
-            complexity: 'simple' as const,
-            acceptanceCriteria: [
-              'PR review feedback addressed as described',
-              'Existing tests continue to pass',
-            ],
+            steps: [{
+              id: `${sessionId}-step-001`,
+              name: `Address PR review from ${review.author}`,
+              description: review.body,
+              files: [] as string[],
+              complexity: 'simple' as const,
+              acceptanceCriteria: [
+                'PR review feedback addressed as described',
+                'Existing tests continue to pass',
+              ],
+            }],
           };
         });
 

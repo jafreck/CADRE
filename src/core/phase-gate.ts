@@ -1,13 +1,13 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
-import type { GateResult, ImplementationTask } from '../agents/types.js';
+import type { GateResult, AgentSession } from '../agents/types.js';
 import {
   analysisSchema,
   scoutReportSchema,
   integrationReportSchema,
 } from '../agents/schemas/index.js';
-import { TaskQueue } from '../execution/task-queue.js';
+import { SessionQueue } from '../execution/task-queue.js';
 import { extractCadreJson } from '../util/cadre-json.js';
 
 /** Context passed to every gate validator. */
@@ -126,9 +126,9 @@ export class AnalysisToPlanningGate implements PhaseGate {
  * before Phase 3 (Implementation) begins.
  *
  * Checks:
- * - Every task in `implementation-plan.md` has files, a description, and at
- *   least one acceptance criterion.
- * - The task dependency graph is acyclic (verified via TaskQueue).
+ * - Every session in `implementation-plan.md` has a rationale and at least one step.
+ * - Every step has files, a description, and at least one acceptance criterion.
+ * - The session dependency graph is acyclic (verified via SessionQueue).
  */
 export class PlanningToImplementationGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
@@ -146,46 +146,61 @@ export class PlanningToImplementationGate implements PhaseGate {
     const parsed = extractCadreJson(planContent);
 
     if (parsed === null) {
-      return fail(['implementation-plan.md is missing a cadre-json block; the implementation-planner agent must emit a ```cadre-json``` fenced block containing a JSON array of task objects. See the agent template for the required schema.']);
+      return fail(['implementation-plan.md is missing a cadre-json block; the implementation-planner agent must emit a ```cadre-json``` fenced block containing a JSON array of session objects. See the agent template for the required schema.']);
     }
 
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      return fail(['implementation-plan.md cadre-json block contains no tasks']);
+      return fail(['implementation-plan.md cadre-json block contains no sessions']);
     }
 
-    const tasks: ImplementationTask[] = [];
+    const sessions: AgentSession[] = [];
 
     for (let i = 0; i < (parsed as unknown[]).length; i++) {
-      const t = (parsed as Record<string, unknown>[])[i];
-      const id = String(t['id'] ?? `task-unknown-${i + 1}`);
-      const name = String(t['name'] ?? id);
-      const description = String(t['description'] ?? '');
-      const files = Array.isArray(t['files']) ? (t['files'] as string[]) : [];
-      const dependencies = Array.isArray(t['dependencies']) ? (t['dependencies'] as string[]) : [];
-      const acceptanceCriteria = Array.isArray(t['acceptanceCriteria']) ? (t['acceptanceCriteria'] as string[]) : [];
+      const s = (parsed as Record<string, unknown>[])[i];
+      const id = String(s['id'] ?? `session-unknown-${i + 1}`);
+      const name = String(s['name'] ?? id);
+      const rationale = String(s['rationale'] ?? '');
+      const dependencies = Array.isArray(s['dependencies']) ? (s['dependencies'] as string[]) : [];
+      const rawSteps = Array.isArray(s['steps']) ? (s['steps'] as Record<string, unknown>[]) : [];
 
-      if (!description) errors.push(`Task ${id} (${name}) is missing a description`);
-      if (files.length === 0) errors.push(`Task ${id} (${name}) does not list any files`);
-      if (acceptanceCriteria.length === 0) errors.push(`Task ${id} (${name}) has no acceptance criteria`);
+      if (!rationale) errors.push(`Session ${id} (${name}) is missing a rationale`);
+      if (rawSteps.length === 0) errors.push(`Session ${id} (${name}) has no steps`);
 
-      tasks.push({ id, name, description, files, dependencies, complexity: 'moderate', acceptanceCriteria });
+      const steps = rawSteps.map((step, si) => {
+        const stepId = String(step['id'] ?? `${id}-step-${si + 1}`);
+        const stepName = String(step['name'] ?? stepId);
+        const description = String(step['description'] ?? '');
+        const files = Array.isArray(step['files']) ? (step['files'] as string[]) : [];
+        const acceptanceCriteria = Array.isArray(step['acceptanceCriteria']) ? (step['acceptanceCriteria'] as string[]) : [];
+        const complexity = (step['complexity'] as 'simple' | 'moderate' | 'complex') ?? 'moderate';
+
+        if (!description) errors.push(`Session ${id}, Step ${stepId} (${stepName}) is missing a description`);
+        if (files.length === 0) errors.push(`Session ${id}, Step ${stepId} (${stepName}) does not list any files`);
+        if (acceptanceCriteria.length === 0) errors.push(`Session ${id}, Step ${stepId} (${stepName}) has no acceptance criteria`);
+
+        return { id: stepId, name: stepName, description, files, complexity, acceptanceCriteria };
+      });
+
+      sessions.push({ id, name, rationale, dependencies, steps });
     }
 
     // Verify dependency DAG is acyclic
     try {
-      new TaskQueue(tasks);
+      new SessionQueue(sessions);
     } catch (err) {
       errors.push(`Implementation plan has a dependency cycle: ${String(err)}`);
     }
 
     // Check that each file referenced in the plan exists under the worktree
-    for (const task of tasks) {
-      for (const filePath of task.files) {
-        const resolvedPath = join(context.worktreePath, filePath);
-        try {
-          await access(resolvedPath);
-        } catch {
-          warnings.push(`Task ${task.id}: file does not exist: ${filePath}`);
+    for (const session of sessions) {
+      for (const step of session.steps) {
+        for (const filePath of step.files) {
+          const resolvedPath = join(context.worktreePath, filePath);
+          try {
+            await access(resolvedPath);
+          } catch {
+            warnings.push(`Session ${session.id}, Step ${step.id}: file does not exist: ${filePath}`);
+          }
         }
       }
     }

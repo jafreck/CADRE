@@ -5,7 +5,7 @@ import type { CadreConfig } from '../config/schema.js';
 import type {
   AgentName,
   AgentContext,
-  ImplementationTask,
+  AgentSession,
 } from './types.js';
 import type { IssueDetail, ReviewThread } from '../platform/provider.js';
 import { Logger } from '../logging/logger.js';
@@ -129,16 +129,15 @@ export class ContextBuilder {
   async buildForCodeWriter(
     issueNumber: number,
     worktreePath: string,
-    task: ImplementationTask,
-    taskPlanPath: string,
+    session: AgentSession,
+    sessionPlanPath: string,
     relevantFiles: string[],
     progressDir: string,
     siblingFiles?: string[],
   ): Promise<string> {
     const payload: Record<string, unknown> = {
-      taskId: task.id,
-      files: task.files,
-      acceptanceCriteria: task.acceptanceCriteria,
+      sessionId: session.id,
+      steps: session.steps,
     };
     if (siblingFiles && siblingFiles.length > 0) {
       payload.siblingFiles = siblingFiles;
@@ -150,9 +149,9 @@ export class ContextBuilder {
       repository: this.config.repository,
       worktreePath,
       phase: 3,
-      taskId: task.id,
+      sessionId: session.id,
       config: { commands: this.config.commands },
-      inputFiles: [taskPlanPath, ...relevantFiles],
+      inputFiles: [sessionPlanPath, ...relevantFiles],
       outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload,
     });
@@ -164,9 +163,9 @@ export class ContextBuilder {
   async buildForTestWriter(
     issueNumber: number,
     worktreePath: string,
-    task: ImplementationTask,
+    session: AgentSession,
     changedFiles: string[],
-    taskPlanPath: string,
+    sessionPlanPath: string,
     progressDir: string,
   ): Promise<string> {
     return this.writeContext(progressDir, 'test-writer', issueNumber, {
@@ -176,12 +175,12 @@ export class ContextBuilder {
       repository: this.config.repository,
       worktreePath,
       phase: 3,
-      taskId: task.id,
+      sessionId: session.id,
       config: { commands: this.config.commands },
-      inputFiles: [...changedFiles, taskPlanPath],
+      inputFiles: [...changedFiles, sessionPlanPath],
       outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload: {
-        taskId: task.id,
+        sessionId: session.id,
         testFramework: this.detectTestFramework(),
       },
     });
@@ -193,11 +192,13 @@ export class ContextBuilder {
   async buildForCodeReviewer(
     issueNumber: number,
     worktreePath: string,
-    task: ImplementationTask,
+    session: AgentSession,
     diffPath: string,
-    taskPlanPath: string,
+    sessionPlanPath: string,
     progressDir: string,
   ): Promise<string> {
+    // Aggregate acceptance criteria from all steps in the session
+    const acceptanceCriteria = session.steps.flatMap((s) => s.acceptanceCriteria);
     return this.writeContext(progressDir, 'code-reviewer', issueNumber, {
       agent: 'code-reviewer',
       issueNumber,
@@ -205,13 +206,13 @@ export class ContextBuilder {
       repository: this.config.repository,
       worktreePath,
       phase: 3,
-      taskId: task.id,
+      sessionId: session.id,
       config: { commands: this.config.commands },
-      inputFiles: [diffPath, taskPlanPath],
-      outputPath: join(progressDir, `review-${task.id}.md`),
+      inputFiles: [diffPath, sessionPlanPath],
+      outputPath: join(progressDir, `review-${session.id}.md`),
       payload: {
-        taskId: task.id,
-        acceptanceCriteria: task.acceptanceCriteria,
+        sessionId: session.id,
+        acceptanceCriteria,
       },
       outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
     });
@@ -223,7 +224,7 @@ export class ContextBuilder {
   async buildForFixSurgeon(
     issueNumber: number,
     worktreePath: string,
-    taskId: string,
+    sessionId: string,
     feedbackPath: string,
     changedFiles: string[],
     progressDir: string,
@@ -237,12 +238,12 @@ export class ContextBuilder {
       repository: this.config.repository,
       worktreePath,
       phase,
-      taskId,
+      sessionId,
       config: { commands: this.config.commands },
       inputFiles: [feedbackPath, ...changedFiles],
       outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
       payload: {
-        taskId,
+        sessionId,
         issueType,
       },
     });
@@ -381,8 +382,8 @@ export class ContextBuilder {
     await ensureDir(contextsDir);
 
     const timestamp = Date.now();
-    const taskSuffix = context.taskId ? `-${context.taskId}` : '';
-    const filename = `${agent}${taskSuffix}-${timestamp}.json`;
+    const sessionSuffix = context.sessionId ? `-${context.sessionId}` : '';
+    const filename = `${agent}${sessionSuffix}-${timestamp}.json`;
     const contextPath = join(contextsDir, filename);
 
     await atomicWriteJSON(contextPath, context);

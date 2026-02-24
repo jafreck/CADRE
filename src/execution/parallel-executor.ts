@@ -43,7 +43,7 @@ export class ParallelExecutor {
 
           this.logger.debug(`Parallel executor: launching ${invocation.agent}`, {
             issueNumber: invocation.issueNumber,
-            taskId: invocation.taskId,
+            sessionId: invocation.sessionId,
           });
 
           return this.launcher.launchAgent(invocation, worktreePath);
