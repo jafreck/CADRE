@@ -24,11 +24,11 @@ function resolveAgentDir(
   config: Awaited<ReturnType<typeof loadConfig>>,
   overrideBackend?: string,
 ): string {
-  const backend = overrideBackend ?? config.agent?.backend ?? 'copilot';
+  const backend = overrideBackend ?? config.agent.backend;
   if (backend === 'claude') {
-    return config.agent?.claude.agentDir ?? '.claude/agents';
+    return config.agent.claude.agentDir;
   }
-  return config.agent!.copilot.agentDir;
+  return config.agent.copilot.agentDir;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   exec: vi.fn(),
@@ -11,29 +11,17 @@ import { platformValidator } from '../src/validation/platform-validator.js';
 const ok = { exitCode: 0, stdout: '/usr/local/bin/github-mcp-server', stderr: '', signal: null, timedOut: false } as const;
 const fail = { exitCode: 1, stdout: '', stderr: 'not found', signal: null, timedOut: false } as const;
 
-const makeGithubConfig = (token?: string): CadreConfig =>
-  ({
-    projectName: 'test-project',
+const makeGithubConfig = (token?: string) =>
+  makeRuntimeConfig({
     platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
-    github: token !== undefined ? { auth: { token } } : undefined,
-  }) as unknown as CadreConfig;
+    ...(token !== undefined ? { github: { auth: { token } } } : {}),
+  });
 
-const makeAzureConfig = (pat: string): CadreConfig =>
-  ({
-    projectName: 'test-project',
+const makeAzureConfig = (pat: string) =>
+  makeRuntimeConfig({
     platform: 'azure-devops',
-    repository: 'my-repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
     azureDevOps: { organization: 'myorg', project: 'myproject', auth: { pat } },
-  }) as unknown as CadreConfig;
+  });
 
 describe('validation-platform', () => {
   beforeEach(() => {

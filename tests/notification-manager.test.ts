@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotificationManager, createNotificationManager } from '../src/notifications/manager.js';
 import type { CadreEvent } from '../src/notifications/types.js';
-import type { CadreConfig, NotificationsConfig } from '../src/config/schema.js';
+import type { NotificationsConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/notifications/webhook-provider.js', () => ({
   WebhookProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
@@ -248,7 +249,7 @@ describe('createNotificationManager', () => {
   });
 
   it('should return a NotificationManager instance', () => {
-    const config = { notifications: makeConfig() } as unknown as CadreConfig;
+    const config = makeRuntimeConfig({ notifications: makeConfig() });
     const manager = createNotificationManager(config);
     expect(manager).toBeInstanceOf(NotificationManager);
   });
@@ -257,11 +258,11 @@ describe('createNotificationManager', () => {
     const webhookNotify = vi.fn().mockResolvedValue(undefined);
     MockWebhookProvider.mockImplementation(() => ({ notify: webhookNotify }));
 
-    const config = {
+    const config = makeRuntimeConfig({
       notifications: makeConfig({
         providers: [{ type: 'webhook', url: 'https://example.com/hook' }],
       }),
-    } as unknown as CadreConfig;
+    });
 
     const manager = createNotificationManager(config);
     await manager.dispatch(sampleEvent);

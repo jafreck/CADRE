@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   exec: vi.fn(),
@@ -13,47 +13,38 @@ import { exec } from '../src/util/process.js';
 import { exists } from '../src/util/fs.js';
 import { agentBackendValidator } from '../src/validation/agent-backend-validator.js';
 
-const makeConfig = (overrides: Partial<{ cliCommand: string; agentDir: string }> = {}): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
+const makeConfig = (overrides: Partial<{ cliCommand: string; agentDir: string }> = {}) =>
+  makeRuntimeConfig({
     copilot: {
       cliCommand: overrides.cliCommand ?? 'copilot',
+      model: 'claude-sonnet-4.6',
       agentDir: overrides.agentDir ?? '/tmp/agents',
-      timeout: 300000,
+      timeout: 300_000,
     },
-    // Mirrors what loadConfig always synthesizes
     agent: {
       backend: 'copilot' as const,
       copilot: { cliCommand: overrides.cliCommand ?? 'copilot', agentDir: overrides.agentDir ?? '/tmp/agents' },
-      claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+      claude: { cliCommand: 'claude', agentDir: '/tmp/.cadre/test-project/agents' },
     },
-  }) as unknown as CadreConfig;
+  });
 
 const makeConfigWithAgent = (
   backend: 'copilot' | 'claude',
   overrides: Partial<{ copilotCli: string; claudeCli: string; agentDir: string }> = {},
-): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
+) =>
+  makeRuntimeConfig({
     copilot: {
       cliCommand: 'copilot',
+      model: 'claude-sonnet-4.6',
       agentDir: overrides.agentDir ?? '/tmp/agents',
-      timeout: 300000,
+      timeout: 300_000,
     },
     agent: {
       backend,
       copilot: { cliCommand: overrides.copilotCli ?? 'copilot', agentDir: '/tmp/agents' },
       claude: { cliCommand: overrides.claudeCli ?? 'claude', agentDir: overrides.agentDir ?? '/tmp/agents' },
     },
-  }) as unknown as CadreConfig;
+  });
 
 describe('agentBackendValidator', () => {
   beforeEach(() => {

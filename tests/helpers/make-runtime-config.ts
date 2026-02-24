@@ -1,0 +1,70 @@
+import type { RuntimeConfig } from '../../src/config/loader.js';
+
+export function makeRuntimeConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
+  return {
+    projectName: 'test-project',
+    platform: 'github',
+    repository: 'owner/repo',
+    repoPath: '/tmp/test-repo',
+    stateDir: '/tmp/.cadre/test-project',
+    worktreeRoot: '/tmp/.cadre/test-project/worktrees',
+    baseBranch: 'main',
+    branchTemplate: 'cadre/issue-{issue}',
+    issues: { ids: [1] },
+    commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+    pullRequest: {
+      autoCreate: true,
+      draft: true,
+      labels: ['cadre-generated'],
+      reviewers: [],
+      linkIssue: true,
+    },
+    options: {
+      maxParallelIssues: 3,
+      maxParallelAgents: 3,
+      maxRetriesPerTask: 3,
+      dryRun: false,
+      resume: false,
+      invocationDelayMs: 0,
+      buildVerification: true,
+      testVerification: true,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
+      skipValidation: false,
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
+    },
+    commands: {},
+    copilot: {
+      cliCommand: 'copilot',
+      model: 'claude-sonnet-4.6',
+      agentDir: '/tmp/.cadre/test-project/agents',
+      timeout: 300_000,
+    },
+    environment: { inheritShellPath: true, extraPath: [] },
+    agent: {
+      backend: 'copilot',
+      copilot: {
+        cliCommand: 'copilot',
+        agentDir: '/tmp/.cadre/test-project/agents',
+      },
+      claude: {
+        cliCommand: 'claude',
+        agentDir: '/tmp/.cadre/test-project/agents',
+      },
+    },
+    issueUpdates: {
+      enabled: true,
+      onStart: true,
+      onPhaseComplete: false,
+      onComplete: true,
+      onFailed: true,
+      onBudgetWarning: true,
+    },
+    notifications: { enabled: false, providers: [] },
+    reviewResponse: { autoReplyOnResolved: false },
+    ...overrides,
+  } as RuntimeConfig;
+}

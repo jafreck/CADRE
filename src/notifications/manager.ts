@@ -1,5 +1,6 @@
 import type { CadreEvent } from '../logging/events.js';
-import type { CadreConfig, NotificationsConfig } from '../config/schema.js';
+import type { NotificationsConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { NotificationProvider } from './types.js';
 import { WebhookProvider } from './webhook-provider.js';
 import { SlackProvider } from './slack-provider.js';
@@ -47,6 +48,6 @@ export class NotificationManager {
   }
 }
 
-export function createNotificationManager(config: CadreConfig): NotificationManager {
+export function createNotificationManager(config: RuntimeConfig): NotificationManager {
   return new NotificationManager(config.notifications);
 }

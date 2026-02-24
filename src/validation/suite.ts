@@ -1,10 +1,10 @@
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { PreRunValidator } from './types.js';
 
 export class PreRunValidationSuite {
   constructor(private readonly validators: PreRunValidator[]) {}
 
-  async run(config: CadreConfig): Promise<boolean> {
+  async run(config: RuntimeConfig): Promise<boolean> {
     const results = await Promise.allSettled(
       this.validators.map((v) => v.validate(config).then((r) => ({ validator: v, result: r }))),
     );

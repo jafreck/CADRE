@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { AgentInvocation } from '../src/agents/types.js';
 
 vi.mock('../src/util/process.js', () => ({
@@ -59,15 +59,11 @@ function makeConfig(overrides: Partial<{
   timeout: number;
   extraPath: string[];
   claudeCli: string;
-}> = {}): CadreConfig {
-  return {
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
+}> = {}) {
+  return makeRuntimeConfig({
     copilot: {
       cliCommand: overrides.cliCommand ?? 'copilot',
+      model: 'claude-sonnet-4.6',
       agentDir: overrides.agentDir ?? '.github/agents',
       timeout: overrides.timeout ?? 300_000,
     },
@@ -81,13 +77,14 @@ function makeConfig(overrides: Partial<{
       },
       claude: {
         cliCommand: overrides.claudeCli ?? 'claude',
+        agentDir: overrides.agentDir ?? '.github/agents',
       },
     },
     environment: {
       inheritShellPath: true,
       extraPath: overrides.extraPath ?? [],
     },
-  } as unknown as CadreConfig;
+  });
 }
 
 function makeInvocation(overrides: Partial<AgentInvocation> = {}): AgentInvocation {
@@ -124,7 +121,7 @@ describe('AgentBackend interface', () => {
 
 describe('CopilotBackend', () => {
   let logger: ReturnType<typeof vi.fn>;
-  let config: CadreConfig;
+  let config: ReturnType<typeof makeConfig>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -359,7 +356,7 @@ describe('CopilotBackend', () => {
 
 describe('ClaudeBackend', () => {
   let logger: ReturnType<typeof vi.fn>;
-  let config: CadreConfig;
+  let config: ReturnType<typeof makeConfig>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -546,19 +543,13 @@ describe('ClaudeBackend', () => {
   });
 
   it('should default to "claude" CLI when config.agent.claude.cliCommand is absent', async () => {
-    const legacyConfig = {
-      projectName: 'test',
-      repository: 'owner/repo',
-      repoPath: '/tmp/repo',
-      baseBranch: 'main',
-      issues: { ids: [1] },
-      copilot: {
-        cliCommand: 'copilot',
-        agentDir: '.github/agents',
-        timeout: 300_000,
+    const legacyConfig = makeRuntimeConfig({
+      agent: {
+        backend: 'copilot',
+        copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
+        claude: { cliCommand: '', agentDir: '.github/agents' },
       },
-      environment: { inheritShellPath: true, extraPath: [] },
-    } as unknown as CadreConfig;
+    });
 
     const backend = new ClaudeBackend(legacyConfig, logger as never);
     setupSpawn(makeProcessResult());
@@ -570,7 +561,7 @@ describe('ClaudeBackend', () => {
 
 describe('parseTokenUsage (via invoke)', () => {
   let logger: ReturnType<typeof vi.fn>;
-  let config: CadreConfig;
+  let config: ReturnType<typeof makeConfig>;
 
   beforeEach(() => {
     vi.clearAllMocks();

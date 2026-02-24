@@ -1,4 +1,4 @@
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import type { Logger } from '../logging/logger.js';
 import type { CadreEvent } from '../logging/events.js';
@@ -12,14 +12,14 @@ import type { NotificationProvider } from '../notifications/types.js';
  * and receive events through a single dispatch channel.
  */
 export class IssueNotifier implements NotificationProvider {
-  private readonly updates: CadreConfig['issueUpdates'];
+  private readonly updates: RuntimeConfig['issueUpdates'];
 
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
   ) {
-    this.updates = config.issueUpdates ?? { enabled: false, onStart: false, onPhaseComplete: false, onComplete: false, onFailed: false, onBudgetWarning: false };
+    this.updates = config.issueUpdates;
   }
 
   /** Post a comment when an issue pipeline starts. */

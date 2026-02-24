@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
 import { writeFile, copyFile } from 'node:fs/promises';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { AgentInvocation, AgentResult } from './types.js';
 import { spawnProcess, stripVSCodeEnv, trackProcess, type ProcessResult } from '../util/process.js';
 import { exists, ensureDir } from '../util/fs.js';
@@ -22,7 +22,7 @@ export interface AgentBackend {
 function buildEnv(
   invocation: AgentInvocation,
   worktreePath: string,
-  config: CadreConfig,
+  config: RuntimeConfig,
 ): Record<string, string | undefined> {
   let env = { ...process.env };
 
@@ -129,14 +129,14 @@ export class CopilotBackend implements AgentBackend {
   private readonly defaultModel: string | undefined;
 
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly logger: Logger,
   ) {
     // Prefer config.agent.copilot settings, fall back to legacy config.copilot
-    this.cliCommand = config.agent?.copilot?.cliCommand ?? config.copilot.cliCommand;
-    this.agentDir = config.agent!.copilot.agentDir;
-    this.defaultTimeout = config.agent?.timeout ?? config.copilot.timeout;
-    this.defaultModel = config.agent?.model ?? config.copilot.model;
+    this.cliCommand = config.agent.copilot.cliCommand;
+    this.agentDir = config.agent.copilot.agentDir;
+    this.defaultTimeout = config.agent.timeout ?? config.copilot.timeout;
+    this.defaultModel = config.agent.model;
   }
 
   async init(): Promise<void> {
@@ -248,12 +248,12 @@ export class ClaudeBackend implements AgentBackend {
   private readonly defaultModel: string | undefined;
 
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly logger: Logger,
   ) {
-    this.cliCommand = config.agent?.claude?.cliCommand ?? 'claude';
-    this.defaultTimeout = config.agent?.timeout ?? config.copilot.timeout;
-    this.defaultModel = config.agent?.model;
+    this.cliCommand = config.agent.claude.cliCommand || 'claude';
+    this.defaultTimeout = config.agent.timeout ?? config.copilot.timeout;
+    this.defaultModel = config.agent.model;
   }
 
   async init(): Promise<void> {

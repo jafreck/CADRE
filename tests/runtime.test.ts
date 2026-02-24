@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock all heavy dependencies
 vi.mock('../src/logging/logger.js', () => ({
@@ -153,14 +153,9 @@ const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnTy
 const MockCheckpointManager = CheckpointManager as unknown as ReturnType<typeof vi.fn>;
 const mockExists = exists as unknown as ReturnType<typeof vi.fn>;
 
-function makeConfig(issueIds = [1]): CadreConfig {
-  return {
-    projectName: 'test-project',
-    platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
+function makeConfig(issueIds = [1]) {
+  return makeRuntimeConfig({
     stateDir: '/tmp/cadre-state',
-    baseBranch: 'main',
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: issueIds },
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
@@ -174,23 +169,20 @@ function makeConfig(issueIds = [1]): CadreConfig {
       invocationDelayMs: 0,
       buildVerification: false,
       testVerification: false,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
       skipValidation: true,
-    },
-    commands: {},
-    copilot: {
-      cliCommand: 'copilot',
-      model: 'claude-sonnet-4',
-      agentDir: '.github/agents',
-      timeout: 300000,
-      costOverrides: {},
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
     },
     agent: {
       backend: 'copilot',
       copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
       claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
     },
-    notifications: { enabled: false, providers: [] },
-  } as unknown as CadreConfig;
+  });
 }
 
 describe('CadreRuntime — NotificationManager wiring', () => {
@@ -269,7 +261,7 @@ describe('CadreRuntime — NotificationManager wiring', () => {
     };
     MockCreatePlatformProvider.mockReturnValue(mockProvider);
 
-    const config = { ...makeConfig(), issues: { query: { state: 'open' } } } as unknown as CadreConfig;
+    const config = makeRuntimeConfig({ ...makeConfig(), issues: { query: { state: 'open', limit: 10 } } });
     const runtime = new CadreRuntime(config);
     const result = await runtime.run();
 
@@ -348,7 +340,7 @@ describe('CadreRuntime — review-response routing', () => {
   });
 
   it('calls fleet.runReviewResponse() when respondToReviews is true', async () => {
-    const config = { ...makeConfig([1]), options: { ...makeConfig([1]).options, respondToReviews: true } } as unknown as CadreConfig;
+    const config = makeRuntimeConfig({ ...makeConfig([1]), options: { ...makeConfig([1]).options, respondToReviews: true } });
     const runtime = new CadreRuntime(config);
     await runtime.run();
 
