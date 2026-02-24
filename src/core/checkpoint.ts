@@ -284,6 +284,22 @@ export class CheckpointManager {
   }
 
   /**
+   * Remove the given phase IDs from completedPhases so they will be
+   * re-executed on the next run.
+   *
+   * Used by the review-response orchestrator to force phases 3–5 to re-run
+   * against the new review-response implementation plan instead of being
+   * silently skipped because the prior pipeline run already completed them.
+   */
+  async resetPhases(phaseIds: number[]): Promise<void> {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+    this.state.completedPhases = this.state.completedPhases.filter(
+      (p) => !phaseIds.includes(p),
+    );
+    await this.save();
+  }
+
+  /**
    * Check if a task was already completed.
    */
   isTaskCompleted(taskId: string): boolean {
