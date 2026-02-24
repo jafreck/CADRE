@@ -46,8 +46,8 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
 
   const resultParser = {
     parseImplementationPlan: vi.fn().mockResolvedValue([
-      { id: 'task-001', name: 'Task 1', dependencies: [] },
-      { id: 'task-002', name: 'Task 2', dependencies: ['task-001'] },
+      { id: 'session-001', name: 'Session 1', rationale: 'r', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'd', files: ['src/a.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },
+      { id: 'session-002', name: 'Session 2', rationale: 'r', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'd', files: ['src/b.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },
     ]),
   };
 
@@ -195,7 +195,7 @@ describe('PlanningPhaseExecutor', () => {
       expect(
         (ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info,
       ).toHaveBeenCalledWith(
-        expect.stringContaining('2 tasks'),
+        expect.stringContaining('2 sessions'),
         expect.objectContaining({ issueNumber: 42, phase: 2 }),
       );
     });
@@ -227,14 +227,14 @@ describe('PlanningPhaseExecutor', () => {
         parseImplementationPlan: vi.fn().mockResolvedValue([]),
       };
       const ctx = makeCtx({ services: { resultParser: resultParser } as never });
-      await expect(executor.execute(ctx)).rejects.toThrow('Implementation plan produced zero tasks');
+      await expect(executor.execute(ctx)).rejects.toThrow('Implementation plan produced zero sessions');
     });
 
     it('should throw if the dependency graph has a cycle', async () => {
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue([
-          { id: 'task-001', name: 'Task 1', dependencies: ['task-002'] },
-          { id: 'task-002', name: 'Task 2', dependencies: ['task-001'] },
+          { id: 'session-001', name: 'Session 1', rationale: 'r', dependencies: ['session-002'], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'd', files: ['src/a.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },
+          { id: 'session-002', name: 'Session 2', rationale: 'r', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'd', files: ['src/b.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },
         ]),
       };
       const ctx = makeCtx({ services: { resultParser: resultParser } as never });

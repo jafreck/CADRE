@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
-import { TaskQueue } from '../execution/task-queue.js';
+import { SessionQueue } from '../execution/task-queue.js';
 
 export class PlanningPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 2;
@@ -33,26 +33,26 @@ export class PlanningPhaseExecutor implements PhaseExecutor {
 
     // Validate the plan
     const planPath = join(ctx.io.progressDir, 'implementation-plan.md');
-    const tasks = await ctx.services.resultParser.parseImplementationPlan(planPath);
+    const sessions = await ctx.services.resultParser.parseImplementationPlan(planPath);
 
-    if (tasks.length === 0) {
+    if (sessions.length === 0) {
       throw new Error(
-        'Implementation plan produced zero tasks. ' +
-        'The implementation-planner agent did not emit a valid `cadre-json` block or any parseable task sections. ' +
+        'Implementation plan produced zero sessions. ' +
+        'The implementation-planner agent did not emit a valid `cadre-json` block or any parseable session sections. ' +
         `Check ${join(ctx.io.progressDir, 'implementation-plan.md')} — the agent must output a ` +
-        '```cadre-json``` fenced block containing a JSON array of task objects (see agent template for schema).',
+        '```cadre-json``` fenced block containing a JSON array of session objects (see agent template for schema).',
       );
     }
 
     // Validate dependency graph is acyclic
     try {
-      const queue = new TaskQueue(tasks);
+      const queue = new SessionQueue(sessions);
       queue.topologicalSort();
     } catch (err) {
       throw new Error(`Invalid implementation plan: ${err}`);
     }
 
-    ctx.services.logger.info(`Plan validated: ${tasks.length} tasks`, {
+    ctx.services.logger.info(`Plan validated: ${sessions.length} sessions`, {
       issueNumber: ctx.issue.number,
       phase: 2,
     });

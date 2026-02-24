@@ -37,8 +37,8 @@ describe('implementation-planner.md template', () => {
       expect(content).toMatch(/implementation-plan\.md/i);
     });
 
-    it('should describe task IDs with task-XXX pattern', () => {
-      expect(content).toMatch(/task-\d{3}|task-XXX/i);
+    it('should describe session IDs with session-XXX pattern', () => {
+      expect(content).toMatch(/session-\d{3}|session-XXX/i);
     });
 
     it('should describe dependencies field', () => {
@@ -53,11 +53,10 @@ describe('implementation-planner.md template', () => {
       expect(content).toMatch(/[Aa]cceptance [Cc]riteria/);
     });
 
-    it('should specify the exact ImplementationTask interface fields', () => {
-      expect(content).toMatch(/\*\*Description:\*\*|\*\*Description\*\*:|\bDescription:/);
-      expect(content).toMatch(/\*\*Files:\*\*|\*\*Files\*\*:|\bFiles:/);
-      expect(content).toMatch(/\*\*Dependencies:\*\*|\*\*Dependencies\*\*:|\bDependencies:/);
-      expect(content).toMatch(/\*\*Complexity:\*\*|\*\*Complexity\*\*:|\bComplexity:/);
+    it('should specify session and step schema fields', () => {
+      expect(content).toMatch(/rationale/i);
+      expect(content).toMatch(/steps/i);
+      expect(content).toMatch(/sessionId|session-001/i);
     });
   });
 
@@ -94,19 +93,18 @@ describe('implementation-planner.md template', () => {
       expect(content).toMatch(/[Ee]xample/);
     });
 
-    it('example should contain a task-001 heading', () => {
-      expect(content).toMatch(/task-001/);
+    it('example should contain a session-001 id', () => {
+      expect(content).toMatch(/session-001/);
     });
 
-    it('example should include Description, Files, Dependencies, Complexity, and Acceptance Criteria', () => {
-      expect(content).toMatch(/\*\*Description:\*\*|\*\*Description\*\*:/);
-      expect(content).toMatch(/\*\*Files:\*\*|\*\*Files\*\*:/);
-      expect(content).toMatch(/\*\*Dependencies:\*\*|\*\*Dependencies\*\*:/);
-      expect(content).toMatch(/\*\*Complexity:\*\*|\*\*Complexity\*\*:/);
-      expect(content).toMatch(/\*\*Acceptance Criteria:\*\*|\*\*Acceptance Criteria\*\*:/);
+    it('example should include rationale, steps, complexity, and acceptanceCriteria fields', () => {
+      expect(content).toMatch(/"rationale"/);
+      expect(content).toMatch(/"steps"/);
+      expect(content).toMatch(/"complexity"/);
+      expect(content).toMatch(/"acceptanceCriteria"/);
     });
 
-    it('example should include at least one test file path in a Files list', () => {
+    it('example should include at least one test file path in a files list', () => {
       expect(content).toMatch(/tests\/[^\s,]+\.test\.ts/);
     });
   });

@@ -150,14 +150,17 @@ vi.mock('../src/execution/retry.js', () => ({
   })),
 }));
 
+const mockSessionQueueInstance = {
+  topologicalSort: vi.fn().mockReturnValue([]),
+  isComplete: vi.fn().mockReturnValue(true),
+  getReady: vi.fn().mockReturnValue([]),
+  getCounts: vi.fn().mockReturnValue({ total: 0, completed: 0, blocked: 0 }),
+  restoreState: vi.fn(),
+};
+
 vi.mock('../src/execution/task-queue.js', () => ({
-  TaskQueue: vi.fn(() => ({
-    topologicalSort: vi.fn().mockReturnValue([]),
-    isComplete: vi.fn().mockReturnValue(true),
-    getReady: vi.fn().mockReturnValue([]),
-    getCounts: vi.fn().mockReturnValue({ total: 0, completed: 0, blocked: 0 }),
-    restoreState: vi.fn(),
-  })),
+  TaskQueue: vi.fn(() => mockSessionQueueInstance),
+  SessionQueue: vi.fn(() => mockSessionQueueInstance),
   // static method:
   selectNonOverlappingBatch: vi.fn().mockReturnValue([]),
 }));
@@ -404,13 +407,18 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     // Phase 2 (executePlanning) validates the plan and requires at least one task
     mockResultParserParsePlan.mockResolvedValue([
       {
-        id: 'task-001',
-        name: 'Task 1',
-        description: 'Do something',
-        files: ['src/foo.ts'],
+        id: 'session-001',
+        name: 'Session 1',
+        rationale: 'Do something',
         dependencies: [],
-        complexity: 'simple',
-        acceptanceCriteria: ['It works'],
+        steps: [{
+          id: 'session-001-step-001',
+          name: 'Step 1',
+          description: 'Do something',
+          files: ['src/foo.ts'],
+          complexity: 'simple',
+          acceptanceCriteria: ['It works'],
+        }],
       },
     ]);
 

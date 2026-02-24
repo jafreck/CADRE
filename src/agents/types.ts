@@ -126,8 +126,8 @@ export interface AgentInvocation {
   issueNumber: number;
   /** Current pipeline phase. */
   phase: number;
-  /** Optional task ID (for Implementation phase). */
-  taskId?: string;
+  /** Optional session ID (for Implementation phase). */
+  sessionId?: string;
   /** Path to the context JSON file the agent should read. */
   contextPath: string;
   /** Expected output path(s). */
@@ -162,23 +162,38 @@ export interface AgentResult {
   error?: string;
 }
 
-/** An implementation task parsed from the planner's output. */
-export interface ImplementationTask {
-  /** Unique task ID (e.g. "task-001"). */
+/** A discrete unit of work within an agent session. */
+export interface AgentStep {
+  /** Unique step ID (e.g. "session-001-step-001"). */
   id: string;
-  /** Human-readable task name. */
+  /** Human-readable step name. */
   name: string;
-  /** Description of what needs to change. */
+  /** Description of what this step changes and why. */
   description: string;
   /** Source files to modify or create. */
   files: string[];
-  /** IDs of tasks that must complete before this one. */
-  dependencies: string[];
-  /** Complexity estimate. */
+  /** Complexity estimate for this step. */
   complexity: 'simple' | 'moderate' | 'complex';
-  /** Acceptance criteria. */
+  /** Testable acceptance criteria. */
   acceptanceCriteria: string[];
 }
+
+/** A single code-writer agent invocation, containing an ordered list of steps. */
+export interface AgentSession {
+  /** Unique session ID (e.g. "session-001"). */
+  id: string;
+  /** Short human-readable label. */
+  name: string;
+  /** Why these steps are grouped together. */
+  rationale: string;
+  /** Session IDs that must complete before this session starts. */
+  dependencies: string[];
+  /** Ordered steps to execute within this session. */
+  steps: AgentStep[];
+}
+
+/** @deprecated Use AgentSession */
+export type ImplementationTask = AgentSession;
 
 /** Parsed analysis output. */
 export interface AnalysisResult {
@@ -261,7 +276,7 @@ export interface AgentContext {
   repository: string;
   worktreePath: string;
   phase: number;
-  taskId?: string;
+  sessionId?: string;
   config: {
     commands: {
       install?: string;

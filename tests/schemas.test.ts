@@ -134,13 +134,18 @@ describe('scoutReportSchema', () => {
 // ---------------------------------------------------------------------------
 describe('implementationTaskSchema', () => {
   const validTask = {
-    id: 'task-001',
+    id: 'session-001',
     name: 'Add feature',
-    description: 'Detailed description',
-    files: ['src/feature.ts'],
+    rationale: 'Needed for productivity',
     dependencies: [],
-    complexity: 'simple' as const,
-    acceptanceCriteria: ['Should work'],
+    steps: [{
+      id: 'session-001-step-001',
+      name: 'Add feature step',
+      description: 'Detailed description',
+      files: ['src/feature.ts'],
+      complexity: 'simple' as const,
+      acceptanceCriteria: ['Should work'],
+    }],
   };
 
   it('should accept a valid ImplementationTask', () => {
@@ -149,7 +154,8 @@ describe('implementationTaskSchema', () => {
   });
 
   it('should reject an unknown complexity value', () => {
-    const result = implementationTaskSchema.safeParse({ ...validTask, complexity: 'extreme' });
+    const invalid = { ...validTask, steps: [{ ...validTask.steps[0], complexity: 'extreme' }] };
+    const result = implementationTaskSchema.safeParse(invalid);
     expect(result.success).toBe(false);
   });
 
@@ -160,15 +166,17 @@ describe('implementationTaskSchema', () => {
   });
 
   it('should reject when acceptanceCriteria field is missing', () => {
-    const { acceptanceCriteria: _a, ...without } = validTask;
-    const result = implementationTaskSchema.safeParse(without);
+    const { acceptanceCriteria: _a, ...withoutAc } = validTask.steps[0];
+    const invalid = { ...validTask, steps: [withoutAc] };
+    const result = implementationTaskSchema.safeParse(invalid);
     expect(result.success).toBe(false);
   });
 
   it('should accept all valid complexity values', () => {
     const complexities = ['simple', 'moderate', 'complex'] as const;
     for (const complexity of complexities) {
-      const result = implementationTaskSchema.safeParse({ ...validTask, complexity });
+      const invalid = { ...validTask, steps: [{ ...validTask.steps[0], complexity }] };
+      const result = implementationTaskSchema.safeParse(invalid);
       expect(result.success).toBe(true);
     }
   });
@@ -176,13 +184,18 @@ describe('implementationTaskSchema', () => {
 
 describe('implementationPlanSchema', () => {
   const validTask = {
-    id: 'task-001',
+    id: 'session-001',
     name: 'Add feature',
-    description: 'Detailed description',
-    files: ['src/feature.ts'],
+    rationale: 'Needed for productivity',
     dependencies: [],
-    complexity: 'simple' as const,
-    acceptanceCriteria: ['Should work'],
+    steps: [{
+      id: 'session-001-step-001',
+      name: 'Add feature step',
+      description: 'Detailed description',
+      files: ['src/feature.ts'],
+      complexity: 'simple' as const,
+      acceptanceCriteria: ['Should work'],
+    }],
   };
 
   it('should accept an empty plan array', () => {
@@ -193,13 +206,14 @@ describe('implementationPlanSchema', () => {
   it('should accept a plan with multiple valid tasks', () => {
     const result = implementationPlanSchema.safeParse([
       validTask,
-      { ...validTask, id: 'task-002', name: 'Second task' },
+      { ...validTask, id: 'session-002', name: 'Second session', steps: [{ ...validTask.steps[0], id: 'session-002-step-001' }] },
     ]);
     expect(result.success).toBe(true);
   });
 
   it('should reject a plan containing an invalid task', () => {
-    const result = implementationPlanSchema.safeParse([{ ...validTask, complexity: 'invalid' }]);
+    const invalid = { ...validTask, steps: [{ ...validTask.steps[0], complexity: 'invalid' }] };
+    const result = implementationPlanSchema.safeParse([invalid]);
     expect(result.success).toBe(false);
   });
 });

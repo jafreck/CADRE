@@ -92,7 +92,7 @@ function makeInvocation(overrides: Partial<AgentInvocation> = {}): AgentInvocati
     agent: 'code-writer',
     issueNumber: 42,
     phase: 3,
-    taskId: 'task-001',
+    sessionId: 'session-001',
     contextPath: '/tmp/worktree/.cadre/issues/42/contexts/ctx.json',
     outputPath: '/tmp/worktree/.cadre/issues/42/outputs/result.md',
     ...overrides,
@@ -280,21 +280,21 @@ describe('CopilotBackend', () => {
     expect(opts.env?.['CADRE_PHASE']).toBe('3');
   });
 
-  it('should set CADRE_TASK_ID env var when taskId is provided', async () => {
+  it('should set CADRE_SESSION_ID env var when taskId is provided', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    await backend.invoke(makeInvocation({ taskId: 'task-007' }), '/tmp/worktree');
+    await backend.invoke(makeInvocation({ sessionId: 'session-007' }), '/tmp/worktree');
     const [, , opts] = mockSpawnProcess.mock.calls[0];
-    expect(opts.env?.['CADRE_TASK_ID']).toBe('task-007');
+    expect(opts.env?.['CADRE_SESSION_ID']).toBe('session-007');
   });
 
-  it('should not set CADRE_TASK_ID env var when taskId is absent', async () => {
-    vi.stubEnv('CADRE_TASK_ID', undefined as unknown as string);
+  it('should not set CADRE_SESSION_ID env var when taskId is absent', async () => {
+    vi.stubEnv('CADRE_SESSION_ID', undefined as unknown as string);
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    await backend.invoke(makeInvocation({ taskId: undefined }), '/tmp/worktree');
+    await backend.invoke(makeInvocation({ sessionId: undefined }), '/tmp/worktree');
     const [, , opts] = mockSpawnProcess.mock.calls[0];
-    expect(opts.env?.['CADRE_TASK_ID']).toBeUndefined();
+    expect(opts.env?.['CADRE_SESSION_ID']).toBeUndefined();
     vi.unstubAllEnvs();
   });
 
@@ -510,12 +510,12 @@ describe('ClaudeBackend', () => {
     expect(opts.env?.['CADRE_PHASE']).toBe('4');
   });
 
-  it('should set CADRE_TASK_ID env var when taskId is provided', async () => {
+  it('should set CADRE_SESSION_ID env var when taskId is provided', async () => {
     const backend = new ClaudeBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    await backend.invoke(makeInvocation({ taskId: 'task-abc' }), '/tmp/worktree');
+    await backend.invoke(makeInvocation({ sessionId: 'session-abc' }), '/tmp/worktree');
     const [, , opts] = mockSpawnProcess.mock.calls[0];
-    expect(opts.env?.['CADRE_TASK_ID']).toBe('task-abc');
+    expect(opts.env?.['CADRE_SESSION_ID']).toBe('session-abc');
   });
 
   it('should call trackProcess on the spawned process', async () => {

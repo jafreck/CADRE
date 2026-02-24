@@ -29,7 +29,7 @@ export class SerialExecutor {
 
       this.logger.debug(`Serial executor: launching ${invocation.agent} (${i + 1}/${invocations.length})`, {
         issueNumber: invocation.issueNumber,
-        taskId: invocation.taskId,
+        sessionId: invocation.sessionId,
       });
 
       const result = await this.launcher.launchAgent(invocation, worktreePath);

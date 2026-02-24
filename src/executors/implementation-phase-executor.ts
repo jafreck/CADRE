@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
-import type { ImplementationTask } from '../agents/types.js';
-import { TaskQueue } from '../execution/task-queue.js';
+import type { AgentSession } from '../agents/types.js';
+import { SessionQueue } from '../execution/task-queue.js';
 import { exists } from '../util/fs.js';
 import { execShell } from '../util/process.js';
 
@@ -13,33 +13,32 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
   async execute(ctx: PhaseContext): Promise<string> {
     const planPath = join(ctx.io.progressDir, 'implementation-plan.md');
-    const tasks = await ctx.services.resultParser.parseImplementationPlan(planPath);
-
-    // Create task queue and restore checkpoint state
-    const queue = new TaskQueue(tasks);
+    const sessions = await ctx.services.resultParser.parseImplementationPlan(planPath);
+    // Create session queue and restore checkpoint state
+    const queue = new SessionQueue(sessions);
     const cpState = ctx.io.checkpoint.getState();
     queue.restoreState(cpState.completedTasks, cpState.blockedTasks);
 
     const maxParallel = ctx.config.options.maxParallelAgents;
 
     while (!queue.isComplete()) {
-      const readyTasks = queue.getReady();
-      if (readyTasks.length === 0) {
-        ctx.services.logger.warn('No ready tasks but queue not complete — possible deadlock', {
+      const readySessions = queue.getReady();
+      if (readySessions.length === 0) {
+        ctx.services.logger.warn('No ready sessions but queue not complete — possible deadlock', {
           issueNumber: ctx.issue.number,
         });
         break;
       }
 
       // Select non-overlapping batch
-      const batch = TaskQueue.selectNonOverlappingBatch(readyTasks, maxParallel);
-      ctx.services.logger.info(`Implementation batch: ${batch.map((t) => t.id).join(', ')}`, {
+      const batch = SessionQueue.selectNonOverlappingBatch(readySessions, maxParallel);
+      ctx.services.logger.info(`Implementation batch: ${batch.map((s) => s.id).join(', ')}`, {
         issueNumber: ctx.issue.number,
         phase: 3,
       });
 
-      // Process batch (tasks can run concurrently if they don't share files)
-      const batchPromises = batch.map((task) => this.executeTask(task, queue, ctx));
+      // Process batch (sessions can run concurrently if they don't share files)
+      const batchPromises = batch.map((session) => this.executeSession(session, queue, ctx));
       await Promise.all(batchPromises);
 
       await ctx.callbacks.updateProgress();
@@ -47,44 +46,53 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
     const counts = queue.getCounts();
     ctx.services.logger.info(
-      `Implementation complete: ${counts.completed}/${counts.total} tasks (${counts.blocked} blocked)`,
+      `Implementation complete: ${counts.completed}/${counts.total} sessions (${counts.blocked} blocked)`,
       { issueNumber: ctx.issue.number, phase: 3 },
     );
 
     if (counts.blocked > 0 && counts.completed === 0) {
-      throw new Error('All implementation tasks blocked');
+      throw new Error('All implementation sessions blocked');
     }
 
     return planPath;
   }
 
-  private async executeTask(task: ImplementationTask, queue: TaskQueue, ctx: PhaseContext): Promise<void> {
-    if (ctx.io.checkpoint.isTaskCompleted(task.id)) {
-      queue.complete(task.id);
+  private async executeSession(session: AgentSession, queue: SessionQueue, ctx: PhaseContext): Promise<void> {
+    if (ctx.io.checkpoint.isTaskCompleted(session.id)) {
+      queue.complete(session.id);
       return;
     }
 
-    queue.start(task.id);
-    await ctx.io.checkpoint.startTask(task.id);
-    await ctx.io.progressWriter.appendEvent(`Task ${task.id} started: ${task.name}`);
+    queue.start(session.id);
+    await ctx.io.checkpoint.startTask(session.id);
+    await ctx.io.progressWriter.appendEvent(`Session ${session.id} started: ${session.name}`);
 
     const maxRetries = ctx.config.options.maxRetriesPerTask;
 
     const retryResult = await ctx.services.retryExecutor.execute({
       fn: async (attempt) => {
         ctx.callbacks.checkBudget();
-        // 1. Write task plan slice
-        const taskPlanPath = join(ctx.io.progressDir, `task-${task.id}.md`);
-        const taskPlanContent = this.buildTaskPlanSlice(task);
-        await writeFile(taskPlanPath, taskPlanContent, 'utf-8');
+        // 1. Write session plan slice
+        const sessionPlanPath = join(ctx.io.progressDir, `session-${session.id}.md`);
+        const sessionPlanContent = this.buildSessionPlanSlice(session);
+        await writeFile(sessionPlanPath, sessionPlanContent, 'utf-8');
 
-        // 2. Launch code-writer
+        // Collect union of all step files for this session
+        const sessionFileSet = new Set<string>();
+        for (const step of session.steps) {
+          for (const f of step.files) {
+            sessionFileSet.add(f);
+          }
+        }
+        const sessionFileList = Array.from(sessionFileSet);
+
+        // 2. Launch code-writer (receives entire session with all steps)
         const writerContextPath = await ctx.services.contextBuilder.buildForCodeWriter(
           ctx.issue.number,
           ctx.worktree.path,
-          task,
-          taskPlanPath,
-          task.files.map((f) => join(ctx.worktree.path, f)),
+          session,
+          sessionPlanPath,
+          sessionFileList.map((f) => join(ctx.worktree.path, f)),
           ctx.io.progressDir,
         );
 
@@ -93,7 +101,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             agent: 'code-writer',
             issueNumber: ctx.issue.number,
             phase: 3,
-            taskId: task.id,
+            sessionId: session.id,
             contextPath: writerContextPath,
             outputPath: ctx.worktree.path,
           },
@@ -107,7 +115,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           throw new Error(`Code writer failed: ${writerResult.error}`);
         }
 
-        // 2.5. Per-task build check (optional)
+        // 2.5. Per-session build check (optional) — runs once after all steps complete
         if (ctx.config.commands.build && ctx.config.options.perTaskBuildCheck) {
           let buildResult = await execShell(ctx.config.commands.build, {
             cwd: ctx.worktree.path,
@@ -119,15 +127,14 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             round < ctx.config.options.maxBuildFixRounds && buildResult.exitCode !== 0;
             round++
           ) {
-            const buildFailurePath = join(ctx.io.progressDir, `build-failure-${task.id}-${round}.txt`);
+            const buildFailurePath = join(ctx.io.progressDir, `build-failure-${session.id}-${round}.txt`);
             await writeFile(buildFailurePath, buildResult.stderr + buildResult.stdout, 'utf-8');
-
             const buildFixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
               ctx.issue.number,
               ctx.worktree.path,
-              task.id,
+              session.id,
               buildFailurePath,
-              task.files.map((f) => join(ctx.worktree.path, f)),
+              sessionFileList.map((f) => join(ctx.worktree.path, f)),
               ctx.io.progressDir,
               'build',
               3,
@@ -138,7 +145,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 agent: 'fix-surgeon',
                 issueNumber: ctx.issue.number,
                 phase: 3,
-                taskId: task.id,
+                sessionId: session.id,
                 contextPath: buildFixContextPath,
                 outputPath: ctx.worktree.path,
               },
@@ -159,14 +166,14 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           }
         }
 
-        // 3. Launch test-writer
+        // 3. Launch test-writer (once per session, after all steps are done)
         const changedFiles = await ctx.io.commitManager.getChangedFiles();
         const testWriterContextPath = await ctx.services.contextBuilder.buildForTestWriter(
           ctx.issue.number,
           ctx.worktree.path,
-          task,
+          session,
           changedFiles.map((f) => join(ctx.worktree.path, f)),
-          taskPlanPath,
+          sessionPlanPath,
           ctx.io.progressDir,
         );
 
@@ -175,7 +182,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             agent: 'test-writer',
             issueNumber: ctx.issue.number,
             phase: 3,
-            taskId: task.id,
+            sessionId: session.id,
             contextPath: testWriterContextPath,
             outputPath: ctx.worktree.path,
           },
@@ -185,15 +192,15 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         ctx.callbacks.recordTokens('test-writer', testResult.tokenUsage);
         ctx.callbacks.checkBudget();
 
-        // 4. Commit code-writer + test-writer output so getTaskDiff() reflects this task's changes
+        // 4. Commit code-writer + test-writer output so getTaskDiff() reflects this session's changes
         await ctx.io.commitManager.commit(
-          `wip: ${task.name} (attempt ${attempt})`,
+          `wip: ${session.name} (attempt ${attempt})`,
           ctx.issue.number,
           'feat',
         );
 
         // 5. Launch code-reviewer
-        const diffPath = join(ctx.io.progressDir, `diff-${task.id}.patch`);
+        const diffPath = join(ctx.io.progressDir, `diff-${session.id}.patch`);
         const rawDiff = await ctx.io.commitManager.getTaskDiff();
         const diff = truncateDiff(rawDiff, 200_000);
         await writeFile(diffPath, diff, 'utf-8');
@@ -201,9 +208,9 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         const reviewerContextPath = await ctx.services.contextBuilder.buildForCodeReviewer(
           ctx.issue.number,
           ctx.worktree.path,
-          task,
+          session,
           diffPath,
-          taskPlanPath,
+          sessionPlanPath,
           ctx.io.progressDir,
         );
 
@@ -212,9 +219,9 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             agent: 'code-reviewer',
             issueNumber: ctx.issue.number,
             phase: 3,
-            taskId: task.id,
+            sessionId: session.id,
             contextPath: reviewerContextPath,
-            outputPath: join(ctx.io.progressDir, `review-${task.id}.md`),
+            outputPath: join(ctx.io.progressDir, `review-${session.id}.md`),
           },
           ctx.worktree.path,
         );
@@ -224,7 +231,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
         // 6. Check review verdict
         if (reviewResult.success) {
-          const reviewPath = join(ctx.io.progressDir, `review-${task.id}.md`);
+          const reviewPath = join(ctx.io.progressDir, `review-${session.id}.md`);
           if (await exists(reviewPath)) {
             let review;
             try {
@@ -234,7 +241,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
                 ctx.services.logger.warn(`Review validation failed (will retry): ${msg}`, {
                   issueNumber: ctx.issue.number,
-                  taskId: task.id,
+                  sessionId: session.id,
                 });
               }
               throw err;
@@ -244,7 +251,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
                 ctx.issue.number,
                 ctx.worktree.path,
-                task.id,
+                session.id,
                 reviewPath,
                 changedFiles.map((f) => join(ctx.worktree.path, f)),
                 ctx.io.progressDir,
@@ -257,7 +264,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                   agent: 'fix-surgeon',
                   issueNumber: ctx.issue.number,
                   phase: 3,
-                  taskId: task.id,
+                  sessionId: session.id,
                   contextPath: fixContextPath,
                   outputPath: ctx.worktree.path,
                 },
@@ -277,43 +284,53 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         return true;
       },
       maxAttempts: maxRetries,
-      description: `Task ${task.id}: ${task.name}`,
+      description: `Session ${session.id}: ${session.name}`,
     });
 
     ctx.callbacks.checkBudget();
 
     if (retryResult.success) {
-      queue.complete(task.id);
-      await ctx.io.checkpoint.completeTask(task.id);
-      await ctx.io.progressWriter.appendEvent(`Task ${task.id} completed`);
+      queue.complete(session.id);
+      await ctx.io.checkpoint.completeTask(session.id);
+      await ctx.io.progressWriter.appendEvent(`Session ${session.id} completed`);
 
-      // Commit task
+      // Commit session
       await ctx.io.commitManager.commit(
-        `implement ${task.name}`,
+        `implement ${session.name}`,
         ctx.issue.number,
         'feat',
       );
     } else {
-      queue.markBlocked(task.id);
-      await ctx.io.checkpoint.blockTask(task.id);
-      await ctx.io.progressWriter.appendEvent(`Task ${task.id} blocked: ${retryResult.error}`);
+      queue.markBlocked(session.id);
+      await ctx.io.checkpoint.blockTask(session.id);
+      await ctx.io.progressWriter.appendEvent(`Session ${session.id} blocked: ${retryResult.error}`);
     }
   }
 
-  private buildTaskPlanSlice(task: ImplementationTask): string {
-    return [
-      `# Task: ${task.id} - ${task.name}`,
+  private buildSessionPlanSlice(session: AgentSession): string {
+    const lines = [
+      `# Session: ${session.id} - ${session.name}`,
       '',
-      `**Description:** ${task.description}`,
-      `**Files:** ${task.files.join(', ')}`,
-      `**Dependencies:** ${task.dependencies.length === 0 ? 'none' : task.dependencies.join(', ')}`,
-      `**Complexity:** ${task.complexity}`,
-      `**Acceptance Criteria:**`,
-      ...task.acceptanceCriteria.map((c) => `- ${c}`),
-    ].join('\n');
+      `**Rationale:** ${session.rationale}`,
+      `**Dependencies:** ${session.dependencies.length === 0 ? 'none' : session.dependencies.join(', ')}`,
+      '',
+      `## Steps`,
+    ];
+
+    for (const step of session.steps) {
+      lines.push('');
+      lines.push(`### ${step.id}: ${step.name}`);
+      lines.push(`**Description:** ${step.description}`);
+      lines.push(`**Files:** ${step.files.join(', ')}`);
+      lines.push(`**Complexity:** ${step.complexity}`);
+      lines.push(`**Acceptance Criteria:**`);
+      for (const c of step.acceptanceCriteria) {
+        lines.push(`- ${c}`);
+      }
+    }
+
+    return lines.join('\n');
   }
-
-
 }
 
 function truncateDiff(diff: string, maxChars: number): string {

@@ -4,8 +4,8 @@ export type { AnalysisResult } from './analysis.schema.js';
 export { scoutReportSchema } from './scout-report.schema.js';
 export type { ScoutReport } from './scout-report.schema.js';
 
-export { implementationTaskSchema, implementationPlanSchema } from './implementation-plan.schema.js';
-export type { ImplementationTask, ImplementationPlan } from './implementation-plan.schema.js';
+export { agentStepSchema, agentSessionSchema, implementationTaskSchema, implementationPlanSchema } from './implementation-plan.schema.js';
+export type { AgentStep, AgentSession, ImplementationTask, ImplementationPlan } from './implementation-plan.schema.js';
 
 export { reviewIssueSchema, reviewSchema } from './review.schema.js';
 export type { ReviewIssue, ReviewResult } from './review.schema.js';

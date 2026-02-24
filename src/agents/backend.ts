@@ -31,8 +31,8 @@ function buildEnv(
   env['CADRE_ISSUE_NUMBER'] = String(invocation.issueNumber);
   env['CADRE_WORKTREE_PATH'] = worktreePath;
   env['CADRE_PHASE'] = String(invocation.phase);
-  if (invocation.taskId) {
-    env['CADRE_TASK_ID'] = invocation.taskId;
+  if (invocation.sessionId) {
+    env['CADRE_SESSION_ID'] = invocation.sessionId;
   }
 
   if (config.environment.extraPath.length > 0) {
@@ -97,7 +97,7 @@ async function writeAgentLog(
       `=== Agent: ${invocation.agent} ===`,
       `=== Issue: #${invocation.issueNumber} ===`,
       `=== Phase: ${invocation.phase} ===`,
-      invocation.taskId ? `=== Task: ${invocation.taskId} ===` : '',
+      invocation.sessionId ? `=== Session: ${invocation.sessionId} ===` : '',
       `=== Started: ${new Date(startTime).toISOString()} ===`,
       `=== Duration: ${Date.now() - startTime}ms ===`,
       `=== Exit Code: ${processResult.exitCode} ===`,
@@ -149,13 +149,13 @@ export class CopilotBackend implements AgentBackend {
     await ensureDir(logDir);
 
     const timestamp = Date.now();
-    const taskSuffix = invocation.taskId ? `-${invocation.taskId}` : '';
-    const logFile = join(logDir, `${invocation.agent}${taskSuffix}-${timestamp}.log`);
+    const sessionSuffix = invocation.sessionId ? `-${invocation.sessionId}` : '';
+    const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${timestamp}.log`);
 
     this.logger.info(`Launching agent (copilot): ${invocation.agent}`, {
       issueNumber: invocation.issueNumber,
       phase: invocation.phase,
-      taskId: invocation.taskId,
+      sessionId: invocation.sessionId,
     });
 
     const prompt = `Read your context file at: ${invocation.contextPath}`;
@@ -200,7 +200,7 @@ export class CopilotBackend implements AgentBackend {
       this.logger.info(`Agent ${invocation.agent} completed in ${duration}ms`, {
         issueNumber: invocation.issueNumber,
         phase: invocation.phase,
-        taskId: invocation.taskId,
+        sessionId: invocation.sessionId,
         data: { tokenUsage, outputExists },
       });
     } else {
@@ -211,7 +211,7 @@ export class CopilotBackend implements AgentBackend {
         {
           issueNumber: invocation.issueNumber,
           phase: invocation.phase,
-          taskId: invocation.taskId,
+          sessionId: invocation.sessionId,
           data: { stderr: processResult.stderr.slice(0, 500) },
         },
       );
@@ -266,13 +266,13 @@ export class ClaudeBackend implements AgentBackend {
     await ensureDir(logDir);
 
     const timestamp = Date.now();
-    const taskSuffix = invocation.taskId ? `-${invocation.taskId}` : '';
-    const logFile = join(logDir, `${invocation.agent}${taskSuffix}-${timestamp}.log`);
+    const sessionSuffix = invocation.sessionId ? `-${invocation.sessionId}` : '';
+    const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${timestamp}.log`);
 
     this.logger.info(`Launching agent (claude): ${invocation.agent}`, {
       issueNumber: invocation.issueNumber,
       phase: invocation.phase,
-      taskId: invocation.taskId,
+      sessionId: invocation.sessionId,
     });
 
     const prompt = `Read your context file at: ${invocation.contextPath}`;
@@ -309,14 +309,14 @@ export class ClaudeBackend implements AgentBackend {
       this.logger.info(`Agent ${invocation.agent} completed in ${duration}ms`, {
         issueNumber: invocation.issueNumber,
         phase: invocation.phase,
-        taskId: invocation.taskId,
+        sessionId: invocation.sessionId,
         data: { tokenUsage, outputExists },
       });
     } else {
       this.logger.error(`Agent ${invocation.agent} failed (exit: ${processResult.exitCode}, timeout: ${processResult.timedOut})`, {
         issueNumber: invocation.issueNumber,
         phase: invocation.phase,
-        taskId: invocation.taskId,
+        sessionId: invocation.sessionId,
         data: { stderr: processResult.stderr.slice(0, 500) },
       });
     }

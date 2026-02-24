@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { ImplementationPhaseExecutor } from '../src/executors/implementation-phase-executor.js';
 import { BudgetExceededError } from '../src/core/issue-orchestrator.js';
 import type { PhaseContext } from '../src/core/phase-executor.js';
-import type { AgentResult, ImplementationTask } from '../src/agents/types.js';
+import type { AgentResult, AgentSession } from '../src/agents/types.js';
 
 vi.mock('../src/util/fs.js', () => ({
   exists: vi.fn().mockResolvedValue(false),
@@ -21,15 +21,20 @@ import { exists } from '../src/util/fs.js';
 import { writeFile } from 'node:fs/promises';
 import { execShell } from '../src/util/process.js';
 
-function makeTask(id: string, deps: string[] = [], files: string[] = []): ImplementationTask {
+function makeSession(id: string, deps: string[] = [], files: string[] = []): AgentSession {
   return {
     id,
-    name: `Task ${id}`,
-    description: `Description for ${id}`,
-    files: files.length ? files : [`src/${id}.ts`],
+    name: `Session ${id}`,
+    rationale: `Rationale for ${id}`,
     dependencies: deps,
-    complexity: 'simple' as const,
-    acceptanceCriteria: ['criterion 1'],
+    steps: [{
+      id: `${id}-step-001`,
+      name: `Step 1 of ${id}`,
+      description: `Description for ${id}`,
+      files: files.length ? files : [`src/${id}.ts`],
+      complexity: 'simple' as const,
+      acceptanceCriteria: ['criterion 1'],
+    }],
   };
 }
 
@@ -78,7 +83,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const resultParser = {
-    parseImplementationPlan: vi.fn().mockResolvedValue([makeTask('task-001')]),
+    parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
     parseReview: vi.fn().mockResolvedValue({ verdict: 'approved' }),
   };
 
@@ -200,7 +205,7 @@ describe('ImplementationPhaseExecutor', () => {
 
     it('should restore checkpoint state before processing tasks', async () => {
       const checkpoint = {
-        getState: vi.fn().mockReturnValue({ completedTasks: ['task-001'], blockedTasks: [], currentPhase: 3 }),
+        getState: vi.fn().mockReturnValue({ completedTasks: ['session-001'], blockedTasks: [], currentPhase: 3 }),
         isTaskCompleted: vi.fn().mockReturnValue(false),
         startTask: vi.fn().mockResolvedValue(undefined),
         completeTask: vi.fn().mockResolvedValue(undefined),
@@ -225,7 +230,7 @@ describe('ImplementationPhaseExecutor', () => {
           agent: 'code-writer',
           issueNumber: 42,
           phase: 3,
-          taskId: 'task-001',
+          sessionId: 'session-001',
         }),
         '/tmp/worktree',
       );
@@ -241,7 +246,7 @@ describe('ImplementationPhaseExecutor', () => {
           agent: 'test-writer',
           issueNumber: 42,
           phase: 3,
-          taskId: 'task-001',
+          sessionId: 'session-001',
         }),
         '/tmp/worktree',
       );
@@ -257,7 +262,7 @@ describe('ImplementationPhaseExecutor', () => {
           agent: 'code-reviewer',
           issueNumber: 42,
           phase: 3,
-          taskId: 'task-001',
+          sessionId: 'session-001',
         }),
         '/tmp/worktree',
       );
@@ -276,7 +281,7 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
       const calls = (ctx.io.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
       expect(calls[0][0]).toMatch(/^wip:/);
-      expect(calls[1][0]).toBe('implement Task task-001');
+      expect(calls[1][0]).toBe('implement Session session-001');
     });
 
     it('should mark task complete in checkpoint on success', async () => {
@@ -284,7 +289,7 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
       expect(
         (ctx.io.checkpoint as never as { completeTask: ReturnType<typeof vi.fn> }).completeTask,
-      ).toHaveBeenCalledWith('task-001');
+      ).toHaveBeenCalledWith('session-001');
     });
 
     it('should record tokens for code-writer, test-writer, and code-reviewer', async () => {
@@ -306,12 +311,12 @@ describe('ImplementationPhaseExecutor', () => {
       );
     });
 
-    it('should write task plan slice to progressDir/task-{id}.md', async () => {
+    it('should write session plan slice to progressDir/session-{id}.md', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
-        join('/tmp/progress', 'task-task-001.md'),
-        expect.stringContaining('# Task: task-001'),
+        join('/tmp/progress', 'session-session-001.md'),
+        expect.stringContaining('# Session: session-001'),
         'utf-8',
       );
     });
@@ -320,7 +325,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
-        join('/tmp/progress', 'diff-task-001.patch'),
+        join('/tmp/progress', 'diff-session-001.patch'),
         expect.any(String),
         'utf-8',
       );
@@ -331,14 +336,14 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
       expect(
         (ctx.io.progressWriter as never as { appendEvent: ReturnType<typeof vi.fn> }).appendEvent,
-      ).toHaveBeenCalledWith(expect.stringContaining('task-001 started'));
+      ).toHaveBeenCalledWith(expect.stringContaining('session-001 started'));
       expect(
         (ctx.io.progressWriter as never as { appendEvent: ReturnType<typeof vi.fn> }).appendEvent,
-      ).toHaveBeenCalledWith(expect.stringContaining('task-001 completed'));
+      ).toHaveBeenCalledWith(expect.stringContaining('session-001 completed'));
     });
 
     it('should not throw if some tasks complete and some are blocked (sequential)', async () => {
-      const tasks = [makeTask('task-001'), makeTask('task-002', ['task-001'])];
+      const tasks = [makeSession('session-001'), makeSession('session-002', ['session-001'])];
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue(tasks),
         parseReview: vi.fn().mockResolvedValue({ verdict: 'approved' }),
@@ -353,7 +358,7 @@ describe('ImplementationPhaseExecutor', () => {
             const result = await fn(1);
             return { success: true, result };
           }
-          return { success: false, error: 'task-002 failed' };
+          return { success: false, error: 'session-002 failed' };
         }),
       };
 
@@ -364,12 +369,12 @@ describe('ImplementationPhaseExecutor', () => {
   });
 
   describe('execute() error handling', () => {
-    it('should throw "All implementation tasks blocked" if all tasks are blocked', async () => {
+    it('should throw "All implementation sessions blocked" if all tasks are blocked', async () => {
       const retryExecutor = {
         execute: vi.fn().mockResolvedValue({ success: false, error: 'agent failed' }),
       };
       const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
-      await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
+      await expect(executor.execute(ctx)).rejects.toThrow('All implementation sessions blocked');
     });
 
     it('should throw if code-writer fails (causes task to be blocked)', async () => {
@@ -388,13 +393,13 @@ describe('ImplementationPhaseExecutor', () => {
       };
       const launcher = { launchAgent: vi.fn().mockResolvedValue(failResult) };
       const ctx = makeCtx({ services: { launcher: launcher } as never });
-      await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
+      await expect(executor.execute(ctx)).rejects.toThrow('All implementation sessions blocked');
     });
 
     it('should throw when all tasks end up blocked (chain of failures)', async () => {
       // task-001 blocks → task-002 (dep on task-001) becomes ready (blocked deps count as satisfied)
       // → task-002 also blocks → queue complete with 0 completed → throw
-      const tasks = [makeTask('task-001'), makeTask('task-002', ['task-001'])];
+      const tasks = [makeSession('session-001'), makeSession('session-002', ['session-001'])];
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue(tasks),
         parseReview: vi.fn().mockResolvedValue({ verdict: 'approved' }),
@@ -404,7 +409,7 @@ describe('ImplementationPhaseExecutor', () => {
       };
       const ctx = makeCtx({ services: { resultParser: resultParser, retryExecutor: retryExecutor } as never });
 
-      await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
+      await expect(executor.execute(ctx)).rejects.toThrow('All implementation sessions blocked');
     });
 
     it('should mark task blocked in checkpoint when retryExecutor fails', async () => {
@@ -415,7 +420,7 @@ describe('ImplementationPhaseExecutor', () => {
       await expect(executor.execute(ctx)).rejects.toThrow();
       expect(
         (ctx.io.checkpoint as never as { blockTask: ReturnType<typeof vi.fn> }).blockTask,
-      ).toHaveBeenCalledWith('task-001');
+      ).toHaveBeenCalledWith('session-001');
     });
 
     it('should propagate BudgetExceededError thrown inside the retry fn', async () => {
@@ -452,7 +457,7 @@ describe('ImplementationPhaseExecutor', () => {
       };
 
       const resultParser = {
-        parseImplementationPlan: vi.fn().mockResolvedValue([makeTask('task-001')]),
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn().mockResolvedValue({ verdict: 'needs-fixes' }),
       };
 
@@ -462,7 +467,7 @@ describe('ImplementationPhaseExecutor', () => {
       expect(
         (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
-        expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 3, taskId: 'task-001' }),
+        expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 3, sessionId: 'session-001' }),
         '/tmp/worktree',
       );
     });
@@ -471,7 +476,7 @@ describe('ImplementationPhaseExecutor', () => {
       vi.mocked(exists).mockResolvedValue(true);
 
       const resultParser = {
-        parseImplementationPlan: vi.fn().mockResolvedValue([makeTask('task-001')]),
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn().mockResolvedValue({ verdict: 'approved' }),
       };
 
@@ -487,7 +492,7 @@ describe('ImplementationPhaseExecutor', () => {
       vi.mocked(exists).mockResolvedValue(false);
 
       const resultParser = {
-        parseImplementationPlan: vi.fn().mockResolvedValue([makeTask('task-001')]),
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn().mockResolvedValue({ verdict: 'needs-fixes' }),
       };
 
@@ -510,10 +515,10 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
       const writeCalls = vi.mocked(writeFile).mock.calls;
       const planSliceCall = writeCalls.find(
-        (c) => typeof c[0] === 'string' && (c[0] as string).includes('task-task-001.md'),
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('session-session-001.md'),
       );
       expect(planSliceCall).toBeDefined();
-      expect(planSliceCall![1] as string).toContain('# Task: task-001 - Task task-001');
+      expect(planSliceCall![1] as string).toContain('# Session: session-001 - Session session-001');
     });
 
     it('should include description, files, complexity, and acceptance criteria', async () => {
@@ -521,7 +526,7 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
       const writeCalls = vi.mocked(writeFile).mock.calls;
       const planSliceCall = writeCalls.find(
-        (c) => typeof c[0] === 'string' && (c[0] as string).includes('task-task-001.md'),
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('session-session-001.md'),
       );
       const content = planSliceCall![1] as string;
       expect(content).toContain('**Description:**');
@@ -536,13 +541,13 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
       const writeCalls = vi.mocked(writeFile).mock.calls;
       const planSliceCall = writeCalls.find(
-        (c) => typeof c[0] === 'string' && (c[0] as string).includes('task-task-001.md'),
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('session-session-001.md'),
       );
       expect(planSliceCall![1] as string).toContain('**Dependencies:** none');
     });
 
     it('should list dependency ids for tasks with dependencies', async () => {
-      const tasks = [makeTask('task-001'), makeTask('task-002', ['task-001'])];
+      const tasks = [makeSession('session-001'), makeSession('session-002', ['session-001'])];
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue(tasks),
         parseReview: vi.fn().mockResolvedValue({ verdict: 'approved' }),
@@ -550,7 +555,7 @@ describe('ImplementationPhaseExecutor', () => {
 
       let secondTaskPlanContent: string | undefined;
       vi.mocked(writeFile).mockImplementation(async (path, data) => {
-        if (typeof path === 'string' && path.includes('task-task-002.md')) {
+        if (typeof path === 'string' && path.includes('session-session-002.md')) {
           secondTaskPlanContent = data as string;
         }
       });
@@ -569,7 +574,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ services: { resultParser: resultParser, launcher: launcher } as never });
       await executor.execute(ctx);
       expect(secondTaskPlanContent).toBeDefined();
-      expect(secondTaskPlanContent).toContain('**Dependencies:** task-001');
+      expect(secondTaskPlanContent).toContain('**Dependencies:** session-001');
     });
   });
 
@@ -603,7 +608,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
-        join('/tmp/progress', 'diff-task-001.patch'),
+        join('/tmp/progress', 'diff-session-001.patch'),
         'my-task-specific-diff',
         'utf-8',
       );
@@ -637,7 +642,7 @@ describe('ImplementationPhaseExecutor', () => {
       const calls = (ctx.io.commitManager as never as { commit: ReturnType<typeof vi.fn> }).commit.mock.calls as [string, number, string][];
       const intermediateCall = calls.find(([msg]) => msg.startsWith('wip:'));
       expect(intermediateCall).toBeDefined();
-      expect(intermediateCall![0]).toContain('Task task-001');
+      expect(intermediateCall![0]).toContain('Session session-001');
       expect(intermediateCall![0]).toMatch(/attempt \d+/);
       expect(intermediateCall![1]).toBe(42);
       expect(intermediateCall![2]).toBe('feat');
@@ -678,7 +683,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
-        join('/tmp/progress', 'diff-task-001.patch'),
+        join('/tmp/progress', 'diff-session-001.patch'),
         shortDiff,
         'utf-8',
       );
@@ -694,7 +699,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       expect(writeFile).toHaveBeenCalledWith(
-        join('/tmp/progress', 'diff-task-001.patch'),
+        join('/tmp/progress', 'diff-session-001.patch'),
         exactDiff,
         'utf-8',
       );
@@ -710,7 +715,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       const patchCall = vi.mocked(writeFile).mock.calls.find(
-        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-session-001.patch'),
       );
       expect(patchCall).toBeDefined();
       const written = patchCall![1] as string;
@@ -728,7 +733,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       const patchCall = vi.mocked(writeFile).mock.calls.find(
-        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-session-001.patch'),
       );
       const written = patchCall![1] as string;
       expect(written).toMatch(/\[Diff truncated: exceeded 200,000 character limit\]/);
@@ -746,7 +751,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
       const patchCall = vi.mocked(writeFile).mock.calls.find(
-        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-task-001.patch'),
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('diff-session-001.patch'),
       );
       const written = patchCall![1] as string;
       // The suffix characters should not appear in the written diff
@@ -786,7 +791,7 @@ describe('ImplementationPhaseExecutor', () => {
       const ctx = makeCtx({ services: { retryExecutor: retryExecutor } as never });
       await executor.execute(ctx);
 
-      expect(descriptions.some((d) => d.includes('task-001') && d.includes('Task task-001'))).toBe(true);
+      expect(descriptions.some((d) => d.includes('session-001') && d.includes('Session session-001'))).toBe(true);
     });
   });
 
@@ -915,7 +920,7 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('build-failure-task-001'),
+        expect.stringContaining('build-failure-session-001'),
         expect.stringContaining('TS error'),
         'utf-8',
       );
@@ -971,7 +976,7 @@ describe('ImplementationPhaseExecutor', () => {
       };
 
       const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
-      await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
+      await expect(executor.execute(ctx)).rejects.toThrow('All implementation sessions blocked');
     });
 
     it('should throw containing maxBuildFixRounds in message after exhausting retries', async () => {
@@ -996,7 +1001,7 @@ describe('ImplementationPhaseExecutor', () => {
       };
 
       const ctx = makeCtxWithBuild({ services: { launcher: launcher, retryExecutor: retryExecutor } as never });
-      await expect(executor.execute(ctx)).rejects.toThrow('All implementation tasks blocked');
+      await expect(executor.execute(ctx)).rejects.toThrow('All implementation sessions blocked');
       // Verify the inner error references the build fix rounds
       const lastCall = retryExecutor.execute.mock.results[0];
       expect(lastCall).toBeDefined();
