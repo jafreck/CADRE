@@ -296,6 +296,19 @@ export class CheckpointManager {
     this.state.completedPhases = this.state.completedPhases.filter(
       (p) => !phaseIds.includes(p),
     );
+    // Tasks, gate results, and phase outputs have no phase-ID association in
+    // the checkpoint, so clearing them all is the only correct approach when
+    // rewinding phases for a review-response re-run.
+    this.state.completedTasks = [];
+    this.state.failedTasks = [];
+    this.state.blockedTasks = [];
+    this.state.currentTask = null;
+    for (const phaseId of phaseIds) {
+      delete this.state.phaseOutputs[phaseId];
+      if (this.state.gateResults) {
+        delete this.state.gateResults[phaseId];
+      }
+    }
     await this.save();
   }
 
