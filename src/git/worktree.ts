@@ -248,10 +248,10 @@ export class WorktreeManager {
   }
 
   /**
-   * Copy agent files from agentDir into the worktree's `.github/agents/` directory.
-   * For the copilot backend copies `*.agent.md` files; for the claude backend
-   * copies `<name>/CLAUDE.md` subdirectory trees.
-   * No-op if agentDir is not configured or does not exist.
+   * Copy agent files from agentDir into the worktree's agent directory.
+   * Both backends use flat `*.md` files — copilot reads from `.github/agents/`,
+   * claude reads from `.claude/agents/`. No-op if agentDir is not configured
+   * or does not exist.
    */
   private async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<void> {
     if (!this.agentDir) return;
@@ -261,28 +261,19 @@ export class WorktreeManager {
       return;
     }
 
-    const destDir = join(worktreePath, '.github', 'agents');
+    const destDir =
+      this.backend === 'claude'
+        ? join(worktreePath, '.claude', 'agents')
+        : join(worktreePath, '.github', 'agents');
     await ensureDir(destDir);
 
     const entries = await readdir(this.agentDir);
     let syncCount = 0;
 
-    if (this.backend === 'claude') {
-      // Claude Code resolves sub-agents from flat *.md files in .claude/agents/
-      const claudeDestDir = join(worktreePath, '.claude', 'agents');
-      await ensureDir(claudeDestDir);
-      const agentFiles = entries.filter((f) => f.endsWith('.md'));
-      for (const file of agentFiles) {
-        await copyFile(join(this.agentDir, file), join(claudeDestDir, file));
-        syncCount++;
-      }
-    } else {
-      // Copilot agents are flat *.agent.md files
-      const agentFiles = entries.filter((f) => f.endsWith('.agent.md'));
-      for (const file of agentFiles) {
-        await copyFile(join(this.agentDir, file), join(destDir, file));
-        syncCount++;
-      }
+    const agentFiles = entries.filter((f) => f.endsWith('.md'));
+    for (const file of agentFiles) {
+      await copyFile(join(this.agentDir, file), join(destDir, file));
+      syncCount++;
     }
 
     if (syncCount > 0) {

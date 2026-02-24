@@ -36,7 +36,7 @@ export class CadreRuntime {
   private activeIssueNumbers: number[] = [];
 
   private get agentDir(): string {
-    return this.config.agent?.copilot?.agentDir ?? this.config.copilot.agentDir;
+    return this.config.agent!.copilot.agentDir;
   }
 
   private get backend(): string {

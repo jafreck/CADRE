@@ -299,7 +299,7 @@ describe('cadre run autoscaffold behavior', () => {
 
   it('(b) autoscaffold: calls scaffoldMissingAgents, logs notice, and does not exit 1 when all issues resolve', async () => {
     validateAgentFilesMock
-      .mockResolvedValueOnce(['  ❌ Missing: /agent-dir/some-agent.agent.md'])
+      .mockResolvedValueOnce(['  ❌ Missing: /agent-dir/some-agent.md'])
       .mockResolvedValueOnce([]);
     scaffoldMissingAgentsMock.mockResolvedValue(1);
 
@@ -313,7 +313,7 @@ describe('cadre run autoscaffold behavior', () => {
   });
 
   it('(c) --no-autoscaffold: does not call scaffoldMissingAgents and exits 1', async () => {
-    validateAgentFilesMock.mockResolvedValue(['  ❌ Missing: /agent-dir/some-agent.agent.md']);
+    validateAgentFilesMock.mockResolvedValue(['  ❌ Missing: /agent-dir/some-agent.md']);
     scaffoldMissingAgentsMock.mockResolvedValue(0);
 
     await loadRunWith(['--no-autoscaffold']);

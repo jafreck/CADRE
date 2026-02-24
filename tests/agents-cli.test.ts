@@ -217,6 +217,7 @@ describe('agents scaffold CLI', () => {
 describe('scaffoldMissingAgents helper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.mocked(writeFile).mockResolvedValue(undefined);
     vi.mocked(mkdir).mockResolvedValue(undefined);
@@ -231,7 +232,7 @@ describe('scaffoldMissingAgents helper', () => {
     // templates exist, destination files also exist → all skipped
     vi.mocked(exists).mockResolvedValue(true);
 
-    const count = await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
+    const count = await scaffoldMissingAgents('/mock/agent-dir', '/mock/templates');
 
     expect(count).toBe(0);
     expect(writeFile).not.toHaveBeenCalled();
@@ -243,118 +244,32 @@ describe('scaffoldMissingAgents helper', () => {
       return (path as string).includes('templates');
     });
 
-    const count = await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
+    const count = await scaffoldMissingAgents('/mock/agent-dir', '/mock/templates');
 
     expect(count).toBe(AGENT_DEFINITIONS.length);
     expect(writeFile).toHaveBeenCalledTimes(AGENT_DEFINITIONS.length);
   });
 
-  it('should use ${agent.name}.agent.md filenames for the copilot backend', async () => {
+  it('should write ${agent.name}.md filenames', async () => {
     vi.mocked(exists).mockImplementation(async (path: string) => {
       return (path as string).includes('templates');
     });
 
-    await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
+    await scaffoldMissingAgents('/mock/agent-dir', '/mock/templates');
 
-    const firstCall = vi.mocked(writeFile).mock.calls[0] as [string, ...unknown[]];
-    expect(firstCall[0]).toMatch(/\/mock\/agent-dir\/.+\.agent\.md$/);
+    const writtenPaths = vi.mocked(writeFile).mock.calls.map((c) => c[0] as string);
+    for (const p of writtenPaths) {
+      expect(p).toMatch(/\/mock\/agent-dir\/.+\.md$/);
+    }
   });
 
   it('should skip files when template is missing', async () => {
     // nothing exists (no templates, no destinations)
     vi.mocked(exists).mockResolvedValue(false);
 
-    const count = await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
+    const count = await scaffoldMissingAgents('/mock/agent-dir', '/mock/templates');
 
     expect(count).toBe(0);
     expect(writeFile).not.toHaveBeenCalled();
-  });
-});
-
-describe('scaffoldMissingAgents helper', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.mocked(writeFile).mockResolvedValue(undefined);
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-    vi.mocked(readFile).mockResolvedValue('# template content' as never);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('should use ${agent.name}.agent.md filenames for the copilot backend', async () => {
-    // templates exist, destinations do not
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates');
-    });
-
-    await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
-
-    const writtenPaths = vi.mocked(writeFile).mock.calls.map((c) => c[0] as string);
-    for (const p of writtenPaths) {
-      expect(p).toMatch(/\.agent\.md$/);
-    }
-  });
-
-  it('should use ${agent.name}.md filenames for non-copilot backends', async () => {
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates');
-    });
-
-    await scaffoldMissingAgents('/mock/agent-dir', 'claude', '/mock/templates');
-
-    const writtenPaths = vi.mocked(writeFile).mock.calls.map((c) => c[0] as string);
-    for (const p of writtenPaths) {
-      expect(p).not.toMatch(/\.agent\.md$/);
-      expect(p).toMatch(/\.md$/);
-    }
-  });
-
-  it('should skip existing destination files and not count them', async () => {
-    // all files exist (templates and destinations)
-    vi.mocked(exists).mockResolvedValue(true);
-
-    const count = await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
-
-    expect(writeFile).not.toHaveBeenCalled();
-    expect(count).toBe(0);
-  });
-
-  it('should return the count of files actually written', async () => {
-    // templates exist, destinations do not
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates');
-    });
-
-    const count = await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
-
-    expect(count).toBe(AGENT_DEFINITIONS.length);
-    expect(writeFile).toHaveBeenCalledTimes(AGENT_DEFINITIONS.length);
-  });
-
-  it('should skip files whose template is missing', async () => {
-    // neither templates nor destinations exist
-    vi.mocked(exists).mockResolvedValue(false);
-
-    const count = await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
-
-    expect(count).toBe(0);
-    expect(writeFile).not.toHaveBeenCalled();
-  });
-
-  it('should use copilot backend naming convention when backend is \'copilot\'', async () => {
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates');
-    });
-
-    await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
-
-    const writtenPaths = vi.mocked(writeFile).mock.calls.map((c) => c[0] as string);
-    for (const p of writtenPaths) {
-      expect(p).toMatch(/\.agent\.md$/);
-    }
   });
 });

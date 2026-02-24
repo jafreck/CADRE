@@ -28,21 +28,19 @@ function resolveAgentDir(
   if (backend === 'claude') {
     return config.agent?.claude.agentDir ?? '.claude/agents';
   }
-  return config.agent?.copilot.agentDir ?? config.copilot.agentDir;
+  return config.agent!.copilot.agentDir;
 }
 
 /**
  * Scaffold agent instruction files that are currently missing from `agentDir`.
  * Skips files that already exist; returns the count of files written.
  *
- * File naming matches `AgentLauncher.validateAgentFiles`:
- *   - copilot (default): `${agent.name}.agent.md`
- *   - claude:            `${agent.name}/CLAUDE.md`
- *   - other:             `${agent.name}.md`
+ * Both backends use flat `${agent.name}.md` files — the only difference is the
+ * parent directory (`.github/agents/` for copilot, `.claude/agents/` for claude),
+ * which is already encoded in `agentDir` by the time this function is called.
  */
 export async function scaffoldMissingAgents(
   agentDir: string,
-  backend: string,
   templateDir?: string,
 ): Promise<number> {
   const resolvedTemplateDir = templateDir ?? getTemplateDir();
@@ -50,12 +48,7 @@ export async function scaffoldMissingAgents(
 
   for (const agent of AGENT_DEFINITIONS) {
     const srcPath = join(resolvedTemplateDir, agent.templateFile);
-    const fileName =
-      backend === 'claude'
-        ? join(agent.name, 'CLAUDE.md')
-        : backend === 'copilot'
-          ? `${agent.name}.agent.md`
-          : `${agent.name}.md`;
+    const fileName = `${agent.name}.md`;
     const destPath = join(agentDir, fileName);
 
     if (!(await exists(srcPath))) continue;
