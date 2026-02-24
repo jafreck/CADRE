@@ -32,12 +32,21 @@ function resolveAgentDir(
 }
 
 /**
+ * Return the agent source file name. Agent instruction files in `agentDir` are
+ * always stored as plain `{name}.md` (no frontmatter, no backend-specific suffix).
+ * Frontmatter and the `.agent.md` suffix are injected at worktree-sync time for
+ * the Copilot backend; Claude copies the `.md` files as-is.
+ */
+export function agentFileName(name: string): string {
+  return `${name}.md`;
+}
+
+/**
  * Scaffold agent instruction files that are currently missing from `agentDir`.
  * Skips files that already exist; returns the count of files written.
  *
- * Both backends use flat `${agent.name}.md` files — the only difference is the
- * parent directory (`.github/agents/` for copilot, `.claude/agents/` for claude),
- * which is already encoded in `agentDir` by the time this function is called.
+ * Files are stored as plain `{name}.md` regardless of backend.  Frontmatter is
+ * injected by the Copilot worktree sync step at runtime.
  */
 export async function scaffoldMissingAgents(
   agentDir: string,
@@ -48,8 +57,7 @@ export async function scaffoldMissingAgents(
 
   for (const agent of AGENT_DEFINITIONS) {
     const srcPath = join(resolvedTemplateDir, agent.templateFile);
-    const fileName = `${agent.name}.md`;
-    const destPath = join(agentDir, fileName);
+    const destPath = join(agentDir, agentFileName(agent.name));
 
     if (!(await exists(srcPath))) continue;
     if (await exists(destPath)) continue;
@@ -88,7 +96,7 @@ export function registerAgentsCommand(program: Command): void {
         console.log('─'.repeat(72));
 
         for (const agent of AGENT_DEFINITIONS) {
-          const filePath = join(agentDir, `${agent.name}.md`);
+          const filePath = join(agentDir, agentFileName(agent.name));
           const fileExists = await exists(filePath);
           const status = fileExists ? chalk.green('✅') : chalk.red('❌');
           const name = agent.name.padEnd(30);
@@ -129,7 +137,7 @@ export function registerAgentsCommand(program: Command): void {
 
           for (const agent of toScaffold) {
             const srcPath = join(templateDir, agent.templateFile);
-            const destPath = join(agentDir, `${agent.name}.md`);
+            const destPath = join(agentDir, agentFileName(agent.name));
 
             if (!(await exists(srcPath))) {
               console.warn(chalk.yellow(`⚠ Template not found: ${srcPath}`));
@@ -167,7 +175,7 @@ export function registerAgentsCommand(program: Command): void {
         const issues: string[] = [];
 
         for (const agent of AGENT_DEFINITIONS) {
-          const filePath = join(agentDir, `${agent.name}.md`);
+          const filePath = join(agentDir, agentFileName(agent.name));
           const fileStat = await statOrNull(filePath);
           if (fileStat === null) {
             issues.push(`  ❌ Missing: ${filePath}`);

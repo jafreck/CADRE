@@ -23,13 +23,14 @@ export class AgentLauncher {
   /**
    * Validate that all agent instruction files exist and are non-empty.
    * Returns an array of error strings for any missing or empty files.
+   * Copilot backend expects `{name}.agent.md`; Claude expects `{name}.md`.
    */
   static async validateAgentFiles(agentDir: string): Promise<string[]> {
     const resolvedDir = resolve(agentDir);
     const issues: string[] = [];
     for (const agent of AGENT_DEFINITIONS) {
-      const fileName = `${agent.name}.md`;
-      const filePath = join(resolvedDir, fileName);
+      // agentDir always stores plain {name}.md source files.
+      const filePath = join(resolvedDir, `${agent.name}.md`);
       const fileStat = await statOrNull(filePath);
       if (fileStat === null) {
         issues.push(`  ❌ Missing: ${filePath}`);
