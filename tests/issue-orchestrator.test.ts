@@ -907,6 +907,59 @@ describe('IssueOrchestrator – codeComplete and prCreated fields', () => {
     expect(result.pr).toBeUndefined();
   });
 
+  it('should wire onPRFailed callback to set prFailed flag', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    await orchestrator.run();
+
+    expect((orchestrator as any).prFailed).toBe(false);
+    (orchestrator as any).ctx.callbacks.onPRFailed();
+    expect((orchestrator as any).prFailed).toBe(true);
+  });
+
+  it('should not set prFailed when onPRFailed is not invoked', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    await orchestrator.run();
+
+    expect((orchestrator as any).prFailed).toBe(false);
+  });
+
+  it('should have onPRFailed defined in ctx.callbacks after run()', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    await orchestrator.run();
+
+    expect(typeof (orchestrator as any).ctx.callbacks.onPRFailed).toBe('function');
+  });
+
   it('should set codeComplete=true and prCreated=false when phase 5 succeeds but PR creation fails', async () => {
     // Simulate: all phases run and succeed, but onPRCreated is never invoked
     // (because createPullRequest threw inside the executor — the executor swallows
