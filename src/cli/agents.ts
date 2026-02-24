@@ -32,6 +32,45 @@ function resolveAgentDir(
 }
 
 /**
+ * Scaffold agent instruction files that are currently missing from `agentDir`.
+ * Skips files that already exist; returns the count of files written.
+ *
+ * File naming matches `AgentLauncher.validateAgentFiles`:
+ *   - copilot (default): `${agent.name}.agent.md`
+ *   - claude:            `${agent.name}/CLAUDE.md`
+ *   - other:             `${agent.name}.md`
+ */
+export async function scaffoldMissingAgents(
+  agentDir: string,
+  backend = 'copilot',
+  templateDir?: string,
+): Promise<number> {
+  const resolvedTemplateDir = templateDir ?? getTemplateDir();
+  let written = 0;
+
+  for (const agent of AGENT_DEFINITIONS) {
+    const srcPath = join(resolvedTemplateDir, agent.templateFile);
+    const fileName =
+      backend === 'claude'
+        ? join(agent.name, 'CLAUDE.md')
+        : backend === 'copilot'
+          ? `${agent.name}.agent.md`
+          : `${agent.name}.md`;
+    const destPath = join(agentDir, fileName);
+
+    if (!(await exists(srcPath))) continue;
+    if (await exists(destPath)) continue;
+
+    const content = await readFile(srcPath, 'utf-8');
+    await mkdir(dirname(destPath), { recursive: true });
+    await writeFile(destPath, content, 'utf-8');
+    written++;
+  }
+
+  return written;
+}
+
+/**
  * Register the `agents` command group with `list`, `scaffold`, and `validate` subcommands.
  */
 export function registerAgentsCommand(program: Command): void {
