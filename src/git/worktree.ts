@@ -1,8 +1,9 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { join, basename } from 'node:path';
-import { copyFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir } from '../util/fs.js';
+import { AGENT_DEFINITIONS } from '../agents/types.js';
 
 export class RemoteBranchMissingError extends Error {
   constructor(branch: string) {
@@ -249,9 +250,14 @@ export class WorktreeManager {
 
   /**
    * Copy agent files from agentDir into the worktree's agent directory.
-   * Both backends use flat `*.md` files — copilot reads from `.github/agents/`,
-   * claude reads from `.claude/agents/`. No-op if agentDir is not configured
-   * or does not exist.
+   * Source files in agentDir are always plain `{name}.md` with no frontmatter.
+   *
+   * - **Copilot**: reads `{name}.md`, injects YAML frontmatter, writes
+   *   `{name}.agent.md` into `.github/agents/` (the format Copilot CLI expects).
+   * - **Claude**: reads `{name}.md`, injects YAML frontmatter, writes
+   *   `{name}.md` into `.claude/agents/` (the format Claude CLI expects).
+   *
+   * No-op if agentDir is not configured or does not exist.
    */
   private async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<void> {
     if (!this.agentDir) return;
@@ -268,11 +274,44 @@ export class WorktreeManager {
     await ensureDir(destDir);
 
     const entries = await readdir(this.agentDir);
+    const sourceFiles = entries.filter((f) => f.endsWith('.md') && !f.endsWith('.agent.md'));
     let syncCount = 0;
 
-    const agentFiles = entries.filter((f) => f.endsWith('.md'));
-    for (const file of agentFiles) {
-      await copyFile(join(this.agentDir, file), join(destDir, file));
+    for (const file of sourceFiles) {
+      const agentName = file.replace(/\.md$/, '');
+      const srcPath = join(this.agentDir!, file);
+
+      const definition = AGENT_DEFINITIONS.find((d) => d.name === agentName);
+      const displayName = agentName
+        .split('-')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+      const description = definition?.description ?? displayName;
+      const body = await readFile(srcPath, 'utf-8');
+
+      if (this.backend === 'claude') {
+        // Claude expects {name}.md with YAML frontmatter
+        const frontmatter = [
+          '---',
+          `name: ${displayName}`,
+          `description: "${description.replace(/"/g, '\\"')}"`,
+          '---',
+          '',
+        ].join('\n');
+        await writeFile(join(destDir, file), frontmatter + body, 'utf-8');
+      } else {
+        // Copilot expects {name}.agent.md with YAML frontmatter
+        const frontmatter = [
+          '---',
+          `name: ${displayName}`,
+          `description: "${description.replace(/"/g, '\\"')}"`,
+          'tools: ["read", "edit", "search", "execute"]',
+          '---',
+          '',
+        ].join('\n');
+        const destFile = `${agentName}.agent.md`;
+        await writeFile(join(destDir, destFile), frontmatter + body, 'utf-8');
+      }
       syncCount++;
     }
 
