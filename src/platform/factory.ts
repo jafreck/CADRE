@@ -1,4 +1,4 @@
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { PlatformProvider } from './provider.js';
 import { GitHubProvider } from './github-provider.js';
 import { AzureDevOpsProvider } from './azure-devops-provider.js';
@@ -70,7 +70,7 @@ function resolveGitHubAuthEnv(
  * Defaults to GitHub when `platform` is omitted for backward compatibility.
  */
 export function createPlatformProvider(
-  config: CadreConfig,
+  config: RuntimeConfig,
   logger: Logger,
 ): PlatformProvider {
   const platform = config.platform ?? 'github';

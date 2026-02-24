@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { PhaseResult } from '../agents/types.js';
 import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
@@ -79,7 +79,7 @@ export class IssueOrchestrator {
   private createdPR: PullRequestInfo | undefined;
 
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly issue: IssueDetail,
     private readonly worktree: WorktreeInfo,
     private readonly checkpoint: CheckpointManager,
@@ -100,7 +100,7 @@ export class IssueOrchestrator {
       logger,
     );
     this.contextBuilder = new ContextBuilder(config, logger);
-    this.resultParser = new ResultParser(logger);
+    this.resultParser = new ResultParser();
     this.retryExecutor = new RetryExecutor(logger);
     this.progressWriter = new IssueProgressWriter(
       this.progressDir,

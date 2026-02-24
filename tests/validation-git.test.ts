@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   exec: vi.fn(),
@@ -13,15 +13,7 @@ import { exec } from '../src/util/process.js';
 import { exists } from '../src/util/fs.js';
 import { gitValidator } from '../src/validation/git-validator.js';
 
-const makeConfig = (): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
-  }) as unknown as CadreConfig;
+const makeConfig = () => makeRuntimeConfig({ repoPath: '/tmp/repo' });
 
 const ok = { exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false } as const;
 const fail = { exitCode: 1, stdout: '', stderr: '', signal: null, timedOut: false } as const;

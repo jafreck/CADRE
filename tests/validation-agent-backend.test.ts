@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   exec: vi.fn(),
@@ -13,25 +13,23 @@ import { exec } from '../src/util/process.js';
 import { exists } from '../src/util/fs.js';
 import { agentBackendValidator } from '../src/validation/agent-backend-validator.js';
 
-const makeConfig = (overrides: Partial<{ cliCommand: string; agentDir: string }> = {}): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
+const makeConfig = (overrides: Partial<{ cliCommand: string; agentDir: string }> = {}) =>
+  makeRuntimeConfig({
     copilot: {
       cliCommand: overrides.cliCommand ?? 'copilot',
-      agentDir: overrides.agentDir ?? '/tmp/agents',
-      timeout: 300000,
+      model: 'claude-sonnet-4.6',
+      agentDir: overrides.agentDir ?? '/tmp/.cadre/test-project/agents',
+      timeout: 300_000,
     },
-    // Mirrors what loadConfig always synthesizes
     agent: {
       backend: 'copilot' as const,
-      copilot: { cliCommand: overrides.cliCommand ?? 'copilot', agentDir: overrides.agentDir ?? '/tmp/agents' },
-      claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+      copilot: {
+        cliCommand: overrides.cliCommand ?? 'copilot',
+        agentDir: overrides.agentDir ?? '/tmp/.cadre/test-project/agents',
+      },
+      claude: { cliCommand: 'claude', agentDir: '/tmp/.cadre/test-project/agents' },
     },
-  }) as unknown as CadreConfig;
+  });
 
 const ok = { exitCode: 0, stdout: '/usr/local/bin/copilot', stderr: '', signal: null, timedOut: false } as const;
 const fail = { exitCode: 1, stdout: '', stderr: 'not found', signal: null, timedOut: false } as const;

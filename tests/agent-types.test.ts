@@ -13,13 +13,11 @@ const ALL_AGENT_NAMES: AgentName[] = [
   'fix-surgeon',
   'integration-checker',
   'pr-composer',
-  'issue-orchestrator',
-  'cadre-runner',
 ];
 
 describe('AGENT_DEFINITIONS', () => {
-  it('should contain exactly 13 entries', () => {
-    expect(AGENT_DEFINITIONS).toHaveLength(13);
+  it('should contain exactly 11 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(11);
   });
 
   it('should have one entry for each AgentName', () => {
@@ -72,21 +70,10 @@ describe('AGENT_DEFINITIONS', () => {
 
   it('should mark non-structured-output agents correctly', () => {
     const unstructured = AGENT_DEFINITIONS.filter((d) => !d.hasStructuredOutput).map((d) => d.name);
-    expect(unstructured).toContain('cadre-runner');
-    expect(unstructured).toContain('issue-orchestrator');
     expect(unstructured).toContain('code-writer');
     expect(unstructured).toContain('test-writer');
     expect(unstructured).toContain('fix-surgeon');
     expect(unstructured).toContain('conflict-resolver');
-  });
-
-  it('should group orchestration agents in phase 0', () => {
-    const phase0 = AGENT_DEFINITIONS.filter((d) => d.phase === 0).map((d) => d.name);
-    expect(phase0).toContain('cadre-runner');
-    expect(phase0).toContain('issue-orchestrator');
-    for (const def of AGENT_DEFINITIONS.filter((d) => d.phase === 0)) {
-      expect(def.phaseName).toBe('Orchestration');
-    }
   });
 
   it('should group analysis agents in phase 1', () => {

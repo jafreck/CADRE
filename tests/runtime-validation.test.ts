@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies before importing CadreRuntime
 vi.mock('../src/logging/logger.js', () => {
@@ -37,16 +37,11 @@ vi.mock('../src/validation/index.js', () => ({
 import { CadreRuntime } from '../src/core/runtime.js';
 import { PreRunValidationSuite } from '../src/validation/index.js';
 
-const makeConfig = (skipValidation = false): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
+const makeConfig = (skipValidation = false) =>
+  makeRuntimeConfig({
     stateDir: '/tmp/cadre-state',
-    baseBranch: 'main',
-    issues: { ids: [1] },
     branchTemplate: 'cadre/issue-{issue}',
+    issues: { ids: [1] },
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
     pullRequest: { autoCreate: true, draft: true, labels: ['cadre-generated'], reviewers: [], linkIssue: true },
     options: {
@@ -58,12 +53,15 @@ const makeConfig = (skipValidation = false): CadreConfig =>
       invocationDelayMs: 0,
       buildVerification: true,
       testVerification: true,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
       skipValidation,
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
     },
-    commands: {},
-    copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4.6', agentDir: '.github/agents', timeout: 300_000 },
-    environment: { inheritShellPath: true, extraPath: [] },
-  }) as unknown as CadreConfig;
+  });
 
 describe('CadreRuntime.validate()', () => {
   let mockRunSuite: ReturnType<typeof vi.fn>;

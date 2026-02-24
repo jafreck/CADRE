@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager } from '../git/worktree.js';
@@ -45,7 +45,7 @@ export class ReviewResponseOrchestrator {
   private readonly cadreDir: string;
 
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly worktreeManager: WorktreeManager,
     private readonly launcher: AgentLauncher,
     private readonly platform: PlatformProvider,
@@ -53,8 +53,7 @@ export class ReviewResponseOrchestrator {
     private readonly notifications: NotificationManager = new NotificationManager(),
   ) {
     this.contextBuilder = new ContextBuilder(config, logger);
-    // stateDir is resolved by loadConfig; fall back to repoPath/.cadre for unit-test compat
-    this.cadreDir = config.stateDir!;
+    this.cadreDir = config.stateDir;
   }
 
   /**
@@ -304,7 +303,7 @@ export class ReviewResponseOrchestrator {
           // Update the existing PR body with the pr-composer's output
           const prContentPath = join(progressDir, 'pr-content.md');
           try {
-            const resultParser = new ResultParser(this.logger);
+            const resultParser = new ResultParser();
             const prContent = await resultParser.parsePRContent(prContentPath);
             const newTitle = prContent.title
               ? `${prContent.title} (#${issueNumber})`

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { FleetResult } from '../core/fleet-orchestrator.js';
 import type { IssueDetail } from '../platform/provider.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
@@ -11,7 +11,7 @@ import type { RunReport, RunIssueSummary, RunPhaseSummary, RunTotals } from './t
 
 export class ReportWriter {
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly costEstimator: CostEstimator,
   ) {}
 

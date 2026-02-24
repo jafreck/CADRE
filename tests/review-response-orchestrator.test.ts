@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReviewResponseOrchestrator, REVIEW_RESPONSE_PHASES } from '../src/core/review-response-orchestrator.js';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
+import type { RuntimeConfig } from '../src/config/loader.js';
 import type { PullRequestInfo, ReviewThread } from '../src/platform/provider.js';
 
 // Mock heavy I/O dependencies
@@ -59,14 +60,9 @@ vi.mock('../src/notifications/manager.js', () => ({
   })),
 }));
 
-function makeConfig(reviewResponseOverrides: Partial<CadreConfig['reviewResponse']> = {}): CadreConfig {
-  return {
-    projectName: 'test-project',
-    platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
+function makeConfig(reviewResponseOverrides: Partial<RuntimeConfig['reviewResponse']> = {}) {
+  return makeRuntimeConfig({
     stateDir: '/tmp/cadre-state',
-    baseBranch: 'main',
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [1] },
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
@@ -80,12 +76,16 @@ function makeConfig(reviewResponseOverrides: Partial<CadreConfig['reviewResponse
       invocationDelayMs: 0,
       buildVerification: false,
       testVerification: false,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
+      skipValidation: false,
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
     },
-    commands: {},
-    copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4', agentDir: '.github/agents', timeout: 300000, costOverrides: {} },
-    notifications: { enabled: false, providers: [] },
     reviewResponse: { autoReplyOnResolved: false, ...reviewResponseOverrides },
-  } as unknown as CadreConfig;
+  });
 }
 
 function makePR(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {

@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
@@ -36,15 +36,15 @@ export class CadreRuntime {
   private activeIssueNumbers: number[] = [];
 
   private get agentDir(): string {
-    return this.config.agent!.copilot.agentDir;
+    return this.config.agent.copilot.agentDir;
   }
 
   private get backend(): string {
-    return this.config.agent?.backend ?? 'copilot';
+    return this.config.agent.backend;
   }
 
-  constructor(private readonly config: CadreConfig) {
-    this.cadreDir = config.stateDir!;
+  constructor(private readonly config: RuntimeConfig) {
+    this.cadreDir = config.stateDir;
     this.logger = new Logger({
       source: 'fleet',
       logDir: join(this.cadreDir, 'logs'),
@@ -123,7 +123,7 @@ export class CadreRuntime {
     // 3. Initialize components
     const worktreeManager = new WorktreeManager(
       this.config.repoPath,
-      this.config.worktreeRoot ?? join(this.cadreDir, 'worktrees'),
+      this.config.worktreeRoot,
       this.config.baseBranch,
       this.config.branchTemplate,
       this.logger,
@@ -285,7 +285,7 @@ export class CadreRuntime {
   async listWorktrees(): Promise<void> {
     const worktreeManager = new WorktreeManager(
       this.config.repoPath,
-      this.config.worktreeRoot ?? join(this.cadreDir, 'worktrees'),
+      this.config.worktreeRoot,
       this.config.baseBranch,
       this.config.branchTemplate,
       this.logger,
@@ -316,7 +316,7 @@ export class CadreRuntime {
   async pruneWorktrees(): Promise<void> {
     const worktreeManager = new WorktreeManager(
       this.config.repoPath,
-      this.config.worktreeRoot ?? join(this.cadreDir, 'worktrees'),
+      this.config.worktreeRoot,
       this.config.baseBranch,
       this.config.branchTemplate,
       this.logger,

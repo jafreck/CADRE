@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   exec: vi.fn(),
@@ -15,19 +15,14 @@ import { diskValidator } from '../src/validation/disk-validator.js';
 
 const makeConfig = (
   overrides: Partial<{ repoPath: string; worktreeRoot: string; maxParallelIssues: number }> = {},
-): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    repository: 'owner/repo',
+) =>
+  makeRuntimeConfig({
     repoPath: overrides.repoPath ?? '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
     ...(overrides.worktreeRoot !== undefined ? { worktreeRoot: overrides.worktreeRoot } : {}),
     ...(overrides.maxParallelIssues !== undefined
-      ? { options: { maxParallelIssues: overrides.maxParallelIssues } }
+      ? { options: { maxParallelIssues: overrides.maxParallelIssues, maxParallelAgents: 3, maxRetriesPerTask: 3, dryRun: false, resume: false, invocationDelayMs: 0, buildVerification: true, testVerification: true, perTaskBuildCheck: true, maxBuildFixRounds: 2, skipValidation: false, maxIntegrationFixRounds: 1, ambiguityThreshold: 5, haltOnAmbiguity: false, respondToReviews: false } }
       : {}),
-  }) as unknown as CadreConfig;
+  });
 
 const okResult = { exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false } as const;
 const failResult = { exitCode: 1, stdout: '', stderr: 'error', signal: null, timedOut: false } as const;
@@ -287,14 +282,15 @@ describe('diskValidator', () => {
       expect(exec).toHaveBeenCalledWith('df', ['-k', '/custom/worktrees']);
     });
 
-    it('should call df on default worktreeRoot path when worktreeRoot is not configured', async () => {
+    it('should call df on the configured worktreeRoot (always set by loadConfig)', async () => {
       vi.mocked(exec)
         .mockResolvedValueOnce({ ...okResult, stdout: makeDuOutput(50000) })
         .mockResolvedValueOnce({ ...okResult, stdout: makeDfOutput(50000 * 3 * 2) });
 
-      await diskValidator.validate(makeConfig({ repoPath: '/tmp/myrepo' }));
+      const config = makeConfig({ repoPath: '/tmp/myrepo' });
+      await diskValidator.validate(config);
 
-      expect(exec).toHaveBeenCalledWith('df', ['-k', '/tmp/myrepo/.cadre/worktrees']);
+      expect(exec).toHaveBeenCalledWith('df', ['-k', config.worktreeRoot]);
     });
 
     it('should call du on repoPath', async () => {
