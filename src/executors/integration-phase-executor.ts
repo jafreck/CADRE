@@ -14,6 +14,11 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     const reportPath = join(ctx.io.progressDir, 'integration-report.md');
     let report = '';
 
+    // Structured results for the cadre-json block appended at the end
+    let structuredBuildResult: { command: string; exitCode: number; output: string; pass: boolean } | null = null;
+    let structuredTestResult: { command: string; exitCode: number; output: string; pass: boolean } | null = null;
+    let structuredLintResult: { command: string; exitCode: number; output: string; pass: boolean } | null = null;
+
     // Read baseline results (null-safe: missing baseline treats all failures as regressions)
     const baselineResultsPath = join(ctx.worktree.path, '.cadre', 'baseline-results.json');
     let baseline: BaselineResults | null = null;
@@ -79,9 +84,13 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       if (buildResult.exitCode !== 0) {
         report += `\`\`\`\n${buildResult.stderr}\n${buildResult.stdout}\n\`\`\`\n\n`;
       }
+      structuredBuildResult = {
+        command: ctx.config.commands.build ?? '',
+        exitCode: buildResult.exitCode,
+        output: (buildResult.stdout + buildResult.stderr).slice(0, 500),
+        pass: buildResult.exitCode === 0,
+      };
     }
-
-    // Run test command
     if (ctx.config.commands.test && ctx.config.options.testVerification) {
       let testResult = await execShell(ctx.config.commands.test, {
         cwd: ctx.worktree.path,
@@ -116,9 +125,13 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       if (testResult.exitCode !== 0) {
         report += `\`\`\`\n${testResult.stderr}\n${testResult.stdout}\n\`\`\`\n\n`;
       }
+      structuredTestResult = {
+        command: ctx.config.commands.test ?? '',
+        exitCode: testResult.exitCode,
+        output: (testResult.stdout + testResult.stderr).slice(0, 500),
+        pass: testResult.exitCode === 0,
+      };
     }
-
-    // Run lint command
     if (ctx.config.commands.lint) {
       const lintResult = await execShell(ctx.config.commands.lint, {
         cwd: ctx.worktree.path,
@@ -130,9 +143,13 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       if (lintResult.exitCode !== 0) {
         report += `\`\`\`\n${lintResult.stderr}\n${lintResult.stdout}\n\`\`\`\n\n`;
       }
+      structuredLintResult = {
+        command: ctx.config.commands.lint ?? '',
+        exitCode: lintResult.exitCode,
+        output: (lintResult.stdout + lintResult.stderr).slice(0, 500),
+        pass: lintResult.exitCode === 0,
+      };
     }
-
-    // Pre-existing failures and new regressions sections
     const allCurrentFailureSet = new Set<string>(allCurrentFailures);
     const allPreExistingFailures = [...baselineBuildFailures, ...baselineTestFailures].filter((f) =>
       allCurrentFailureSet.has(f),
@@ -153,8 +170,16 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       report += '_None_\n\n';
     }
 
-    // Write integration report
-    const fullReport = `# Integration Report: Issue #${ctx.issue.number}\n\n${report}`;
+    // Write integration report with structured cadre-json block
+    const cadreJson = {
+      buildResult: structuredBuildResult ?? { command: ctx.config.commands.build ?? '', exitCode: 0, output: '', pass: true },
+      testResult: structuredTestResult ?? { command: ctx.config.commands.test ?? '', exitCode: 0, output: '', pass: true },
+      ...(structuredLintResult ? { lintResult: structuredLintResult } : {}),
+      overallPass: uniqueRegressionFailures.length === 0,
+      regressionFailures: uniqueRegressionFailures,
+      baselineFailures: allPreExistingFailures,
+    };
+    const fullReport = `# Integration Report: Issue #${ctx.issue.number}\n\n${report}\`\`\`cadre-json\n${JSON.stringify(cadreJson)}\n\`\`\`\n`;
     await writeFile(reportPath, fullReport, 'utf-8');
 
     // Commit any fixes

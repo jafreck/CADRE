@@ -62,30 +62,16 @@ vi.mock('../src/util/process.js', async (importOriginal) => {
 
 const SYNTHETIC_ANALYSIS = `# Analysis: Issue
 
-## Requirements
-- Implement the requested feature
-- Ensure backward compatibility
-- Add appropriate tests
-
-**Change Type:** feature
-
-**Scope:** medium
-
-## Affected Areas
-- src/core
-
-## Ambiguities
-- None identified
+\`\`\`cadre-json
+${JSON.stringify({ requirements: ['Implement the requested feature', 'Ensure backward compatibility', 'Add appropriate tests'], changeType: 'feature', scope: 'medium', affectedAreas: ['src/core'], ambiguities: [] })}
+\`\`\`
 `;
 
 const SYNTHETIC_SCOUT_REPORT = `# Scout Report
 
-## Relevant Files
-- \`src/core/issue-orchestrator.ts\` - Main orchestration logic
-- \`src/agents/types.ts\` - Type definitions
-
-## Test Files
-- \`tests/issue-orchestrator.test.ts\`
+\`\`\`cadre-json
+${JSON.stringify({ relevantFiles: [{ path: 'src/core/issue-orchestrator.ts', reason: 'Main orchestration logic' }, { path: 'src/agents/types.ts', reason: 'Type definitions' }], dependencyMap: {}, testFiles: ['tests/issue-orchestrator.test.ts'], estimatedChanges: [] })}
+\`\`\`
 `;
 
 const SYNTHETIC_IMPLEMENTATION_PLAN = `# Implementation Plan: Issue
@@ -109,6 +95,13 @@ const SYNTHETIC_PR_CONTENT = `# PR Content
 
 \`\`\`cadre-json
 ${JSON.stringify({ title: 'Implement requested changes', body: '## Summary\n\nThis PR implements the changes requested in the issue.', labels: ['enhancement'] })}
+\`\`\`
+`;
+
+const SYNTHETIC_INTEGRATION_REPORT = `# Integration Report
+
+\`\`\`cadre-json
+${JSON.stringify({ buildResult: { command: 'npm run build', exitCode: 0, output: 'OK', pass: true }, testResult: { command: 'npm test', exitCode: 0, output: 'OK', pass: true }, overallPass: true, regressionFailures: [], baselineFailures: [] })}
 \`\`\`
 `;
 
@@ -197,6 +190,7 @@ class E2ELauncher {
     if (agent === 'implementation-planner' || outFile === 'implementation-plan.md') return SYNTHETIC_IMPLEMENTATION_PLAN;
     if (agent === 'pr-composer' || outFile === 'pr-content.md') return SYNTHETIC_PR_CONTENT;
     if (agent === 'code-reviewer' || outFile.startsWith('review')) return SYNTHETIC_REVIEW;
+    if (agent === 'integration-checker' || outFile === 'integration-report.md') return SYNTHETIC_INTEGRATION_REPORT;
 
     return '# Output\n\nSynthetic output.\n';
   }

@@ -2,6 +2,11 @@ import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
 import type { GateResult, ImplementationTask } from '../agents/types.js';
+import {
+  analysisSchema,
+  scoutReportSchema,
+  integrationReportSchema,
+} from '../agents/schemas/index.js';
 import { TaskQueue } from '../execution/task-queue.js';
 
 /** Context passed to every gate validator. */
@@ -37,6 +42,20 @@ function fail(errors: string[], warnings: string[] = []): GateResult {
   return { status: 'fail', warnings, errors };
 }
 
+/**
+ * Extract and JSON-parse the first ```cadre-json``` fenced block from content.
+ * Returns the parsed value, or null if no such block exists or the JSON is invalid.
+ */
+function extractCadreJson(content: string): unknown | null {
+  const match = content.match(/```cadre-json\s*\n([\s\S]*?)```/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
 // ── Gate 1→2: Analysis → Planning ────────────────────────────────────────────
 
 /**
@@ -59,18 +78,23 @@ export class AnalysisToPlanningGate implements PhaseGate {
     if (analysisContent === null) {
       errors.push('analysis.md is missing from the progress directory');
     } else {
-      if (!/requirements?/i.test(analysisContent)) {
-        errors.push('analysis.md does not contain a requirements section');
-      } else if (analysisContent.match(/##\s*requirements?[^\n]*\n\s*\n/i)) {
-        errors.push('analysis.md requirements section appears to be empty');
-      }
-
-      if (!/change.?type/i.test(analysisContent)) {
-        errors.push('analysis.md does not specify a change type');
-      }
-
-      if (!/\bscope\b/i.test(analysisContent)) {
-        errors.push('analysis.md does not specify a scope');
+      const parsed = extractCadreJson(analysisContent);
+      if (parsed === null) {
+        errors.push(
+          'analysis.md is missing a cadre-json block; the issue-analyst agent must emit a ' +
+          '```cadre-json``` fenced block containing a valid analysis object',
+        );
+      } else {
+        const result = analysisSchema.safeParse(parsed);
+        if (!result.success) {
+          for (const issue of result.error.issues) {
+            errors.push(
+              `analysis.md cadre-json is invalid: ${issue.path.join('.') || 'root'} — ${issue.message}`,
+            );
+          }
+        } else if (result.data.requirements.length === 0) {
+          errors.push('analysis.md cadre-json: requirements array is empty');
+        }
       }
     }
 
@@ -81,10 +105,26 @@ export class AnalysisToPlanningGate implements PhaseGate {
     if (scoutContent === null) {
       errors.push('scout-report.md is missing from the progress directory');
     } else {
-      // Expect at least one file path reference (heuristic: a line containing a '/')
-      const hasRelevantFile = /[^\s]+\/[^\s]+/.test(scoutContent);
-      if (!hasRelevantFile) {
-        errors.push('scout-report.md does not list any relevant files');
+      const parsed = extractCadreJson(scoutContent);
+      if (parsed === null) {
+        errors.push(
+          'scout-report.md is missing a cadre-json block; the codebase-scout agent must emit a ' +
+          '```cadre-json``` fenced block containing a valid scout report',
+        );
+      } else {
+        const result = scoutReportSchema.safeParse(parsed);
+        if (!result.success) {
+          for (const issue of result.error.issues) {
+            errors.push(
+              `scout-report.md cadre-json is invalid: ${issue.path.join('.') || 'root'} — ${issue.message}`,
+            );
+          }
+        } else if (result.data.relevantFiles.length === 0) {
+          errors.push(
+            'scout-report.md cadre-json: relevantFiles array is empty; ' +
+            'the codebase-scout agent must list at least one relevant file',
+          );
+        }
       }
     }
 
@@ -115,18 +155,11 @@ export class PlanningToImplementationGate implements PhaseGate {
       return fail(['implementation-plan.md is missing from the progress directory']);
     }
 
-    // Primary: parse from cadre-json block
-    const cadreJsonMatch = planContent.match(/```cadre-json\s*\n([\s\S]*?)```/);
+    // Parse from cadre-json block
+    const parsed = extractCadreJson(planContent);
 
-    if (!cadreJsonMatch) {
-      return fail(['implementation-plan.md is missing a cadre-json block; the implementation-planner agent must emit a ```cadre-json``` fenced block containing a JSON array of task objects']);
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(cadreJsonMatch[1].trim());
-    } catch {
-      return fail(['implementation-plan.md cadre-json block contains invalid JSON']);
+    if (parsed === null) {
+      return fail(['implementation-plan.md is missing a cadre-json block; the implementation-planner agent must emit a ```cadre-json``` fenced block containing a JSON array of task objects. See the agent template for the required schema.']);
     }
 
     if (!Array.isArray(parsed) || parsed.length === 0) {
@@ -229,32 +262,46 @@ export class IntegrationToPRGate implements PhaseGate {
       return fail(['integration-report.md is missing from the progress directory']);
     }
 
-    if (!/build/i.test(reportContent)) {
-      warnings.push('integration-report.md does not contain a build result section');
+    const parsed = extractCadreJson(reportContent);
+    if (parsed === null) {
+      return fail([
+        'integration-report.md is missing a cadre-json block; the integration-checker agent must emit a ' +
+        '```cadre-json``` fenced block containing a valid integration report',
+      ]);
     }
 
-    if (!/test/i.test(reportContent)) {
-      warnings.push('integration-report.md does not contain a test result section');
+    const schemaResult = integrationReportSchema.safeParse(parsed);
+    if (!schemaResult.success) {
+      return fail(
+        schemaResult.error.issues.map(
+          (i) =>
+            `integration-report.md cadre-json is invalid: ${i.path.join('.') || 'root'} — ${i.message}`,
+        ),
+      );
     }
 
-    // Check for new regressions — only these should fail the gate
-    const regressionsMatch = reportContent.match(/##\s*New Regressions\s*\n+([\s\S]*?)(?=\n##|$)/i);
-    if (regressionsMatch) {
-      const regressionsBody = regressionsMatch[1].trim();
-      const hasRegressions = regressionsBody !== '' && !/^_none_$/i.test(regressionsBody);
-      if (hasRegressions) {
-        errors.push('integration-report.md contains new regression failures');
-      }
+    const report = schemaResult.data;
+
+    if (!report.buildResult.pass) {
+      errors.push(
+        `integration-report.md: build failed (exit code ${report.buildResult.exitCode})`,
+      );
     }
 
-    // Warn (but do not fail) if there are pre-existing baseline failures
-    const preExistingMatch = reportContent.match(/##\s*Pre-existing Failures\s*\n+([\s\S]*?)(?=\n##|$)/i);
-    if (preExistingMatch) {
-      const preExistingBody = preExistingMatch[1].trim();
-      const hasPreExisting = preExistingBody !== '' && !/^_none_$/i.test(preExistingBody);
-      if (hasPreExisting) {
-        warnings.push('integration-report.md contains pre-existing failures (not caused by these changes)');
-      }
+    if (!report.testResult.pass) {
+      errors.push(
+        `integration-report.md: tests failed (exit code ${report.testResult.exitCode})`,
+      );
+    }
+
+    if (report.regressionFailures && report.regressionFailures.length > 0) {
+      errors.push('integration-report.md contains new regression failures');
+    }
+
+    if (report.baselineFailures && report.baselineFailures.length > 0) {
+      warnings.push(
+        'integration-report.md contains pre-existing failures (not caused by these changes)',
+      );
     }
 
     return errors.length > 0 ? fail(errors, warnings) : pass(warnings);
