@@ -233,6 +233,13 @@ describe('PRCompositionPhaseExecutor', () => {
         (ctx.io.commitManager as never as { push: ReturnType<typeof vi.fn> }).push,
       ).not.toHaveBeenCalled();
     });
+
+    it('should not call ctx.callbacks.setPR when autoCreate is false', async () => {
+      const setPR = vi.fn();
+      const ctx = makeCtx({ callbacks: { setPR } as never });
+      await executor.execute(ctx);
+      expect(setPR).not.toHaveBeenCalled();
+    });
   });
 
   describe('execute() with autoCreate enabled', () => {
@@ -443,6 +450,52 @@ describe('PRCompositionPhaseExecutor', () => {
       };
       const ctx = makeAutoCreateCtx({ platform: platform as never });
       await expect(executor.execute(ctx)).rejects.toThrow('API rate limit');
+    });
+
+    it('should call ctx.callbacks.setPR with the created PR info', async () => {
+      const prInfo = { number: 77, url: 'https://github.com/owner/repo/pull/77', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+      };
+      const setPR = vi.fn();
+      const ctx = makeAutoCreateCtx({
+        platform: platform as never,
+        callbacks: { setPR } as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect(setPR).toHaveBeenCalledWith(prInfo);
+    });
+
+    it('should not call ctx.callbacks.setPR when createPullRequest fails', async () => {
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockRejectedValue(new Error('API error')),
+      };
+      const setPR = vi.fn();
+      const ctx = makeAutoCreateCtx({
+        platform: platform as never,
+        callbacks: { setPR } as never,
+      });
+
+      await expect(executor.execute(ctx)).rejects.toThrow('API error');
+      expect(setPR).not.toHaveBeenCalled();
+    });
+
+    it('should not call ctx.callbacks.setPR when setPR is not provided', async () => {
+      const prInfo = { number: 78, url: 'https://github.com/owner/repo/pull/78', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+      };
+      // No setPR in callbacks — should not throw
+      const ctx = makeAutoCreateCtx({
+        platform: platform as never,
+      });
+
+      await expect(executor.execute(ctx)).resolves.toBeDefined();
     });
   });
 

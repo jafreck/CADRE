@@ -30,6 +30,7 @@ describe('FleetResult.tokenUsage', () => {
       issues: [],
       prsCreated: [],
       failedIssues: [],
+      codeDoneNoPR: [],
       totalDuration: 5000,
       tokenUsage: tokenSummary,
     };
@@ -51,12 +52,46 @@ describe('FleetResult.tokenUsage', () => {
       issues: [],
       prsCreated: [],
       failedIssues: [],
+      codeDoneNoPR: [],
       totalDuration: 0,
       tokenUsage: emptyTokenUsage,
     };
     expect(result.tokenUsage.byPhase).toEqual({});
     expect(result.tokenUsage.recordCount).toBe(0);
     expect(result.tokenUsage.total).toBe(0);
+  });
+});
+
+describe('FleetResult.codeDoneNoPR', () => {
+  it('should accept an empty codeDoneNoPR array', () => {
+    const result: FleetResult = {
+      success: true,
+      issues: [],
+      prsCreated: [],
+      failedIssues: [],
+      codeDoneNoPR: [],
+      totalDuration: 0,
+      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+    };
+    expect(result.codeDoneNoPR).toEqual([]);
+  });
+
+  it('should accept codeDoneNoPR entries with issueNumber and branch', () => {
+    const result: FleetResult = {
+      success: false,
+      issues: [],
+      prsCreated: [],
+      failedIssues: [],
+      codeDoneNoPR: [
+        { issueNumber: 7, branch: 'cadre/issue-7' },
+        { issueNumber: 12, branch: 'cadre/issue-12' },
+      ],
+      totalDuration: 1000,
+      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+    };
+    expect(result.codeDoneNoPR).toHaveLength(2);
+    expect(result.codeDoneNoPR[0]).toEqual({ issueNumber: 7, branch: 'cadre/issue-7' });
+    expect(result.codeDoneNoPR[1]).toEqual({ issueNumber: 12, branch: 'cadre/issue-12' });
   });
 });
 
