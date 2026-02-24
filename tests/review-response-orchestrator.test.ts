@@ -26,6 +26,7 @@ vi.mock('../src/agents/result-parser.js', () => ({
 vi.mock('../src/core/checkpoint.js', () => ({
   CheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue(undefined),
+    resetPhases: vi.fn().mockResolvedValue(undefined),
     setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
   })),
 }));

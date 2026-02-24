@@ -103,6 +103,56 @@ describe('CheckpointManager', () => {
     expect(resume.phase).toBe(2);
   });
 
+  it('resetPhases should remove specified phases from completedPhases', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.completePhase(1, 'analysis.md');
+    await manager.completePhase(2, 'planning.md');
+    await manager.completePhase(3, 'implementation.md');
+    await manager.completePhase(4, 'integration.md');
+    await manager.completePhase(5, 'pr.md');
+
+    await manager.resetPhases([3, 4, 5]);
+
+    const state = manager.getState();
+    expect(state.completedPhases).toEqual([1, 2]);
+    expect(state.completedPhases).not.toContain(3);
+    expect(state.completedPhases).not.toContain(4);
+    expect(state.completedPhases).not.toContain(5);
+  });
+
+  it('resetPhases should persist to disk', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.completePhase(1, 'analysis.md');
+    await manager.completePhase(2, 'planning.md');
+    await manager.completePhase(3, 'implementation.md');
+
+    await manager.resetPhases([3]);
+
+    // Reload from disk and verify the reset was persisted
+    const manager2 = new CheckpointManager(tempDir, mockLogger);
+    const state = await manager2.load('42');
+    expect(state.completedPhases).toContain(1);
+    expect(state.completedPhases).toContain(2);
+    expect(state.completedPhases).not.toContain(3);
+  });
+
+  it('resetPhases with no-op IDs leaves completedPhases unchanged', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    await manager.completePhase(1, 'analysis.md');
+    await manager.completePhase(2, 'planning.md');
+
+    await manager.resetPhases([3, 4, 5]); // phases not yet completed
+
+    const state = manager.getState();
+    expect(state.completedPhases).toEqual([1, 2]);
+  });
+
   it('should initialize with budgetExceeded undefined', async () => {
     const manager = new CheckpointManager(tempDir, mockLogger);
     const state = await manager.load('42');
