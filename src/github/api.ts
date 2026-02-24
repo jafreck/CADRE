@@ -1,24 +1,23 @@
-import { GitHubMCPClient } from './mcp-client.js';
+import { Octokit } from '@octokit/rest';
 import { Logger } from '../logging/logger.js';
 
 /**
- * GitHub API layer backed by the GitHub MCP server.
- *
- * All interactions use structured MCP tool calls (JSON-RPC over stdio)
- * instead of shelling out to the `gh` CLI.
+ * GitHub API layer backed by the Octokit REST client.
  */
 export class GitHubAPI {
   private readonly owner: string;
   private readonly repo: string;
+  private readonly octokit: Octokit;
 
   constructor(
     private readonly repository: string,
     private readonly logger: Logger,
-    private readonly mcp: GitHubMCPClient,
+    octokit?: Octokit,
   ) {
     const [owner, repo] = repository.split('/');
     this.owner = owner;
     this.repo = repo;
+    this.octokit = octokit ?? new Octokit({ auth: process.env.GITHUB_TOKEN });
   }
 
   // ── Issues ──
@@ -27,33 +26,25 @@ export class GitHubAPI {
    * Get full issue details including comments.
    */
   async getIssue(issueNumber: number): Promise<Record<string, unknown>> {
-    const issue = await this.mcp.callTool<Record<string, unknown>>('issue_read', {
-      method: 'get',
+    const { data: issue } = await this.octokit.rest.issues.get({
       owner: this.owner,
       repo: this.repo,
       issue_number: issueNumber,
     });
 
-    // Fetch comments separately — the MCP issue endpoint doesn't inline them
     let comments: unknown[] = [];
     try {
-      const rawComments = await this.mcp.callTool<unknown[] | { comments?: unknown[] }>('issue_read', {
-        method: 'get_comments',
+      const { data } = await this.octokit.rest.issues.listComments({
         owner: this.owner,
         repo: this.repo,
         issue_number: issueNumber,
       });
-      // Normalize — some versions of the MCP server wrap comments in an envelope
-      if (Array.isArray(rawComments)) {
-        comments = rawComments;
-      } else if (rawComments && typeof rawComments === 'object' && 'comments' in rawComments) {
-        comments = (rawComments as { comments: unknown[] }).comments ?? [];
-      }
+      comments = data;
     } catch {
       this.logger.debug(`Could not fetch comments for issue #${issueNumber}`);
     }
 
-    return { ...issue, comments };
+    return { ...(issue as unknown as Record<string, unknown>), comments };
   }
 
   /**
@@ -66,46 +57,36 @@ export class GitHubAPI {
     state?: string;
     limit?: number;
   }): Promise<Record<string, unknown>[]> {
-    // For milestone/assignee filtering, fall back to search_issues
     const needsSearch = filters.milestone || filters.assignee;
 
     if (needsSearch) {
       return this.searchIssuesWithFilters(filters);
     }
 
-    const args: Record<string, unknown> = {
+    const params: Parameters<typeof this.octokit.rest.issues.listForRepo>[0] = {
       owner: this.owner,
       repo: this.repo,
     };
 
     if (filters.state) {
-      args.state = filters.state;
+      params.state = filters.state as 'open' | 'closed' | 'all';
     }
     if (filters.labels && filters.labels.length > 0) {
-      args.labels = filters.labels;
+      params.labels = filters.labels.join(',');
     }
     if (filters.limit) {
-      args.perPage = Math.min(filters.limit, 100);
+      params.per_page = Math.min(filters.limit, 100);
     }
 
-    // The list_issues MCP tool returns a paginated envelope: { issues, pageInfo, totalCount }
-    const result = await this.mcp.callTool<
-      Record<string, unknown>[] | { issues: Record<string, unknown>[] }
-    >('list_issues', args);
-
-    // Unwrap paginated envelope if present
-    if (result && !Array.isArray(result) && 'issues' in result) {
-      return (result as { issues: Record<string, unknown>[] }).issues;
-    }
-
-    return result as Record<string, unknown>[];
+    const issues = await this.octokit.paginate(this.octokit.rest.issues.listForRepo, params);
+    return issues as unknown as Record<string, unknown>[];
   }
 
   /**
    * Add a comment to an issue.
    */
   async addIssueComment(issueNumber: number, body: string): Promise<void> {
-    await this.mcp.callTool('add_issue_comment', {
+    await this.octokit.rest.issues.createComment({
       owner: this.owner,
       repo: this.repo,
       issue_number: issueNumber,
@@ -127,7 +108,7 @@ export class GitHubAPI {
     labels?: string[];
     reviewers?: string[];
   }): Promise<Record<string, unknown>> {
-    const args: Record<string, unknown> = {
+    const { data: pr } = await this.octokit.rest.pulls.create({
       owner: this.owner,
       repo: this.repo,
       title: params.title,
@@ -135,59 +116,51 @@ export class GitHubAPI {
       head: params.head,
       base: params.base,
       draft: params.draft ?? false,
-    };
+    });
 
-    // Note: the create_pull_request MCP tool does not accept `labels` or
-    // `reviewers` — those fields are not in its input schema and are silently
-    // dropped.  We apply them in separate calls after the PR is created.
+    const prNumber = pr.number;
 
-    const result = await this.mcp.callTool<Record<string, unknown>>('create_pull_request', args);
-
-    const prNumber = result.number as number | undefined;
-    if (prNumber) {
-      // Add labels via the Issues API (PRs are a type of issue in GitHub).
-      if (params.labels && params.labels.length > 0) {
-        try {
-          await this.mcp.callTool('issue_write', {
-            method: 'update',
-            owner: this.owner,
-            repo: this.repo,
-            issue_number: prNumber,
-            labels: params.labels,
-          });
-        } catch (err) {
-          this.logger.warn(`Failed to set labels on PR #${prNumber}: ${err}`);
-        }
-      }
-
-      // Request reviewers via the PR update endpoint.
-      if (params.reviewers && params.reviewers.length > 0) {
-        try {
-          await this.mcp.callTool('update_pull_request', {
-            owner: this.owner,
-            repo: this.repo,
-            pullNumber: prNumber,
-            reviewers: params.reviewers,
-          });
-        } catch (err) {
-          this.logger.warn(`Failed to set reviewers on PR #${prNumber}: ${err}`);
-        }
+    // Add labels via the Issues API (PRs are a type of issue in GitHub).
+    if (params.labels && params.labels.length > 0) {
+      try {
+        await this.octokit.rest.issues.update({
+          owner: this.owner,
+          repo: this.repo,
+          issue_number: prNumber,
+          labels: params.labels,
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to set labels on PR #${prNumber}: ${err}`);
       }
     }
 
-    return result;
+    // Request reviewers via the PR review requests endpoint.
+    if (params.reviewers && params.reviewers.length > 0) {
+      try {
+        await this.octokit.rest.pulls.requestReviewers({
+          owner: this.owner,
+          repo: this.repo,
+          pull_number: prNumber,
+          reviewers: params.reviewers,
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to set reviewers on PR #${prNumber}: ${err}`);
+      }
+    }
+
+    return pr as unknown as Record<string, unknown>;
   }
 
   /**
    * Get a pull request by number.
    */
   async getPullRequest(prNumber: number): Promise<Record<string, unknown>> {
-    return this.mcp.callTool<Record<string, unknown>>('pull_request_read', {
-      method: 'get',
+    const { data } = await this.octokit.rest.pulls.get({
       owner: this.owner,
       repo: this.repo,
-      pullNumber: prNumber,
+      pull_number: prNumber,
     });
+    return data as unknown as Record<string, unknown>;
   }
 
   /**
@@ -197,10 +170,10 @@ export class GitHubAPI {
     prNumber: number,
     updates: { title?: string; body?: string },
   ): Promise<void> {
-    await this.mcp.callTool('update_pull_request', {
+    await this.octokit.rest.pulls.update({
       owner: this.owner,
       repo: this.repo,
-      pullNumber: prNumber,
+      pull_number: prNumber,
       ...updates,
     });
   }
@@ -209,36 +182,36 @@ export class GitHubAPI {
    * Get regular conversation comments on a pull request (issue-style, not review threads).
    */
   async getPRComments(prNumber: number): Promise<unknown> {
-    return this.mcp.callTool<unknown>('pull_request_read', {
-      method: 'get_comments',
+    const { data } = await this.octokit.rest.issues.listComments({
       owner: this.owner,
       repo: this.repo,
-      pullNumber: prNumber,
+      issue_number: prNumber,
     });
+    return data;
   }
 
   /**
    * Get review comments for a pull request.
    */
   async getPRReviewComments(prNumber: number): Promise<unknown> {
-    return this.mcp.callTool<unknown>('pull_request_read', {
-      method: 'get_review_comments',
+    const { data } = await this.octokit.rest.pulls.listReviewComments({
       owner: this.owner,
       repo: this.repo,
-      pullNumber: prNumber,
+      pull_number: prNumber,
     });
+    return data;
   }
 
   /**
    * Get top-level reviews for a pull request (review bodies, not inline threads).
    */
   async getPRReviews(prNumber: number): Promise<unknown> {
-    return this.mcp.callTool<unknown>('pull_request_read', {
-      method: 'get_reviews',
+    const { data } = await this.octokit.rest.pulls.listReviews({
       owner: this.owner,
       repo: this.repo,
-      pullNumber: prNumber,
+      pull_number: prNumber,
     });
+    return data;
   }
 
   /**
@@ -249,22 +222,23 @@ export class GitHubAPI {
     base?: string;
     state?: string;
   }): Promise<Record<string, unknown>[]> {
-    const args: Record<string, unknown> = {
+    const params: Parameters<typeof this.octokit.rest.pulls.list>[0] = {
       owner: this.owner,
       repo: this.repo,
     };
 
     if (filters?.head) {
-      args.head = `${this.owner}:${filters.head}`;
+      params.head = `${this.owner}:${filters.head}`;
     }
     if (filters?.base) {
-      args.base = filters.base;
+      params.base = filters.base;
     }
     if (filters?.state) {
-      args.state = filters.state;
+      params.state = filters.state as 'open' | 'closed' | 'all';
     }
 
-    return this.mcp.callTool<Record<string, unknown>[]>('list_pull_requests', args);
+    const { data } = await this.octokit.rest.pulls.list(params);
+    return data as unknown as Record<string, unknown>[];
   }
 
   // ── Labels ──
@@ -275,7 +249,7 @@ export class GitHubAPI {
    */
   async ensureLabel(labelName: string, color = 'ededed'): Promise<void> {
     try {
-      await this.mcp.callTool('create_label', {
+      await this.octokit.rest.issues.createLabel({
         owner: this.owner,
         repo: this.repo,
         name: labelName,
@@ -297,12 +271,9 @@ export class GitHubAPI {
   async applyLabels(prNumber: number, labels: string[]): Promise<void> {
     if (labels.length === 0) return;
     try {
-      // Fetch current labels so we don't clobber them — GitHub's issue update
-      // API replaces the full label set when `labels` is provided.
       let existingLabels: string[] = [];
       try {
-        const issue = await this.mcp.callTool<Record<string, unknown>>('issue_read', {
-          method: 'get',
+        const { data: issue } = await this.octokit.rest.issues.get({
           owner: this.owner,
           repo: this.repo,
           issue_number: prNumber,
@@ -317,8 +288,7 @@ export class GitHubAPI {
         // If we can't fetch current labels, proceed with only the supplied ones.
       }
       const merged = Array.from(new Set([...existingLabels, ...labels]));
-      await this.mcp.callTool('issue_write', {
-        method: 'update',
+      await this.octokit.rest.issues.update({
         owner: this.owner,
         repo: this.repo,
         issue_number: prNumber,
@@ -332,10 +302,15 @@ export class GitHubAPI {
   // ── Auth ──
 
   /**
-   * Check if the MCP server is connected and authenticated.
+   * Check if the Octokit client is authenticated.
    */
   async checkAuth(): Promise<boolean> {
-    return this.mcp.checkAuth();
+    try {
+      await this.octokit.rest.users.getAuthenticated();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // ── Private helpers ──
@@ -367,11 +342,11 @@ export class GitHubAPI {
       queryParts.push(`assignee:${filters.assignee}`);
     }
 
-    const result = await this.mcp.callTool<Record<string, unknown>>('search_issues', {
-      query: queryParts.join(' '),
-      perPage: filters.limit ?? 30,
+    const items = await this.octokit.paginate(this.octokit.rest.search.issuesAndPullRequests, {
+      q: queryParts.join(' '),
+      per_page: filters.limit ?? 30,
     });
 
-    return (result.items as Record<string, unknown>[]) ?? [];
+    return items as unknown as Record<string, unknown>[];
   }
 }
