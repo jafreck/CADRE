@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
+import { isCadreSelfRun } from '../util/cadre-self-run.js';
 
 export class PRCompositionPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 5;
@@ -67,13 +68,21 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
         prBody += `\n\n${ctx.platform.issueLinkSuffix(ctx.issue.number)}`;
       }
 
+      let labels = ctx.config.pullRequest.labels ?? [];
+      if (isCadreSelfRun(ctx.config)) {
+        await ctx.platform.ensureLabel('cadre-generated');
+        if (!labels.includes('cadre-generated')) {
+          labels = [...labels, 'cadre-generated'];
+        }
+      }
+
       const pr = await ctx.platform.createPullRequest({
         title: prTitle,
         body: prBody,
         head: ctx.worktree.branch,
         base: ctx.config.baseBranch,
         draft: ctx.config.pullRequest.draft,
-        labels: ctx.config.pullRequest.labels,
+        labels,
         reviewers: ctx.config.pullRequest.reviewers,
       });
       ctx.callbacks.setPR?.(pr);

@@ -5,5 +5,5 @@ import type { CadreConfig } from '../config/schema.js';
  * Comparison is case-insensitive.
  */
 export function isCadreSelfRun(config: CadreConfig): boolean {
-  return config.repository.toLowerCase() === 'jafreck/cadre';
+  return (config.repository ?? '').toLowerCase() === 'jafreck/cadre';
 }

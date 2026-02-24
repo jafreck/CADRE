@@ -12,6 +12,7 @@ import { Logger } from '../logging/logger.js';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { NotificationManager } from '../notifications/manager.js';
+import { isCadreSelfRun } from '../util/cadre-self-run.js';
 
 /** The phases executed during a review-response cycle (skips analysis & planning). */
 export const REVIEW_RESPONSE_PHASES = [3, 4, 5];
@@ -394,6 +395,10 @@ export class ReviewResponseOrchestrator {
               ...(newTitle ? { title: newTitle } : {}),
               body: newBody,
             });
+            if (isCadreSelfRun(this.config)) {
+              await this.platform.ensureLabel('cadre-generated');
+              await this.platform.applyLabels(pr.number, ['cadre-generated']);
+            }
             this.logger.info(
               `Issue #${issueNumber}: updated PR #${pr.number} description`,
               { issueNumber },
