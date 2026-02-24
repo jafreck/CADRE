@@ -177,6 +177,8 @@ export const CadreConfigSchema = z.object({
       haltOnAmbiguity: z.boolean().default(false),
       /** Enable automatic reply comments on resolved review threads. */
       respondToReviews: z.boolean().default(false),
+      /** Post an issue comment with the cost summary when the pipeline finishes. */
+      postCostComment: z.boolean().default(false),
     })
     .default({}),
 
