@@ -1,4 +1,4 @@
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 
 export interface ValidationResult {
   passed: boolean;
@@ -8,5 +8,5 @@ export interface ValidationResult {
 
 export interface PreRunValidator {
   name: string;
-  validate(config: CadreConfig): Promise<ValidationResult>;
+  validate(config: RuntimeConfig): Promise<ValidationResult>;
 }

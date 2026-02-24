@@ -4,7 +4,11 @@ import { registerAgentsCommand } from '../src/cli/agents.js';
 
 vi.mock('../src/config/loader.js', () => ({
   loadConfig: vi.fn().mockResolvedValue({
-    agent: { backend: 'copilot' },
+    agent: {
+      backend: 'copilot',
+      copilot: { agentDir: '/fake/agents' },
+      claude: { agentDir: '/fake/agents' },
+    },
     copilot: { agentDir: '/fake/agents' },
   }),
   applyOverrides: vi.fn((c: unknown) => c),
@@ -277,7 +281,11 @@ describe('cadre run autoscaffold behavior', () => {
     vi.doMock('../src/config/loader.js', () => ({
       loadConfig: vi.fn().mockResolvedValue({
         copilot: { agentDir: '/agent-dir' },
-        agent: { backend: 'copilot' },
+        agent: {
+          backend: 'copilot',
+          copilot: { agentDir: '/agent-dir' },
+          claude: { agentDir: '/agent-dir' },
+        },
       }),
       applyOverrides: vi.fn((c: unknown) => c),
     }));

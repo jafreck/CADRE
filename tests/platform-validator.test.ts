@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   exec: vi.fn(),
@@ -13,36 +13,21 @@ const failResult = { exitCode: 1, stdout: '', stderr: 'not found', signal: null,
 
 const makeGithubConfig = (
   overrides: Partial<{ token: string | undefined; envToken: string | undefined }> = {},
-): CadreConfig =>
-  ({
-    projectName: 'test-project',
+) =>
+  makeRuntimeConfig({
     platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
-    github:
-      overrides.token !== undefined
-        ? { auth: { token: overrides.token } }
-        : undefined,
-  }) as unknown as CadreConfig;
+    ...(overrides.token !== undefined ? { github: { auth: { token: overrides.token } } } : {}),
+  });
 
-const makeAzureConfig = (pat: string): CadreConfig =>
-  ({
-    projectName: 'test-project',
+const makeAzureConfig = (pat: string) =>
+  makeRuntimeConfig({
     platform: 'azure-devops',
-    repository: 'my-repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
     azureDevOps: {
       organization: 'myorg',
       project: 'myproject',
       auth: { pat },
     },
-  }) as unknown as CadreConfig;
+  });
 
 describe('platformValidator', () => {
   beforeEach(() => {

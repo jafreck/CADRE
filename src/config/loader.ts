@@ -4,6 +4,19 @@ import { homedir } from 'node:os';
 import { CadreConfigSchema, type CadreConfig } from './schema.js';
 import { exists } from '../util/fs.js';
 
+/**
+ * Config as consumed by the runtime: all fields that loadConfig always
+ * synthesises are narrowed to required. Everything else is inherited as-is.
+ */
+export interface RuntimeConfig extends Omit<CadreConfig, 'stateDir' | 'worktreeRoot' | 'agent'> {
+  /** Always an absolute path — resolved by loadConfig. */
+  readonly stateDir: string;
+  /** Always an absolute path — resolved by loadConfig. */
+  readonly worktreeRoot: string;
+  /** Always synthesised from copilot legacy fields if absent. */
+  readonly agent: NonNullable<CadreConfig['agent']>;
+}
+
 export class ConfigLoadError extends Error {
   constructor(
     message: string,
@@ -18,7 +31,7 @@ export class ConfigLoadError extends Error {
  * Load, parse, and validate a cadre.config.json file.
  * Resolves relative paths to absolute and validates the repo is a git repository.
  */
-export async function loadConfig(configPath: string): Promise<Readonly<CadreConfig>> {
+export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
   const absPath = isAbsolute(configPath) ? configPath : resolve(process.cwd(), configPath);
 
   // Check file exists
@@ -111,7 +124,7 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
     );
   }
 
-  const frozen: CadreConfig = {
+  const frozen: RuntimeConfig = {
     ...config,
     repoPath: resolvedRepoPath,
     stateDir: resolvedStateDir,
@@ -130,7 +143,7 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
  * Apply CLI overrides to a loaded config.
  */
 export function applyOverrides(
-  config: CadreConfig,
+  config: RuntimeConfig,
   overrides: {
     resume?: boolean;
     dryRun?: boolean;
@@ -141,7 +154,7 @@ export function applyOverrides(
     noPr?: boolean;
     respondToReviews?: boolean;
   },
-): CadreConfig {
+): RuntimeConfig {
   const merged = { ...config };
 
   if (overrides.resume != null) {
@@ -176,5 +189,5 @@ export function applyOverrides(
     merged.options = { ...merged.options, respondToReviews: overrides.respondToReviews };
   }
 
-  return Object.freeze(merged);
+  return Object.freeze(merged) as RuntimeConfig;
 }

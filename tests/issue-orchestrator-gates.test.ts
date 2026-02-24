@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { CheckpointManager } from '../src/core/checkpoint.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { PlatformProvider } from '../src/platform/provider.js';
@@ -192,13 +192,9 @@ vi.mock('node:fs/promises', () => ({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeConfig(): CadreConfig {
-  return {
+function makeConfig() {
+  return makeRuntimeConfig({
     projectName: 'test',
-    repository: 'owner/repo',
-    platform: 'github',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [42] },
     commits: {
@@ -223,11 +219,16 @@ function makeConfig(): CadreConfig {
       invocationDelayMs: 0,
       buildVerification: false,
       testVerification: false,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
+      skipValidation: false,
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
     },
-    commands: {},
     copilot: { cliCommand: 'copilot', agentDir: '.agents', timeout: 300000, model: 'claude-sonnet-4.6' },
-    environment: { inheritShellPath: true, extraPath: [] },
-  } as unknown as CadreConfig;
+  });
 }
 
 function makeIssue(): IssueDetail {
@@ -809,15 +810,15 @@ describe('IssueOrchestrator – Ambiguity Gating', () => {
   }
 
   /** Config with haltOnAmbiguity enabled and a small threshold. */
-  function makeHaltConfig(): CadreConfig {
-    return {
+  function makeHaltConfig() {
+    return makeRuntimeConfig({
       ...makeConfig(),
       options: {
-        ...(makeConfig() as any).options,
+        ...makeConfig().options,
         haltOnAmbiguity: true,
         ambiguityThreshold: 0,
       },
-    } as unknown as CadreConfig;
+    });
   }
 
   beforeEach(() => {

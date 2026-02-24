@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import pLimit from 'p-limit';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager, RemoteBranchMissingError } from '../git/worktree.js';
@@ -43,7 +43,7 @@ export class FleetOrchestrator {
   private fleetBudgetExceeded = false;
 
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly issues: IssueDetail[],
     private readonly worktreeManager: WorktreeManager,
     private readonly launcher: AgentLauncher,

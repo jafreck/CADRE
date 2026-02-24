@@ -1,17 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { PreRunValidator, ValidationResult } from '../src/validation/types.js';
 import { PreRunValidationSuite } from '../src/validation/suite.js';
 
-const makeConfig = (): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
-  }) as unknown as CadreConfig;
+const makeConfig = () => makeRuntimeConfig();
 
 const makeValidator = (name: string, result: ValidationResult): PreRunValidator => ({
   name,

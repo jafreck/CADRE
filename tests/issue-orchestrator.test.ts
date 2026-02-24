@@ -6,7 +6,7 @@ import * as fsUtils from '../src/util/fs.js';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
 import type { CheckpointManager } from '../src/core/checkpoint.js';
@@ -163,12 +163,8 @@ function makeCheckpoint(overrides: Record<string, unknown> = {}): CheckpointMana
   return makeCheckpointMock(overrides) as unknown as CheckpointManager;
 }
 
-function makeConfig(tokenBudget?: number): CadreConfig {
-  return {
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
+function makeConfig(tokenBudget?: number) {
+  return makeRuntimeConfig({
     issues: { ids: [42] },
     options: {
       maxParallelIssues: 1,
@@ -178,29 +174,38 @@ function makeConfig(tokenBudget?: number): CadreConfig {
       resume: false,
       buildVerification: false,
       testVerification: false,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
+      skipValidation: false,
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
+      invocationDelayMs: 0,
       tokenBudget: tokenBudget ?? undefined,
-    },
+    } as any,
     commits: {
       commitPerPhase: false,
       squashBeforePR: false,
+      conventional: true,
+      sign: false,
     },
     pullRequest: {
       autoCreate: false,
       draft: false,
       linkIssue: false,
+      labels: [],
+      reviewers: [],
     },
-    commands: {},
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
-    environment: { inheritShellPath: true, extraPath: [] },
     issueUpdates: {
       enabled: false,
       onStart: false,
       onPhaseComplete: false,
       onComplete: false,
       onFailed: false,
-      onBudgetWarning: false,
+      onBudgetWarning: true,
     },
-  } as unknown as CadreConfig;
+  });
 }
 
 function makeIssue(): IssueDetail {
@@ -250,7 +255,7 @@ function makeLauncher() {
 }
 
 describe('IssueOrchestrator – notification dispatch', () => {
-  let config: CadreConfig;
+  let config: ReturnType<typeof makeConfig>;
   let issue: IssueDetail;
   let worktree: WorktreeInfo;
   let logger: Logger;
@@ -608,7 +613,7 @@ describe('IssueOrchestrator notifier integration', () => {
   }
 
   function makeOrchestrator(
-    config: CadreConfig,
+    config: ReturnType<typeof makeConfig>,
     checkpoint: CheckpointManager,
     launcher: AgentLauncher,
     logger: Logger,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   exec: vi.fn(),
@@ -10,21 +10,15 @@ import { commandValidator } from '../src/validation/command-validator.js';
 
 const makeConfig = (
   overrides: Partial<{ build: string; test: string; install?: string; lint?: string }> = {},
-): CadreConfig =>
-  ({
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
+) =>
+  makeRuntimeConfig({
     commands: {
       build: overrides.build ?? 'npm run build',
       test: overrides.test ?? 'npx vitest run',
       ...(overrides.install !== undefined ? { install: overrides.install } : {}),
       ...(overrides.lint !== undefined ? { lint: overrides.lint } : {}),
     },
-  }) as unknown as CadreConfig;
+  });
 
 const ok = { exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false } as const;
 const fail = { exitCode: 1, stdout: '', stderr: '', signal: null, timedOut: false } as const;

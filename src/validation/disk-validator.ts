@@ -1,5 +1,4 @@
-import { join } from 'node:path';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import { statOrNull } from '../util/fs.js';
 import { exec } from '../util/process.js';
 import type { PreRunValidator, ValidationResult } from './types.js';
@@ -7,7 +6,7 @@ import type { PreRunValidator, ValidationResult } from './types.js';
 export const diskValidator: PreRunValidator = {
   name: 'disk',
 
-  async validate(config: CadreConfig): Promise<ValidationResult> {
+  async validate(config: RuntimeConfig): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -27,11 +26,11 @@ export const diskValidator: PreRunValidator = {
       return { passed: false, errors: [`Could not parse repo size from du output: ${duResult.stdout.trim()}`], warnings: [] };
     }
 
-    const maxParallelIssues = config.options?.maxParallelIssues ?? 3;
+    const maxParallelIssues = config.options.maxParallelIssues;
     const estimateKb = repoSizeKb * maxParallelIssues;
 
-    // Use worktreeRoot for df; fall back to repoPath if not set
-    const worktreeRoot = config.worktreeRoot ?? join(config.repoPath, '.cadre', 'worktrees');
+    // Use worktreeRoot for df (always set by loadConfig)
+    const worktreeRoot = config.worktreeRoot;
 
     // Get available disk space in KB using df -k
     const dfResult = await exec('df', ['-k', worktreeRoot]);

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import { ReportWriter } from '../src/reporting/report-writer.js';
 import { CostEstimator } from '../src/budget/cost-estimator.js';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
+import type { RuntimeConfig } from '../src/config/loader.js';
 import type { FleetResult } from '../src/core/fleet-orchestrator.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { RunReport } from '../src/reporting/types.js';
@@ -21,9 +22,8 @@ vi.mock('node:fs/promises', () => ({
 import * as fsUtil from '../src/util/fs.js';
 import { readdir } from 'node:fs/promises';
 
-const makeConfig = (overrides: Partial<CadreConfig> = {}): CadreConfig =>
-  ({
-    projectName: 'test-project',
+const makeConfig = (overrides: Partial<RuntimeConfig> = {}) =>
+  makeRuntimeConfig({
     repoPath: '/repo',
     copilot: {
       model: 'gpt-4o',
@@ -32,7 +32,7 @@ const makeConfig = (overrides: Partial<CadreConfig> = {}): CadreConfig =>
       timeout: 300000,
     },
     ...overrides,
-  }) as unknown as CadreConfig;
+  });
 
 const makeFleetResult = (
   overrides: Partial<FleetResult> = {},
@@ -67,13 +67,13 @@ const makeIssues = (): IssueDetail[] => [
 
 describe('ReportWriter', () => {
   let writer: ReportWriter;
-  let config: CadreConfig;
+  let config: ReturnType<typeof makeConfig>;
   let estimator: CostEstimator;
 
   beforeEach(() => {
     vi.clearAllMocks();
     config = makeConfig();
-    estimator = new CostEstimator(config.copilot as CadreConfig['copilot']);
+    estimator = new CostEstimator(config.copilot);
     writer = new ReportWriter(config, estimator);
   });
 

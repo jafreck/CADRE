@@ -1,11 +1,11 @@
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import { exec } from '../util/process.js';
 import type { PreRunValidator, ValidationResult } from './types.js';
 
 export const commandValidator: PreRunValidator = {
   name: 'command',
 
-  async validate(config: CadreConfig): Promise<ValidationResult> {
+  async validate(config: RuntimeConfig): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
 

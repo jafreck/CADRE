@@ -62,103 +62,58 @@ vi.mock('../src/util/process.js', async (importOriginal) => {
 
 const SYNTHETIC_ANALYSIS = `# Analysis: Issue
 
-## Requirements
-- Implement the requested feature
-- Ensure backward compatibility
-- Add appropriate tests
-
-**Change Type:** feature
-
-**Scope:** medium
-
-## Affected Areas
-- src/core
-
-## Ambiguities
-- None identified
+\`\`\`cadre-json
+${JSON.stringify({ requirements: ['Implement the requested feature', 'Ensure backward compatibility', 'Add appropriate tests'], changeType: 'feature', scope: 'medium', affectedAreas: ['src/core'], ambiguities: [] })}
+\`\`\`
 `;
 
 const SYNTHETIC_SCOUT_REPORT = `# Scout Report
 
-## Relevant Files
-- \`src/core/issue-orchestrator.ts\` - Main orchestration logic
-- \`src/agents/types.ts\` - Type definitions
-
-## Test Files
-- \`tests/issue-orchestrator.test.ts\`
+\`\`\`cadre-json
+${JSON.stringify({ relevantFiles: [{ path: 'src/core/issue-orchestrator.ts', reason: 'Main orchestration logic' }, { path: 'src/agents/types.ts', reason: 'Type definitions' }], dependencyMap: {}, testFiles: ['tests/issue-orchestrator.test.ts'], estimatedChanges: [] })}
+\`\`\`
 `;
 
 const SYNTHETIC_IMPLEMENTATION_PLAN = `# Implementation Plan: Issue
 
-## Tasks
-
-### Task: task-001 - Implement core changes
-
-**Description:** Make the primary code changes required by the issue.
-**Files:** src/core/issue-orchestrator.ts
-**Dependencies:** none
-**Complexity:** moderate
-**Acceptance Criteria:**
-- Core changes implemented correctly
-
-### Task: task-002 - Add tests
-
-**Description:** Write tests for the changes.
-**Files:** tests/issue-orchestrator.test.ts
-**Dependencies:** task-001
-**Complexity:** simple
-**Acceptance Criteria:**
-- Tests cover new functionality
+\`\`\`cadre-json
+${JSON.stringify([
+  { id: 'task-001', name: 'Implement core changes', description: 'Make the primary code changes required by the issue.', files: ['src/core/issue-orchestrator.ts'], dependencies: [], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented correctly'] },
+  { id: 'task-002', name: 'Add tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], dependencies: ['task-001'], complexity: 'simple', acceptanceCriteria: ['Tests cover new functionality'] },
+])}
+\`\`\`
 `;
 
 const SYNTHETIC_REVIEW = `# Code Review
 
-**Verdict:** pass
-
-## Summary
-The implementation looks correct and follows existing patterns.
+\`\`\`cadre-json
+${JSON.stringify({ verdict: 'pass', issues: [], summary: 'The implementation looks correct and follows existing patterns.' })}
+\`\`\`
 `;
 
-const SYNTHETIC_PR_CONTENT = `---
-title: "Implement requested changes"
-labels: ["enhancement"]
----
+const SYNTHETIC_PR_CONTENT = `# PR Content
 
-## Summary
+\`\`\`cadre-json
+${JSON.stringify({ title: 'Implement requested changes', body: '## Summary\n\nThis PR implements the changes requested in the issue.', labels: ['enhancement'] })}
+\`\`\`
+`;
 
-This PR implements the changes requested in the issue.
+const SYNTHETIC_INTEGRATION_REPORT = `# Integration Report
+
+\`\`\`cadre-json
+${JSON.stringify({ buildResult: { command: 'npm run build', exitCode: 0, output: 'OK', pass: true }, testResult: { command: 'npm test', exitCode: 0, output: 'OK', pass: true }, overallPass: true, regressionFailures: [], baselineFailures: [] })}
+\`\`\`
 `;
 
 const THREE_TASK_PLAN = `# Implementation Plan: Issue
 
-## Tasks
-
-### Task: task-001 - Implement core changes
-
-**Description:** Make the primary code changes.
-**Files:** src/core/issue-orchestrator.ts
-**Dependencies:** none
-**Complexity:** moderate
-**Acceptance Criteria:**
-- Core changes implemented
-
-### Task: task-002 - Add tests
-
-**Description:** Write tests for the changes.
-**Files:** tests/issue-orchestrator.test.ts
-**Dependencies:** none
-**Complexity:** simple
-**Acceptance Criteria:**
-- Tests pass
-
-### Task: task-003 - Always blocked task
-
-**Description:** This task is configured to always fail in the test.
-**Files:** src/blocked.ts
-**Dependencies:** none
-**Complexity:** simple
-**Acceptance Criteria:**
-- Will never pass (for testing blocked-task behavior)
+\`\`\`cadre-json
+${JSON.stringify([
+  { id: 'task-001', name: 'Implement core changes', description: 'Make the primary code changes.', files: ['src/core/issue-orchestrator.ts'], dependencies: [], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented'] },
+  { id: 'task-002', name: 'Add tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['Tests pass'] },
+  { id: 'task-003', name: 'Always blocked task', description: 'This task is configured to always fail in the test.', files: ['src/blocked.ts'], dependencies: [], complexity: 'simple', acceptanceCriteria: ['Will never pass (for testing blocked-task behavior)'] },
+])}
+\`\`\`
 `;
 
 // ── E2E Launcher ──────────────────────────────────────────────────────────────
@@ -235,6 +190,7 @@ class E2ELauncher {
     if (agent === 'implementation-planner' || outFile === 'implementation-plan.md') return SYNTHETIC_IMPLEMENTATION_PLAN;
     if (agent === 'pr-composer' || outFile === 'pr-content.md') return SYNTHETIC_PR_CONTENT;
     if (agent === 'code-reviewer' || outFile.startsWith('review')) return SYNTHETIC_REVIEW;
+    if (agent === 'integration-checker' || outFile === 'integration-report.md') return SYNTHETIC_INTEGRATION_REPORT;
 
     return '# Output\n\nSynthetic output.\n';
   }
