@@ -103,7 +103,7 @@ describe('loadConfig – agent backward-compat normalisation', () => {
   it('should set agent.copilot.agentDir from copilot.agentDir when synthesizing', async () => {
     setupFs(BASE_CONFIG);
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.copilot.agentDir).toBe('.github/agents');
+    expect(config.agent!.copilot.agentDir).toBe('/tmp/repo/.github/agents');
   });
 
   it('should return a frozen config object', async () => {

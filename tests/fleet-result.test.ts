@@ -8,6 +8,7 @@ const minimalConfig = CadreConfigSchema.parse({
   projectName: 'test-project',
   repository: 'owner/repo',
   repoPath: '/tmp/test-repo',
+  stateDir: '/tmp/cadre-state',
   baseBranch: 'main',
   issues: { ids: [1] },
   github: {

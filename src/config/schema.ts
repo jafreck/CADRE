@@ -37,7 +37,7 @@ export const AgentConfigSchema = z.object({
   copilot: z
     .object({
       cliCommand: z.string().default('copilot'),
-      agentDir: z.string().default('.cadre/agents'),
+      agentDir: z.string().default('agents'),
       costOverrides: z
         .record(
           z.string(),
@@ -53,8 +53,8 @@ export const AgentConfigSchema = z.object({
   claude: z
     .object({
       cliCommand: z.string().default('claude'),
-      /** Directory where Claude subagent files (.claude/agents/) live. */
-      agentDir: z.string().default('.claude/agents'),
+      /** Directory where Claude subagent files live. */
+      agentDir: z.string().default('agents'),
     })
     .default({}),
 });
@@ -82,7 +82,14 @@ export const CadreConfigSchema = z.object({
   /** Base branch that worktrees are created from (e.g. "main", "develop"). */
   baseBranch: z.string().default('main'),
 
-  /** Where to create worktree directories. Defaults to `.cadre/worktrees/`. */
+  /**
+   * Directory where all cadre state is stored (logs, checkpoints, reports, agents, worktrees).
+   * Defaults to `~/.cadre/{projectName}/` so cadre never writes inside the target repository.
+   * Can be overridden to any absolute or relative path.
+   */
+  stateDir: z.string().optional(),
+
+  /** Where to create worktree directories. Defaults to `{stateDir}/worktrees/`. */
   worktreeRoot: z.string().optional(),
 
   /** Issue selection — either explicit IDs or a query. */
@@ -191,7 +198,7 @@ export const CadreConfigSchema = z.object({
     .object({
       cliCommand: z.string().default('copilot'),
       model: z.string().default('claude-sonnet-4.6'),
-      agentDir: z.string().default('.cadre/agents'),
+      agentDir: z.string().default('agents'),
       timeout: z.number().int().default(300_000),
       costOverrides: z
         .record(

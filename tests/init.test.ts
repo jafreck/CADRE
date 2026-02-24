@@ -3,13 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../src/util/fs.js', () => ({
   exists: vi.fn(),
   atomicWriteJSON: vi.fn(),
-  atomicWriteFile: vi.fn(),
-  readFileOrNull: vi.fn(),
-  ensureDir: vi.fn(),
-}));
-
-vi.mock('../src/cli/agents.js', () => ({
-  scaffoldMissingAgents: vi.fn(),
 }));
 
 vi.mock('../src/cli/prompts.js', () => ({
@@ -20,18 +13,13 @@ vi.mock('@inquirer/prompts', () => ({
   confirm: vi.fn(),
 }));
 
-import { exists, atomicWriteJSON, atomicWriteFile, readFileOrNull, ensureDir } from '../src/util/fs.js';
-import { scaffoldMissingAgents } from '../src/cli/agents.js';
+import { exists, atomicWriteJSON } from '../src/util/fs.js';
 import { collectAnswers } from '../src/cli/prompts.js';
 import { confirm } from '@inquirer/prompts';
 import { runInit } from '../src/cli/init.js';
 
 const mockExists = vi.mocked(exists);
 const mockAtomicWriteJSON = vi.mocked(atomicWriteJSON);
-const mockAtomicWriteFile = vi.mocked(atomicWriteFile);
-const mockReadFileOrNull = vi.mocked(readFileOrNull);
-const mockEnsureDir = vi.mocked(ensureDir);
-const mockScaffoldMissingAgents = vi.mocked(scaffoldMissingAgents);
 const mockCollectAnswers = vi.mocked(collectAnswers);
 const mockConfirm = vi.mocked(confirm);
 
@@ -54,11 +42,7 @@ function setupHappyPath() {
     if (p.endsWith('cadre.config.json')) return false;
     return false;
   });
-  mockReadFileOrNull.mockResolvedValue(null);
   mockAtomicWriteJSON.mockResolvedValue(undefined);
-  mockAtomicWriteFile.mockResolvedValue(undefined);
-  mockEnsureDir.mockResolvedValue(undefined);
-  mockScaffoldMissingAgents.mockResolvedValue(0);
   mockCollectAnswers.mockResolvedValue(DEFAULT_ANSWERS);
 }
 
@@ -111,10 +95,7 @@ describe('runInit', () => {
         return false;
       });
       mockConfirm.mockResolvedValue(true);
-      mockReadFileOrNull.mockResolvedValue(null);
       mockAtomicWriteJSON.mockResolvedValue(undefined);
-      mockAtomicWriteFile.mockResolvedValue(undefined);
-      mockEnsureDir.mockResolvedValue(undefined);
       mockCollectAnswers.mockResolvedValue(DEFAULT_ANSWERS);
 
       await runInit({ yes: false, repoPath: REPO_PATH });
@@ -144,10 +125,7 @@ describe('runInit', () => {
         if (p.endsWith('cadre.config.json')) return true;
         return false;
       });
-      mockReadFileOrNull.mockResolvedValue(null);
       mockAtomicWriteJSON.mockResolvedValue(undefined);
-      mockAtomicWriteFile.mockResolvedValue(undefined);
-      mockEnsureDir.mockResolvedValue(undefined);
       mockCollectAnswers.mockResolvedValue(DEFAULT_ANSWERS);
 
       await runInit({ yes: true, repoPath: REPO_PATH });
@@ -291,103 +269,6 @@ describe('runInit', () => {
 
       const [, writtenConfig] = mockAtomicWriteJSON.mock.calls[0];
       expect(writtenConfig).not.toHaveProperty('github');
-    });
-  });
-
-  describe('.gitignore management', () => {
-    it('should append .cadre/ to .gitignore when not already present', async () => {
-      setupHappyPath();
-      mockReadFileOrNull.mockResolvedValue('node_modules/\ndist/\n');
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockAtomicWriteFile).toHaveBeenCalledWith(
-        `${REPO_PATH}/.gitignore`,
-        expect.stringContaining('.cadre/'),
-      );
-    });
-
-    it('should not duplicate .cadre/ if already in .gitignore', async () => {
-      setupHappyPath();
-      mockReadFileOrNull.mockResolvedValue('node_modules/\n.cadre/\ndist/\n');
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockAtomicWriteFile).not.toHaveBeenCalled();
-    });
-
-    it('should create .gitignore with .cadre/ when it does not exist', async () => {
-      setupHappyPath();
-      mockReadFileOrNull.mockResolvedValue(null);
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockAtomicWriteFile).toHaveBeenCalledWith(
-        `${REPO_PATH}/.gitignore`,
-        '.cadre/\n',
-      );
-    });
-
-    it('should add newline separator before .cadre/ when existing .gitignore does not end with newline', async () => {
-      setupHappyPath();
-      mockReadFileOrNull.mockResolvedValue('node_modules/');
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockAtomicWriteFile).toHaveBeenCalledWith(
-        `${REPO_PATH}/.gitignore`,
-        'node_modules/\n.cadre/\n',
-      );
-    });
-
-    it('should not add extra newline when .gitignore already ends with newline', async () => {
-      setupHappyPath();
-      mockReadFileOrNull.mockResolvedValue('node_modules/\n');
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockAtomicWriteFile).toHaveBeenCalledWith(
-        `${REPO_PATH}/.gitignore`,
-        'node_modules/\n.cadre/\n',
-      );
-    });
-  });
-
-  describe('.github/agents/ directory creation', () => {
-    it('should create .github/agents/ directory', async () => {
-      setupHappyPath();
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockEnsureDir).toHaveBeenCalledWith(`${REPO_PATH}/.github/agents`);
-    });
-
-    it('should call scaffoldMissingAgents with the resolved agent directory path', async () => {
-      setupHappyPath();
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      expect(mockScaffoldMissingAgents).toHaveBeenCalledWith(`${REPO_PATH}/.github/agents`, 'copilot');
-    });
-
-    it('should print a notice when scaffoldMissingAgents creates files', async () => {
-      setupHappyPath();
-      mockScaffoldMissingAgents.mockResolvedValue(3);
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
-      expect(logCalls).toContain('Auto-scaffolded 3 missing agent file(s)');
-    });
-
-    it('should not print a scaffold notice when all agent files already exist', async () => {
-      setupHappyPath();
-      mockScaffoldMissingAgents.mockResolvedValue(0);
-
-      await runInit({ yes: true, repoPath: REPO_PATH });
-
-      const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
-      expect(logCalls).not.toContain('Auto-scaffolded');
     });
   });
 
