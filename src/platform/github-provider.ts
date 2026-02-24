@@ -12,6 +12,7 @@ import type {
 } from './provider.js';
 import { GitHubAPI } from '../github/api.js';
 import { Logger } from '../logging/logger.js';
+import { Octokit } from '@octokit/rest';
 
 function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -32,8 +33,8 @@ function asArray(value: unknown): unknown[] {
 /**
  * GitHub implementation of PlatformProvider.
  *
- * Delegates all operations to GitHubAPI / GitHubMCPClient,
- * normalizing responses to the platform-agnostic types.
+ * Delegates all operations to GitHubAPI, normalizing responses to the
+ * platform-agnostic types.
  */
 export class GitHubProvider implements PlatformProvider {
   readonly name = 'GitHub';
@@ -45,6 +46,7 @@ export class GitHubProvider implements PlatformProvider {
   constructor(
     private readonly repository: string,
     private readonly logger: Logger,
+    private readonly octokit?: Octokit,
   ) {
     const [owner, repo] = repository.split('/');
     this.owner = owner;
@@ -54,7 +56,7 @@ export class GitHubProvider implements PlatformProvider {
   // ── Lifecycle ──
 
   async connect(): Promise<void> {
-    this.api = new GitHubAPI(this.repository, this.logger);
+    this.api = new GitHubAPI(this.repository, this.logger, this.octokit);
   }
 
   async disconnect(): Promise<void> {
