@@ -63,6 +63,19 @@ export interface ReviewComment {
 }
 
 /**
+ * A regular (non-review) pull request comment (issue-style comment on the PR conversation).
+ */
+export interface PRComment {
+  id: string;
+  author: string;
+  /** Whether the author account is a bot (e.g. codecov[bot], dependabot[bot]). */
+  isBot: boolean;
+  body: string;
+  createdAt: string;
+  url: string;
+}
+
+/**
  * A pull request review thread, grouping one or more comments on the same code location.
  */
 export interface ReviewThread {
@@ -144,6 +157,8 @@ export interface PlatformProvider {
 
   /** List review threads (with comments) for a pull request. */
   listPRReviewComments(prNumber: number): Promise<ReviewThread[]>;
+  /** List regular (non-review) conversation comments on a pull request. */
+  listPRComments(prNumber: number): Promise<PRComment[]>;
 
   // ── Issue Linking ──
 

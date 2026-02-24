@@ -125,6 +125,7 @@ function makeMockDeps() {
   const platform = {
     listPullRequests: vi.fn().mockResolvedValue([]),
     listPRReviewComments: vi.fn().mockResolvedValue([]),
+    listPRComments: vi.fn().mockResolvedValue([]),
     getIssue: vi.fn().mockResolvedValue({
       number: 1,
       title: 'Issue 1',
@@ -231,7 +232,7 @@ describe('ReviewResponseOrchestrator — run() skipping logic', () => {
     expect(result.issues[0]).toMatchObject({
       issueNumber: 1,
       skipped: true,
-      skipReason: 'no unresolved review threads',
+      skipReason: 'no unresolved review threads or PR comments',
     });
   });
 
@@ -258,7 +259,7 @@ describe('ReviewResponseOrchestrator — run() skipping logic', () => {
     expect(result.issues[0]).toMatchObject({
       issueNumber: 1,
       skipped: true,
-      skipReason: 'no unresolved review threads',
+      skipReason: 'no unresolved review threads or PR comments',
     });
   });
 
