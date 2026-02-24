@@ -86,7 +86,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       }
       structuredBuildResult = {
         command: ctx.config.commands.build ?? '',
-        exitCode: buildResult.exitCode,
+        exitCode: buildResult.exitCode ?? -1,
         output: (buildResult.stdout + buildResult.stderr).slice(0, 500),
         pass: buildResult.exitCode === 0,
       };
@@ -127,7 +127,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       }
       structuredTestResult = {
         command: ctx.config.commands.test ?? '',
-        exitCode: testResult.exitCode,
+        exitCode: testResult.exitCode ?? -1,
         output: (testResult.stdout + testResult.stderr).slice(0, 500),
         pass: testResult.exitCode === 0,
       };
@@ -145,7 +145,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
       }
       structuredLintResult = {
         command: ctx.config.commands.lint ?? '',
-        exitCode: lintResult.exitCode,
+        exitCode: lintResult.exitCode ?? -1,
         output: (lintResult.stdout + lintResult.stderr).slice(0, 500),
         pass: lintResult.exitCode === 0,
       };
