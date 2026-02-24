@@ -49,7 +49,9 @@ program
       if (!opts.skipAgentValidation) {
         const backend = config.agent?.backend ?? 'copilot';
         const agentDir =
-          backend === 'claude' ? config.agent!.claude.agentDir : config.agent!.copilot.agentDir;
+          backend === 'claude'
+            ? (config.agent?.claude?.agentDir ?? '.claude/agents')
+            : (config.agent?.copilot?.agentDir ?? config.copilot.agentDir);
         let issues = await AgentLauncher.validateAgentFiles(agentDir);
 
         if (issues.length > 0) {
