@@ -254,7 +254,8 @@ export class WorktreeManager {
    *
    * - **Copilot**: reads `{name}.md`, injects YAML frontmatter, writes
    *   `{name}.agent.md` into `.github/agents/` (the format Copilot CLI expects).
-   * - **Claude**: copies `{name}.md` as-is into `.claude/agents/`.
+   * - **Claude**: reads `{name}.md`, injects YAML frontmatter, writes
+   *   `{name}.md` into `.claude/agents/` (the format Claude CLI expects).
    *
    * No-op if agentDir is not configured or does not exist.
    */
@@ -280,17 +281,26 @@ export class WorktreeManager {
       const agentName = file.replace(/\.md$/, '');
       const srcPath = join(this.agentDir!, file);
 
+      const definition = AGENT_DEFINITIONS.find((d) => d.name === agentName);
+      const displayName = agentName
+        .split('-')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+      const description = definition?.description ?? displayName;
+      const body = await readFile(srcPath, 'utf-8');
+
       if (this.backend === 'claude') {
-        // Claude expects plain .md files
-        await writeFile(join(destDir, file), await readFile(srcPath, 'utf-8'), 'utf-8');
+        // Claude expects {name}.md with YAML frontmatter
+        const frontmatter = [
+          '---',
+          `name: ${displayName}`,
+          `description: "${description.replace(/"/g, '\\"')}"`,
+          '---',
+          '',
+        ].join('\n');
+        await writeFile(join(destDir, file), frontmatter + body, 'utf-8');
       } else {
         // Copilot expects {name}.agent.md with YAML frontmatter
-        const definition = AGENT_DEFINITIONS.find((d) => d.name === agentName);
-        const displayName = agentName
-          .split('-')
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(' ');
-        const description = definition?.description ?? displayName;
         const frontmatter = [
           '---',
           `name: ${displayName}`,
@@ -299,7 +309,6 @@ export class WorktreeManager {
           '---',
           '',
         ].join('\n');
-        const body = await readFile(srcPath, 'utf-8');
         const destFile = `${agentName}.agent.md`;
         await writeFile(join(destDir, destFile), frontmatter + body, 'utf-8');
       }

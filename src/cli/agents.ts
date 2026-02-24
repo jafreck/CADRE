@@ -34,8 +34,8 @@ function resolveAgentDir(
 /**
  * Return the agent source file name. Agent instruction files in `agentDir` are
  * always stored as plain `{name}.md` (no frontmatter, no backend-specific suffix).
- * Frontmatter and the `.agent.md` suffix are injected at worktree-sync time for
- * the Copilot backend; Claude copies the `.md` files as-is.
+ * Frontmatter is injected at worktree-sync time for both backends; the `.agent.md`
+ * suffix is additionally applied for the Copilot backend.
  */
 export function agentFileName(name: string): string {
   return `${name}.md`;
@@ -46,7 +46,7 @@ export function agentFileName(name: string): string {
  * Skips files that already exist; returns the count of files written.
  *
  * Files are stored as plain `{name}.md` regardless of backend.  Frontmatter is
- * injected by the Copilot worktree sync step at runtime.
+ * injected by the worktree sync step at runtime for both backends.
  */
 export async function scaffoldMissingAgents(
   agentDir: string,
