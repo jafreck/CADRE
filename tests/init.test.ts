@@ -367,7 +367,7 @@ describe('runInit', () => {
 
       await runInit({ yes: true, repoPath: REPO_PATH });
 
-      expect(mockScaffoldMissingAgents).toHaveBeenCalledWith(`${REPO_PATH}/.github/agents`);
+      expect(mockScaffoldMissingAgents).toHaveBeenCalledWith(`${REPO_PATH}/.github/agents`, 'copilot');
     });
 
     it('should print a notice when scaffoldMissingAgents creates files', async () => {

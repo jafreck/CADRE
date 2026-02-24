@@ -345,12 +345,12 @@ describe('scaffoldMissingAgents helper', () => {
     expect(writeFile).not.toHaveBeenCalled();
   });
 
-  it('should default to copilot backend when backend is omitted', async () => {
+  it('should use copilot backend naming convention when backend is \'copilot\'', async () => {
     vi.mocked(exists).mockImplementation(async (path: string) => {
       return (path as string).includes('templates');
     });
 
-    await scaffoldMissingAgents('/mock/agent-dir', undefined, '/mock/templates');
+    await scaffoldMissingAgents('/mock/agent-dir', 'copilot', '/mock/templates');
 
     const writtenPaths = vi.mocked(writeFile).mock.calls.map((c) => c[0] as string);
     for (const p of writtenPaths) {
