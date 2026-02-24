@@ -32,7 +32,6 @@ export class IssueFetcher {
   constructor(
     private readonly repository: string,
     private readonly logger: Logger,
-    _mcp?: unknown,
   ) {
     this.api = new GitHubAPI(repository, logger);
   }

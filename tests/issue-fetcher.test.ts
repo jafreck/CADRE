@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueFetcher } from '../src/github/issues.js';
 import { GitHubAPI } from '../src/github/api.js';
-import type { GitHubMCPClient } from '../src/github/mcp-client.js';
 import { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 
@@ -19,16 +18,6 @@ function makeLogger(): Logger {
     warn: vi.fn(),
     error: vi.fn(),
   } as unknown as Logger;
-}
-
-function makeMCP(): GitHubMCPClient {
-  return {
-    callTool: vi.fn(),
-    checkAuth: vi.fn(),
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    isConnected: vi.fn().mockReturnValue(true),
-  } as unknown as GitHubMCPClient;
 }
 
 function getApiMock() {
@@ -61,7 +50,7 @@ describe('IssueFetcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     logger = makeLogger();
-    fetcher = new IssueFetcher('owner/repo', logger, makeMCP());
+    fetcher = new IssueFetcher('owner/repo', logger);
   });
 
   describe('fetchIssue', () => {

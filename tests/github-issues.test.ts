@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GitHubAPI } from '../src/github/api.js';
-import { Octokit } from '@octokit/rest';
+import type { Octokit } from '@octokit/rest';
 import { Logger } from '../src/logging/logger.js';
 
 describe('GitHubAPI', () => {
@@ -25,6 +25,8 @@ describe('GitHubAPI', () => {
           createComment: vi.fn(),
           update: vi.fn(),
           createLabel: vi.fn(),
+          addLabels: vi.fn(),
+          listForRepo: vi.fn(),
         },
         pulls: {
           create: vi.fn(),
@@ -212,59 +214,37 @@ describe('GitHubAPI', () => {
   });
 
   describe('applyLabels', () => {
-    it('should call issues.update with the given labels when PR has no existing labels', async () => {
-      vi.mocked(mockOctokit.rest.issues.get).mockResolvedValue({ data: { labels: [] } } as never);
-      vi.mocked(mockOctokit.rest.issues.update).mockResolvedValue({ data: {} } as never);
+    it('should call issues.addLabels with the given labels', async () => {
+      vi.mocked(mockOctokit.rest.issues.addLabels).mockResolvedValue({ data: [] } as never);
 
       await api.applyLabels(42, ['bug', 'enhancement']);
 
-      expect(mockOctokit.rest.issues.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          owner: 'owner',
-          repo: 'repo',
-          issue_number: 42,
-          labels: expect.arrayContaining(['bug', 'enhancement']),
-        }),
-      );
+      expect(mockOctokit.rest.issues.addLabels).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 42,
+        labels: ['bug', 'enhancement'],
+      });
     });
 
-    it('should merge new labels with existing PR labels without clobbering', async () => {
-      vi.mocked(mockOctokit.rest.issues.get).mockResolvedValue({
-        data: { labels: [{ name: 'existing-label' }, { name: 'other' }] },
-      } as never);
-      vi.mocked(mockOctokit.rest.issues.update).mockResolvedValue({ data: {} } as never);
+    it('should add labels without clobbering existing ones (addLabels API handles this)', async () => {
+      vi.mocked(mockOctokit.rest.issues.addLabels).mockResolvedValue({ data: [] } as never);
 
       await api.applyLabels(42, ['cadre-generated']);
 
-      expect(mockOctokit.rest.issues.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          labels: expect.arrayContaining(['existing-label', 'other', 'cadre-generated']),
-        }),
+      expect(mockOctokit.rest.issues.addLabels).toHaveBeenCalledWith(
+        expect.objectContaining({ labels: ['cadre-generated'] }),
       );
     });
 
-    it('should deduplicate labels when the label is already present', async () => {
-      vi.mocked(mockOctokit.rest.issues.get).mockResolvedValue({
-        data: { labels: [{ name: 'cadre-generated' }] },
-      } as never);
-      vi.mocked(mockOctokit.rest.issues.update).mockResolvedValue({ data: {} } as never);
-
-      await api.applyLabels(42, ['cadre-generated']);
-
-      const updateCall = vi.mocked(mockOctokit.rest.issues.update).mock.calls[0][0];
-      const appliedLabels = (updateCall as Record<string, unknown>).labels as string[];
-      expect(appliedLabels.filter((l) => l === 'cadre-generated')).toHaveLength(1);
-    });
-
-    it('should not call issues.update when labels array is empty', async () => {
+    it('should not call addLabels when labels array is empty', async () => {
       await api.applyLabels(42, []);
 
-      expect(mockOctokit.rest.issues.update).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.addLabels).not.toHaveBeenCalled();
     });
 
-    it('should warn when issues.update fails', async () => {
-      vi.mocked(mockOctokit.rest.issues.get).mockResolvedValue({ data: { labels: [] } } as never);
-      vi.mocked(mockOctokit.rest.issues.update).mockRejectedValue(new Error('Forbidden'));
+    it('should warn when addLabels fails', async () => {
+      vi.mocked(mockOctokit.rest.issues.addLabels).mockRejectedValue(new Error('Forbidden'));
 
       await api.applyLabels(42, ['bug']);
 
@@ -411,9 +391,9 @@ describe('GitHubAPI', () => {
   });
 
   describe('createPullRequest (error paths)', () => {
-    it('should warn but not throw when issues.update fails for labels', async () => {
+    it('should warn but not throw when addLabels fails for labels', async () => {
       vi.mocked(mockOctokit.rest.pulls.create).mockResolvedValue({ data: { number: 100 } } as never);
-      vi.mocked(mockOctokit.rest.issues.update).mockRejectedValue(new Error('Forbidden'));
+      vi.mocked(mockOctokit.rest.issues.addLabels).mockRejectedValue(new Error('Forbidden'));
 
       await expect(
         api.createPullRequest({ title: 'T', body: 'B', head: 'h', base: 'main', labels: ['bug'] }),
@@ -581,9 +561,9 @@ describe('GitHubAPI', () => {
       });
     });
 
-    it('should apply labels via a separate issues.update call after PR creation', async () => {
+    it('should apply labels via a separate issues.addLabels call after PR creation', async () => {
       vi.mocked(mockOctokit.rest.pulls.create).mockResolvedValue({ data: { number: 88 } } as never);
-      vi.mocked(mockOctokit.rest.issues.update).mockResolvedValue({ data: {} } as never);
+      vi.mocked(mockOctokit.rest.issues.addLabels).mockResolvedValue({ data: [] } as never);
 
       await api.createPullRequest({
         title: 'Add feature',
@@ -597,8 +577,8 @@ describe('GitHubAPI', () => {
       expect(mockOctokit.rest.pulls.create).toHaveBeenCalledWith(
         expect.not.objectContaining({ labels: expect.anything() }),
       );
-      // Labels are applied via issues.update
-      expect(mockOctokit.rest.issues.update).toHaveBeenCalledWith(
+      // Labels are applied via issues.addLabels
+      expect(mockOctokit.rest.issues.addLabels).toHaveBeenCalledWith(
         expect.objectContaining({
           issue_number: 88,
           labels: ['enhancement', 'cadre-generated'],
@@ -633,7 +613,7 @@ describe('GitHubAPI', () => {
 
     it('should apply labels and request reviewers via separate calls after PR creation', async () => {
       vi.mocked(mockOctokit.rest.pulls.create).mockResolvedValue({ data: { number: 90 } } as never);
-      vi.mocked(mockOctokit.rest.issues.update).mockResolvedValue({ data: {} } as never);
+      vi.mocked(mockOctokit.rest.issues.addLabels).mockResolvedValue({ data: [] } as never);
       vi.mocked(mockOctokit.rest.pulls.requestReviewers).mockResolvedValue({ data: {} } as never);
 
       await api.createPullRequest({
@@ -645,7 +625,7 @@ describe('GitHubAPI', () => {
         reviewers: ['charlie'],
       });
 
-      expect(mockOctokit.rest.issues.update).toHaveBeenCalledWith(
+      expect(mockOctokit.rest.issues.addLabels).toHaveBeenCalledWith(
         expect.objectContaining({ issue_number: 90, labels: ['refactor'] }),
       );
       expect(mockOctokit.rest.pulls.requestReviewers).toHaveBeenCalledWith(
@@ -666,7 +646,7 @@ describe('GitHubAPI', () => {
 
       const callArgs = vi.mocked(mockOctokit.rest.pulls.create).mock.calls[0][0];
       expect(callArgs).not.toHaveProperty('labels');
-      expect(mockOctokit.rest.issues.update).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.addLabels).not.toHaveBeenCalled();
     });
 
     it('should omit reviewers from PR call when reviewers array is empty', async () => {

@@ -12,7 +12,6 @@ export class IssueQueryResolver {
   constructor(
     private readonly config: CadreConfig,
     private readonly logger: Logger,
-    _mcp?: unknown,
   ) {
     this.fetcher = new IssueFetcher(config.repository, logger);
   }

@@ -10,7 +10,6 @@ import type {
   PRComment,
   PRReview,
 } from './provider.js';
-import { GitHubMCPClient, type MCPServerConfig } from '../github/mcp-client.js';
 import { GitHubAPI } from '../github/api.js';
 import { Logger } from '../logging/logger.js';
 
@@ -39,36 +38,31 @@ function asArray(value: unknown): unknown[] {
 export class GitHubProvider implements PlatformProvider {
   readonly name = 'GitHub';
 
-  private readonly mcpClient: GitHubMCPClient;
   private api: GitHubAPI | null = null;
   private readonly owner: string;
   private readonly repo: string;
 
   constructor(
     private readonly repository: string,
-    private readonly mcpServerConfig: MCPServerConfig,
     private readonly logger: Logger,
   ) {
     const [owner, repo] = repository.split('/');
     this.owner = owner;
     this.repo = repo;
-    this.mcpClient = new GitHubMCPClient(mcpServerConfig, logger);
   }
 
   // ── Lifecycle ──
 
   async connect(): Promise<void> {
-    await this.mcpClient.connect();
     this.api = new GitHubAPI(this.repository, this.logger);
   }
 
   async disconnect(): Promise<void> {
-    await this.mcpClient.disconnect();
     this.api = null;
   }
 
   async checkAuth(): Promise<boolean> {
-    return this.mcpClient.checkAuth();
+    return this.getAPI().checkAuth();
   }
 
   // ── Issues ──

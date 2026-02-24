@@ -23,7 +23,6 @@
     "@inquirer/prompts": "^7",
     "@modelcontextprotocol/sdk": "^1.12",
     "@octokit/rest": "^21",
-    "@octokit/rest": "^21",
     "chalk": "^5",
     "commander": "^12",
     "date-fns": "^3",

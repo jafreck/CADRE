@@ -77,21 +77,8 @@ export function createPlatformProvider(
 
   switch (platform) {
     case 'github': {
-      const ghConfig = config.github;
-      const mcpServer = ghConfig?.mcpServer ?? {
-        command: 'github-mcp-server',
-        args: ['stdio'],
-      };
-
-      const mcpEnv = resolveGitHubAuthEnv(ghConfig?.auth, logger);
-
       return new GitHubProvider(
         config.repository,
-        {
-          command: mcpServer.command,
-          args: mcpServer.args,
-          env: mcpEnv,
-        },
         logger,
       );
     }
