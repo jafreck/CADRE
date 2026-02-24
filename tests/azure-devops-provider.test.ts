@@ -489,6 +489,109 @@ describe('AzureDevOpsProvider.createPullRequest()', () => {
     });
   });
 
+  describe('findOpenPR()', () => {
+    it('should return a matching PR when one exists for the branch', async () => {
+      const provider = await makeConnectedProvider(fetchStub);
+
+      fetchStub.mockResolvedValueOnce(
+        okJson({
+          value: [
+            {
+              pullRequestId: 42,
+              title: 'Fix issue',
+              sourceRefName: 'refs/heads/cadre/issue-1-fix',
+              targetRefName: 'refs/heads/main',
+            },
+          ],
+        }),
+      );
+
+      const result = await provider.findOpenPR(1, 'cadre/issue-1-fix');
+
+      expect(result).not.toBeNull();
+      expect(result!.number).toBe(42);
+      expect(result!.headBranch).toBe('cadre/issue-1-fix');
+    });
+
+    it('should return null when no PRs exist', async () => {
+      const provider = await makeConnectedProvider(fetchStub);
+
+      fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+      const result = await provider.findOpenPR(1, 'cadre/issue-1-fix');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when no PR matches the branch', async () => {
+      const provider = await makeConnectedProvider(fetchStub);
+
+      fetchStub.mockResolvedValueOnce(
+        okJson({
+          value: [
+            {
+              pullRequestId: 99,
+              title: 'Other PR',
+              sourceRefName: 'refs/heads/other-branch',
+              targetRefName: 'refs/heads/main',
+            },
+          ],
+        }),
+      );
+
+      const result = await provider.findOpenPR(1, 'cadre/issue-1-fix');
+
+      expect(result).toBeNull();
+    });
+
+    it('should call listPullRequests with head=branch and state=open', async () => {
+      const provider = await makeConnectedProvider(fetchStub);
+
+      fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+      await provider.findOpenPR(7, 'my-feature-branch');
+
+      const listCall = fetchStub.mock.calls[1];
+      expect(listCall[0]).toContain('searchCriteria.sourceRefName=refs%2Fheads%2Fmy-feature-branch');
+      expect(listCall[0]).toContain('searchCriteria.status=active');
+    });
+
+    it('should return the first matching PR when multiple PRs are returned', async () => {
+      const provider = await makeConnectedProvider(fetchStub);
+
+      fetchStub.mockResolvedValueOnce(
+        okJson({
+          value: [
+            {
+              pullRequestId: 10,
+              title: 'First PR',
+              sourceRefName: 'refs/heads/target-branch',
+              targetRefName: 'refs/heads/main',
+            },
+            {
+              pullRequestId: 11,
+              title: 'Second PR',
+              sourceRefName: 'refs/heads/target-branch',
+              targetRefName: 'refs/heads/main',
+            },
+          ],
+        }),
+      );
+
+      const result = await provider.findOpenPR(5, 'target-branch');
+
+      expect(result).not.toBeNull();
+      expect(result!.number).toBe(10);
+    });
+
+    it('should throw when not connected', async () => {
+      const provider = makeProvider();
+      vi.stubGlobal('fetch', fetchStub);
+
+      await expect(provider.findOpenPR(1, 'branch')).rejects.toThrow('not connected');
+    });
+  });
+
   describe('listPRReviewComments()', () => {
     it('should return an empty array (stub)', async () => {
       const provider = await makeConnectedProvider(fetchStub);
