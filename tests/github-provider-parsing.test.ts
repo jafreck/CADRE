@@ -665,3 +665,55 @@ describe('GitHubProvider – findOpenPR', () => {
     expect(pr!.number).toBe(10);
   });
 });
+
+describe('GitHubProvider – lifecycle', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+  });
+
+  it('should throw when calling getIssue before connect()', async () => {
+    await expect(provider.getIssue(1)).rejects.toThrow('not connected');
+  });
+
+  it('should throw when calling checkAuth before connect()', async () => {
+    await expect(provider.checkAuth()).rejects.toThrow('not connected');
+  });
+
+  it('should not throw after connect()', async () => {
+    await provider.connect();
+    getApiMock().getIssue.mockResolvedValue({ number: 1, comments: [] });
+    await expect(provider.getIssue(1)).resolves.toBeDefined();
+  });
+
+  it('should throw after disconnect()', async () => {
+    await provider.connect();
+    await provider.disconnect();
+    await expect(provider.getIssue(1)).rejects.toThrow('not connected');
+  });
+
+  it('checkAuth should delegate to api.checkAuth and return true', async () => {
+    await provider.connect();
+    getApiMock().checkAuth.mockResolvedValue(true);
+
+    const result = await provider.checkAuth();
+
+    expect(result).toBe(true);
+    expect(getApiMock().checkAuth).toHaveBeenCalled();
+  });
+
+  it('checkAuth should return false when api.checkAuth returns false', async () => {
+    await provider.connect();
+    getApiMock().checkAuth.mockResolvedValue(false);
+
+    const result = await provider.checkAuth();
+
+    expect(result).toBe(false);
+  });
+
+  it('issueLinkSuffix should return correct closing suffix', () => {
+    expect(provider.issueLinkSuffix(42)).toBe('Closes #42');
+  });
+});

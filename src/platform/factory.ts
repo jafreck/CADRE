@@ -12,17 +12,17 @@ function resolveEnvRef(value: string): string {
 }
 
 /**
- * Build the MCP server env vars for GitHub authentication.
+ * Resolve GitHub authentication from config and ensure GITHUB_TOKEN is set in process.env.
  *
  * Priority:
  * 1. Explicit token in config (`github.auth.token`)
  * 2. Explicit GitHub App in config (`github.auth.appId` + friends)
- * 3. Auto-detect from `GITHUB_TOKEN` env var
+ * 3. Auto-detect from `GITHUB_TOKEN` or `GH_TOKEN` env var
  *
  * This makes CADRE work with:
  * - `gh auth token` piped into GITHUB_TOKEN
  * - Copilot CLI (which sets GITHUB_TOKEN)
- * - Claude CLI (env vars passed to MCP server)
+ * - Claude CLI (env vars passed via environment)
  * - GitHub App for CI / org-level access
  */
 function resolveGitHubAuthEnv(
@@ -31,37 +31,37 @@ function resolveGitHubAuthEnv(
     | { appId: string; installationId: string; privateKeyFile: string }
     | undefined,
   logger: Logger,
-): Record<string, string> {
+): void {
   if (auth && 'token' in auth) {
     // Token-based auth (simplest)
     const token = resolveEnvRef(auth.token);
     if (token) {
       logger.info('Using token-based GitHub authentication');
-      return { GITHUB_PERSONAL_ACCESS_TOKEN: token };
+      process.env.GITHUB_TOKEN = token;
+      return;
     }
   }
 
   if (auth && 'appId' in auth) {
     // GitHub App auth
     logger.info('Using GitHub App authentication');
-    return {
-      GITHUB_APP_ID: resolveEnvRef(auth.appId),
-      GITHUB_APP_INSTALLATION_ID: resolveEnvRef(auth.installationId),
-      GITHUB_APP_PRIVATE_KEY_FILE: resolveEnvRef(auth.privateKeyFile),
-    };
+    // App credentials remain in config; token obtained at runtime
+    return;
   }
 
   // Auto-detect from environment
   const envToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '';
   if (envToken) {
     logger.info('Auto-detected GITHUB_TOKEN from environment');
-    return { GITHUB_PERSONAL_ACCESS_TOKEN: envToken };
+    if (!process.env.GITHUB_TOKEN) {
+      process.env.GITHUB_TOKEN = envToken;
+    }
+    return;
   }
 
   logger.warn(
     'No GitHub authentication configured. Set GITHUB_TOKEN, add github.auth.token to config, or configure GitHub App auth.',
   );
-  return {};
 }
 
 /**
@@ -77,6 +77,7 @@ export function createPlatformProvider(
 
   switch (platform) {
     case 'github': {
+      resolveGitHubAuthEnv(config.github?.auth, logger);
       return new GitHubProvider(
         config.repository,
         logger,
