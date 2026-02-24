@@ -1,5 +1,5 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join, basename } from 'node:path';
+import { join, relative, basename } from 'node:path';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir } from '../util/fs.js';
@@ -23,6 +23,13 @@ export interface WorktreeInfo {
   exists: boolean;
   /** Base commit SHA the branch was created from. */
   baseCommit: string;
+  /**
+   * Worktree-relative paths of agent instruction files written by
+   * `syncAgentFiles`.  Passed to `CommitManager` so that only these exact
+   * files are unstaged before every commit, leaving any pre-existing agent
+   * files in the target repo completely untouched.
+   */
+  syncedAgentFiles: string[];
 }
 
 /**
@@ -61,7 +68,7 @@ export class WorktreeManager {
         data: { path: worktreePath, branch },
       });
 
-      await this.syncAgentFiles(worktreePath, issueNumber);
+      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
       const baseCommit = await this.getBaseCommit(worktreePath);
       return {
         issueNumber,
@@ -69,6 +76,7 @@ export class WorktreeManager {
         branch,
         exists: true,
         baseCommit,
+        syncedAgentFiles,
       };
     }
 
@@ -87,7 +95,7 @@ export class WorktreeManager {
       await this.git.raw(['worktree', 'add', worktreePath, branch]);
 
       await this.initCadreDir(worktreePath, issueNumber);
-      await this.syncAgentFiles(worktreePath, issueNumber);
+      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
 
       const baseCommit = await this.getBaseCommit(worktreePath);
       this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
@@ -101,6 +109,7 @@ export class WorktreeManager {
         branch,
         exists: true,
         baseCommit,
+        syncedAgentFiles,
       };
     }
 
@@ -125,7 +134,7 @@ export class WorktreeManager {
 
     // 4. Bootstrap the worktree's .cadre/ directory and gitignore cadre artifacts
     await this.initCadreDir(worktreePath, issueNumber);
-    await this.syncAgentFiles(worktreePath, issueNumber);
+    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
 
     this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
       issueNumber,
@@ -138,6 +147,7 @@ export class WorktreeManager {
       branch,
       exists: true,
       baseCommit: baseCommit.trim(),
+      syncedAgentFiles,
     };
   }
 
@@ -156,7 +166,7 @@ export class WorktreeManager {
         data: { path: worktreePath, branch },
       });
 
-      await this.syncAgentFiles(worktreePath, issueNumber);
+      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
       const baseCommit = await this.getBaseCommit(worktreePath);
       return {
         issueNumber,
@@ -164,6 +174,7 @@ export class WorktreeManager {
         branch,
         exists: true,
         baseCommit,
+        syncedAgentFiles,
       };
     }
 
@@ -179,7 +190,7 @@ export class WorktreeManager {
 
     // Bootstrap the worktree's .cadre/ directory
     await this.initCadreDir(worktreePath, issueNumber);
-    await this.syncAgentFiles(worktreePath, issueNumber);
+    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
 
     const baseCommit = await this.getBaseCommit(worktreePath);
 
@@ -194,6 +205,7 @@ export class WorktreeManager {
       branch,
       exists: true,
       baseCommit,
+      syncedAgentFiles,
     };
   }
 
@@ -259,12 +271,12 @@ export class WorktreeManager {
    *
    * No-op if agentDir is not configured or does not exist.
    */
-  private async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<void> {
-    if (!this.agentDir) return;
+  private async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<string[]> {
+    if (!this.agentDir) return [];
 
     if (!(await exists(this.agentDir))) {
       this.logger.debug(`agentDir ${this.agentDir} does not exist — skipping agent sync`, { issueNumber });
-      return;
+      return [];
     }
 
     const destDir =
@@ -275,7 +287,8 @@ export class WorktreeManager {
 
     const entries = await readdir(this.agentDir);
     const sourceFiles = entries.filter((f) => f.endsWith('.md') && !f.endsWith('.agent.md'));
-    let syncCount = 0;
+    // Track the exact paths written so CommitManager can precisely unstage them.
+    const syncedRelPaths: string[] = [];
 
     for (const file of sourceFiles) {
       const agentName = file.replace(/\.md$/, '');
@@ -289,6 +302,7 @@ export class WorktreeManager {
       const description = definition?.description ?? displayName;
       const body = await readFile(srcPath, 'utf-8');
 
+      let destAbsPath: string;
       if (this.backend === 'claude') {
         // Claude expects {name}.md with YAML frontmatter
         const frontmatter = [
@@ -298,7 +312,8 @@ export class WorktreeManager {
           '---',
           '',
         ].join('\n');
-        await writeFile(join(destDir, file), frontmatter + body, 'utf-8');
+        destAbsPath = join(destDir, file);
+        await writeFile(destAbsPath, frontmatter + body, 'utf-8');
       } else {
         // Copilot expects {name}.agent.md with YAML frontmatter
         const frontmatter = [
@@ -309,18 +324,19 @@ export class WorktreeManager {
           '---',
           '',
         ].join('\n');
-        const destFile = `${agentName}.agent.md`;
-        await writeFile(join(destDir, destFile), frontmatter + body, 'utf-8');
+        destAbsPath = join(destDir, `${agentName}.agent.md`);
+        await writeFile(destAbsPath, frontmatter + body, 'utf-8');
       }
-      syncCount++;
+      syncedRelPaths.push(relative(worktreePath, destAbsPath));
     }
 
-    if (syncCount > 0) {
+    if (syncedRelPaths.length > 0) {
       this.logger.debug(
-        `Synced ${syncCount} agent file(s) from ${this.agentDir} → ${destDir}`,
+        `Synced ${syncedRelPaths.length} agent file(s) from ${this.agentDir} → ${destDir}`,
         { issueNumber },
       );
     }
+    return syncedRelPaths;
   }
 
   /**

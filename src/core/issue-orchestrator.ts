@@ -98,6 +98,7 @@ export class IssueOrchestrator {
       worktree.path,
       config.commits,
       logger,
+      worktree.syncedAgentFiles,
     );
     this.contextBuilder = new ContextBuilder(config, logger);
     this.resultParser = new ResultParser();

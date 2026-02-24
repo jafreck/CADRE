@@ -486,41 +486,8 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
       // Phase 4 should not run after critical failure
       expect(execs[3].execute).not.toHaveBeenCalled();
     });
-  });
 
-  // ── Non-critical phase failure ──
-
-  describe('run() – non-critical phase failure', () => {
-    it('should continue the pipeline when a non-critical phase (4) fails', async () => {
-      const execs = [
-        makeExecutorMock(1, 'Analysis & Scouting'),
-        makeExecutorMock(2, 'Planning'),
-        makeExecutorMock(3, 'Implementation'),
-        { phaseId: 4, name: 'Integration Verification', execute: vi.fn().mockRejectedValue(new Error('integration failed')) },
-        makeExecutorMock(5, 'PR Composition'),
-      ];
-      setupExecutorMocks(execs);
-
-      const orchestrator = new IssueOrchestrator(
-        makeConfig(),
-        makeIssue(),
-        makeWorktree(),
-        makeCheckpoint(worktreePath),
-        makeLauncher(),
-        makePlatform(),
-        makeLogger(),
-      );
-
-      const result = await orchestrator.run();
-
-      // Phase 4 failed but pipeline should still complete (success = true)
-      expect(result.phases[3].success).toBe(false);
-      // Phase 5 still executed
-      expect(execs[4].execute).toHaveBeenCalledTimes(1);
-      expect(result.success).toBe(true);
-    });
-
-    it('should continue the pipeline when a non-critical phase (5) fails', async () => {
+    it('should abort the pipeline when a critical phase (5) fails', async () => {
       const execs = [
         makeExecutorMock(1, 'Analysis & Scouting'),
         makeExecutorMock(2, 'Planning'),
@@ -543,8 +510,41 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
       const result = await orchestrator.run();
 
       expect(result.phases[4].success).toBe(false);
-      // Overall pipeline completes (non-critical failure)
-      expect(result.success).toBe(true);
+      // Phase 5 is critical — overall pipeline should fail
+      expect(result.success).toBe(false);
+    });
+  });
+
+  // ── Non-critical phase failure ──
+
+  describe('run() – critical phase 4 failure', () => {
+    it('should abort the pipeline when critical phase (4) fails', async () => {
+      const execs = [
+        makeExecutorMock(1, 'Analysis & Scouting'),
+        makeExecutorMock(2, 'Planning'),
+        makeExecutorMock(3, 'Implementation'),
+        { phaseId: 4, name: 'Integration Verification', execute: vi.fn().mockRejectedValue(new Error('integration failed')) },
+        makeExecutorMock(5, 'PR Composition'),
+      ];
+      setupExecutorMocks(execs);
+
+      const orchestrator = new IssueOrchestrator(
+        makeConfig(),
+        makeIssue(),
+        makeWorktree(),
+        makeCheckpoint(worktreePath),
+        makeLauncher(),
+        makePlatform(),
+        makeLogger(),
+      );
+
+      const result = await orchestrator.run();
+
+      // Phase 4 failed and is critical — pipeline should abort
+      expect(result.phases[3].success).toBe(false);
+      // Phase 5 should NOT have executed
+      expect(execs[4].execute).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
     });
   });
 
