@@ -50,6 +50,8 @@ export interface IssueResult {
   tokenUsage: number | null;
   error?: string;
   budgetExceeded?: boolean;
+  codeComplete: boolean;
+  prCreated: boolean;
 }
 
 /** Stateless gates — constructed once and reused across all runGate() calls. */
@@ -78,6 +80,7 @@ export class IssueOrchestrator {
   private budgetExceeded = false;
   private budgetWarningSent = false;
   private createdPR: PullRequestInfo | undefined;
+  private codeCompleted = false;
 
   constructor(
     private readonly config: RuntimeConfig,
@@ -164,6 +167,7 @@ export class IssueOrchestrator {
         recordTokens: (agent, tokens) => this.recordTokens(agent, tokens),
         checkBudget: () => this.checkBudget(),
         updateProgress: () => this.updateProgress(),
+        onPRCreated: (pr) => { this.createdPR = pr; },
       },
     };
 
@@ -301,6 +305,11 @@ export class IssueOrchestrator {
         // Commit after phase if configured
         if (this.config.commits.commitPerPhase) {
           await this.commitPhase(phaseDef);
+        }
+
+        // Mark code as complete after phase 4 (Integration) succeeds
+        if (executor.phaseId === 4) {
+          this.codeCompleted = true;
         }
 
         await this.updateProgress();
@@ -563,6 +572,8 @@ export class IssueOrchestrator {
       tokenUsage: this.tokenTracker.getTotal(),
       error,
       budgetExceeded,
+      codeComplete: this.codeCompleted,
+      prCreated: this.createdPR !== undefined,
     };
   }
 }

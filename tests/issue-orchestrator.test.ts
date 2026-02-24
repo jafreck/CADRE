@@ -7,7 +7,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
-import type { IssueDetail } from '../src/platform/provider.js';
+import type { IssueDetail, PullRequestInfo } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
 import type { CheckpointManager } from '../src/core/checkpoint.js';
 import type { AgentLauncher } from '../src/agents/types.js';
@@ -412,6 +412,27 @@ describe('IssueOrchestrator – notification dispatch', () => {
       expect(result.issueTitle).toBe('Test Issue');
       expect(result.success).toBe(true);
     });
+
+    it('should include codeComplete and prCreated fields in IssueResult', async () => {
+      const checkpoint = makeCheckpointMock();
+
+      const orchestrator = new IssueOrchestrator(
+        config,
+        issue,
+        worktree,
+        checkpoint as never,
+        launcher as never,
+        platform as never,
+        logger,
+      );
+
+      const result = await orchestrator.run();
+
+      expect(result).toHaveProperty('codeComplete');
+      expect(result).toHaveProperty('prCreated');
+      expect(typeof result.codeComplete).toBe('boolean');
+      expect(typeof result.prCreated).toBe('boolean');
+    });
   });
 
   describe('run() – critical phase failure', () => {
@@ -738,6 +759,31 @@ describe('IssueOrchestrator notifier integration', () => {
     expect(mockNotifierMethods.notifyFailed).not.toHaveBeenCalled();
   });
 
+  it('should set codeComplete=true and prCreated=false when phase 4 succeeds but no PR created', async () => {
+    const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = makeOrchestrator(makeConfig(), checkpoint, makeLauncher(), makeLogger());
+
+    let callCount = 0;
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockImplementation(async () => {
+        callCount++;
+        return {
+          phase: callCount,
+          phaseName: `Phase ${callCount}`,
+          success: true,
+          duration: 100,
+          tokenUsage: 0,
+          outputPath: '',
+        };
+      });
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(true);
+    expect(result.codeComplete).toBe(true);
+    expect(result.prCreated).toBe(false);
+  });
+
   it('should not crash when notifyStart rejects', async () => {
     const checkpoint = makeCheckpoint({ isPhaseCompleted: vi.fn(() => true) });
     mockNotifierMethods.notifyStart.mockRejectedValue(new Error('network failure'));
@@ -756,5 +802,108 @@ describe('IssueOrchestrator notifier integration', () => {
     mockNotifierMethods.notifyFailed.mockRejectedValue(new Error('network failure'));
 
     await expect(orchestrator.run()).resolves.toMatchObject({ success: false, budgetExceeded: true });
+  });
+});
+
+describe('IssueOrchestrator – codeComplete and prCreated fields', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should set codeComplete=false and prCreated=false when all phases are pre-completed (skipped)', async () => {
+    // The run loop skips already-completed phases, so codeCompleted is never set to true.
+    const checkpoint = makeCheckpointMock(); // default: all phases completed
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    const result = await orchestrator.run();
+
+    expect(result.codeComplete).toBe(false);
+    expect(result.prCreated).toBe(false);
+  });
+
+  it('should set codeComplete=false when pipeline fails before phase 4', async () => {
+    const checkpoint = makeCheckpointMock({ isPhaseCompleted: vi.fn(() => false) });
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    vi.spyOn(orchestrator as unknown as { executePhase: () => Promise<unknown> }, 'executePhase')
+      .mockImplementation(async (executor: any) => {
+        // Fail at phase 3 (before phase 4 which sets codeCompleted)
+        if (executor.phaseId >= 3) {
+          return { phase: executor.phaseId, phaseName: executor.name, success: false, duration: 50, tokenUsage: 0, error: 'phase failed' };
+        }
+        return { phase: executor.phaseId, phaseName: executor.name, success: true, duration: 100, tokenUsage: 0, outputPath: '' };
+      });
+
+    const result = await orchestrator.run();
+
+    expect(result.success).toBe(false);
+    expect(result.codeComplete).toBe(false);
+  });
+
+  it('should set prCreated=true when onPRCreated callback is invoked via PhaseContext', async () => {
+    // Run with all phases pre-completed to get the orchestrator into a fully initialized state.
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    await orchestrator.run();
+
+    // The ctx.callbacks.onPRCreated is set during run(). Invoke it to simulate
+    // the PR composition executor calling back with a created PR.
+    const mockPR: PullRequestInfo = {
+      number: 99,
+      url: 'https://github.com/owner/repo/pull/99',
+      title: 'Mock PR title',
+      headBranch: 'cadre/issue-42',
+      baseBranch: 'main',
+    };
+    (orchestrator as any).ctx.callbacks.onPRCreated(mockPR);
+
+    // buildResult reflects the newly set createdPR
+    const result = (orchestrator as any).buildResult(true, undefined, Date.now() - 100);
+    expect(result.prCreated).toBe(true);
+    expect(result.pr).toEqual(mockPR);
+  });
+
+  it('should set prCreated=false in buildResult when onPRCreated was never called', async () => {
+    const checkpoint = makeCheckpointMock();
+    const orchestrator = new IssueOrchestrator(
+      makeConfig(),
+      makeIssue(),
+      makeWorktree(),
+      checkpoint as never,
+      makeLauncher() as never,
+      makePlatform() as never,
+      makeLogger(),
+    );
+
+    await orchestrator.run();
+
+    const result = (orchestrator as any).buildResult(true, undefined, Date.now() - 100);
+    expect(result.prCreated).toBe(false);
+    expect(result.pr).toBeUndefined();
   });
 });

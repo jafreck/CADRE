@@ -196,6 +196,8 @@ export class FleetOrchestrator {
         totalDuration: 0,
         tokenUsage: 0,
         error: 'Fleet budget exceeded',
+        codeComplete: false,
+        prCreated: false,
       };
     }
 
@@ -229,6 +231,8 @@ export class FleetOrchestrator {
             phases: [],
             totalDuration: 0,
             tokenUsage: 0,
+            codeComplete: false,
+            prCreated: true,
           };
         }
       } catch (prErr) {
@@ -363,6 +367,8 @@ export class FleetOrchestrator {
           totalDuration: 0,
           tokenUsage: 0,
           error,
+          codeComplete: false,
+          prCreated: false,
         };
       }
 
@@ -389,6 +395,8 @@ export class FleetOrchestrator {
         totalDuration: 0,
         tokenUsage: 0,
         error,
+        codeComplete: false,
+        prCreated: false,
       };
     }
   }
