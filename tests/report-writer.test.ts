@@ -50,6 +50,7 @@ const makeFleetResult = (
     },
   ],
   prsCreated: [{ number: 10, url: 'https://github.com/owner/repo/pull/10' }],
+  codeDoneNoPR: [],
   failedIssues: [],
   totalDuration: 5000,
   tokenUsage: {
@@ -216,6 +217,23 @@ describe('ReportWriter', () => {
       expect(report.totals.estimatedCost).toBeGreaterThanOrEqual(0);
     });
 
+    it('should set codeDoneNoPR count from codeDoneNoPR array length', () => {
+      const result = makeFleetResult({
+        codeDoneNoPR: [
+          { issueNumber: 5, issueTitle: 'Issue without PR' },
+          { issueNumber: 6, issueTitle: 'Another issue without PR' },
+        ],
+      });
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+      expect(report.totals.codeDoneNoPR).toBe(2);
+    });
+
+    it('should set codeDoneNoPR to 0 when codeDoneNoPR array is empty', () => {
+      const result = makeFleetResult({ codeDoneNoPR: [] });
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+      expect(report.totals.codeDoneNoPR).toBe(0);
+    });
+
     it('should not include agentInvocations or retries fields', () => {
       const report = writer.buildReport(makeFleetResult(), makeIssues(), Date.now() - 1000);
       expect((report as Record<string, unknown>).agentInvocations).toBeUndefined();
@@ -247,7 +265,7 @@ describe('ReportWriter', () => {
         totalTokens: 0,
         estimatedCost: 0,
         prsCreated: 0,
-        totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
+        totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, codeDoneNoPR: 0, failures: 0 },
       };
 
       const filePath = await writer.write(report);
@@ -269,7 +287,7 @@ describe('ReportWriter', () => {
         totalTokens: 0,
         estimatedCost: 0,
         prsCreated: 0,
-        totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
+        totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, codeDoneNoPR: 0, failures: 0 },
       };
 
       const filePath = await writer.write(report);
@@ -292,7 +310,7 @@ describe('ReportWriter', () => {
         totalTokens: 0,
         estimatedCost: 0,
         prsCreated: 0,
-        totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
+        totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, codeDoneNoPR: 0, failures: 0 },
       };
 
       const filePath = await writer.write(report);
@@ -369,7 +387,7 @@ describe('ReportWriter', () => {
         totalTokens: 100,
         estimatedCost: 0.01,
         prsCreated: 0,
-        totals: { tokens: 100, estimatedCost: 0.01, issues: 0, prsCreated: 0, failures: 0 },
+        totals: { tokens: 100, estimatedCost: 0.01, issues: 0, prsCreated: 0, codeDoneNoPR: 0, failures: 0 },
       };
 
       vi.mocked(fsUtil.readJSON).mockResolvedValue(fakeReport);
