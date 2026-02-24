@@ -7,6 +7,7 @@ import type {
   ListPullRequestsParams,
   ListIssuesParams,
   ReviewThread,
+  PRComment,
 } from './provider.js';
 import { GitHubMCPClient, type MCPServerConfig } from '../github/mcp-client.js';
 import { GitHubAPI } from '../github/api.js';
@@ -156,6 +157,38 @@ export class GitHubProvider implements PlatformProvider {
   async listPRReviewComments(prNumber: number): Promise<ReviewThread[]> {
     const raw = await this.getAPI().getPRReviewComments(prNumber);
     return this.parseReviewThreads(prNumber, raw);
+  }
+
+  async listPRComments(prNumber: number): Promise<PRComment[]> {
+    const raw = await this.getAPI().getPRComments(prNumber);
+    return this.parsePRComments(raw);
+  }
+
+  private parsePRComments(raw: unknown): PRComment[] {
+    let items: unknown[];
+    if (Array.isArray(raw)) {
+      items = raw;
+    } else if (raw !== null && typeof raw === 'object') {
+      const envelope = raw as Record<string, unknown>;
+      items = Array.isArray(envelope.comments) ? envelope.comments : [];
+    } else {
+      return [];
+    }
+
+    return items.map((item) => {
+      const c = item as Record<string, unknown>;
+      const userObj = (c.user ?? c.author ?? {}) as Record<string, unknown>;
+      const login = String(userObj.login ?? userObj.Login ?? 'unknown');
+      const isBot = login.includes('[bot]') || String(userObj.type ?? '').toLowerCase() === 'bot';
+      return {
+        id: String(c.id ?? ''),
+        author: login,
+        isBot,
+        body: String(c.body ?? ''),
+        createdAt: String(c.created_at ?? c.createdAt ?? ''),
+        url: String(c.html_url ?? c.url ?? ''),
+      };
+    });
   }
 
   // ── Helpers ──

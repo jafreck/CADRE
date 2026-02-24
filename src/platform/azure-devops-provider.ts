@@ -7,6 +7,7 @@ import type {
   ListPullRequestsParams,
   ListIssuesParams,
   ReviewThread,
+  PRComment,
 } from './provider.js';
 import { Logger } from '../logging/logger.js';
 
@@ -392,6 +393,11 @@ export class AzureDevOpsProvider implements PlatformProvider {
 
   async listPRReviewComments(_prNumber: number): Promise<ReviewThread[]> {
     this.logger.warn('listPRReviewComments: review-response mode is not yet supported on Azure DevOps');
+    return [];
+  }
+
+  async listPRComments(_prNumber: number): Promise<PRComment[]> {
+    this.logger.warn('listPRComments: review-response mode is not yet supported on Azure DevOps');
     return [];
   }
 

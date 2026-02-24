@@ -206,6 +206,18 @@ export class GitHubAPI {
   }
 
   /**
+   * Get regular conversation comments on a pull request (issue-style, not review threads).
+   */
+  async getPRComments(prNumber: number): Promise<unknown> {
+    return this.mcp.callTool<unknown>('pull_request_read', {
+      method: 'get_comments',
+      owner: this.owner,
+      repo: this.repo,
+      pullNumber: prNumber,
+    });
+  }
+
+  /**
    * Get review comments for a pull request.
    */
   async getPRReviewComments(prNumber: number): Promise<unknown> {

@@ -96,7 +96,16 @@ export class ReviewResponseOrchestrator {
       const threads = await this.platform.listPRReviewComments(pr.number);
       const activeThreads = threads.filter((t) => !t.isResolved && !t.isOutdated);
 
-      if (activeThreads.length === 0) {
+      // 4b. Also fetch regular PR conversation comments (non-bot, non-empty).
+      let actionableComments: import('../platform/provider.js').PRComment[] = [];
+      try {
+        const prComments = await this.platform.listPRComments(pr.number);
+        actionableComments = prComments.filter((c) => !c.isBot && c.body.trim().length > 0);
+      } catch (err) {
+        this.logger.warn(`Issue #${issueNumber}: could not fetch PR comments: ${err}`, { issueNumber });
+      }
+
+      if (activeThreads.length === 0 && actionableComments.length === 0) {
         this.logger.info(
           `Issue #${issueNumber} (PR #${pr.number}): all review threads resolved or outdated, skipping`,
           { issueNumber },
@@ -105,7 +114,7 @@ export class ReviewResponseOrchestrator {
         result.issues.push({
           issueNumber,
           skipped: true,
-          skipReason: 'no unresolved review threads',
+          skipReason: 'no unresolved review threads or PR comments',
         });
         continue;
       }
@@ -235,9 +244,8 @@ export class ReviewResponseOrchestrator {
         const reviewContext = this.contextBuilder.buildForReviewResponse(issue, activeThreads);
         await writeFile(join(progressDir, 'review-response.md'), reviewContext, 'utf-8');
 
-        // 7b. Synthesise an implementation plan from the review threads so that
-        //     Phase 3 (ImplementationPhaseExecutor) has the tasks it expects.
-        const planTasks = activeThreads.map((thread, idx) => {
+        // 7b. Synthesise an implementation plan from review threads AND regular PR comments.
+        const threadTasks = activeThreads.map((thread, idx) => {
           const files = [...new Set(thread.comments.map((c) => c.path).filter(Boolean))];
           const description = thread.comments.map((c) => c.body).join('\n\n');
           return {
@@ -253,6 +261,24 @@ export class ReviewResponseOrchestrator {
             ],
           };
         });
+
+        const commentTasks = actionableComments.map((comment, idx) => {
+          const taskIdx = activeThreads.length + idx + 1;
+          return {
+            id: `task-${String(taskIdx).padStart(3, '0')}`,
+            name: `Address PR comment from ${comment.author}`,
+            description: comment.body,
+            files: [] as string[],
+            dependencies: [] as string[],
+            complexity: 'simple' as const,
+            acceptanceCriteria: [
+              'PR comment addressed as described',
+              'Existing tests continue to pass',
+            ],
+          };
+        });
+
+        const planTasks = [...threadTasks, ...commentTasks];
         const planContent = [
           '# Review-Response Implementation Plan',
           '',
