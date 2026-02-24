@@ -204,14 +204,48 @@ export class FleetOrchestrator {
     });
 
     try {
-      // 1. Provision worktree
+      // 1. Check for an existing open PR before provisioning
+      const branchName = this.worktreeManager.resolveBranchName(issue.number, issue.title);
+      try {
+        const existingPR = await this.platform.findOpenPR(issue.number, branchName);
+        if (existingPR !== null) {
+          this.logger.info(
+            `Skipping issue #${issue.number}: existing open PR found at ${existingPR.url}`,
+            { issueNumber: issue.number },
+          );
+          await this.fleetCheckpoint.setIssueStatus(
+            issue.number,
+            'completed',
+            '',
+            branchName,
+            0,
+            issue.title,
+          );
+          return {
+            issueNumber: issue.number,
+            issueTitle: issue.title,
+            success: true,
+            pr: existingPR,
+            phases: [],
+            totalDuration: 0,
+            tokenUsage: 0,
+          };
+        }
+      } catch (prErr) {
+        this.logger.warn(
+          `Could not check for existing PR for issue #${issue.number}: ${prErr}`,
+          { issueNumber: issue.number },
+        );
+      }
+
+      // 2. Provision worktree
       const worktree = await this.worktreeManager.provision(
         issue.number,
         issue.title,
         this.config.options.resume,
       );
 
-      // 2. Update fleet checkpoint
+      // 3. Update fleet checkpoint
       await this.fleetCheckpoint.setIssueStatus(
         issue.number,
         'in-progress',
@@ -221,7 +255,7 @@ export class FleetOrchestrator {
         issue.title,
       );
 
-      // 3. Set up per-issue progress directory
+      // 4. Set up per-issue progress directory
       const progressDir = join(
         worktree.path,
         '.cadre',

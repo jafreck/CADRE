@@ -238,6 +238,27 @@ describe('PlatformProvider interface shape', () => {
     expect(typeof provider.listPRReviewComments).toBe('function');
   });
 
+  it('GitHubProvider should expose findOpenPR method', () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    expect(typeof provider.findOpenPR).toBe('function');
+  });
+
+  it('AzureDevOpsProvider should expose findOpenPR method', () => {
+    const provider = new AzureDevOpsProvider(
+      {
+        organization: 'my-org',
+        project: 'my-project',
+        auth: { pat: 'token' },
+      },
+      mockLogger,
+    );
+    expect(typeof provider.findOpenPR).toBe('function');
+  });
+
   it('GitHubProvider.listPRReviewComments should throw when not connected', async () => {
     const provider = new GitHubProvider(
       'owner/repo',
@@ -369,6 +390,15 @@ describe('GitHubProvider', () => {
     );
     await expect(provider.getIssue(1)).rejects.toThrow('not connected');
   });
+
+  it('should throw when calling findOpenPR before connect', async () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    await expect(provider.findOpenPR(1, 'feature-branch')).rejects.toThrow('not connected');
+  });
 });
 
 describe('AzureDevOpsProvider', () => {
@@ -406,5 +436,17 @@ describe('AzureDevOpsProvider', () => {
       mockLogger,
     );
     await expect(provider.getIssue(1)).rejects.toThrow('not connected');
+  });
+
+  it('should throw when calling findOpenPR before connect', async () => {
+    const provider = new AzureDevOpsProvider(
+      {
+        organization: 'my-org',
+        project: 'my-project',
+        auth: { pat: 'token' },
+      },
+      mockLogger,
+    );
+    await expect(provider.findOpenPR(1, 'feature-branch')).rejects.toThrow('not connected');
   });
 });

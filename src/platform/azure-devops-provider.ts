@@ -379,6 +379,11 @@ export class AzureDevOpsProvider implements PlatformProvider {
     }));
   }
 
+  async findOpenPR(_issueNumber: number, branch: string): Promise<PullRequestInfo | null> {
+    const prs = await this.listPullRequests({ head: branch, state: 'open' });
+    return prs.find((pr) => pr.headBranch === branch) ?? null;
+  }
+
   // ── Issue Linking ──
 
   issueLinkSuffix(issueNumber: number): string {

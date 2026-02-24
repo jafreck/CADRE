@@ -95,6 +95,22 @@ describe('MockPlatformProvider', () => {
     expect(prs).toEqual([]);
   });
 
+  it('findOpenPR() returns null by default', async () => {
+    const provider = new MockPlatformProvider();
+    const result = await provider.findOpenPR(1, 'feature-branch');
+    expect(result).toBeNull();
+  });
+
+  it('findOpenPR() accepts any issueNumber and branch without error', async () => {
+    const provider = new MockPlatformProvider();
+    await expect(provider.findOpenPR(42, 'issue-42-fix')).resolves.toBeNull();
+  });
+
+  it('listPRReviewComments() returns empty array', async () => {
+    const provider = new MockPlatformProvider();
+    await expect(provider.listPRReviewComments(1)).resolves.toEqual([]);
+  });
+
   it('issueLinkSuffix() returns "Closes #N"', () => {
     const provider = new MockPlatformProvider();
     expect(provider.issueLinkSuffix(11)).toBe('Closes #11');
