@@ -166,6 +166,15 @@ describe('renderFleetStatus', () => {
     }
   });
 
+  it('should show 🔀 emoji for code-complete-no-pr status', () => {
+    const state = makeFleetState({
+      issues: { 1: makeIssueStatus({ status: 'code-complete-no-pr', issueTitle: 'Code complete no PR' }) },
+    });
+    const output = renderFleetStatus(state);
+    expect(output).toContain('🔀');
+    expect(output).toContain('code-complete-no-pr');
+  });
+
   it('should show human-readable phase name (not just phase number)', () => {
     const state = makeFleetState({
       issues: {
