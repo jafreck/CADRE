@@ -436,6 +436,29 @@ describe('PRCompositionPhaseExecutor', () => {
       );
     });
 
+    it('should call onPRCreated with PR info on success', async () => {
+      const prInfo = { number: 99, url: 'https://github.com/owner/repo/pull/99', title: 'Fix: resolve issue (#42)' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+      };
+      const onPRCreated = vi.fn();
+      const ctx = makeAutoCreateCtx({ platform: platform as never, callbacks: { onPRCreated } as never });
+      await executor.execute(ctx);
+      expect(onPRCreated).toHaveBeenCalledWith(prInfo);
+    });
+
+    it('should NOT call onPRCreated when createPullRequest throws', async () => {
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
+        createPullRequest: vi.fn().mockRejectedValue(new Error('API rate limit')),
+      };
+      const onPRCreated = vi.fn();
+      const ctx = makeAutoCreateCtx({ platform: platform as never, callbacks: { onPRCreated } as never });
+      await executor.execute(ctx);
+      expect(onPRCreated).not.toHaveBeenCalled();
+    });
+
     it('should not throw when createPullRequest fails (non-critical)', async () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),

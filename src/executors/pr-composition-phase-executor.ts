@@ -68,7 +68,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
           prBody += `\n\n${ctx.platform.issueLinkSuffix(ctx.issue.number)}`;
         }
 
-        await ctx.platform.createPullRequest({
+        const pr = await ctx.platform.createPullRequest({
           title: prTitle,
           body: prBody,
           head: ctx.worktree.branch,
@@ -77,6 +77,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
           labels: ctx.config.pullRequest.labels,
           reviewers: ctx.config.pullRequest.reviewers,
         });
+        ctx.callbacks.onPRCreated?.(pr);
       } catch (err) {
         // Non-critical: the branch is pushed, PR can be created manually
         ctx.services.logger.error(`Failed to create PR: ${err}`, {
