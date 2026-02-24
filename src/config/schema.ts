@@ -177,6 +177,8 @@ export const CadreConfigSchema = z.object({
       haltOnAmbiguity: z.boolean().default(false),
       /** Enable automatic reply comments on resolved review threads. */
       respondToReviews: z.boolean().default(false),
+      /** Skip the scout phase for small/simple issues. */
+      skipScoutForSmallIssues: z.boolean().default(false),
     })
     .default({}),
 

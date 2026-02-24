@@ -723,6 +723,32 @@ describe('CadreConfigSchema', () => {
     });
   });
 
+  describe('skipScoutForSmallIssues', () => {
+    it('should default skipScoutForSmallIssues to false when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.options.skipScoutForSmallIssues).toBe(false);
+    });
+
+    it('should accept skipScoutForSmallIssues set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { skipScoutForSmallIssues: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.options.skipScoutForSmallIssues).toBe(true);
+      }
+    });
+
+    it('should reject a non-boolean skipScoutForSmallIssues', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        options: { skipScoutForSmallIssues: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe('ambiguityThreshold and haltOnAmbiguity together', () => {
     it('should accept both fields set explicitly alongside other options', () => {
       const result = CadreConfigSchema.safeParse({

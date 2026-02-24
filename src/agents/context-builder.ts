@@ -84,7 +84,14 @@ export class ContextBuilder {
     analysisPath: string,
     scoutReportPath: string,
     progressDir: string,
+    scope?: string,
+    changeType?: string,
+    maxTasksHint?: number,
   ): Promise<string> {
+    const hasPayload = scope !== undefined || changeType !== undefined || maxTasksHint !== undefined;
+    const payload = hasPayload
+      ? { ...(scope !== undefined && { scope }), ...(changeType !== undefined && { changeType }), ...(maxTasksHint !== undefined && { maxTasksHint }) }
+      : undefined;
     return this.writeContext(progressDir, 'implementation-planner', issueNumber, {
       agent: 'implementation-planner',
       issueNumber,
@@ -95,6 +102,7 @@ export class ContextBuilder {
       config: { commands: this.config.commands },
       inputFiles: [analysisPath, scoutReportPath],
       outputPath: join(progressDir, 'implementation-plan.md'),
+      ...(payload !== undefined && { payload }),
       outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
     });
   }

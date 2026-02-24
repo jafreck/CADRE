@@ -111,6 +111,40 @@ describe('implementation-planner.md template', () => {
     });
   });
 
+  describe('task sizing rules', () => {
+    it('should contain a Task Sizing Rules section', () => {
+      expect(content).toMatch(/##\s+Task Sizing Rules/);
+    });
+
+    it('should include the one-agent-session principle', () => {
+      expect(content).toMatch(/one agent session|single agent session/i);
+    });
+
+    it('should include the ~5 files / ~200-300 lines per task guideline', () => {
+      expect(content).toMatch(/~5 files|5 files/i);
+      expect(content).toMatch(/200[–-]300 lines|200.*300 lines/i);
+    });
+
+    it('should include a scope-to-task-count table with small, medium, large rows', () => {
+      expect(content).toMatch(/small\s*\|?\s*1[–-]3/i);
+      expect(content).toMatch(/medium\s*\|?\s*3[–-]6/i);
+      expect(content).toMatch(/large\s*\|?\s*5[–-]10/i);
+    });
+
+    it('should include a rule against splitting constants/type aliases from consumer tasks', () => {
+      expect(content).toMatch(/constant|type alias/i);
+      expect(content).toMatch(/same task/i);
+    });
+
+    it('should prefer co-located source and test changes in one task', () => {
+      expect(content).toMatch(/source.*test.*same task|co-locate/i);
+    });
+
+    it('should require co-deployed changes to be in one task', () => {
+      expect(content).toMatch(/co-deploy|deployed together/i);
+    });
+  });
+
   describe('test file inclusion rule', () => {
     it('should explicitly instruct that test files must be listed in the files array', () => {
       expect(content).toMatch(/test file/i);

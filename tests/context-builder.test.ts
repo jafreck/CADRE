@@ -110,6 +110,42 @@ describe('ContextBuilder', () => {
     expect(typeof ctx).toBe('string');
   });
 
+  describe('buildForImplementationPlanner scope/changeType/maxTasksHint', () => {
+    it('should include payload with scope, changeType, maxTasksHint when all provided', async () => {
+      await builder.buildForImplementationPlanner(
+        42, '/tmp/worktree', '/tmp/analysis.md', '/tmp/scout-report.md', '/tmp/progress',
+        'frontend', 'feature', 5,
+      );
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload).toBeDefined();
+      expect(payload.scope).toBe('frontend');
+      expect(payload.changeType).toBe('feature');
+      expect(payload.maxTasksHint).toBe(5);
+    });
+
+    it('should include payload with only scope when only scope provided', async () => {
+      await builder.buildForImplementationPlanner(
+        42, '/tmp/worktree', '/tmp/analysis.md', '/tmp/scout-report.md', '/tmp/progress',
+        'backend',
+      );
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload).toBeDefined();
+      expect(payload.scope).toBe('backend');
+      expect(payload.changeType).toBeUndefined();
+      expect(payload.maxTasksHint).toBeUndefined();
+    });
+
+    it('should not include payload when no optional params provided', async () => {
+      await builder.buildForImplementationPlanner(
+        42, '/tmp/worktree', '/tmp/analysis.md', '/tmp/scout-report.md', '/tmp/progress',
+      );
+      const ctx = captureWrittenContext();
+      expect(ctx.payload).toBeUndefined();
+    });
+  });
+
   it('should build context for code-writer', async () => {
     const task = {
       id: 'task-001',

@@ -66,6 +66,24 @@ The block must match this exact schema:
 - `acceptanceCriteria`: JSON array of strings; each entry is a single testable criterion.
 - All string values must be valid JSON (escape quotes, no trailing commas).
 
+## Task Sizing Rules
+
+Each task must be completable in a single agent session. Use these guidelines to size tasks correctly:
+
+- **One agent session per task**: A task should represent a coherent unit of work an agent can complete without needing to wait for another task to finish first.
+- **File and line budget**: Aim for ~5 files and ~200–300 lines changed per task. Tasks that exceed this are likely too large and should be split.
+- **Scope-to-task-count table**:
+
+  | Scope   | Suggested task count |
+  |---------|----------------------|
+  | small   | 1–3                  |
+  | medium  | 3–6                  |
+  | large   | 5–10                 |
+
+- **Do not split constants, type aliases, exports, or interfaces from their consumer tasks.** If a constant or type is introduced solely to support a change in the same PR, define it in the same task as the code that uses it.
+- **Co-locate source and test changes in one task.** Prefer putting the source file change and its corresponding test file change in the same task rather than separate tasks.
+- **Co-deployed changes belong in one task.** If two changes must be deployed together (e.g., they would break independently), they must be in the same task.
+
 ### Rules
 - You MUST read every source file you intend to reference before making any claims about its contents or structure.
 - Task IDs must be sequential: `task-001`, `task-002`, etc.
@@ -84,23 +102,14 @@ The block must match this exact schema:
 ## Example Output
 
 ```
-## task-001 – Add timeout configuration constant
+## task-001 – Add timeout support to login handler
 
-**Description:** Define a DEFAULT_TIMEOUT constant in the shared config module so all components can reference a single source of truth for the default timeout value.
-**Files:** src/config.ts
+**Description:** Define a DEFAULT_TIMEOUT constant in src/config.ts and update loginHandler to accept an optional `timeout` parameter that falls back to DEFAULT_TIMEOUT. Update tests to cover the new behaviour.
+**Files:** src/config.ts, src/auth/login.ts, tests/auth/login.test.ts
 **Dependencies:** none
-**Complexity:** simple
-**Acceptance Criteria:**
-- `DEFAULT_TIMEOUT` is exported from `src/config.ts`
-- Value is `30` (seconds)
-
-## task-002 – Accept timeout parameter in login handler
-
-**Description:** Update the loginHandler function to accept an optional `timeout` parameter, falling back to `DEFAULT_TIMEOUT` when not provided.
-**Files:** src/auth/login.ts, tests/auth/login.test.ts
-**Dependencies:** task-001
 **Complexity:** moderate
 **Acceptance Criteria:**
+- `DEFAULT_TIMEOUT` is exported from `src/config.ts` with value `30` (seconds)
 - `loginHandler` accepts an optional `timeout?: number` parameter
 - When `timeout` is omitted, the handler uses `DEFAULT_TIMEOUT`
 - Existing tests continue to pass without modification
@@ -110,24 +119,13 @@ The block must match this exact schema:
 [
   {
     "id": "task-001",
-    "name": "Add timeout configuration constant",
-    "description": "Define a DEFAULT_TIMEOUT constant in the shared config module so all components can reference a single source of truth for the default timeout value.",
-    "files": ["src/config.ts"],
+    "name": "Add timeout support to login handler",
+    "description": "Define a DEFAULT_TIMEOUT constant in src/config.ts and update loginHandler to accept an optional `timeout` parameter that falls back to DEFAULT_TIMEOUT. Update tests to cover the new behaviour.",
+    "files": ["src/config.ts", "src/auth/login.ts", "tests/auth/login.test.ts"],
     "dependencies": [],
-    "complexity": "simple",
-    "acceptanceCriteria": [
-      "`DEFAULT_TIMEOUT` is exported from `src/config.ts`",
-      "Value is `30` (seconds)"
-    ]
-  },
-  {
-    "id": "task-002",
-    "name": "Accept timeout parameter in login handler",
-    "description": "Update the loginHandler function to accept an optional `timeout` parameter, falling back to `DEFAULT_TIMEOUT` when not provided.",
-    "files": ["src/auth/login.ts", "tests/auth/login.test.ts"],
-    "dependencies": ["task-001"],
     "complexity": "moderate",
     "acceptanceCriteria": [
+      "`DEFAULT_TIMEOUT` is exported from `src/config.ts` with value `30` (seconds)",
       "`loginHandler` accepts an optional `timeout?: number` parameter",
       "When `timeout` is omitted, the handler uses `DEFAULT_TIMEOUT`",
       "Existing tests continue to pass without modification"
