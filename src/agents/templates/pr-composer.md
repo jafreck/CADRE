@@ -30,7 +30,7 @@ Write a `pr-content.md` file at the path specified by `outputPath` in your conte
 
 The body must include these sections in order:
 
-1. **Summary** — One to three sentences describing what the PR does and which issue it resolves (e.g., `Closes #7`).
+1. **Summary** — One to three sentences describing what the PR does and which issue it resolves. **You MUST include `Closes #<issue-number>` verbatim in this section** (e.g., `Closes #7`). GitHub uses this exact phrase to auto-close the linked issue when the PR is merged. Do NOT use any other wording — not "Fixes", "Resolves", "Implements", "Addresses", or any other variant. `Closes #<number>` only.
 2. **Changes** — A bulleted list of the significant changes made, grouped by file or feature area.
 3. **Testing** — A brief description of how the changes were verified (tests run, manual checks performed).
 
