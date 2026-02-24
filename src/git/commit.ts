@@ -75,16 +75,22 @@ export class CommitManager {
    * in at construction time from `WorktreeManager.syncAgentFiles`, so only
    * those specific files are unstaged — the target repo's own agent files
    * in the same directories are completely untouched.
+   *
+   * Each pattern is restored individually so that a pathspec miss on one
+   * pattern (e.g. no `task-*.md` files are staged) does not cause git to
+   * abort the whole command and leave the agent files still staged.
    */
   private async unstageArtifacts(issueNumber: number): Promise<void> {
     const artifactPatterns = ['.cadre/', 'task-*.md', ...this.syncedAgentFiles];
-    try {
-      // `git restore --staged` silently succeeds even if the path doesn't exist
-      await this.git.raw(['restore', '--staged', '--', ...artifactPatterns]);
-    } catch {
-      // Non-fatal: if restore fails (e.g. old git version), log and continue
-      this.logger.debug('Could not unstage artifact patterns; continuing', { issueNumber });
+    for (const pattern of artifactPatterns) {
+      // `git restore --staged` may fail with a pathspec error when the pattern
+      // matches nothing — catch individually so one miss doesn't block the rest.
+      await this.git.raw(['restore', '--staged', '--', pattern]).catch(() => {});
     }
+    this.logger.debug(
+      `Unstaged ${artifactPatterns.length} artifact pattern(s)`,
+      { issueNumber },
+    );
   }
 
   /**
@@ -178,8 +184,12 @@ export class CommitManager {
       await this.git.raw(['cherry-pick', '--no-commit', sha]).catch(() => {});
 
       // Remove cadre artefacts from index and working tree.
-      await this.git.raw(['restore', '--staged', '--', ...cadrePatterns]).catch(() => {});
-      await this.git.raw(['restore', '--', ...cadrePatterns]).catch(() => {});
+      // Run each pattern individually — a pathspec miss on one (e.g. no
+      // task-*.md files in this commit) must not abort the whole restore.
+      for (const pattern of cadrePatterns) {
+        await this.git.raw(['restore', '--staged', '--', pattern]).catch(() => {});
+        await this.git.raw(['restore', '--', pattern]).catch(() => {});
+      }
 
       const status = await this.git.status();
       if (status.staged.length === 0) {
