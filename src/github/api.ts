@@ -267,6 +267,47 @@ export class GitHubAPI {
     return this.mcp.callTool<Record<string, unknown>[]>('list_pull_requests', args);
   }
 
+  // ── Labels ──
+
+  /**
+   * Ensure a label exists in the repository, creating it if it does not.
+   * Silently ignores 422 "already exists" errors.
+   */
+  async ensureLabel(labelName: string, color = 'ededed'): Promise<void> {
+    try {
+      await this.mcp.callTool('create_label', {
+        owner: this.owner,
+        repo: this.repo,
+        name: labelName,
+        color,
+      });
+    } catch (err) {
+      const message = String(err);
+      // GitHub returns 422 when the label already exists — safe to ignore
+      if (!message.includes('422') && !message.toLowerCase().includes('already exists')) {
+        this.logger.warn(`Failed to create label "${labelName}": ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Apply labels to a pull request (via the Issues API).
+   */
+  async applyLabels(prNumber: number, labels: string[]): Promise<void> {
+    if (labels.length === 0) return;
+    try {
+      await this.mcp.callTool('issue_write', {
+        method: 'update',
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: prNumber,
+        labels,
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to apply labels to PR #${prNumber}: ${err}`);
+    }
+  }
+
   // ── Auth ──
 
   /**

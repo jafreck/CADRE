@@ -159,6 +159,16 @@ export class GitHubProvider implements PlatformProvider {
     return prs.find((pr) => pr.headBranch === branch) ?? null;
   }
 
+  // ── Labels ──
+
+  async ensureLabel(labelName: string, color?: string): Promise<void> {
+    await this.getAPI().ensureLabel(labelName, color);
+  }
+
+  async applyLabels(prNumber: number, labels: string[]): Promise<void> {
+    await this.getAPI().applyLabels(prNumber, labels);
+  }
+
   // ── Issue Linking ──
 
   issueLinkSuffix(issueNumber: number): string {

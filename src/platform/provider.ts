@@ -178,6 +178,14 @@ export interface PlatformProvider {
   /** List top-level pull request reviews (review bodies, not inline thread comments). */
   listPRReviews(prNumber: number): Promise<PRReview[]>;
 
+  // ── Labels ──
+
+  /** Ensure a label exists in the repository, creating it if it does not. */
+  ensureLabel(labelName: string, color?: string): Promise<void>;
+
+  /** Apply labels to a pull request. */
+  applyLabels(prNumber: number, labels: string[]): Promise<void>;
+
   // ── Issue Linking ──
 
   /**
