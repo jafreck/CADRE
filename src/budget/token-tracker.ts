@@ -7,13 +7,15 @@ export class TokenTracker {
   /**
    * Record usage for a specific issue + agent + phase.
    */
-  record(issueNumber: number, agent: string, phase: number, tokens: number): void {
+  record(issueNumber: number, agent: string, phase: number, tokens: number, input?: number, output?: number): void {
     this.records.push({
       issueNumber,
       agent,
       phase,
       tokens,
       timestamp: new Date().toISOString(),
+      input,
+      output,
     });
   }
 

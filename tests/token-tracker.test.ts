@@ -139,4 +139,24 @@ describe('TokenTracker', () => {
       expect(tracker2.getTotal()).toBe(17000);
     });
   });
+
+  describe('record with input/output', () => {
+    it('should store input and output on TokenRecord when provided', () => {
+      const tracker = new TokenTracker();
+      tracker.record(42, 'issue-analyst', 1, 3000, 1000, 2000);
+      const records = tracker.exportRecords();
+      expect(records).toHaveLength(1);
+      expect(records[0].input).toBe(1000);
+      expect(records[0].output).toBe(2000);
+      expect(records[0].tokens).toBe(3000);
+    });
+
+    it('should leave input and output undefined when not provided', () => {
+      const tracker = new TokenTracker();
+      tracker.record(42, 'issue-analyst', 1, 3000);
+      const records = tracker.exportRecords();
+      expect(records[0].input).toBeUndefined();
+      expect(records[0].output).toBeUndefined();
+    });
+  });
 });
