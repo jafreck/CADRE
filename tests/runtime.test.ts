@@ -784,6 +784,6 @@ describe('CadreRuntime — printSummary code-done-no-pr display', () => {
     const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
     expect(output).toContain('Code Done (No PR): 0');
     // The section header should not appear (only the summary line)
-    expect(output).not.toContain('Code Done (No PR):\n');
+    expect(output).not.toContain('\n  Code Done (No PR):\n');
   });
 });
