@@ -1478,4 +1478,163 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
 
     expect(result.codeDoneNoPR).toEqual([]);
   });
+
+  it('runReviewResponse computes codeDoneNoPR from issueResults where codeComplete=true and prCreated!=true', async () => {
+    const { ReviewResponseOrchestrator } = await import('../src/core/review-response-orchestrator.js');
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        processed: 2,
+        skipped: 0,
+        succeeded: 2,
+        failed: 0,
+        issues: [
+          {
+            issueNumber: 10,
+            skipped: false,
+            result: {
+              issueNumber: 10,
+              issueTitle: 'Issue 10',
+              success: true,
+              codeComplete: true,
+              prCreated: false,
+              phases: [],
+              totalDuration: 100,
+              tokenUsage: 200,
+            },
+          },
+          {
+            issueNumber: 11,
+            skipped: false,
+            result: {
+              issueNumber: 11,
+              issueTitle: 'Issue 11',
+              success: true,
+              codeComplete: true,
+              prCreated: true,
+              pr: { number: 55, url: 'https://github.com/owner/repo/pull/55', title: 'Fix 11' },
+              phases: [],
+              totalDuration: 100,
+              tokenUsage: 200,
+            },
+          },
+        ],
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(10), makeIssue(11)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.runReviewResponse();
+
+    expect(result.codeDoneNoPR).toHaveLength(1);
+    expect(result.codeDoneNoPR[0]).toMatchObject({ issueNumber: 10, issueTitle: 'Issue 10' });
+  });
+
+  it('runReviewResponse excludes issues with prCreated=true from codeDoneNoPR', async () => {
+    const { ReviewResponseOrchestrator } = await import('../src/core/review-response-orchestrator.js');
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        processed: 1,
+        skipped: 0,
+        succeeded: 1,
+        failed: 0,
+        issues: [
+          {
+            issueNumber: 20,
+            skipped: false,
+            result: {
+              issueNumber: 20,
+              issueTitle: 'Issue 20',
+              success: true,
+              codeComplete: true,
+              prCreated: true,
+              pr: { number: 77, url: 'https://github.com/owner/repo/pull/77', title: 'Fix 20' },
+              phases: [],
+              totalDuration: 100,
+              tokenUsage: 300,
+            },
+          },
+        ],
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(20)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.runReviewResponse();
+
+    expect(result.codeDoneNoPR).toHaveLength(0);
+    expect(result.prsCreated).toHaveLength(1);
+  });
+
+  it('runReviewResponse excludes issues with codeComplete=false from codeDoneNoPR', async () => {
+    const { ReviewResponseOrchestrator } = await import('../src/core/review-response-orchestrator.js');
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      run: vi.fn().mockResolvedValue({
+        processed: 1,
+        skipped: 0,
+        succeeded: 1,
+        failed: 0,
+        issues: [
+          {
+            issueNumber: 30,
+            skipped: false,
+            result: {
+              issueNumber: 30,
+              issueTitle: 'Issue 30',
+              success: true,
+              codeComplete: false,
+              prCreated: false,
+              phases: [],
+              totalDuration: 100,
+              tokenUsage: 100,
+            },
+          },
+        ],
+      }),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(30)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.runReviewResponse();
+
+    expect(result.codeDoneNoPR).toHaveLength(0);
+  });
 });
