@@ -395,6 +395,7 @@ export class WorktreeManager {
             branch,
             exists: true,
             baseCommit,
+            syncedAgentFiles: [],
           });
         }
       }
