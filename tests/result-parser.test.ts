@@ -54,7 +54,7 @@ describe('ResultParser', () => {
       const content = '```cadre-json\n{ not valid json }\n```';
       vi.mocked(readFile).mockResolvedValue(content);
 
-      await expect(parser.parseImplementationPlan('/tmp/plan.md')).rejects.toThrow(SyntaxError);
+      await expect(parser.parseImplementationPlan('/tmp/plan.md')).rejects.toThrow(/cadre-json/);
     });
   });
 

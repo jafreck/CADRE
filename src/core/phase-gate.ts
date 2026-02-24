@@ -8,6 +8,7 @@ import {
   integrationReportSchema,
 } from '../agents/schemas/index.js';
 import { TaskQueue } from '../execution/task-queue.js';
+import { extractCadreJson } from '../util/cadre-json.js';
 
 /** Context passed to every gate validator. */
 export interface GateContext {
@@ -40,20 +41,6 @@ function pass(warnings: string[] = []): GateResult {
 
 function fail(errors: string[], warnings: string[] = []): GateResult {
   return { status: 'fail', warnings, errors };
-}
-
-/**
- * Extract and JSON-parse the first ```cadre-json``` fenced block from content.
- * Returns the parsed value, or null if no such block exists or the JSON is invalid.
- */
-function extractCadreJson(content: string): unknown | null {
-  const match = content.match(/```cadre-json\s*\n([\s\S]*?)```/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[1].trim());
-  } catch {
-    return null;
-  }
 }
 
 // ── Gate 1→2: Analysis → Planning ────────────────────────────────────────────

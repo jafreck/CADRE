@@ -26,6 +26,7 @@ import { RetryExecutor } from '../execution/retry.js';
 import { TokenTracker } from '../budget/token-tracker.js';
 import { Logger } from '../logging/logger.js';
 import { IssueNotifier } from './issue-notifier.js';
+import { extractCadreJson } from '../util/cadre-json.js';
 import { AnalysisPhaseExecutor } from '../executors/analysis-phase-executor.js';
 import { PlanningPhaseExecutor } from '../executors/planning-phase-executor.js';
 import { ImplementationPhaseExecutor } from '../executors/implementation-phase-executor.js';
@@ -529,22 +530,26 @@ export class IssueOrchestrator {
       return [];
     }
 
-    const lines = content.split('\n');
-    let inAmbiguities = false;
-    const ambiguityLines: string[] = [];
-
-    for (const line of lines) {
-      if (/^##\s+Ambiguities/i.test(line)) {
-        inAmbiguities = true;
-        continue;
-      }
-      if (inAmbiguities && /^##\s/.test(line)) break;
-      if (inAmbiguities && line.trim()) {
-        ambiguityLines.push(line.trim());
-      }
+    const data = extractCadreJson(content) as Record<string, unknown> | null;
+    if (data === null) {
+      this.logger.warn(`analysis.md for issue #${this.issue.number} has no cadre-json block; ambiguities will not be reported`, {
+        issueNumber: this.issue.number,
+      });
+      return [];
     }
 
-    return ambiguityLines;
+    try {
+      const ambiguities = data['ambiguities'];
+      if (Array.isArray(ambiguities)) {
+        return ambiguities.filter((a): a is string => typeof a === 'string');
+      }
+      return [];
+    } catch (err) {
+      this.logger.warn(`Failed to parse cadre-json block in analysis.md for issue #${this.issue.number}: ${err}`, {
+        issueNumber: this.issue.number,
+      });
+      return [];
+    }
   }
 
   private buildResult(success: boolean, error?: string, startTime?: number, budgetExceeded?: boolean): IssueResult {

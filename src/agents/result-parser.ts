@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { extractCadreJson } from '../util/cadre-json.js';
 import type {
   ImplementationTask,
   AnalysisResult,
@@ -22,16 +23,6 @@ export class ResultParser {
   constructor() {}
 
   /**
-   * Extract and JSON-parse the first ```cadre-json``` fenced block in content.
-   * Returns the parsed value, or null if no such block exists.
-   */
-  private extractCadreJson(content: string): unknown | null {
-    const match = content.match(/```cadre-json\s*\n([\s\S]*?)```/);
-    if (!match) return null;
-    return JSON.parse(match[1].trim());
-  }
-
-  /**
    * Normalize a markdown string that may contain JSON-style escape sequences
    * (e.g. `\\n` → actual newline, `\\t` → actual tab).
    *
@@ -53,7 +44,7 @@ export class ResultParser {
   async parseImplementationPlan(planPath: string): Promise<ImplementationTask[]> {
     const content = await readFile(planPath, 'utf-8');
 
-    const parsed = this.extractCadreJson(content);
+    const parsed = extractCadreJson(content);
     if (parsed !== null) {
       return implementationPlanSchema.parse(parsed);
     }
@@ -71,7 +62,7 @@ export class ResultParser {
   async parseReview(reviewPath: string): Promise<ReviewResult> {
     const content = await readFile(reviewPath, 'utf-8');
 
-    const parsed = this.extractCadreJson(content);
+    const parsed = extractCadreJson(content);
     if (parsed !== null) {
       const result = reviewSchema.parse(parsed);
       return {
@@ -96,7 +87,7 @@ export class ResultParser {
   async parseIntegrationReport(reportPath: string): Promise<IntegrationReport> {
     const content = await readFile(reportPath, 'utf-8');
 
-    const parsed = this.extractCadreJson(content);
+    const parsed = extractCadreJson(content);
     if (parsed !== null) {
       return integrationReportSchema.parse(parsed);
     }
@@ -113,7 +104,7 @@ export class ResultParser {
   async parsePRContent(contentPath: string): Promise<PRContent> {
     const content = await readFile(contentPath, 'utf-8');
 
-    const parsed = this.extractCadreJson(content);
+    const parsed = extractCadreJson(content);
     if (parsed !== null) {
       const result = prContentSchema.parse(parsed);
       return { ...result, body: this.unescapeText(result.body) };
@@ -131,7 +122,7 @@ export class ResultParser {
   async parseScoutReport(reportPath: string): Promise<ScoutReport> {
     const content = await readFile(reportPath, 'utf-8');
 
-    const parsed = this.extractCadreJson(content);
+    const parsed = extractCadreJson(content);
     if (parsed !== null) {
       return scoutReportSchema.parse(parsed);
     }
@@ -148,7 +139,7 @@ export class ResultParser {
   async parseAnalysis(analysisPath: string): Promise<AnalysisResult> {
     const content = await readFile(analysisPath, 'utf-8');
 
-    const parsed = this.extractCadreJson(content);
+    const parsed = extractCadreJson(content);
     if (parsed !== null) {
       const result = analysisSchema.parse(parsed);
       return {
