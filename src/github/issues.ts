@@ -1,5 +1,4 @@
 import { GitHubAPI } from './api.js';
-import type { GitHubMCPClient } from './mcp-client.js';
 import type { CadreConfig } from '../config/schema.js';
 import { Logger } from '../logging/logger.js';
 
@@ -33,9 +32,9 @@ export class IssueFetcher {
   constructor(
     private readonly repository: string,
     private readonly logger: Logger,
-    mcp: GitHubMCPClient,
+    _mcp?: unknown,
   ) {
-    this.api = new GitHubAPI(repository, logger, mcp);
+    this.api = new GitHubAPI(repository, logger);
   }
 
   /**

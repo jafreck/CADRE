@@ -59,7 +59,7 @@ export class GitHubProvider implements PlatformProvider {
 
   async connect(): Promise<void> {
     await this.mcpClient.connect();
-    this.api = new GitHubAPI(this.repository, this.logger, this.mcpClient);
+    this.api = new GitHubAPI(this.repository, this.logger);
   }
 
   async disconnect(): Promise<void> {
