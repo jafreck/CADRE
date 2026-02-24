@@ -175,6 +175,7 @@ describe('CadreRuntime.emptyResult()', () => {
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
     expect(result.prsCreated).toEqual([]);
+    expect(result.codeDoneNoPR).toEqual([]);
     expect(result.failedIssues).toEqual([]);
     expect(result.totalDuration).toBe(0);
     expect(result.tokenUsage).toMatchObject({
