@@ -399,6 +399,42 @@ describe('GitHubProvider', () => {
     );
     await expect(provider.findOpenPR(1, 'feature-branch')).rejects.toThrow('not connected');
   });
+
+  it('should expose ensureLabel method', () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    expect(typeof provider.ensureLabel).toBe('function');
+  });
+
+  it('should throw when calling ensureLabel before connect', async () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    await expect(provider.ensureLabel('bug')).rejects.toThrow('not connected');
+  });
+
+  it('should expose applyLabels method', () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    expect(typeof provider.applyLabels).toBe('function');
+  });
+
+  it('should throw when calling applyLabels before connect', async () => {
+    const provider = new GitHubProvider(
+      'owner/repo',
+      { command: 'github-mcp-server', args: ['stdio'] },
+      mockLogger,
+    );
+    await expect(provider.applyLabels(1, ['bug'])).rejects.toThrow('not connected');
+  });
 });
 
 describe('AzureDevOpsProvider', () => {
