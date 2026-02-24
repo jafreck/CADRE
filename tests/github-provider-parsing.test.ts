@@ -666,6 +666,285 @@ describe('GitHubProvider – findOpenPR', () => {
   });
 });
 
+describe('GitHubProvider – listIssues', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should return a list of issue details', async () => {
+    getApiMock().listIssues.mockResolvedValue([{ number: 1 }, { number: 2 }]);
+    getApiMock().getIssue
+      .mockResolvedValueOnce({ number: 1, title: 'First', state: 'open', comments: [] })
+      .mockResolvedValueOnce({ number: 2, title: 'Second', state: 'closed', comments: [] });
+
+    const issues = await provider.listIssues({});
+
+    expect(issues).toHaveLength(2);
+    expect(issues[0].number).toBe(1);
+    expect(issues[1].number).toBe(2);
+  });
+
+  it('should skip issues that fail to fetch and log a warning', async () => {
+    getApiMock().listIssues.mockResolvedValue([{ number: 10 }, { number: 11 }]);
+    getApiMock().getIssue
+      .mockRejectedValueOnce(new Error('Not found'))
+      .mockResolvedValueOnce({ number: 11, title: 'Good', state: 'open', comments: [] });
+
+    const issues = await provider.listIssues({});
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].number).toBe(11);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('#10'),
+      expect.any(Object),
+    );
+  });
+
+  it('should return empty array when listIssues returns empty', async () => {
+    getApiMock().listIssues.mockResolvedValue([]);
+
+    const issues = await provider.listIssues({});
+
+    expect(issues).toEqual([]);
+  });
+});
+
+describe('GitHubProvider – addIssueComment', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should call api.addIssueComment with correct arguments', async () => {
+    getApiMock().addIssueComment.mockResolvedValue(undefined);
+
+    await provider.addIssueComment(42, 'Hello!');
+
+    expect(getApiMock().addIssueComment).toHaveBeenCalledWith(42, 'Hello!');
+  });
+});
+
+describe('GitHubProvider – updatePullRequest', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should call api.updatePullRequest with correct arguments', async () => {
+    getApiMock().updatePullRequest.mockResolvedValue(undefined);
+
+    await provider.updatePullRequest(55, { title: 'New Title', body: 'New body' });
+
+    expect(getApiMock().updatePullRequest).toHaveBeenCalledWith(55, { title: 'New Title', body: 'New body' });
+  });
+});
+
+describe('GitHubProvider – ensureLabel and applyLabels', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should call api.ensureLabel with name and color', async () => {
+    getApiMock().ensureLabel.mockResolvedValue(undefined);
+
+    await provider.ensureLabel('bug', 'ff0000');
+
+    expect(getApiMock().ensureLabel).toHaveBeenCalledWith('bug', 'ff0000');
+  });
+
+  it('should call api.ensureLabel without color', async () => {
+    getApiMock().ensureLabel.mockResolvedValue(undefined);
+
+    await provider.ensureLabel('enhancement');
+
+    expect(getApiMock().ensureLabel).toHaveBeenCalledWith('enhancement', undefined);
+  });
+
+  it('should call api.applyLabels with prNumber and labels', async () => {
+    getApiMock().applyLabels.mockResolvedValue(undefined);
+
+    await provider.applyLabels(10, ['bug', 'wontfix']);
+
+    expect(getApiMock().applyLabels).toHaveBeenCalledWith(10, ['bug', 'wontfix']);
+  });
+});
+
+describe('GitHubProvider – listPRComments', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should parse an array of PR comments', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      {
+        id: 'c1',
+        user: { login: 'alice', type: 'User' },
+        body: 'Looks good!',
+        created_at: '2024-01-01T00:00:00Z',
+        html_url: 'https://github.com/owner/repo/pull/1#comment-1',
+      },
+    ]);
+
+    const comments = await provider.listPRComments(1);
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0].id).toBe('c1');
+    expect(comments[0].author).toBe('alice');
+    expect(comments[0].isBot).toBe(false);
+    expect(comments[0].body).toBe('Looks good!');
+    expect(comments[0].createdAt).toBe('2024-01-01T00:00:00Z');
+    expect(comments[0].url).toBe('https://github.com/owner/repo/pull/1#comment-1');
+  });
+
+  it('should detect bot comments by login containing [bot]', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      { id: 'b1', user: { login: 'github-actions[bot]' }, body: 'CI passed', created_at: '', html_url: '' },
+    ]);
+
+    const comments = await provider.listPRComments(2);
+
+    expect(comments[0].isBot).toBe(true);
+  });
+
+  it('should detect bot comments by user type', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      { id: 'b2', user: { login: 'some-bot', type: 'Bot' }, body: 'Auto comment', created_at: '', html_url: '' },
+    ]);
+
+    const comments = await provider.listPRComments(3);
+
+    expect(comments[0].isBot).toBe(true);
+  });
+
+  it('should parse an envelope { comments: [...] } response', async () => {
+    getApiMock().getPRComments.mockResolvedValue({
+      comments: [{ id: 'e1', user: { login: 'bob' }, body: 'hi', created_at: '', html_url: '' }],
+    });
+
+    const comments = await provider.listPRComments(4);
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0].id).toBe('e1');
+  });
+
+  it('should return empty array for null or non-array non-object response', async () => {
+    getApiMock().getPRComments.mockResolvedValue(null);
+
+    const comments = await provider.listPRComments(5);
+
+    expect(comments).toEqual([]);
+  });
+
+  it('should fall back to author field when user is absent', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      { id: 'c3', author: { login: 'charlie' }, body: 'noted', created_at: '', html_url: '' },
+    ]);
+
+    const comments = await provider.listPRComments(6);
+
+    expect(comments[0].author).toBe('charlie');
+  });
+});
+
+describe('GitHubProvider – listPRReviews', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should parse an array of PR reviews', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      {
+        id: 'r1',
+        user: { login: 'alice', type: 'User' },
+        body: 'LGTM',
+        state: 'APPROVED',
+        submitted_at: '2024-01-05T00:00:00Z',
+      },
+    ]);
+
+    const reviews = await provider.listPRReviews(1);
+
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].id).toBe('r1');
+    expect(reviews[0].author).toBe('alice');
+    expect(reviews[0].isBot).toBe(false);
+    expect(reviews[0].body).toBe('LGTM');
+    expect(reviews[0].state).toBe('APPROVED');
+    expect(reviews[0].submittedAt).toBe('2024-01-05T00:00:00Z');
+  });
+
+  it('should detect bot reviews by login', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      { id: 'rb1', user: { login: 'coderabbitai[bot]' }, body: '', state: 'COMMENTED', submitted_at: '' },
+    ]);
+
+    const reviews = await provider.listPRReviews(2);
+
+    expect(reviews[0].isBot).toBe(true);
+  });
+
+  it('should parse an envelope { reviews: [...] } response', async () => {
+    getApiMock().getPRReviews.mockResolvedValue({
+      reviews: [{ id: 'er1', user: { login: 'bob' }, body: 'ok', state: 'APPROVED', submitted_at: '' }],
+    });
+
+    const reviews = await provider.listPRReviews(3);
+
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].id).toBe('er1');
+  });
+
+  it('should return empty array for null response', async () => {
+    getApiMock().getPRReviews.mockResolvedValue(null);
+
+    const reviews = await provider.listPRReviews(4);
+
+    expect(reviews).toEqual([]);
+  });
+
+  it('should fall back to author field when user is absent', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      { id: 'r2', author: { login: 'dave' }, body: '', state: 'CHANGES_REQUESTED', submitted_at: '' },
+    ]);
+
+    const reviews = await provider.listPRReviews(5);
+
+    expect(reviews[0].author).toBe('dave');
+  });
+
+  it('should fall back to submittedAt field when submitted_at is absent', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      { id: 'r3', user: { login: 'eve' }, body: '', state: 'APPROVED', submittedAt: '2024-06-01T00:00:00Z' },
+    ]);
+
+    const reviews = await provider.listPRReviews(6);
+
+    expect(reviews[0].submittedAt).toBe('2024-06-01T00:00:00Z');
+  });
+});
+
 describe('GitHubProvider – lifecycle', () => {
   let provider: GitHubProvider;
 
