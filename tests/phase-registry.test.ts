@@ -27,9 +27,12 @@ describe('PhaseRegistry', () => {
       expect(ISSUE_PHASES[2].critical).toBe(true);
     });
 
-    it('should have phases 4-5 as non-critical', () => {
-      expect(ISSUE_PHASES[3].critical).toBe(false);
-      expect(ISSUE_PHASES[4].critical).toBe(false);
+    it('should have phase 4 as critical', () => {
+      expect(ISSUE_PHASES[3].critical).toBe(true);
+    });
+
+    it('should have phase 5 as critical', () => {
+      expect(ISSUE_PHASES[4].critical).toBe(true);
     });
 
     it('should have expected phase names', () => {

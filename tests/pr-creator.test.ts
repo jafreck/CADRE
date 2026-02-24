@@ -70,6 +70,86 @@ describe('PullRequestCreator', () => {
     });
   });
 
+  describe('create', () => {
+    it('should create a PR with the correct title and return PullRequestInfo', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({
+        number: 99,
+        html_url: 'https://github.com/owner/repo/pull/99',
+        title: 'Fix login (#42)',
+      });
+
+      const result = await creator.create(42, 'Fix login', 'cadre/issue-42', 'body text', '/tmp/wt');
+
+      expect(result.number).toBe(99);
+      expect(result.url).toBe('https://github.com/owner/repo/pull/99');
+      expect(result.title).toBe('Fix login (#42)');
+      expect(result.headBranch).toBe('cadre/issue-42');
+      expect(result.baseBranch).toBe('main');
+    });
+
+    it('should append "Closes #N" to body when linkIssue is true', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({
+        number: 99,
+        html_url: 'https://github.com/owner/repo/pull/99',
+      });
+
+      await creator.create(42, 'Fix login', 'cadre/issue-42', 'body text', '/tmp/wt');
+
+      const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+      const inputBody = (callArgs[1] as Record<string, unknown>)?.body as string;
+      expect(inputBody).toContain('Closes #42');
+    });
+
+    it('should not append "Closes #N" when linkIssue is false', async () => {
+      mockConfig.pullRequest.linkIssue = false;
+      creator = new PullRequestCreator(mockConfig, mockLogger, api);
+
+      vi.mocked(mockMCP.callTool).mockResolvedValue({
+        number: 99,
+        html_url: 'https://github.com/owner/repo/pull/99',
+      });
+
+      await creator.create(42, 'Fix login', 'cadre/issue-42', 'body text', '/tmp/wt');
+
+      const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+      const inputBody = (callArgs[1] as Record<string, unknown>)?.body as string;
+      expect(inputBody).not.toContain('Closes #42');
+    });
+
+    it('should log info with PR number and URL after creation', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({
+        number: 99,
+        html_url: 'https://github.com/owner/repo/pull/99',
+      });
+
+      await creator.create(42, 'Fix login', 'cadre/issue-42', 'body', '/tmp/wt');
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Created PR #99'),
+        expect.any(Object),
+      );
+    });
+  });
+
+  describe('update', () => {
+    it('should call api.updatePullRequest with prNumber and updates', async () => {
+      vi.mocked(mockMCP.callTool).mockResolvedValue({});
+
+      await creator.update(99, { title: 'New Title', body: 'New body' });
+
+      expect(mockMCP.callTool).toHaveBeenCalled();
+    });
+
+    it('should log warn and not throw when update fails', async () => {
+      vi.mocked(mockMCP.callTool).mockRejectedValueOnce(new Error('API error'));
+
+      await expect(creator.update(99, { title: 'New Title' })).resolves.toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to update PR #99'),
+      );
+    });
+  });
+
   it('should have create method', () => {
     expect(typeof creator.create).toBe('function');
   });

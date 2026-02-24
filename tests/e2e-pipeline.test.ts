@@ -36,6 +36,7 @@ vi.mock('../src/git/commit.js', () => ({
     getTaskDiff: vi.fn().mockResolvedValue(''),
     push: vi.fn().mockResolvedValue(undefined),
     squash: vi.fn().mockResolvedValue('abc123'),
+    stripCadreFiles: vi.fn().mockResolvedValue('abc123'),
   })),
 }));
 
@@ -273,6 +274,7 @@ function makeWorktree(worktreePath: string): WorktreeInfo {
     branch: 'cadre/issue-1',
     exists: true,
     baseCommit: 'deadbeef',
+    syncedAgentFiles: [],
   };
 }
 

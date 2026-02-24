@@ -21,8 +21,8 @@ export const ISSUE_PHASES: PhaseDefinition[] = [
   { id: 1, name: 'Analysis & Scouting', critical: true, commitType: 'chore', commitMessage: 'analyze issue #{issueNumber}' },
   { id: 2, name: 'Planning', critical: true, commitType: 'chore', commitMessage: 'plan implementation for #{issueNumber}' },
   { id: 3, name: 'Implementation', critical: true, commitType: 'feat', commitMessage: 'implement changes for #{issueNumber}' },
-  { id: 4, name: 'Integration Verification', critical: false, commitType: 'fix', commitMessage: 'address integration issues' },
-  { id: 5, name: 'PR Composition', critical: false, commitType: 'chore', commitMessage: 'compose PR for #{issueNumber}' },
+  { id: 4, name: 'Integration Verification', critical: true, commitType: 'fix', commitMessage: 'address integration issues' },
+  { id: 5, name: 'PR Composition', critical: true, commitType: 'chore', commitMessage: 'compose PR for #{issueNumber}' },
 ];
 
 /** Phase IDs used by the review-response pipeline (implementation, integration-verification, PR composition). */
