@@ -276,7 +276,6 @@ export class ReviewResponseOrchestrator {
           this.platform,
           this.logger.child(issueNumber, join(this.cadreDir, 'logs')),
           this.notifications,
-          REVIEW_RESPONSE_PHASES,
         );
 
         const issueResult = await issueOrchestrator.run();

@@ -25,6 +25,12 @@ const makeConfig = (overrides: Partial<{ cliCommand: string; agentDir: string }>
       agentDir: overrides.agentDir ?? '/tmp/agents',
       timeout: 300000,
     },
+    // Mirrors what loadConfig always synthesizes
+    agent: {
+      backend: 'copilot' as const,
+      copilot: { cliCommand: overrides.cliCommand ?? 'copilot', agentDir: overrides.agentDir ?? '/tmp/agents' },
+      claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+    },
   }) as unknown as CadreConfig;
 
 const makeConfigWithAgent = (
@@ -45,7 +51,7 @@ const makeConfigWithAgent = (
     agent: {
       backend,
       copilot: { cliCommand: overrides.copilotCli ?? 'copilot', agentDir: '/tmp/agents' },
-      claude: { cliCommand: overrides.claudeCli ?? 'claude' },
+      claude: { cliCommand: overrides.claudeCli ?? 'claude', agentDir: overrides.agentDir ?? '/tmp/agents' },
     },
   }) as unknown as CadreConfig;
 
@@ -195,7 +201,7 @@ describe('agentBackendValidator', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should check copilot.agentDir even when backend is claude', async () => {
+    it('should check agent.claude.agentDir when backend is claude', async () => {
       vi.mocked(exec).mockResolvedValue({ exitCode: 0, stdout: '/usr/bin/claude', stderr: '', signal: null, timedOut: false });
       vi.mocked(exists).mockResolvedValue(true);
 

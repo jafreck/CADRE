@@ -53,6 +53,8 @@ export const AgentConfigSchema = z.object({
   claude: z
     .object({
       cliCommand: z.string().default('claude'),
+      /** Directory where Claude subagent files (.claude/agents/) live. */
+      agentDir: z.string().default('.claude/agents'),
     })
     .default({}),
 });
