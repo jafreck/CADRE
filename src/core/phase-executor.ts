@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from '../config/loader.js';
-import type { IssueDetail, PlatformProvider } from '../platform/provider.js';
+import type { IssueDetail, PlatformProvider, PullRequestInfo } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
 import type { CheckpointManager } from './checkpoint.js';
 import type { IssueProgressWriter } from './progress.js';
@@ -34,6 +34,7 @@ export type PhaseCallbacks = {
   recordTokens: (agent: string, tokens: number | null) => void;
   checkBudget: () => void;
   updateProgress: () => Promise<void>;
+  onPRCreated?: (pr: PullRequestInfo) => void;
 };
 
 /**

@@ -372,6 +372,13 @@ describe('FleetCheckpointManager', () => {
     expect(manager.isIssueCompleted(5)).toBe(false);
   });
 
+  it('isIssueCompleted should return true for code-complete-no-pr status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(100, 'code-complete-no-pr', '/path', 'branch', 5, 'Some feature');
+    expect(manager.isIssueCompleted(100)).toBe(true);
+  });
+
   it('isIssueCompleted should return false for not-started status', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();

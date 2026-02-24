@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { PhaseContext, PhaseExecutor } from '../src/core/phase-executor.js';
+import type { PhaseCallbacks, PhaseContext, PhaseExecutor } from '../src/core/phase-executor.js';
+import type { PullRequestInfo } from '../src/platform/provider.js';
 
 // ── PhaseExecutor interface ──
 
@@ -129,6 +130,102 @@ describe('PhaseContext', () => {
 
     expect(recordTokens).toHaveBeenCalledWith('issue-analyst', 1500);
     expect(recordTokens).toHaveBeenCalledWith('code-writer', null);
+  });
+
+  it('should accept PhaseCallbacks without onPRCreated (it is optional)', () => {
+    const callbacks: PhaseCallbacks = {
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+    };
+    expect(callbacks.onPRCreated).toBeUndefined();
+  });
+
+  it('should accept PhaseCallbacks with onPRCreated defined', () => {
+    const onPRCreated = vi.fn();
+    const callbacks: PhaseCallbacks = {
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      onPRCreated,
+    };
+    expect(typeof callbacks.onPRCreated).toBe('function');
+  });
+
+  it('onPRCreated should be called with PullRequestInfo when provided', () => {
+    const onPRCreated = vi.fn();
+    const callbacks: PhaseCallbacks = {
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      onPRCreated,
+    };
+
+    const pr: PullRequestInfo = {
+      number: 99,
+      url: 'https://github.com/owner/repo/pull/99',
+      title: 'Fix: resolve edge case',
+      headBranch: 'cadre/issue-42',
+      baseBranch: 'main',
+    };
+
+    callbacks.onPRCreated!(pr);
+    expect(onPRCreated).toHaveBeenCalledOnce();
+    expect(onPRCreated).toHaveBeenCalledWith(pr);
+  });
+
+  it('onPRCreated should receive full PullRequestInfo fields', () => {
+    const received: PullRequestInfo[] = [];
+    const callbacks: PhaseCallbacks = {
+      recordTokens: vi.fn(),
+      checkBudget: vi.fn(),
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      onPRCreated: (pr) => received.push(pr),
+    };
+
+    const pr: PullRequestInfo = {
+      number: 7,
+      url: 'https://github.com/owner/repo/pull/7',
+      title: 'Add feature',
+      headBranch: 'cadre/issue-7',
+      baseBranch: 'main',
+    };
+
+    callbacks.onPRCreated!(pr);
+    expect(received).toHaveLength(1);
+    expect(received[0].number).toBe(7);
+    expect(received[0].url).toBe('https://github.com/owner/repo/pull/7');
+    expect(received[0].headBranch).toBe('cadre/issue-7');
+  });
+
+  it('PhaseContext callbacks should work without onPRCreated', () => {
+    const ctx: PhaseContext = {
+      issue: {} as never,
+      worktree: {} as never,
+      config: {} as never,
+      platform: {} as never,
+      services: {
+        launcher: {} as never,
+        retryExecutor: {} as never,
+        tokenTracker: {} as never,
+        contextBuilder: {} as never,
+        resultParser: {} as never,
+        logger: {} as never,
+      },
+      io: {
+        progressDir: '',
+        progressWriter: {} as never,
+        checkpoint: {} as never,
+        commitManager: {} as never,
+      },
+      callbacks: {
+        recordTokens: vi.fn(),
+        checkBudget: vi.fn(),
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+        // no onPRCreated
+      },
+    };
+    expect(ctx.callbacks.onPRCreated).toBeUndefined();
   });
 
   it('checkBudget should be callable with no arguments', () => {
