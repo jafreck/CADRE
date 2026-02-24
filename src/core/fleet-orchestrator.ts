@@ -231,7 +231,7 @@ export class FleetOrchestrator {
             phases: [],
             totalDuration: 0,
             tokenUsage: 0,
-            codeComplete: false,
+            codeComplete: true,
             prCreated: true,
           };
         }
