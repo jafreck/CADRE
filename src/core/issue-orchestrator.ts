@@ -81,7 +81,6 @@ export class IssueOrchestrator {
   private budgetWarningSent = false;
   private createdPR: PullRequestInfo | undefined;
   private codeCompleted = false;
-  private prFailed = false;
 
   constructor(
     private readonly config: RuntimeConfig,
@@ -169,7 +168,7 @@ export class IssueOrchestrator {
         checkBudget: () => this.checkBudget(),
         updateProgress: () => this.updateProgress(),
         onPRCreated: (pr) => { this.createdPR = pr; },
-        onPRFailed: () => { this.prFailed = true; },
+        onPRFailed: () => { /* no-op: PR failure is surfaced via prCreated being false */ },
       },
     };
 

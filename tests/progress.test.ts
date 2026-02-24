@@ -141,18 +141,6 @@ describe('FleetProgressWriter', () => {
     expect(content).toContain('🔀 code-complete-no-pr');
   });
 
-  it('should emit 🔀 emoji for code-complete-no-pr status', async () => {
-    const writer = new FleetProgressWriter(tempDir, logger);
-    const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 1, status: 'code-complete-no-pr' }),
-    ];
-
-    await writer.write(issues, [], { current: 1000 });
-
-    const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
-    expect(content).toContain('🔀 code-complete-no-pr');
-  });
-
   it('should count code-complete-no-pr issues in fleet summary', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
