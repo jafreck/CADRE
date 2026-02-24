@@ -137,9 +137,12 @@ function makeMockDeps() {
       branch: 'cadre/issue-1',
       baseCommit: 'abc123',
     }),
+    resolveBranchName: vi.fn().mockReturnValue('cadre/issue-1'),
   };
   const launcher = {};
-  const platform = {};
+  const platform = {
+    findOpenPR: vi.fn().mockResolvedValue(null),
+  };
   const logger = {
     info: vi.fn(),
     debug: vi.fn(),
@@ -872,6 +875,280 @@ describe('FleetOrchestrator — RemoteBranchMissingError handling', () => {
 
     expect(result.issues).toHaveLength(1);
     expect(result.issues[0].success).toBe(true);
+    expect(result.failedIssues).toHaveLength(0);
+  });
+});
+
+describe('FleetOrchestrator — skip issues with existing open PRs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls resolveBranchName() with issue number and title before provision()', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.resolveBranchName).toHaveBeenCalledWith(1, 'Issue 1');
+  });
+
+  it('calls resolveBranchName() before provision()', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const callOrder: string[] = [];
+    worktreeManager.resolveBranchName.mockImplementation(() => {
+      callOrder.push('resolveBranchName');
+      return 'cadre/issue-1';
+    });
+    worktreeManager.provision.mockImplementation(async () => {
+      callOrder.push('provision');
+      return { path: '/tmp/worktree/1', branch: 'cadre/issue-1', baseCommit: 'abc123' };
+    });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(callOrder.indexOf('resolveBranchName')).toBeLessThan(callOrder.indexOf('provision'));
+  });
+
+  it('skips provisioning when findOpenPR() returns a non-null PR', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const existingPR = { number: 42, url: 'https://github.com/owner/repo/pull/42', title: 'Existing PR' };
+    platform.findOpenPR.mockResolvedValue(existingPR);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.provision).not.toHaveBeenCalled();
+  });
+
+  it('returns IssueResult with success: true and pr populated when existing PR is found', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const existingPR = { number: 42, url: 'https://github.com/owner/repo/pull/42', title: 'Existing PR' };
+    platform.findOpenPR.mockResolvedValue(existingPR);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    expect(result.issues).toHaveLength(1);
+    const skippedResult = result.issues[0];
+    expect(skippedResult.success).toBe(true);
+    expect(skippedResult.pr).toEqual(existingPR);
+    expect(skippedResult.phases).toEqual([]);
+    expect(skippedResult.issueNumber).toBe(1);
+  });
+
+  it('logs an info message containing the PR URL when skipping', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const existingPR = { number: 42, url: 'https://github.com/owner/repo/pull/42', title: 'Existing PR' };
+    platform.findOpenPR.mockResolvedValue(existingPR);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    const infoCall = (logger.info as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes(existingPR.url),
+    );
+    expect(infoCall).toBeDefined();
+  });
+
+  it('records the issue as completed in the fleet checkpoint when skipping', async () => {
+    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const setIssueStatusMock = vi.fn().mockResolvedValue(undefined);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: setIssueStatusMock,
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      getIssueStatus: vi.fn().mockReturnValue(null),
+    }));
+
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const existingPR = { number: 42, url: 'https://github.com/owner/repo/pull/42', title: 'Existing PR' };
+    platform.findOpenPR.mockResolvedValue(existingPR);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    const completedCall = setIssueStatusMock.mock.calls.find(
+      (args: unknown[]) => args[0] === 1 && args[1] === 'completed',
+    );
+    expect(completedCall).toBeDefined();
+  });
+
+  it('proceeds normally (provisions worktree) when findOpenPR() throws an error', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockRejectedValue(new Error('API timeout'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.provision).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs a warning when findOpenPR() throws and issue continues', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockRejectedValue(new Error('API timeout'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it('does not skip provisioning when findOpenPR() returns null (no existing PR)', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockResolvedValue(null);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(worktreeManager.provision).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips all issues individually when each has an existing open PR', async () => {
+    const config = makeConfig({ maxParallelIssues: 3 });
+    const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockImplementation(async (issueNumber: number) => ({
+      number: 100 + issueNumber,
+      url: `https://github.com/owner/repo/pull/${100 + issueNumber}`,
+      title: `PR for issue ${issueNumber}`,
+    }));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    expect(worktreeManager.provision).not.toHaveBeenCalled();
+    expect(result.issues).toHaveLength(3);
+    expect(result.issues.every((i) => i.success === true)).toBe(true);
     expect(result.failedIssues).toHaveLength(0);
   });
 });

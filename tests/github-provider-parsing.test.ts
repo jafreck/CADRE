@@ -600,3 +600,95 @@ describe('GitHubProvider – listPullRequests type guards', () => {
     expect(prs[0].baseBranch).toBe('');
   });
 });
+
+describe('GitHubProvider – findOpenPR', () => {
+  let provider: GitHubProvider;
+  let mockMCP: GitHubMCPClient;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockMCP = makeMockMCP();
+    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
+    (provider as any).mcpClient = mockMCP;
+    await provider.connect();
+  });
+
+  it('should return the matching PR when listPullRequests returns a PR with matching headBranch', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        number: 42,
+        html_url: 'https://github.com/owner/repo/pull/42',
+        title: 'Fix issue 7',
+        head: { ref: 'cadre/issue-7-fix-bug' },
+        base: { ref: 'main' },
+      },
+    ]);
+
+    const pr = await provider.findOpenPR(7, 'cadre/issue-7-fix-bug');
+
+    expect(pr).not.toBeNull();
+    expect(pr!.number).toBe(42);
+    expect(pr!.headBranch).toBe('cadre/issue-7-fix-bug');
+    expect(pr!.url).toBe('https://github.com/owner/repo/pull/42');
+  });
+
+  it('should return null when listPullRequests returns an empty array', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([]);
+
+    const pr = await provider.findOpenPR(5, 'cadre/issue-5-some-feature');
+
+    expect(pr).toBeNull();
+  });
+
+  it('should return null when no PR matches the given branch name', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        number: 99,
+        html_url: 'https://github.com/owner/repo/pull/99',
+        title: 'Unrelated PR',
+        head: { ref: 'cadre/issue-99-other' },
+        base: { ref: 'main' },
+      },
+    ]);
+
+    const pr = await provider.findOpenPR(5, 'cadre/issue-5-some-feature');
+
+    expect(pr).toBeNull();
+  });
+
+  it('should call listPullRequests with head and state open filters', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([]);
+
+    await provider.findOpenPR(3, 'my-feature-branch');
+
+    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
+    expect(callArgs[0]).toBe('list_pull_requests');
+    const payload = callArgs[1] as Record<string, unknown>;
+    expect(payload.state).toBe('open');
+    expect(payload.head).toBe('owner:my-feature-branch');
+  });
+
+  it('should return the first matching PR when multiple PRs match the branch', async () => {
+    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+      {
+        number: 10,
+        html_url: 'https://github.com/owner/repo/pull/10',
+        title: 'First PR',
+        head: { ref: 'feature-branch' },
+        base: { ref: 'main' },
+      },
+      {
+        number: 11,
+        html_url: 'https://github.com/owner/repo/pull/11',
+        title: 'Second PR',
+        head: { ref: 'feature-branch' },
+        base: { ref: 'main' },
+      },
+    ]);
+
+    const pr = await provider.findOpenPR(1, 'feature-branch');
+
+    expect(pr).not.toBeNull();
+    expect(pr!.number).toBe(10);
+  });
+});

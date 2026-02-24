@@ -41,18 +41,19 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       throw new Error(`PR composer failed: ${composerResult.error}`);
     }
 
+    if (!composerResult.outputExists) {
+      throw new Error('pr-composer exited successfully but did not write pr-content.md');
+    }
+
     // Create PR if auto-create is enabled
     if (ctx.config.pullRequest.autoCreate) {
       const prContentPath = join(ctx.io.progressDir, 'pr-content.md');
       const prContent = await ctx.services.resultParser.parsePRContent(prContentPath);
 
-      // Squash if configured
-      if (ctx.config.commits.squashBeforePR) {
-        await ctx.io.commitManager.squash(
-          ctx.worktree.baseCommit,
-          prContent.title || `Fix #${ctx.issue.number}: ${ctx.issue.title}`,
-        );
-      }
+      // Strip cadre-internal artefacts from committed history.
+      // Replays each agent commit, removing cadre files from the index, while
+      // preserving the original commit message, author, and timestamps.
+      await ctx.io.commitManager.stripCadreFiles(ctx.worktree.baseCommit);
 
       // Push
       await ctx.io.commitManager.push(true, ctx.worktree.branch);

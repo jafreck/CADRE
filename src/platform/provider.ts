@@ -139,6 +139,9 @@ export interface PlatformProvider {
   /** List pull requests matching optional filters. */
   listPullRequests(filters?: ListPullRequestsParams): Promise<PullRequestInfo[]>;
 
+  /** Find an open pull request associated with the given issue number and branch, or null if none exists. */
+  findOpenPR(issueNumber: number, branch: string): Promise<PullRequestInfo | null>;
+
   /** List review threads (with comments) for a pull request. */
   listPRReviewComments(prNumber: number): Promise<ReviewThread[]>;
 
