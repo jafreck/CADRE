@@ -2,7 +2,7 @@ import { simpleGit, type SimpleGit } from 'simple-git';
 import { join, basename } from 'node:path';
 import { copyFile, readdir } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
-import { exists, ensureDir, readFileOrNull, atomicWriteFile } from '../util/fs.js';
+import { exists, ensureDir } from '../util/fs.js';
 
 export class RemoteBranchMissingError extends Error {
   constructor(branch: string) {
@@ -210,9 +210,9 @@ export class WorktreeManager {
   }
 
   /**
-   * Bootstrap the worktree's `.cadre/` directory and ensure it is gitignored.
-   * This must run once immediately after the worktree is created so that cadre
-   * internal artifacts never get picked up by `git add -A`.
+   * Bootstrap the worktree's `.cadre/` directory and add it to the worktree's
+   * private git exclude file (`{git-dir}/info/exclude`) so it is never tracked
+   * or accidentally committed — without touching the repo's `.gitignore`.
    */
   private async initCadreDir(worktreePath: string, issueNumber: number): Promise<void> {
     const cadreDir = join(worktreePath, '.cadre');
@@ -221,15 +221,29 @@ export class WorktreeManager {
     // Ensure cadre's tasks scratch dir exists too so agents can write there
     await ensureDir(join(cadreDir, 'tasks'));
 
-    // Append `.cadre/` to the worktree's .gitignore if not already present
-    const gitignorePath = join(worktreePath, '.gitignore');
-    const existing = (await readFileOrNull(gitignorePath)) ?? '';
-    if (!existing.split('\n').some((line) => line.trim() === '.cadre/')) {
-      const updated = existing.endsWith('\n') || existing === ''
-        ? `${existing}.cadre/\n`
-        : `${existing}\n.cadre/\n`;
-      await atomicWriteFile(gitignorePath, updated);
-      this.logger.debug('Added .cadre/ to worktree .gitignore', { issueNumber });
+    // Write `.cadre/` to the worktree-local git exclude instead of .gitignore
+    // so the exclusion is never staged or committed.
+    try {
+      const gitDir = (await this.git.raw(['rev-parse', '--git-dir'])).trim();
+      const excludePath = join(
+        gitDir.startsWith('/') ? gitDir : join(worktreePath, gitDir),
+        'info',
+        'exclude',
+      );
+      await ensureDir(join(excludePath, '..'));
+      const { readFile: readFileNode, writeFile } = await import('node:fs/promises');
+      const existing = await readFileNode(excludePath, 'utf-8').catch(() => '');
+      if (!existing.split('\n').some((line) => line.trim() === '.cadre/')) {
+        const updated =
+          existing === '' || existing.endsWith('\n')
+            ? `${existing}.cadre/\n`
+            : `${existing}\n.cadre/\n`;
+        await writeFile(excludePath, updated, 'utf-8');
+        this.logger.debug('Added .cadre/ to worktree git exclude', { issueNumber });
+      }
+    } catch (err) {
+      // Non-fatal: belt-and-suspenders; CommitManager.unstageArtifacts also guards .cadre/
+      this.logger.debug('Could not write worktree git exclude; relying on unstageArtifacts', { issueNumber });
     }
   }
 

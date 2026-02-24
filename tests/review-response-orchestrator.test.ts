@@ -65,6 +65,7 @@ function makeConfig(reviewResponseOverrides: Partial<CadreConfig['reviewResponse
     platform: 'github',
     repository: 'owner/repo',
     repoPath: '/tmp/repo',
+    stateDir: '/tmp/cadre-state',
     baseBranch: 'main',
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [1] },

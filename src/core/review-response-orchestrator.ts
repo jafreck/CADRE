@@ -53,7 +53,8 @@ export class ReviewResponseOrchestrator {
     private readonly notifications: NotificationManager = new NotificationManager(),
   ) {
     this.contextBuilder = new ContextBuilder(config, logger);
-    this.cadreDir = join(config.repoPath, '.cadre');
+    // stateDir is resolved by loadConfig; fall back to repoPath/.cadre for unit-test compat
+    this.cadreDir = config.stateDir!;
   }
 
   /**

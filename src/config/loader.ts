@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { resolve, isAbsolute } from 'node:path';
+import { resolve, isAbsolute, join } from 'node:path';
+import { homedir } from 'node:os';
 import { CadreConfigSchema, type CadreConfig } from './schema.js';
 import { exists } from '../util/fs.js';
 
@@ -45,6 +46,50 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
 
   const config = result.data;
 
+  // Resolve relative paths to absolute
+  const resolvedRepoPath = isAbsolute(config.repoPath)
+    ? config.repoPath
+    : resolve(process.cwd(), config.repoPath);
+
+  // stateDir: all cadre state lives outside the target repo so it never pollutes git
+  const resolvedStateDir = config.stateDir
+    ? isAbsolute(config.stateDir)
+      ? config.stateDir
+      : resolve(process.cwd(), config.stateDir)
+    : join(homedir(), '.cadre', config.projectName);
+
+  const resolvedWorktreeRoot = config.worktreeRoot
+    ? isAbsolute(config.worktreeRoot)
+      ? config.worktreeRoot
+      : resolve(resolvedRepoPath, config.worktreeRoot)
+    : join(resolvedStateDir, 'worktrees');
+
+  /**
+   * Resolve an agent directory path.
+   *
+   * - Absolute paths are returned unchanged.
+   * - Paths starting with `.cadre/` or `.claude/` are legacy in-repo state paths; the prefix is
+   *   stripped and the remainder is resolved under `stateDir` (backwards compatibility).
+   * - Simple bare names (e.g. `agents`, the new default) resolve under `stateDir`.
+   * - Any other relative path (e.g. `.github/agents`) is assumed to be repo-relative and resolves
+   *   against `repoPath`, since directories like `.github/` are tracked by git.
+   */
+  function resolveAgentDir(agentDir: string): string {
+    if (isAbsolute(agentDir)) return agentDir;
+    if (agentDir.startsWith('.cadre/')) {
+      return join(resolvedStateDir, agentDir.slice('.cadre/'.length));
+    }
+    if (agentDir.startsWith('.claude/')) {
+      return join(resolvedStateDir, agentDir.slice('.claude/'.length));
+    }
+    // Bare name with no path separator → stateDir (e.g. the default "agents")
+    if (!agentDir.includes('/')) {
+      return join(resolvedStateDir, agentDir);
+    }
+    // Everything else (e.g. `.github/agents`) is repo-relative
+    return join(resolvedRepoPath, agentDir);
+  }
+
   // Synthesize agent config from legacy copilot config if agent is not set
   const agent = config.agent ?? {
     backend: 'copilot' as const,
@@ -52,22 +97,11 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
     timeout: config.copilot.timeout,
     copilot: {
       cliCommand: config.copilot.cliCommand,
-      agentDir: config.copilot.agentDir,
+      agentDir: resolveAgentDir(config.copilot.agentDir),
       costOverrides: config.copilot.costOverrides,
     },
-    claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+    claude: { cliCommand: 'claude', agentDir: join(resolvedStateDir, 'agents') },
   };
-
-  // Resolve relative paths to absolute
-  const resolvedRepoPath = isAbsolute(config.repoPath)
-    ? config.repoPath
-    : resolve(process.cwd(), config.repoPath);
-
-  const resolvedWorktreeRoot = config.worktreeRoot
-    ? isAbsolute(config.worktreeRoot)
-      ? config.worktreeRoot
-      : resolve(resolvedRepoPath, config.worktreeRoot)
-    : resolve(resolvedRepoPath, '.cadre', 'worktrees');
 
   // Validate repoPath is a git repository
   const gitDir = resolve(resolvedRepoPath, '.git');
@@ -80,7 +114,12 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
   const frozen: CadreConfig = {
     ...config,
     repoPath: resolvedRepoPath,
+    stateDir: resolvedStateDir,
     worktreeRoot: resolvedWorktreeRoot,
+    copilot: {
+      ...config.copilot,
+      agentDir: resolveAgentDir(config.copilot.agentDir),
+    },
     agent,
   };
 

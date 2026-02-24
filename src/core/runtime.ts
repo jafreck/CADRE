@@ -4,7 +4,7 @@ import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
 import { FleetCheckpointManager, CheckpointManager } from './checkpoint.js';
-import { exists } from '../util/fs.js';
+import { exists, ensureDir } from '../util/fs.js';
 import { renderFleetStatus, renderIssueDetail } from '../cli/status-renderer.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
@@ -44,7 +44,7 @@ export class CadreRuntime {
   }
 
   constructor(private readonly config: CadreConfig) {
-    this.cadreDir = join(config.repoPath, '.cadre');
+    this.cadreDir = config.stateDir!;
     this.logger = new Logger({
       source: 'fleet',
       logDir: join(this.cadreDir, 'logs'),
@@ -76,6 +76,9 @@ export class CadreRuntime {
    * Run the full CADRE pipeline.
    */
   async run(): Promise<FleetResult> {
+    // Ensure the state directory exists before anything writes there
+    await ensureDir(this.cadreDir);
+
     // Run validation unless explicitly skipped
     if (this.config.options.skipValidation === false) {
       const passed = await this.validate();

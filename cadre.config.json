@@ -44,7 +44,6 @@
   "copilot": {
     "cliCommand": "copilot",
     "model": "claude-sonnet-4.6",
-    "agentDir": ".cadre/agents",
     "timeout": 300000
   },
   "environment": {
