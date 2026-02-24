@@ -145,9 +145,13 @@ export function trackProcess(child: ChildProcess): void {
 export function killAllTrackedProcesses(): void {
   for (const child of activeProcesses) {
     try {
-      child.kill('SIGTERM');
+      process.kill(-child.pid!, 'SIGTERM');
     } catch {
-      // Process may already be dead
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // Process may already be dead
+      }
     }
   }
   activeProcesses.clear();

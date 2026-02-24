@@ -169,6 +169,91 @@ describe('trackProcess / killAllTrackedProcesses / getTrackedProcessCount', () =
   });
 });
 
+describe('killAllTrackedProcesses group-kill', () => {
+  beforeEach(() => {
+    killAllTrackedProcesses();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should attempt process.kill(-pid, SIGTERM) for each tracked process', () => {
+    const { process: child } = spawnProcess('sleep', ['5']);
+    trackProcess(child);
+
+    const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+    killAllTrackedProcesses();
+
+    const groupKillCalls = killSpy.mock.calls.filter(
+      ([pid, sig]) => typeof pid === 'number' && pid < 0 && sig === 'SIGTERM',
+    );
+    expect(groupKillCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should clear activeProcesses after killing even when process.kill succeeds', () => {
+    const { process: child } = spawnProcess('sleep', ['5']);
+    trackProcess(child);
+
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+    killAllTrackedProcesses();
+
+    expect(getTrackedProcessCount()).toBe(0);
+  });
+
+  it('should fall back to child.kill(SIGTERM) when process.kill(-pid) throws', () => {
+    const { process: child } = spawnProcess('sleep', ['5']);
+    trackProcess(child);
+
+    vi.spyOn(process, 'kill').mockImplementation((pid, _signal) => {
+      if (typeof pid === 'number' && pid < 0) {
+        throw new Error('Operation not permitted');
+      }
+      return true;
+    });
+
+    const childKillSpy = vi.spyOn(child, 'kill').mockReturnValue(true);
+    killAllTrackedProcesses();
+
+    expect(childKillSpy).toHaveBeenCalledWith('SIGTERM');
+    expect(getTrackedProcessCount()).toBe(0);
+  });
+
+  it('should still clear activeProcesses after fallback child.kill', () => {
+    const { process: child1 } = spawnProcess('sleep', ['5']);
+    const { process: child2 } = spawnProcess('sleep', ['5']);
+    trackProcess(child1);
+    trackProcess(child2);
+
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw new Error('Operation not permitted');
+    });
+    vi.spyOn(child1, 'kill').mockReturnValue(true);
+    vi.spyOn(child2, 'kill').mockReturnValue(true);
+
+    killAllTrackedProcesses();
+
+    expect(getTrackedProcessCount()).toBe(0);
+  });
+
+  it('should handle case when child has no pid (group-kill throws, fallback used)', () => {
+    const { process: child } = spawnProcess('sleep', ['5']);
+    trackProcess(child);
+
+    // Simulate missing pid scenario by making process.kill throw
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw new TypeError('Cannot read properties of undefined');
+    });
+    const childKillSpy = vi.spyOn(child, 'kill').mockReturnValue(true);
+
+    killAllTrackedProcesses();
+
+    expect(childKillSpy).toHaveBeenCalledWith('SIGTERM');
+    expect(getTrackedProcessCount()).toBe(0);
+  });
+});
+
 describe('spawnProcess timeout group-kill', () => {
   afterEach(() => {
     vi.restoreAllMocks();
