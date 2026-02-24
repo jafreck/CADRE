@@ -970,12 +970,23 @@ describe('AzureDevOpsProvider.listPullRequests()', () => {
     expect(listCall[0]).toContain('searchCriteria.status=active');
   });
 
-  it('maps state "closed" to ADO status "completed"', async () => {
+  it('maps state "closed" to ADO status "abandoned"', async () => {
     const provider = await makeConnectedProvider(fetchStub);
 
     fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
 
     await provider.listPullRequests({ state: 'closed' });
+
+    const listCall = fetchStub.mock.calls[1];
+    expect(listCall[0]).toContain('searchCriteria.status=abandoned');
+  });
+
+  it('maps state "merged" to ADO status "completed"', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+    await provider.listPullRequests({ state: 'merged' });
 
     const listCall = fetchStub.mock.calls[1];
     expect(listCall[0]).toContain('searchCriteria.status=completed');

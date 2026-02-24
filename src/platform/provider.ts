@@ -35,6 +35,8 @@ export interface PullRequestInfo {
   title: string;
   headBranch: string;
   baseBranch: string;
+  /** Lifecycle state of the PR. */
+  state: 'open' | 'closed' | 'merged';
 }
 
 /**

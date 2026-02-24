@@ -111,17 +111,21 @@ export class GitHubProvider implements PlatformProvider {
       title: asString(result.title) || params.title,
       headBranch: params.head,
       baseBranch: params.base,
+      state: 'open',
     };
   }
 
   async getPullRequest(prNumber: number): Promise<PullRequestInfo> {
     const result = await this.getAPI().getPullRequest(prNumber);
+    const ghState = asString(result.state);
+    const merged = !!(result.merged || result.merged_at);
     return {
       number: asNumber(result.number),
       url: asString(result.html_url) || asString(result.url),
       title: asString(result.title),
       headBranch: asString(asRecord(result.head).ref),
       baseBranch: asString(asRecord(result.base).ref),
+      state: merged ? 'merged' : ghState === 'closed' ? 'closed' : 'open',
     };
   }
 
@@ -135,13 +139,19 @@ export class GitHubProvider implements PlatformProvider {
   async listPullRequests(filters?: ListPullRequestsParams): Promise<PullRequestInfo[]> {
     // Adjust head filter — GitHubAPI prefixes with "owner:"
     const result = await this.getAPI().listPullRequests(filters);
-    return result.map((pr) => ({
-      number: asNumber(pr.number),
-      url: asString(pr.html_url) || asString(pr.url),
-      title: asString(pr.title),
-      headBranch: asString(asRecord(pr.head).ref),
-      baseBranch: asString(asRecord(pr.base).ref),
-    }));
+    return result.map((pr) => {
+      const ghState = asString(pr.state);
+      const merged = !!pr.merged_at;
+      const prState: PullRequestInfo['state'] = merged ? 'merged' : ghState === 'closed' ? 'closed' : 'open';
+      return {
+        number: asNumber(pr.number),
+        url: asString(pr.html_url) || asString(pr.url),
+        title: asString(pr.title),
+        headBranch: asString(asRecord(pr.head).ref),
+        baseBranch: asString(asRecord(pr.base).ref),
+        state: prState,
+      };
+    });
   }
 
   async findOpenPR(issueNumber: number, branch: string): Promise<PullRequestInfo | null> {
