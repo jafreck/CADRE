@@ -310,7 +310,9 @@ describe('spawnProcess timeout group-kill', () => {
     expect(groupSigkillCalls.length).toBeGreaterThan(0);
 
     vi.useRealTimers();
-    // Allow the real process to be cleaned up
+    // Allow the real process to be cleaned up.
+    // Delete the instance getter we set so child.kill() can update this.killed normally.
+    delete (child as any).killed;
     child.kill('SIGKILL');
     await promise.catch(() => {});
   });
@@ -326,7 +328,9 @@ describe('spawnProcess timeout group-kill', () => {
     });
 
     const { process: child, promise } = spawnProcess('sleep', ['10'], { timeout: 50 });
-    const childKillSpy = vi.spyOn(child, 'kill');
+    // Use mockReturnValue(true) so the spy doesn't call through to Node's kill(),
+    // which would try `this.killed = true` after Object.defineProperty removed the setter.
+    const childKillSpy = vi.spyOn(child, 'kill').mockReturnValue(true);
 
     // Advance past initial SIGTERM timeout
     await vi.advanceTimersByTimeAsync(60);
@@ -339,6 +343,9 @@ describe('spawnProcess timeout group-kill', () => {
     expect(childKillSpy).toHaveBeenCalledWith('SIGKILL');
 
     vi.useRealTimers();
+    childKillSpy.mockRestore();
+    // Restore killed to a writable property so the cleanup kill() can succeed.
+    delete (child as any).killed;
     child.kill('SIGKILL');
     await promise.catch(() => {});
   });
