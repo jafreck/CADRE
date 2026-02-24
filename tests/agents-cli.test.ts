@@ -35,6 +35,11 @@ import { scaffoldMissingAgents } from '../src/cli/agents.js';
 
 const mockConfig = {
   copilot: { agentDir: '/mock/agent-dir' },
+  agent: {
+    backend: 'copilot',
+    copilot: { cliCommand: 'copilot', agentDir: '/mock/agent-dir' },
+    claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+  },
 };
 
 function makeProgram(): Command {
