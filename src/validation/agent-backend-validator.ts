@@ -10,26 +10,23 @@ export const agentBackendValidator: PreRunValidator = {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    let cliCommand: string;
-    let cliConfigKey: string;
+    // loadConfig always synthesizes config.agent before returning
+    const agent = config.agent!;
+    const isClaudeBackend = agent.backend === 'claude';
 
-    if (!config.agent || config.agent.backend === 'copilot') {
-      cliCommand = config.agent ? config.agent.copilot.cliCommand : config.copilot.cliCommand;
-      cliConfigKey = config.agent ? 'agent.copilot.cliCommand' : 'copilot.cliCommand';
-    } else {
-      cliCommand = config.agent.claude.cliCommand;
-      cliConfigKey = 'agent.claude.cliCommand';
-    }
+    const cliCommand = isClaudeBackend ? agent.claude.cliCommand : agent.copilot.cliCommand;
+    const cliConfigKey = isClaudeBackend ? 'agent.claude.cliCommand' : 'agent.copilot.cliCommand';
 
     const whichResult = await exec('which', [cliCommand]);
     if (whichResult.exitCode !== 0) {
       errors.push(`CLI command '${cliCommand}' not found on PATH. Install it or set ${cliConfigKey} to the correct command name.`);
     }
 
-    const agentDir = config.copilot.agentDir;
+    const agentDir = isClaudeBackend ? agent.claude.agentDir : agent.copilot.agentDir;
+    const agentDirKey = isClaudeBackend ? 'agent.claude.agentDir' : 'agent.copilot.agentDir';
     const agentDirExists = await exists(agentDir);
     if (!agentDirExists) {
-      errors.push(`Agent directory '${agentDir}' does not exist. Create it or set copilot.agentDir to a valid path.`);
+      errors.push(`Agent directory '${agentDir}' does not exist. Create it or set ${agentDirKey} to a valid path.`);
     }
 
     return {

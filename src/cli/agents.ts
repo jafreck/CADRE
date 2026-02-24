@@ -15,74 +15,20 @@ function getTemplateDir(): string {
   return resolve(__dirname, '../agents/templates');
 }
 
-/** Compute the output filename for an agent file given the backend. */
-function agentFilePath(agentDir: string, agentName: string, backend?: string): string {
+/**
+ * Resolve the agent directory for the active (or overridden) backend.
+ * Both Claude (.claude/agents/) and Copilot (.github/agents/) use plain
+ * `{agentName}.md` files — the only difference is the root directory.
+ */
+function resolveAgentDir(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  overrideBackend?: string,
+): string {
+  const backend = overrideBackend ?? config.agent?.backend ?? 'copilot';
   if (backend === 'claude') {
-    // Claude Code resolves sub-agents from flat *.md files in .claude/agents/
-    return join(agentDir, `${agentName}.md`);
+    return config.agent?.claude.agentDir ?? '.claude/agents';
   }
-  if (backend === 'copilot') {
-    // GitHub Copilot CLI resolves agents by the .agent.md convention
-    return join(agentDir, `${agentName}.agent.md`);
-  }
-  return join(agentDir, `${agentName}.md`);
-}
-
-/** Resolve the configured backend from a loaded config. */
-function resolveBackend(config: Awaited<ReturnType<typeof loadConfig>>): string {
-  return config.agent?.backend ?? 'copilot';
-}
-
-/**
- * Return the YAML frontmatter block required by the GitHub Copilot CLI for
- * an agent file. Copilot only recognises `.agent.md` files that begin with a
- * frontmatter block containing at least a `description` field.
- */
-function copilotFrontmatter(description: string): string {
-  return `---\ndescription: "${description}"\ntools: ["*"]\n---\n`;
-}
-
-/**
- * Return the YAML frontmatter block required by the Claude Code sub-agent format.
- * `name` and `description` are the required fields; tools inherits all by default.
- */
-function claudeFrontmatter(name: string, description: string): string {
-  return `---\nname: ${name}\ndescription: "${description}"\n---\n`;
-}
-
-/**
- * Scaffold any missing agent instruction files from built-in templates.
- * Existing files are left unchanged. Returns the list of file paths that were created.
- * Throws if a required template is not found.
- */
-export async function scaffoldMissingAgentFiles(
-  agentDir: string,
-  backend: string,
-): Promise<string[]> {
-  const templateDir = getTemplateDir();
-  const created: string[] = [];
-
-  for (const agent of AGENT_DEFINITIONS) {
-    const destPath = agentFilePath(agentDir, agent.name, backend);
-    if (await exists(destPath)) continue;
-
-    const srcPath = join(templateDir, agent.templateFile);
-    if (!(await exists(srcPath))) {
-      throw new Error(`Template not found for agent '${agent.name}': ${srcPath}`);
-    }
-
-    let content = await readFile(srcPath, 'utf-8');
-    if (backend === 'copilot') {
-      content = copilotFrontmatter(agent.description) + content;
-    } else if (backend === 'claude') {
-      content = claudeFrontmatter(agent.name, agent.description) + content;
-    }
-    await mkdir(dirname(destPath), { recursive: true });
-    await writeFile(destPath, content, 'utf-8');
-    created.push(destPath);
-  }
-
-  return created;
+  return config.agent?.copilot.agentDir ?? config.copilot.agentDir;
 }
 
 /**
@@ -99,7 +45,7 @@ export function registerAgentsCommand(program: Command): void {
     .action(async (opts: { config: string }) => {
       try {
         const config = await loadConfig(opts.config);
-        const agentDir = resolve(config.copilot.agentDir);
+        const agentDir = resolve(resolveAgentDir(config));
 
         // Header row
         const col1 = 'Agent'.padEnd(30);
@@ -109,9 +55,8 @@ export function registerAgentsCommand(program: Command): void {
         console.log(chalk.bold(`${col1}${col2}${col3}${col4}`));
         console.log('─'.repeat(72));
 
-        const backend = resolveBackend(config);
         for (const agent of AGENT_DEFINITIONS) {
-          const filePath = agentFilePath(agentDir, agent.name, backend);
+          const filePath = join(agentDir, `${agent.name}.md`);
           const fileExists = await exists(filePath);
           const status = fileExists ? chalk.green('✅') : chalk.red('❌');
           const name = agent.name.padEnd(30);
@@ -138,7 +83,7 @@ export function registerAgentsCommand(program: Command): void {
       async (opts: { config: string; force?: boolean; agent?: string; backend?: string }) => {
         try {
           const config = await loadConfig(opts.config);
-          const agentDir = resolve(config.copilot.agentDir);
+          const agentDir = resolve(resolveAgentDir(config, opts.backend));
           const templateDir = getTemplateDir();
 
           const toScaffold = opts.agent
@@ -150,10 +95,9 @@ export function registerAgentsCommand(program: Command): void {
             process.exit(1);
           }
 
-          const effectiveBackend = opts.backend ?? resolveBackend(config);
           for (const agent of toScaffold) {
             const srcPath = join(templateDir, agent.templateFile);
-            const destPath = agentFilePath(agentDir, agent.name, effectiveBackend);
+            const destPath = join(agentDir, `${agent.name}.md`);
 
             if (!(await exists(srcPath))) {
               console.warn(chalk.yellow(`⚠ Template not found: ${srcPath}`));
@@ -165,12 +109,7 @@ export function registerAgentsCommand(program: Command): void {
               continue;
             }
 
-            let content = await readFile(srcPath, 'utf-8');
-            if (effectiveBackend === 'copilot') {
-              content = copilotFrontmatter(agent.description) + content;
-            } else if (effectiveBackend === 'claude') {
-              content = claudeFrontmatter(agent.name, agent.description) + content;
-            }
+            const content = await readFile(srcPath, 'utf-8');
             await mkdir(dirname(destPath), { recursive: true });
             await writeFile(destPath, content, 'utf-8');
             const action = opts.force ? 'overwrite' : 'create ';
@@ -192,13 +131,11 @@ export function registerAgentsCommand(program: Command): void {
     .action(async (opts: { config: string }) => {
       try {
         const config = await loadConfig(opts.config);
-        const agentDir = resolve(config.copilot.agentDir);
-
-        const backend = resolveBackend(config);
+        const agentDir = resolve(resolveAgentDir(config));
         const issues: string[] = [];
 
         for (const agent of AGENT_DEFINITIONS) {
-          const filePath = agentFilePath(agentDir, agent.name, backend);
+          const filePath = join(agentDir, `${agent.name}.md`);
           const fileStat = await statOrNull(filePath);
           if (fileStat === null) {
             issues.push(`  ❌ Missing: ${filePath}`);

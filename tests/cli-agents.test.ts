@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
-import { registerAgentsCommand, scaffoldMissingAgentFiles } from '../src/cli/agents.js';
+import { registerAgentsCommand } from '../src/cli/agents.js';
 import { AGENT_DEFINITIONS } from '../src/agents/types.js';
 
 vi.mock('../src/config/loader.js', () => ({
@@ -34,6 +34,11 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
 const mockConfig = {
   copilot: { agentDir: '/mock/agents' },
+  agent: {
+    backend: 'copilot',
+    copilot: { agentDir: '/mock/agents' },
+    claude: { agentDir: '/mock/claude/agents' },
+  },
 };
 
 function makeProgram(): Command {
@@ -202,7 +207,7 @@ describe('registerAgentsCommand', () => {
       expect(writeFile).not.toHaveBeenCalled();
     });
 
-    it('should write to <agentDir>/<name>.md with --backend claude', async () => {
+    it('should write to <claude.agentDir>/<name>.md with --backend claude', async () => {
       const agentName = AGENT_DEFINITIONS[0].name;
 
       const program = makeProgram();
@@ -213,10 +218,10 @@ describe('registerAgentsCommand', () => {
 
       expect(writeFile).toHaveBeenCalledTimes(1);
       const [writtenPath] = vi.mocked(writeFile).mock.calls[0] as [string, ...unknown[]];
-      expect(writtenPath).toBe(`/mock/agents/${agentName}.md`);
+      expect(writtenPath).toBe(`/mock/claude/agents/${agentName}.md`);
     });
 
-    it('should use default <agentDir>/<name>.agent.md path for copilot backend (no --backend flag)', async () => {
+    it('should write to <copilot.agentDir>/<name>.md for copilot backend (no --backend flag)', async () => {
       const agentName = AGENT_DEFINITIONS[0].name;
 
       const program = makeProgram();
@@ -224,7 +229,7 @@ describe('registerAgentsCommand', () => {
 
       expect(writeFile).toHaveBeenCalledTimes(1);
       const [writtenPath] = vi.mocked(writeFile).mock.calls[0] as [string, ...unknown[]];
-      expect(writtenPath).toBe(`/mock/agents/${agentName}.agent.md`);
+      expect(writtenPath).toBe(`/mock/agents/${agentName}.md`);
     });
 
     it('should warn and skip when template file is not found', async () => {
@@ -370,99 +375,7 @@ describe('registerAgentsCommand', () => {
       const program = makeProgram();
       await program.parseAsync(['agents', 'validate'], { from: 'user' });
 
-      expect(statOrNull).toHaveBeenCalledWith(`/mock/agents/${firstAgent.name}.agent.md`);
+      expect(statOrNull).toHaveBeenCalledWith(`/mock/agents/${firstAgent.name}.md`);
     });
-  });
-});
-
-describe('scaffoldMissingAgentFiles', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(readFile).mockResolvedValue('# template content' as never);
-    vi.mocked(writeFile).mockResolvedValue(undefined);
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-    // Templates exist, destination files do not
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates');
-    });
-  });
-
-  it('should create all missing agent files and return their paths', async () => {
-    const created = await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
-    expect(created).toHaveLength(AGENT_DEFINITIONS.length);
-    expect(writeFile).toHaveBeenCalledTimes(AGENT_DEFINITIONS.length);
-  });
-
-  it('should write .agent.md files for the copilot backend', async () => {
-    const created = await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
-    expect(created.every((p) => p.endsWith('.agent.md'))).toBe(true);
-    expect(created.every((p) => p.startsWith('/mock/agents/'))).toBe(true);
-  });
-
-  it('should skip files that already exist', async () => {
-    vi.mocked(exists).mockResolvedValue(true); // all dest files already exist
-    const created = await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
-    expect(created).toHaveLength(0);
-    expect(writeFile).not.toHaveBeenCalled();
-  });
-
-  it('should return an empty array when all files already exist', async () => {
-    vi.mocked(exists).mockResolvedValue(true);
-    const result = await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
-    expect(result).toEqual([]);
-  });
-
-  it('should throw when a template file is missing', async () => {
-    // Neither dest nor template exist
-    vi.mocked(exists).mockResolvedValue(false);
-    await expect(scaffoldMissingAgentFiles('/mock/agents', 'copilot')).rejects.toThrow(
-      /Template not found/,
-    );
-    expect(writeFile).not.toHaveBeenCalled();
-  });
-
-  it('should write flat .md paths for the claude backend', async () => {
-    const agentName = AGENT_DEFINITIONS[0].name;
-    // Only the first agent dest is missing; all others already exist
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates') || !path.includes(agentName);
-    });
-    const created = await scaffoldMissingAgentFiles('/mock/agents', 'claude');
-    expect(created).toHaveLength(1);
-    expect(created[0]).toBe(`/mock/agents/${agentName}.md`);
-  });
-
-  it('should call mkdir with recursive option before writing each file', async () => {
-    await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
-    expect(mkdir).toHaveBeenCalledWith('/mock/agents', { recursive: true });
-  });
-
-  it('should prepend Copilot YAML frontmatter when backend is copilot', async () => {
-    // Only scaffold the first agent for a focused check
-    const [firstAgent] = AGENT_DEFINITIONS;
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates') || !path.includes(firstAgent.name);
-    });
-
-    await scaffoldMissingAgentFiles('/mock/agents', 'copilot');
-
-    const writtenContent = vi.mocked(writeFile).mock.calls[0]?.[1] as string;
-    expect(writtenContent).toMatch(/^---\ndescription:/);
-    expect(writtenContent).toContain('tools: ["*"]');
-    expect(writtenContent).toContain('# template content');
-  });
-
-  it('should prepend Claude YAML frontmatter when backend is claude', async () => {
-    const [firstAgent] = AGENT_DEFINITIONS;
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates') || !path.includes(firstAgent.name);
-    });
-
-    await scaffoldMissingAgentFiles('/mock/agents', 'claude');
-
-    const writtenContent = vi.mocked(writeFile).mock.calls[0]?.[1] as string;
-    expect(writtenContent).toMatch(/^---\nname:/);
-    expect(writtenContent).toContain('description:');
-    expect(writtenContent).toContain('# template content');
   });
 });

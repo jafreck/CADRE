@@ -55,7 +55,7 @@ export async function loadConfig(configPath: string): Promise<Readonly<CadreConf
       agentDir: config.copilot.agentDir,
       costOverrides: config.copilot.costOverrides,
     },
-    claude: { cliCommand: 'claude' },
+    claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
   };
 
   // Resolve relative paths to absolute

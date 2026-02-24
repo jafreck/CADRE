@@ -25,6 +25,12 @@ const makeConfig = (overrides: Partial<{ cliCommand: string; agentDir: string }>
       agentDir: overrides.agentDir ?? '/tmp/agents',
       timeout: 300000,
     },
+    // Mirrors what loadConfig always synthesizes
+    agent: {
+      backend: 'copilot' as const,
+      copilot: { cliCommand: overrides.cliCommand ?? 'copilot', agentDir: overrides.agentDir ?? '/tmp/agents' },
+      claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+    },
   }) as unknown as CadreConfig;
 
 const ok = { exitCode: 0, stdout: '/usr/local/bin/copilot', stderr: '', signal: null, timedOut: false } as const;
