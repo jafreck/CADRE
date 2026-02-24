@@ -64,6 +64,14 @@ describe('pr-composer.md template', () => {
     it('should describe the PR body structure with Testing section', () => {
       expect(content).toMatch(/Testing/i);
     });
+
+    it('should require exactly "Closes #" — no other terminology — to auto-close the issue on merge', () => {
+      // The template must mandate "Closes #<number>" verbatim with no alternatives.
+      expect(content).toMatch(/Closes #<number>` only/);
+      expect(content).toMatch(/MUST/);
+      // Must not offer Fixes/Resolves as acceptable alternatives
+      expect(content).not.toMatch(/or `Fixes #|or `Resolves #|Fixes.*Resolves.*acceptable/);
+    });
   });
 
   describe('tool permissions', () => {
