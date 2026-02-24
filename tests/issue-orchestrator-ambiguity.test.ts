@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { CheckpointManager } from '../src/core/checkpoint.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { PlatformProvider, IssueDetail } from '../src/platform/provider.js';
@@ -152,13 +152,9 @@ function buildAnalysisMd(ambiguities: string[]): string {
   ].join('\n');
 }
 
-function makeConfig(overrides: Record<string, unknown> = {}): CadreConfig {
-  return {
+function makeConfig(overrides: Record<string, unknown> = {}) {
+  return makeRuntimeConfig({
     projectName: 'test',
-    repository: 'owner/repo',
-    platform: 'github',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [42] },
     commits: {
@@ -185,13 +181,15 @@ function makeConfig(overrides: Record<string, unknown> = {}): CadreConfig {
       testVerification: false,
       ambiguityThreshold: 2,
       haltOnAmbiguity: false,
-      tokenBudget: null,
-      ...overrides,
-    },
-    commands: {},
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
+      skipValidation: false,
+      maxIntegrationFixRounds: 1,
+      respondToReviews: false,
+      ...overrides as Partial<Record<string, unknown>>,
+    } as any,
     copilot: { cliCommand: 'copilot', agentDir: '.agents', timeout: 300000, model: 'claude-sonnet-4.6' },
-    environment: { inheritShellPath: true, extraPath: [] },
-  } as unknown as CadreConfig;
+  });
 }
 
 function makeIssue(): IssueDetail {

@@ -1,4 +1,4 @@
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
 import type { CheckpointManager } from './checkpoint.js';
@@ -42,7 +42,7 @@ export type PhaseCallbacks = {
 export type PhaseContext = {
   issue: IssueDetail;
   worktree: WorktreeInfo;
-  config: CadreConfig;
+  config: RuntimeConfig;
   platform: PlatformProvider;
   services: PhaseServices;
   io: PhaseIO;

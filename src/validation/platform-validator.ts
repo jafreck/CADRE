@@ -1,6 +1,6 @@
 import { exec } from '../util/process.js';
 import type { PreRunValidator, ValidationResult } from './types.js';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 
 /** Expand ${ENV_VAR} placeholders using process.env. Returns empty string if any variable is unset/empty. */
 function expandEnvVar(value: string): string {
@@ -10,7 +10,7 @@ function expandEnvVar(value: string): string {
 export const platformValidator: PreRunValidator = {
   name: 'platform',
 
-  async validate(config: CadreConfig): Promise<ValidationResult> {
+  async validate(config: RuntimeConfig): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
 

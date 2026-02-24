@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies
 vi.mock('../src/logging/logger.js', () => ({
@@ -119,14 +119,9 @@ const mockExists = exists as ReturnType<typeof vi.fn>;
 const mockRenderFleetStatus = renderFleetStatus as ReturnType<typeof vi.fn>;
 const mockRenderIssueDetail = renderIssueDetail as ReturnType<typeof vi.fn>;
 
-function makeConfig(): CadreConfig {
-  return {
-    projectName: 'test-project',
-    platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
+function makeConfig() {
+  return makeRuntimeConfig({
     stateDir: '/tmp/cadre-state',
-    baseBranch: 'main',
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [1] },
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
@@ -140,12 +135,15 @@ function makeConfig(): CadreConfig {
       invocationDelayMs: 0,
       buildVerification: false,
       testVerification: false,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
       skipValidation: true,
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
     },
-    commands: {},
-    copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4', agentDir: '.github/agents', timeout: 300000, costOverrides: {} },
-    notifications: { enabled: false, providers: [] },
-  } as unknown as CadreConfig;
+  });
 }
 
 describe('CadreRuntime.status() — no fleet checkpoint', () => {

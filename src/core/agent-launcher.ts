@@ -1,5 +1,5 @@
 import { resolve, join } from 'node:path';
-import type { CadreConfig } from '../config/schema.js';
+import type { RuntimeConfig } from '../config/loader.js';
 import type { AgentInvocation, AgentResult } from '../agents/types.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { statOrNull } from '../util/fs.js';
@@ -14,7 +14,7 @@ export class AgentLauncher {
   private readonly backend: AgentBackend;
 
   constructor(
-    private readonly config: CadreConfig,
+    private readonly config: RuntimeConfig,
     private readonly logger: Logger,
   ) {
     this.backend = createAgentBackend(config, logger);

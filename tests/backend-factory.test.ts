@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/util/process.js', () => ({
   spawnProcess: vi.fn(),
@@ -19,25 +19,14 @@ vi.mock('node:fs/promises', () => ({
 import { CopilotBackend, ClaudeBackend } from '../src/agents/backend.js';
 import { createAgentBackend } from '../src/agents/backend-factory.js';
 
-function makeConfig(backend: string = 'copilot'): CadreConfig {
-  return {
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
-    copilot: {
-      cliCommand: 'copilot',
-      agentDir: '.github/agents',
-      timeout: 300_000,
-    },
+function makeConfig(backend: string = 'copilot') {
+  return makeRuntimeConfig({
     agent: {
       backend: backend as 'copilot' | 'claude',
       copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
-      claude: { cliCommand: 'claude' },
+      claude: { cliCommand: 'claude', agentDir: '/tmp/.cadre/test-project/agents' },
     },
-    environment: { inheritShellPath: true, extraPath: [] },
-  } as unknown as CadreConfig;
+  });
 }
 
 function makeLogger() {

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { NotificationManager } from '../src/notifications/manager.js';
 import { RemoteBranchMissingError } from '../src/git/worktree.js';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
+import type { RuntimeConfig } from '../src/config/loader.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
@@ -86,13 +87,8 @@ vi.mock('../src/logging/logger.js', () => ({
   Logger: vi.fn(),
 }));
 
-function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfig {
-  return {
-    projectName: 'test-project',
-    platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
+function makeConfig(overrides: Partial<RuntimeConfig['options']> = {}) {
+  return makeRuntimeConfig({
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [1] },
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
@@ -106,12 +102,16 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfi
       invocationDelayMs: 0,
       buildVerification: false,
       testVerification: false,
+      perTaskBuildCheck: true,
+      maxBuildFixRounds: 2,
+      skipValidation: false,
+      maxIntegrationFixRounds: 1,
+      ambiguityThreshold: 5,
+      haltOnAmbiguity: false,
+      respondToReviews: false,
       ...overrides,
     },
-    commands: {},
-    copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4', agentDir: '.github/agents', timeout: 300000, costOverrides: {} },
-    notifications: { enabled: false, providers: [] },
-  } as unknown as CadreConfig;
+  });
 }
 
 function makeIssue(number = 1): IssueDetail {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueNotifier } from '../src/core/issue-notifier.js';
-import type { CadreConfig } from '../src/config/schema.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
+import type { RuntimeConfig } from '../src/config/loader.js';
 import type { PlatformProvider } from '../src/platform/provider.js';
 import type { Logger } from '../src/logging/logger.js';
 import type { CadreEvent } from '../src/logging/events.js';
@@ -20,17 +21,11 @@ function makeMockPlatform(): PlatformProvider {
   } as unknown as PlatformProvider;
 }
 
-function makeConfig(issueUpdates: Partial<CadreConfig['issueUpdates']> = {}): CadreConfig {
-  return {
-    projectName: 'test',
-    repository: 'owner/repo',
-    platform: 'github',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
+function makeConfig(issueUpdates: Partial<RuntimeConfig['issueUpdates']> = {}) {
+  return makeRuntimeConfig({
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [1] },
-    commits: { signOff: false },
-    agents: { backend: 'claude', model: 'claude-sonnet-4-5' },
+    commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
     issueUpdates: {
       enabled: true,
       onStart: true,
@@ -40,7 +35,7 @@ function makeConfig(issueUpdates: Partial<CadreConfig['issueUpdates']> = {}): Ca
       onBudgetWarning: true,
       ...issueUpdates,
     },
-  } as unknown as CadreConfig;
+  });
 }
 
 describe('IssueNotifier', () => {
