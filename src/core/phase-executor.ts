@@ -10,6 +10,7 @@ import type { CommitManager } from '../git/commit.js';
 import type { RetryExecutor } from '../execution/retry.js';
 import type { TokenTracker } from '../budget/token-tracker.js';
 import type { Logger } from '../logging/logger.js';
+import type { TokenUsageDetail } from '../agents/types.js';
 
 /** Cross-cutting services used by every phase. */
 export type PhaseServices = {
@@ -31,7 +32,7 @@ export type PhaseIO = {
 
 /** Callbacks injected by the orchestrator. */
 export type PhaseCallbacks = {
-  recordTokens: (agent: string, tokens: number | null) => void;
+  recordTokens: (agent: string, tokens: TokenUsageDetail | number | null) => void;
   checkBudget: () => void;
   updateProgress: () => Promise<void>;
   setPR?: (pr: PullRequestInfo) => void;
