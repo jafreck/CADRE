@@ -140,58 +140,6 @@ export function registerAgentsCommand(program: Command): void {
       }
     });
 
-  // ─── agents scaffold ──────────────────────────────────
-  agents
-    .command('scaffold')
-    .description('Scaffold agent instruction files from built-in templates')
-    .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
-    .option('-f, --force', 'Overwrite existing files')
-    .option('-a, --agent <name>', 'Scaffold only the named agent')
-    .option('-b, --backend <name>', 'Adapt filenames for a specific backend (e.g. claude)')
-    .action(
-      async (opts: { config: string; force?: boolean; agent?: string; backend?: string }) => {
-        try {
-          const config = await loadConfig(opts.config);
-          const agentDir = resolve(resolveAgentDir(config, opts.backend));
-          const templateDir = getTemplateDir();
-
-          const toScaffold = opts.agent
-            ? AGENT_DEFINITIONS.filter((a) => a.name === opts.agent)
-            : [...AGENT_DEFINITIONS];
-
-          if (opts.agent && toScaffold.length === 0) {
-            console.error(chalk.red(`Unknown agent: ${opts.agent}`));
-            process.exit(1);
-          }
-
-          for (const agent of toScaffold) {
-            const srcPath = join(templateDir, agent.templateFile);
-            const destPath = join(agentDir, agentFileName(agent.name));
-
-            if (!(await exists(srcPath))) {
-              console.warn(chalk.yellow(`⚠ Template not found: ${srcPath}`));
-              continue;
-            }
-
-            if (!opts.force && (await exists(destPath))) {
-              console.log(chalk.gray(`  skip  ${destPath}`));
-              continue;
-            }
-
-            const content = await readFile(srcPath, 'utf-8');
-            await mkdir(dirname(destPath), { recursive: true });
-            await writeFile(destPath, content, 'utf-8');
-            const action = opts.force ? 'overwrite' : 'create ';
-            console.log(chalk.green(`  ${action} ${destPath}`));
-          }
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(chalk.red(`Error: ${msg}`));
-          process.exit(1);
-        }
-      },
-    );
-
   // ─── agents validate ──────────────────────────────────
   agents
     .command('validate')
@@ -223,7 +171,7 @@ export function registerAgentsCommand(program: Command): void {
           );
           console.error(
             chalk.yellow(
-              `\nRun 'cadre agents scaffold' to create missing files from built-in templates.`,
+              `\nAgents are auto-scaffolded on 'cadre run'. Re-run to restore missing files.`,
             ),
           );
           process.exit(1);

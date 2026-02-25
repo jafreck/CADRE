@@ -447,15 +447,19 @@ export class CadreRuntime {
 
     if ('query' in this.config.issues) {
       const q = this.config.issues.query;
+      // When DAG mode is enabled, fetch all matching issues so the full dependency
+      // graph can be constructed. The concurrency limit (maxParallelIssues) only
+      // applies to execution, not to graph construction.
+      const limit = this.config.dag?.enabled ? undefined : q.limit;
       this.logger.info('Resolving issues from query', {
-        data: q as Record<string, unknown>,
+        data: { ...q as Record<string, unknown>, effectiveLimit: limit ?? 'unlimited' },
       });
       return this.provider.listIssues({
         labels: q.labels,
         milestone: q.milestone,
         assignee: q.assignee,
         state: q.state,
-        limit: q.limit,
+        limit,
       });
     }
 
