@@ -24,7 +24,7 @@ export interface IssueDetail {
 }
 
 /**
- * Fetches issue details from GitHub via the MCP server.
+ * Fetches issue details from GitHub via the Octokit API.
  */
 export class IssueFetcher {
   private readonly api: GitHubAPI;
@@ -119,9 +119,11 @@ export class IssueFetcher {
     const rawComments = (raw.comments as Array<Record<string, unknown>>) ?? [];
 
     const comments: IssueComment[] = rawComments.map((c) => ({
-      author: (c.author as Record<string, unknown>)?.login as string ?? 'unknown',
+      author: (c.user as Record<string, unknown>)?.login as string
+        ?? (c.author as Record<string, unknown>)?.login as string
+        ?? 'unknown',
       body: (c.body as string) ?? '',
-      createdAt: (c.createdAt as string) ?? '',
+      createdAt: (c.created_at as string) ?? (c.createdAt as string) ?? '',
     }));
 
     const milestone = raw.milestone

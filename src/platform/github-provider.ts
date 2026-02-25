@@ -192,7 +192,7 @@ export class GitHubProvider implements PlatformProvider {
       items = raw;
     } else if (raw !== null && typeof raw === 'object') {
       const envelope = raw as Record<string, unknown>;
-      // Some MCP versions wrap reviews in an envelope
+      // Some API versions wrap reviews in an envelope
       items = Array.isArray(envelope.reviews) ? envelope.reviews : [];
     } else {
       return [];
@@ -251,7 +251,7 @@ export class GitHubProvider implements PlatformProvider {
   }
 
   private parseReviewThreads(prNumber: number, raw: unknown): ReviewThread[] {
-    // The MCP get_review_comments response is { reviewThreads: [...], pageInfo: {...}, totalCount: N }
+    // The get_review_comments response may be { reviewThreads: [...], pageInfo: {...}, totalCount: N }
     // with Go-serialized capitalized field names (ID, IsResolved, IsOutdated, Comments.Nodes, etc.)
     // It may also be a plain array of threads (legacy / test format).
     let threads: unknown[];
@@ -273,7 +273,7 @@ export class GitHubProvider implements PlatformProvider {
     return threads.map((t) => {
       const thread = asRecord(t);
 
-      // Support both Go-serialized capitalized keys (MCP server) and lowercase (tests/legacy)
+      // Support both Go-serialized capitalized keys and lowercase (tests/legacy)
       const rawCommentsContainer = thread.Comments ?? thread.comments;
       const rawComments = Array.isArray(rawCommentsContainer)
         ? rawCommentsContainer
