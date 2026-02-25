@@ -14,7 +14,8 @@ export type AgentName =
   | 'fix-surgeon'
   | 'integration-checker'
   | 'pr-composer'
-  | 'conflict-resolver';
+  | 'conflict-resolver'
+  | 'whole-pr-reviewer';
 
 /** Metadata describing a single CADRE agent. */
 export interface AgentDefinition {
@@ -115,6 +116,14 @@ export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
     description: 'Resolves merge conflict markers in files left by a paused git rebase, producing valid compilable code.',
     hasStructuredOutput: false,
     templateFile: 'conflict-resolver.md',
+  },
+  {
+    name: 'whole-pr-reviewer',
+    phase: 3,
+    phaseName: 'Implementation',
+    description: 'Reviews the full PR diff against main after all implementation sessions complete, catching cross-session bugs.',
+    hasStructuredOutput: true,
+    templateFile: 'whole-pr-reviewer.md',
   },
 ] as const;
 
