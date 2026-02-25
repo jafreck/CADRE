@@ -3,7 +3,7 @@ import pLimit from 'p-limit';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
-import { WorktreeManager, RemoteBranchMissingError } from '../git/worktree.js';
+import { WorktreeManager, RemoteBranchMissingError, type WorktreeInfo } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from './progress.js';
@@ -15,6 +15,8 @@ import { getPhaseCount } from './phase-registry.js';
 import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { ReviewResponseOrchestrator } from './review-response-orchestrator.js';
+import { IssueDag } from './issue-dag.js';
+import { DependencyMergeConflictError } from '../errors.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -52,6 +54,8 @@ export class FleetOrchestrator {
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
     private readonly notifications: NotificationManager = new NotificationManager(),
+    private readonly dag?: IssueDag,
+    private readonly dagDepMap?: Record<number, number[]>,
   ) {
     this.cadreDir = join(config.repoPath, '.cadre');
     this.fleetCheckpoint = new FleetCheckpointManager(this.cadreDir, config.projectName, logger);
@@ -93,13 +97,18 @@ export class FleetOrchestrator {
     // Pre-fetch remote refs once before any per-issue pipeline starts
     await this.worktreeManager.prefetch();
 
-    // Run with bounded parallelism
-    const limit = pLimit(this.config.options.maxParallelIssues);
-    const results = await Promise.allSettled(
-      issuesToProcess.map((issue) =>
-        limit(() => this.processIssue(issue)),
-      ),
-    );
+    let results: PromiseSettledResult<IssueResult>[];
+    if (this.dag) {
+      results = await this.runWithDag(this.dag);
+    } else {
+      // Run with bounded parallelism
+      const limit = pLimit(this.config.options.maxParallelIssues);
+      results = await Promise.allSettled(
+        issuesToProcess.map((issue) =>
+          limit(() => this.processIssue(issue)),
+        ),
+      );
+    }
 
     // Aggregate results
     const fleetResult = this.aggregateResults(results, startTime);
@@ -175,7 +184,7 @@ export class FleetOrchestrator {
   /**
    * Process a single issue through its full pipeline.
    */
-  private async processIssue(issue: IssueDetail): Promise<IssueResult> {
+  private async processIssue(issue: IssueDetail, dag?: IssueDag): Promise<IssueResult> {
     // Abort early if fleet budget was already exceeded by a completed issue
     if (this.fleetBudgetExceeded) {
       this.logger.warn(`Skipping issue #${issue.number}: fleet budget exceeded`, {
@@ -244,11 +253,60 @@ export class FleetOrchestrator {
       }
 
       // 2. Provision worktree
-      const worktree = await this.worktreeManager.provision(
-        issue.number,
-        issue.title,
-        this.config.options.resume,
-      );
+      let worktree: WorktreeInfo;
+      if (dag) {
+        const transitiveDeps = dag.getTransitiveDepsOrdered(issue.number);
+        if (transitiveDeps.length > 0) {
+          try {
+            worktree = await this.worktreeManager.provisionWithDeps(
+              issue.number,
+              issue.title,
+              transitiveDeps,
+              this.config.options.resume,
+            );
+          } catch (err) {
+            if (err instanceof DependencyMergeConflictError) {
+              const error = String(err);
+              this.logger.warn(
+                `Dependency merge conflict for issue #${issue.number}: ${error}`,
+                { issueNumber: issue.number },
+              );
+              await this.fleetCheckpoint.setIssueStatus(
+                issue.number,
+                'dep-merge-conflict',
+                '',
+                '',
+                0,
+                issue.title,
+                error,
+              );
+              return {
+                issueNumber: issue.number,
+                issueTitle: issue.title,
+                success: false,
+                codeComplete: false,
+                phases: [],
+                totalDuration: 0,
+                tokenUsage: 0,
+                error,
+              };
+            }
+            throw err;
+          }
+        } else {
+          worktree = await this.worktreeManager.provision(
+            issue.number,
+            issue.title,
+            this.config.options.resume,
+          );
+        }
+      } else {
+        worktree = await this.worktreeManager.provision(
+          issue.number,
+          issue.title,
+          this.config.options.resume,
+        );
+      }
 
       // 3. Update fleet checkpoint
       await this.fleetCheckpoint.setIssueStatus(
@@ -400,6 +458,154 @@ export class FleetOrchestrator {
         error,
       };
     }
+  }
+
+  /**
+   * Execute all issues wave-by-wave when a DAG is present.
+   */
+  private async runWithDag(dag: IssueDag): Promise<PromiseSettledResult<IssueResult>[]> {
+    const waves = dag.getWaves();
+    const waveNumbers = waves.map((w) => w.map((i) => i.number));
+    await this.fleetCheckpoint.setDag(this.dagDepMap ?? {}, waveNumbers);
+
+    const checkpoint = this.fleetCheckpoint.getState();
+    const completedWaves = checkpoint.completedWaves ?? [];
+
+    const allResults: PromiseSettledResult<IssueResult>[] = [];
+    // Track issue numbers that are blocked due to dep failures in prior waves
+    const blockedIssueNumbers = new Set<number>();
+
+    for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
+      const wave = waves[waveIdx];
+
+      // Skip completed waves on resume
+      if (completedWaves.includes(waveIdx)) {
+        this.logger.info(`Resume: skipping completed wave ${waveIdx}`);
+        continue;
+      }
+
+      const waveResults: PromiseSettledResult<IssueResult>[] = [];
+
+      // Mark issues already determined to be dep-blocked
+      for (const issue of wave) {
+        if (blockedIssueNumbers.has(issue.number)) {
+          waveResults.push({
+            status: 'fulfilled',
+            value: await this.markIssueDepBlocked(issue),
+          });
+        }
+      }
+
+      // Determine processable issues for this wave
+      const issuesToRun = wave.filter(
+        (issue) =>
+          !blockedIssueNumbers.has(issue.number) &&
+          !(this.config.options.resume && this.fleetCheckpoint.isIssueCompleted(issue.number)),
+      );
+
+      if (issuesToRun.length < wave.filter((i) => !blockedIssueNumbers.has(i.number)).length) {
+        const skipped = wave.filter((i) => !blockedIssueNumbers.has(i.number)).length - issuesToRun.length;
+        this.logger.info(`Resume: skipping ${skipped} already-completed issues in wave ${waveIdx}`);
+      }
+
+      // Run wave issues in parallel with bounded concurrency
+      const limit = pLimit(this.config.options.maxParallelIssues);
+      const runResults = await Promise.allSettled(
+        issuesToRun.map((issue) => limit(() => this.processIssue(issue, dag))),
+      );
+      waveResults.push(...runResults);
+
+      // Propagate dep-blocked for any dep-failure statuses
+      const depFailureStatuses = new Set(['dep-failed', 'dep-merge-conflict', 'dep-build-broken']);
+      for (const result of runResults) {
+        if (result.status === 'fulfilled') {
+          const cpStatus = this.fleetCheckpoint.getIssueStatus(result.value.issueNumber);
+          if (cpStatus && depFailureStatuses.has(cpStatus.status)) {
+            this.propagateDepBlocked(result.value.issueNumber, waveIdx, waves, dag, blockedIssueNumbers);
+          }
+        }
+      }
+
+      // autoMerge: merge successful PRs into base branch before next wave
+      if (this.config.dag?.autoMerge && waveIdx < waves.length - 1) {
+        for (const result of runResults) {
+          if (result.status === 'fulfilled' && result.value.success && result.value.pr) {
+            const issueNumber = result.value.issueNumber;
+            const pr = result.value.pr;
+            try {
+              await (this.platform as any).mergePullRequest(pr.number, this.config.baseBranch);
+            } catch (err) {
+              this.logger.warn(
+                `Failed to merge PR #${pr.number} for issue #${issueNumber}: ${err}`,
+                { issueNumber },
+              );
+              const issue = wave.find((i) => i.number === issueNumber)!;
+              await this.fleetCheckpoint.setIssueStatus(
+                issueNumber,
+                'dep-merge-conflict',
+                '',
+                '',
+                0,
+                issue.title,
+                String(err),
+              );
+              this.propagateDepBlocked(issueNumber, waveIdx, waves, dag, blockedIssueNumbers);
+            }
+          }
+        }
+      }
+
+      await this.fleetCheckpoint.markWaveComplete(waveIdx);
+      allResults.push(...waveResults);
+    }
+
+    return allResults;
+  }
+
+  /**
+   * Mark transitive dependents of a failed issue as dep-blocked in the blocked set.
+   */
+  private propagateDepBlocked(
+    failedIssueNumber: number,
+    failedWaveIdx: number,
+    waves: IssueDetail[][],
+    dag: IssueDag,
+    blockedSet: Set<number>,
+  ): void {
+    for (const futureWave of waves.slice(failedWaveIdx + 1)) {
+      for (const futureIssue of futureWave) {
+        const transitiveDeps = dag.getTransitiveDepsOrdered(futureIssue.number);
+        if (transitiveDeps.some((d) => d.number === failedIssueNumber)) {
+          blockedSet.add(futureIssue.number);
+        }
+      }
+    }
+  }
+
+  /**
+   * Mark a single issue as dep-blocked in the fleet checkpoint and return a failed IssueResult.
+   */
+  private async markIssueDepBlocked(issue: IssueDetail): Promise<IssueResult> {
+    this.logger.info(`Marking issue #${issue.number} as dep-blocked`, { issueNumber: issue.number });
+    await this.fleetCheckpoint.setIssueStatus(
+      issue.number,
+      'dep-blocked',
+      '',
+      '',
+      0,
+      issue.title,
+      'Blocked by dependency failure',
+    );
+    return {
+      issueNumber: issue.number,
+      issueTitle: issue.title,
+      success: false,
+      codeComplete: false,
+      phases: [],
+      totalDuration: 0,
+      tokenUsage: 0,
+      error: 'dep-blocked',
+    };
   }
 
   /**
