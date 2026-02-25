@@ -32,6 +32,7 @@ import { loadConfig } from '../src/config/loader.js';
 import { exists, statOrNull } from '../src/util/fs.js';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { scaffoldMissingAgents } from '../src/cli/agents.js';
+// Note: scaffoldMissingAgents helper is still exported for programmatic use by 'cadre run'
 
 const mockConfig = {
   copilot: { agentDir: '/mock/agent-dir' },
@@ -136,86 +137,14 @@ describe('agents validate CLI', () => {
     expect(allErrors).toContain(`${AGENT_DEFINITIONS.length} issue(s)`);
   });
 
-  it('should suggest running scaffold when validation fails', async () => {
+  it('should suggest re-running cadre run when validation fails', async () => {
     vi.mocked(statOrNull).mockResolvedValue(null);
 
     const program = makeProgram();
     await program.parseAsync(['agents', 'validate'], { from: 'user' });
 
     const allErrors = errorSpy.mock.calls.map((c) => c[0] as string).join('\n');
-    expect(allErrors).toContain('cadre agents scaffold');
-  });
-});
-
-describe('agents scaffold CLI', () => {
-  let exitMock: ReturnType<typeof vi.spyOn>;
-  let logSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    exitMock = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => undefined as never);
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.mocked(loadConfig).mockResolvedValue(mockConfig as never);
-    vi.mocked(writeFile).mockResolvedValue(undefined);
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-    vi.mocked(readFile).mockResolvedValue('# template content' as never);
-    // By default: templates exist, destination files do not
-    vi.mocked(exists).mockImplementation(async (path: string) => {
-      return (path as string).includes('templates');
-    });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('should write files for all agents to the agentDir', async () => {
-    const program = makeProgram();
-    await program.parseAsync(['agents', 'scaffold'], { from: 'user' });
-
-    expect(writeFile).toHaveBeenCalledTimes(AGENT_DEFINITIONS.length);
-    const [firstPath] = vi.mocked(writeFile).mock.calls[0] as [string, ...unknown[]];
-    expect(firstPath).toMatch(/^\/mock\/agent-dir\//);
-    expect(firstPath).toMatch(/\.md$/);
-  });
-
-  it('should skip existing files without --force', async () => {
-    vi.mocked(exists).mockResolvedValue(true); // all files exist
-
-    const program = makeProgram();
-    await program.parseAsync(['agents', 'scaffold'], { from: 'user' });
-
-    expect(writeFile).not.toHaveBeenCalled();
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('skip'));
-  });
-
-  it('should overwrite existing files with --force', async () => {
-    vi.mocked(exists).mockResolvedValue(true); // templates and destinations exist
-
-    const program = makeProgram();
-    await program.parseAsync(['agents', 'scaffold', '--force'], { from: 'user' });
-
-    expect(writeFile).toHaveBeenCalledTimes(AGENT_DEFINITIONS.length);
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('overwrite'));
-  });
-
-  it('should scaffold only the named agent with --agent', async () => {
-    const program = makeProgram();
-    await program.parseAsync(['agents', 'scaffold', '--agent', 'issue-analyst'], { from: 'user' });
-
-    expect(writeFile).toHaveBeenCalledTimes(1);
-    const [writtenPath] = vi.mocked(writeFile).mock.calls[0] as [string, ...unknown[]];
-    expect(writtenPath).toContain('issue-analyst');
-  });
-
-  it('should exit 1 for an unknown --agent name', async () => {
-    const program = makeProgram();
-    await program.parseAsync(['agents', 'scaffold', '--agent', 'no-such-agent'], { from: 'user' });
-
-    expect(exitMock).toHaveBeenCalledWith(1);
-    expect(writeFile).not.toHaveBeenCalled();
+    expect(allErrors).toContain('cadre run');
   });
 });
 

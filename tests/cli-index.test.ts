@@ -94,14 +94,6 @@ describe('src/index.ts command registration', () => {
     expect(subNames).toContain('list');
   });
 
-  it('should register agents with scaffold subcommand', () => {
-    const program = buildProgram();
-    const agentsCmd = program.commands.find((c) => c.name() === 'agents');
-    expect(agentsCmd).toBeDefined();
-    const subNames = agentsCmd!.commands.map((c) => c.name());
-    expect(subNames).toContain('scaffold');
-  });
-
   it('should register agents with validate subcommand', () => {
     const program = buildProgram();
     const agentsCmd = program.commands.find((c) => c.name() === 'agents');
@@ -110,12 +102,12 @@ describe('src/index.ts command registration', () => {
     expect(subNames).toContain('validate');
   });
 
-  it('should register exactly list, scaffold, and validate under agents', () => {
+  it('should register exactly list and validate under agents', () => {
     const program = buildProgram();
     const agentsCmd = program.commands.find((c) => c.name() === 'agents');
     expect(agentsCmd).toBeDefined();
     const subNames = agentsCmd!.commands.map((c) => c.name()).sort();
-    expect(subNames).toEqual(['list', 'scaffold', 'validate']);
+    expect(subNames).toEqual(['list', 'validate']);
   });
 
   it('should register --no-pr option on the run command', () => {
