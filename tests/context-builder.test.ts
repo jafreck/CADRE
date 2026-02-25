@@ -454,6 +454,111 @@ describe('ContextBuilder', () => {
         expect(inputFiles).not.toContain('/tmp/worktree/.cadre/baseline-results.json');
       });
     });
+
+    describe('buildForWholePrCodeReviewer', () => {
+      it('returns a string path', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        const result = await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+        );
+        expect(typeof result).toBe('string');
+      });
+
+      it('always includes diffPath and sessionPlanPaths in inputFiles', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          ['/tmp/progress/session-001.md', '/tmp/progress/session-002.md'],
+          '/tmp/progress',
+        );
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/whole-pr-diff.patch');
+        expect(inputFiles).toContain('/tmp/progress/session-001.md');
+        expect(inputFiles).toContain('/tmp/progress/session-002.md');
+      });
+
+      it('conditionally includes analysis.md, scout-report.md, and implementation-plan.md when they exist', async () => {
+        vi.mocked(access).mockResolvedValue(undefined);
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+        );
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).toContain('/tmp/progress/scout-report.md');
+        expect(inputFiles).toContain('/tmp/progress/implementation-plan.md');
+      });
+
+      it('excludes analysis.md, scout-report.md, and implementation-plan.md when they do not exist', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+        );
+        const ctx = captureWrittenContext();
+        const inputFiles = ctx.inputFiles as string[];
+        expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
+        expect(inputFiles).not.toContain('/tmp/progress/scout-report.md');
+        expect(inputFiles).not.toContain('/tmp/progress/implementation-plan.md');
+      });
+
+      it('includes outputSchema in context', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+        );
+        const ctx = captureWrittenContext();
+        expect(ctx.outputSchema).toBeDefined();
+        expect(typeof ctx.outputSchema).toBe('object');
+      });
+
+      it('sets payload.scope to "whole-pr" and payload.baseBranch to config.baseBranch', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+        );
+        const ctx = captureWrittenContext();
+        const payload = ctx.payload as Record<string, unknown>;
+        expect(payload.scope).toBe('whole-pr');
+        expect(payload.baseBranch).toBe('main');
+      });
+
+      it('sets agent to "whole-pr-reviewer" and phase to 3', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+        );
+        const ctx = captureWrittenContext();
+        expect(ctx.agent).toBe('whole-pr-reviewer');
+        expect(ctx.phase).toBe(3);
+      });
+    });
   });
 
   describe('buildForReviewResponse', () => {

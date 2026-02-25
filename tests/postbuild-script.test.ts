@@ -19,6 +19,7 @@ const EXPECTED_TEMPLATES = [
   'issue-analyst.md',
   'pr-composer.md',
   'test-writer.md',
+  'whole-pr-reviewer.md',
 ];
 
 describe('package.json postbuild script', () => {
@@ -46,9 +47,9 @@ describe('dist/agents/templates/ after build', () => {
     expect(existsSync(DIST_TEMPLATES_DIR)).toBe(true);
   });
 
-  it.skipIf(!existsSync(DIST_TEMPLATES_DIR))('should contain exactly 11 .md template files', () => {
+  it.skipIf(!existsSync(DIST_TEMPLATES_DIR))('should contain exactly 12 .md template files', () => {
     const files = readdirSync(DIST_TEMPLATES_DIR).filter((f) => f.endsWith('.md'));
-    expect(files).toHaveLength(11);
+    expect(files).toHaveLength(12);
   });
 
   it.each(EXPECTED_TEMPLATES)('%s should be present in dist/agents/templates/', (template) => {

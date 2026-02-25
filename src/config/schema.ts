@@ -177,6 +177,8 @@ export const CadreConfigSchema = z.object({
       haltOnAmbiguity: z.boolean().default(false),
       /** Enable automatic reply comments on resolved review threads. */
       respondToReviews: z.boolean().default(false),
+      /** Max fix-surgeon retries for the whole-PR review. */
+      maxWholePrReviewRetries: z.number().int().min(1).max(5).default(2),
     })
     .default({}),
 

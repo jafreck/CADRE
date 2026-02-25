@@ -54,6 +54,9 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       throw new Error('All implementation sessions blocked');
     }
 
+    // Whole-PR review: runs once after all sessions complete, before phase 4.
+    await this.executeWholePrReview(sessions, ctx);
+
     return planPath;
   }
 
@@ -304,6 +307,152 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       queue.markBlocked(session.id);
       await ctx.io.checkpoint.blockTask(session.id);
       await ctx.io.progressWriter.appendEvent(`Session ${session.id} blocked: ${retryResult.error}`);
+    }
+  }
+
+  private async executeWholePrReview(sessions: AgentSession[], ctx: PhaseContext): Promise<void> {
+    ctx.services.logger.info('[Whole-PR review] Starting post-implementation review', {
+      issueNumber: ctx.issue.number,
+      phase: 3,
+    });
+
+    // Build full PR diff against base commit.
+    const rawDiff = await ctx.io.commitManager.getDiff(ctx.worktree.baseCommit);
+    const diff = truncateDiff(rawDiff, 200_000);
+    const diffPath = join(ctx.io.progressDir, 'whole-pr-diff.patch');
+    await writeFile(diffPath, diff, 'utf-8');
+
+    // Collect all session plan file paths written during implementation.
+    const sessionPlanPaths: string[] = [];
+    for (const session of sessions) {
+      const planPath = join(ctx.io.progressDir, `session-${session.id}.md`);
+      if (await exists(planPath)) {
+        sessionPlanPaths.push(planPath);
+      }
+    }
+
+    const maxRetries = ctx.config.options.maxWholePrReviewRetries;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      ctx.callbacks.checkBudget();
+
+      const reviewerContextPath = await ctx.services.contextBuilder.buildForWholePrCodeReviewer(
+        ctx.issue.number,
+        ctx.worktree.path,
+        diffPath,
+        sessionPlanPaths,
+        ctx.io.progressDir,
+      );
+
+      const reviewResult = await ctx.services.launcher.launchAgent(
+        {
+          agent: 'whole-pr-reviewer',
+          issueNumber: ctx.issue.number,
+          phase: 3,
+          contextPath: reviewerContextPath,
+          outputPath: join(ctx.io.progressDir, 'whole-pr-review.md'),
+        },
+        ctx.worktree.path,
+      );
+
+      ctx.callbacks.recordTokens('whole-pr-reviewer', reviewResult.tokenUsage);
+      ctx.callbacks.checkBudget();
+
+      if (!reviewResult.success) {
+        ctx.services.logger.warn('[Whole-PR review] Reviewer agent did not succeed; skipping', {
+          issueNumber: ctx.issue.number,
+          phase: 3,
+        });
+        return;
+      }
+
+      const reviewPath = join(ctx.io.progressDir, 'whole-pr-review.md');
+      if (!(await exists(reviewPath))) {
+        ctx.services.logger.warn('[Whole-PR review] No output file produced; skipping', {
+          issueNumber: ctx.issue.number,
+          phase: 3,
+        });
+        return;
+      }
+
+      let review;
+      try {
+        review = await ctx.services.resultParser.parseReview(reviewPath);
+      } catch (err) {
+        ctx.services.logger.warn(
+          `[Whole-PR review] Failed to parse review output: ${(err as Error).message}`,
+          { issueNumber: ctx.issue.number, phase: 3 },
+        );
+        return;
+      }
+
+      if (review.verdict !== 'needs-fixes') {
+        ctx.services.logger.info('[Whole-PR review] Verdict: pass', {
+          issueNumber: ctx.issue.number,
+          phase: 3,
+        });
+        return;
+      }
+
+      ctx.services.logger.info(
+        `[Whole-PR review] Verdict: needs-fixes (attempt ${attempt + 1}/${maxRetries + 1})`,
+        { issueNumber: ctx.issue.number, phase: 3 },
+      );
+
+      if (attempt >= maxRetries) {
+        ctx.services.logger.warn(
+          `[Whole-PR review] Max retries (${maxRetries}) exceeded; continuing to phase 4`,
+          { issueNumber: ctx.issue.number, phase: 3 },
+        );
+        return;
+      }
+
+      // Launch fix-surgeon to address findings.
+      const changedFiles = await ctx.io.commitManager.getChangedFiles();
+      const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
+        ctx.issue.number,
+        ctx.worktree.path,
+        'whole-pr',
+        reviewPath,
+        changedFiles.map((f) => join(ctx.worktree.path, f)),
+        ctx.io.progressDir,
+        'review',
+        3,
+      );
+
+      const fixResult = await ctx.services.launcher.launchAgent(
+        {
+          agent: 'fix-surgeon',
+          issueNumber: ctx.issue.number,
+          phase: 3,
+          sessionId: 'whole-pr',
+          contextPath: fixContextPath,
+          outputPath: ctx.worktree.path,
+        },
+        ctx.worktree.path,
+      );
+
+      ctx.callbacks.recordTokens('fix-surgeon', fixResult.tokenUsage);
+      ctx.callbacks.checkBudget();
+
+      if (!fixResult.success) {
+        ctx.services.logger.warn('[Whole-PR review] Fix surgeon failed; aborting review loop', {
+          issueNumber: ctx.issue.number,
+          phase: 3,
+        });
+        return;
+      }
+
+      // Commit fix-surgeon output so the next review sees an updated diff.
+      await ctx.io.commitManager.commit(
+        `fix: whole-PR review fixes (round ${attempt + 1})`,
+        ctx.issue.number,
+        'fix',
+      );
+
+      // Refresh diff for re-review.
+      const updatedRawDiff = await ctx.io.commitManager.getDiff(ctx.worktree.baseCommit);
+      await writeFile(diffPath, truncateDiff(updatedRawDiff, 200_000), 'utf-8');
     }
   }
 
