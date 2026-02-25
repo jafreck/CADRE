@@ -266,6 +266,7 @@ export class ContextBuilder {
       outputPath: join(progressDir, 'whole-pr-review.md'),
       payload: {
         scope: 'whole-pr',
+        baseBranch: this.config.baseBranch,
       },
       outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
     });

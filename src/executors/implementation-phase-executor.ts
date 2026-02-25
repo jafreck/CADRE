@@ -55,9 +55,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
     }
 
     // Whole-PR review: runs once after all sessions complete, before phase 4.
-    if (ctx.config.options.wholePrReview) {
-      await this.executeWholePrReview(sessions, ctx);
-    }
+    await this.executeWholePrReview(sessions, ctx);
 
     return planPath;
   }

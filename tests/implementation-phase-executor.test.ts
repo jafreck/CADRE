@@ -61,7 +61,8 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     launchAgent: vi.fn()
       .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
       .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
-      .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+      .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+      .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
   };
 
   const retryExecutor = {
@@ -156,7 +157,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     worktree: { path: '/tmp/worktree', branch: 'cadre/issue-42', baseCommit: 'abc123', issueNumber: 42 } as never,
     config: {
       commands: { build: undefined },
-      options: { maxParallelAgents: 2, maxRetriesPerTask: 3, perTaskBuildCheck: true, maxBuildFixRounds: 2, wholePrReview: false, maxWholePrReviewRetries: 2 },
+      options: { maxParallelAgents: 2, maxRetriesPerTask: 3, perTaskBuildCheck: true, maxBuildFixRounds: 2, maxWholePrReviewRetries: 2 },
     } as never,
     platform: {} as never,
     services: { ...services, ...overrides.services } as never,
@@ -215,11 +216,15 @@ describe('ImplementationPhaseExecutor', () => {
       };
       const ctx = makeCtx({ io: { checkpoint: checkpoint } as never });
       const result = await executor.execute(ctx);
-      // task-001 restored as complete → queue immediately done → no agents launched
+      // task-001 restored as complete → queue immediately done → no per-session agents launched
       expect(result).toBe(join('/tmp/progress', 'implementation-plan.md'));
-      expect(
-        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
-      ).not.toHaveBeenCalled();
+      const launchCalls = (
+        ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }
+      ).launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
+      // Per-session agents must not run (no sessions were processed this run)
+      expect(launchCalls).not.toContain('code-writer');
+      expect(launchCalls).not.toContain('test-writer');
+      expect(launchCalls).not.toContain('code-reviewer');
     });
 
     it('should launch code-writer with correct arguments', async () => {
@@ -448,14 +453,19 @@ describe('ImplementationPhaseExecutor', () => {
 
   describe('executeTask() fix-surgeon integration', () => {
     it('should launch fix-surgeon when review verdict is needs-fixes', async () => {
-      vi.mocked(exists).mockResolvedValue(true);
+      // Return true only for per-session review files, not the whole-PR review file,
+      // so the whole-PR review path exits early and doesn't interfere.
+      vi.mocked(exists).mockImplementation(async (path) =>
+        String(path).includes('review-session-'),
+      );
 
       const launcher = {
         launchAgent: vi.fn()
           .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
-          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon')),
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
       };
 
       const resultParser = {
@@ -570,7 +580,8 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
-          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
       };
 
       const ctx = makeCtx({ services: { resultParser: resultParser, launcher: launcher } as never });
@@ -589,7 +600,7 @@ describe('ImplementationPhaseExecutor', () => {
       ).toHaveBeenCalled();
     });
 
-    it('should NOT call getDiff() for the reviewer diff', async () => {
+    it('should call getDiff for whole-PR review but not getTaskDiff', async () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue('task diff'),
@@ -598,13 +609,17 @@ describe('ImplementationPhaseExecutor', () => {
       };
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
       await executor.execute(ctx);
-      expect(commitManager.getDiff).not.toHaveBeenCalled();
+      // per-session reviewer uses getTaskDiff, not getDiff
+      expect(commitManager.getTaskDiff).toHaveBeenCalled();
+      // whole-PR review uses getDiff with the base commit
+      expect(commitManager.getDiff).toHaveBeenCalledWith('abc123');
     });
 
     it('should write the result of getTaskDiff() to the diff patch file', async () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue('my-task-specific-diff'),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn().mockResolvedValue(undefined),
       };
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
@@ -621,6 +636,7 @@ describe('ImplementationPhaseExecutor', () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue(''),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn(async (msg: string) => { callOrder.push(`commit:${msg}`); }),
       };
       const launcher = {
@@ -655,6 +671,7 @@ describe('ImplementationPhaseExecutor', () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue(''),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn(async (msg: string) => { callOrder.push(`commit:${msg}`); }),
       };
       const launcher = {
@@ -680,6 +697,7 @@ describe('ImplementationPhaseExecutor', () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue(shortDiff),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn().mockResolvedValue(undefined),
       };
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
@@ -696,6 +714,7 @@ describe('ImplementationPhaseExecutor', () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue(exactDiff),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn().mockResolvedValue(undefined),
       };
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
@@ -712,6 +731,7 @@ describe('ImplementationPhaseExecutor', () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn().mockResolvedValue(undefined),
       };
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
@@ -730,6 +750,7 @@ describe('ImplementationPhaseExecutor', () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn().mockResolvedValue(undefined),
       };
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
@@ -748,6 +769,7 @@ describe('ImplementationPhaseExecutor', () => {
       const commitManager = {
         getChangedFiles: vi.fn().mockResolvedValue([]),
         getTaskDiff: vi.fn().mockResolvedValue(largeDiff),
+        getDiff: vi.fn().mockResolvedValue(''),
         commit: vi.fn().mockResolvedValue(undefined),
       };
       const ctx = makeCtx({ io: { commitManager: commitManager } as never });
@@ -1033,21 +1055,10 @@ describe('ImplementationPhaseExecutor', () => {
   // ---------------------------------------------------------------------------
 
   function makeWholePrCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
-    const base = makeCtx(overrides);
-    return {
-      ...base,
-      config: {
-        ...base.config,
-        options: {
-          ...base.config.options,
-          wholePrReview: true,
-          maxWholePrReviewRetries: 2,
-        },
-      } as never,
-    } as unknown as PhaseContext;
+    return makeCtx(overrides);
   }
 
-  describe('whole-PR review (wholePrReview: true)', () => {
+  describe('whole-PR review', () => {
     it('should launch whole-pr-reviewer after all sessions complete (pass path)', async () => {
       vi.mocked(exists).mockResolvedValue(true);
 
@@ -1121,16 +1132,6 @@ describe('ImplementationPhaseExecutor', () => {
         expect.any(String),
         'utf-8',
       );
-    });
-
-    it('should not launch whole-pr-reviewer when wholePrReview is false', async () => {
-      const ctx = makeCtx(); // wholePrReview: false by default in makeCtx
-      await executor.execute(ctx);
-
-      const agents = (
-        ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }
-      ).launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
-      expect(agents).not.toContain('whole-pr-reviewer');
     });
 
     it('needs-fixes → fix-surgeon → re-review path', async () => {
