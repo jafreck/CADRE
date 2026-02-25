@@ -4,6 +4,9 @@ import {
   PhaseFailedError,
   AgentTimeoutError,
   SchemaValidationError,
+  CyclicDependencyError,
+  DependencyResolutionError,
+  DependencyMergeConflictError,
 } from '../src/errors.js';
 
 describe('BudgetExceededError', () => {
@@ -156,5 +159,65 @@ describe('SchemaValidationError', () => {
   it('can be caught as a generic Error', () => {
     const throwIt = () => { throw new SchemaValidationError('invalid field', 'taskId', 42); };
     expect(throwIt).toThrowError('invalid field');
+  });
+});
+
+describe('CyclicDependencyError', () => {
+  it('instantiates with correct name, message, and issueNumbers', () => {
+    const err = new CyclicDependencyError('cycle detected', [1, 2, 3]);
+    expect(err.name).toBe('CyclicDependencyError');
+    expect(err.message).toBe('cycle detected');
+    expect(err.issueNumbers).toEqual([1, 2, 3]);
+    expect(err instanceof Error).toBe(true);
+  });
+
+  it('is an instance of CyclicDependencyError', () => {
+    const err = new CyclicDependencyError('cycle', [10, 20]);
+    expect(err instanceof CyclicDependencyError).toBe(true);
+  });
+
+  it('can be caught as a generic Error', () => {
+    const throwIt = () => { throw new CyclicDependencyError('cycle detected', [1, 2]); };
+    expect(throwIt).toThrowError('cycle detected');
+  });
+});
+
+describe('DependencyResolutionError', () => {
+  it('instantiates with correct name and message', () => {
+    const err = new DependencyResolutionError('resolution failed');
+    expect(err.name).toBe('DependencyResolutionError');
+    expect(err.message).toBe('resolution failed');
+    expect(err instanceof Error).toBe(true);
+  });
+
+  it('is an instance of DependencyResolutionError', () => {
+    const err = new DependencyResolutionError('failed');
+    expect(err instanceof DependencyResolutionError).toBe(true);
+  });
+
+  it('can be caught as a generic Error', () => {
+    const throwIt = () => { throw new DependencyResolutionError('resolution failed'); };
+    expect(throwIt).toThrowError('resolution failed');
+  });
+});
+
+describe('DependencyMergeConflictError', () => {
+  it('instantiates with correct name, message, issueNumber, and conflictingBranch', () => {
+    const err = new DependencyMergeConflictError('merge conflict', 42, 'cadre/issue-42');
+    expect(err.name).toBe('DependencyMergeConflictError');
+    expect(err.message).toBe('merge conflict');
+    expect(err.issueNumber).toBe(42);
+    expect(err.conflictingBranch).toBe('cadre/issue-42');
+    expect(err instanceof Error).toBe(true);
+  });
+
+  it('is an instance of DependencyMergeConflictError', () => {
+    const err = new DependencyMergeConflictError('conflict', 1, 'feature/branch');
+    expect(err instanceof DependencyMergeConflictError).toBe(true);
+  });
+
+  it('can be caught as a generic Error', () => {
+    const throwIt = () => { throw new DependencyMergeConflictError('merge conflict', 42, 'cadre/issue-42'); };
+    expect(throwIt).toThrowError('merge conflict');
   });
 });

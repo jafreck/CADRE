@@ -6,6 +6,7 @@
 export type AgentName =
   | 'issue-analyst'
   | 'codebase-scout'
+  | 'dependency-analyst'
   | 'implementation-planner'
   | 'adjudicator'
   | 'code-writer'
@@ -27,7 +28,7 @@ export interface AgentDefinition {
   templateFile: string;
 }
 
-/** Registry of all 11 CADRE agents with their metadata. */
+/** Registry of all 13 CADRE agents with their metadata. */
 export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
   {
     name: 'issue-analyst',
@@ -44,6 +45,14 @@ export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
     description: 'Scans the repository to locate relevant files, map dependencies, and identify related tests.',
     hasStructuredOutput: true,
     templateFile: 'codebase-scout.md',
+  },
+  {
+    name: 'dependency-analyst',
+    phase: 1,
+    phaseName: 'Analysis & Scouting',
+    description: 'Analyzes a list of issues and infers their dependency relationships, producing a DAG with no cycles.',
+    hasStructuredOutput: true,
+    templateFile: 'dependency-analyst.md',
   },
   {
     name: 'implementation-planner',
