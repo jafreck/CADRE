@@ -659,6 +659,72 @@ describe('PRCompositionPhaseExecutor', () => {
     });
   });
 
+  describe('parse-validation feedback loop', () => {
+    function makeAutoCreateCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
+      return makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        ...overrides,
+      });
+    }
+
+    it('parse succeeds on first attempt — proceeds normally without re-invocation', async () => {
+      const ctx = makeAutoCreateCtx();
+      await executor.execute(ctx);
+      // launchAgent called exactly once (no retry)
+      expect(
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    it('parse fails then succeeds on re-invocation — creates PR successfully', async () => {
+      const parseError = new Error('Missing cadre-json block. Parse error: Unexpected token');
+      const parsePRContent = vi.fn()
+        .mockRejectedValueOnce(parseError)
+        .mockResolvedValueOnce({ title: 'Fix', body: 'Body', labels: [] });
+      const createPullRequest = vi.fn().mockResolvedValue(undefined);
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest,
+      };
+      const ctx = makeAutoCreateCtx({
+        services: { resultParser: { parsePRContent } as never } as never,
+        platform: platform as never,
+      });
+
+      await executor.execute(ctx);
+
+      // Agent should have been invoked twice (initial + 1 retry)
+      expect(
+        (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
+      ).toHaveBeenCalledTimes(2);
+      // parsePRContent called twice (once failing, once succeeding)
+      expect(parsePRContent).toHaveBeenCalledTimes(2);
+      // PR was created after successful retry
+      expect(createPullRequest).toHaveBeenCalled();
+    });
+
+    it('parse fails on all attempts — throws actionable error with parse failure cause', async () => {
+      const parseError = new Error(
+        'Agent output in /tmp/progress/pr-content.md is missing a `cadre-json` block. Parse error: Unexpected token x',
+      );
+      const parsePRContent = vi.fn().mockRejectedValue(parseError);
+      const ctx = makeAutoCreateCtx({
+        services: { resultParser: { parsePRContent } as never } as never,
+      });
+
+      await expect(executor.execute(ctx)).rejects.toThrow(
+        /pr-composer output could not be parsed after \d+ attempt\(s\)/,
+      );
+      // The error includes the underlying parse failure cause
+      await expect(executor.execute(ctx)).rejects.toThrow(/Parse error:/);
+    });
+  });
+
   describe('launchWithRetry uses correct retry configuration', () => {
     it('should pass maxRetriesPerTask from config to retryExecutor', async () => {
       const retryExecutor = {

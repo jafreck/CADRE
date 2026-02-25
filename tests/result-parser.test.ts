@@ -175,6 +175,13 @@ describe('ResultParser', () => {
       await expect(parser.parsePRContent('/tmp/pr-content.md')).rejects.toThrow('cadre-json');
     });
 
+    it('should include parse failure detail in error when cadre-json block is malformed', async () => {
+      const content = '```cadre-json\n{ "title": "x", "body": invalid json }\n```';
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parsePRContent('/tmp/pr-content.md')).rejects.toThrow(/Parse error:/);
+    });
+
     it('should throw ZodError for PR cadre-json missing required fields', async () => {
       const invalid = { title: 'x' }; // missing body and labels
       const content = `\`\`\`cadre-json\n${JSON.stringify(invalid)}\n\`\`\``;

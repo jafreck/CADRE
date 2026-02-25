@@ -7,17 +7,28 @@
  * as escape sequences (e.g. `\n```ts` stored as two chars `\n` + backtick-backtick-backtick).
  */
 export function extractCadreJson(content: string): unknown | null {
+  return extractCadreJsonWithError(content).parsed;
+}
+
+/**
+ * Like extractCadreJson, but also returns the underlying parse error message when
+ * both the initial JSON.parse and the recovery attempt fail.
+ *
+ * Returns `{ parsed: value, parseError: null }` on success, or
+ * `{ parsed: null, parseError: "…message…" }` on failure.
+ */
+export function extractCadreJsonWithError(content: string): { parsed: unknown | null; parseError: string | null } {
   const match = content.match(/```cadre-json[ \t]*\n([\s\S]*?)\n```[ \t]*(\n|$)/);
-  if (!match) return null;
+  if (!match) return { parsed: null, parseError: 'No cadre-json block found' };
   const raw = match[1].trim();
   try {
-    return JSON.parse(raw);
+    return { parsed: JSON.parse(raw), parseError: null };
   } catch {
     // Best-effort recovery: fix unescaped double-quotes inside JSON string values.
     try {
-      return JSON.parse(recoverUnescapedQuotes(raw));
-    } catch {
-      return null;
+      return { parsed: JSON.parse(recoverUnescapedQuotes(raw)), parseError: null };
+    } catch (recoveryError) {
+      return { parsed: null, parseError: (recoveryError as Error).message };
     }
   }
 }
