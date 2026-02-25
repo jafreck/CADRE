@@ -233,6 +233,46 @@ export class ContextBuilder {
   }
 
   /**
+   * Build a context file for the whole-PR code-reviewer agent.
+   * Receives the full diff against main/base, all session plan files, and the
+   * standard analysis/scout context — giving it cross-session visibility.
+   */
+  async buildForWholePrCodeReviewer(
+    issueNumber: number,
+    worktreePath: string,
+    diffPath: string,
+    sessionPlanPaths: string[],
+    progressDir: string,
+  ): Promise<string> {
+    const inputFiles = [diffPath, ...sessionPlanPaths];
+    if (await exists(join(progressDir, 'analysis.md'))) {
+      inputFiles.push(join(progressDir, 'analysis.md'));
+    }
+    if (await exists(join(progressDir, 'scout-report.md'))) {
+      inputFiles.push(join(progressDir, 'scout-report.md'));
+    }
+    if (await exists(join(progressDir, 'implementation-plan.md'))) {
+      inputFiles.push(join(progressDir, 'implementation-plan.md'));
+    }
+    return this.writeContext(progressDir, 'whole-pr-reviewer', issueNumber, {
+      agent: 'whole-pr-reviewer',
+      issueNumber,
+      projectName: this.config.projectName,
+      repository: this.config.repository,
+      worktreePath,
+      phase: 3,
+      config: { commands: this.config.commands },
+      inputFiles,
+      outputPath: join(progressDir, 'whole-pr-review.md'),
+      payload: {
+        scope: 'whole-pr',
+        baseBranch: this.config.baseBranch,
+      },
+      outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
+    });
+  }
+
+  /**
    * Build a context file for the fix-surgeon agent.
    */
   async buildForFixSurgeon(

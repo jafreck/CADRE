@@ -16,8 +16,8 @@ const ALL_AGENT_NAMES: AgentName[] = [
 ];
 
 describe('AGENT_DEFINITIONS', () => {
-  it('should contain exactly 11 entries', () => {
-    expect(AGENT_DEFINITIONS).toHaveLength(11);
+  it('should contain exactly 12 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(12);
   });
 
   it('should have one entry for each AgentName', () => {
