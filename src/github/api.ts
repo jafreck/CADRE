@@ -76,10 +76,19 @@ export class GitHubAPI {
     }
     if (filters.limit) {
       params.per_page = Math.min(filters.limit, 100);
+      const results: unknown[] = [];
+      for await (const response of this.octokit.paginate.iterator(
+        this.octokit.rest.issues.listForRepo,
+        params,
+      )) {
+        results.push(...(response.data as unknown[]));
+        if (results.length >= filters.limit) break;
+      }
+      return results.slice(0, filters.limit) as Record<string, unknown>[];
     }
 
     const issues = await this.octokit.paginate(this.octokit.rest.issues.listForRepo, params);
-    return (filters.limit ? issues.slice(0, filters.limit) : issues) as unknown as Record<string, unknown>[];
+    return issues as unknown as Record<string, unknown>[];
   }
 
   /**
@@ -365,11 +374,18 @@ export class GitHubAPI {
     }
 
     const limit = filters.limit ?? 30;
-    const items = await this.octokit.paginate(this.octokit.rest.search.issuesAndPullRequests, {
-      q: queryParts.join(' '),
-      per_page: Math.min(limit, 100),
-    });
+    const results: unknown[] = [];
+    for await (const response of this.octokit.paginate.iterator(
+      this.octokit.rest.search.issuesAndPullRequests,
+      {
+        q: queryParts.join(' '),
+        per_page: Math.min(limit, 100),
+      },
+    )) {
+      results.push(...(response.data as unknown[]));
+      if (results.length >= limit) break;
+    }
 
-    return items.slice(0, limit) as unknown as Record<string, unknown>[];
+    return results.slice(0, limit) as Record<string, unknown>[];
   }
 }

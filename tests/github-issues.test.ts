@@ -44,7 +44,7 @@ describe('GitHubAPI', () => {
           issuesAndPullRequests: vi.fn(),
         },
       },
-      paginate: vi.fn(),
+      paginate: Object.assign(vi.fn(), { iterator: vi.fn() }),
     } as unknown as Octokit;
 
     api = new GitHubAPI('owner/repo', mockLogger, mockOctokit);
@@ -116,11 +116,16 @@ describe('GitHubAPI', () => {
     });
 
     it('should use search for milestone/assignee filtering', async () => {
-      vi.mocked(mockOctokit.paginate).mockResolvedValue([{ number: 42, title: 'Issue 1' }] as never);
+      const mockData = [{ number: 42, title: 'Issue 1' }];
+      (mockOctokit.paginate as unknown as { iterator: ReturnType<typeof vi.fn> }).iterator.mockReturnValue(
+        (async function* () {
+          yield { data: mockData };
+        })(),
+      );
 
       const issues = await api.listIssues({ milestone: 'v1.0', assignee: 'dev1' });
       expect(issues).toHaveLength(1);
-      expect(mockOctokit.paginate).toHaveBeenCalledWith(
+      expect((mockOctokit.paginate as unknown as { iterator: ReturnType<typeof vi.fn> }).iterator).toHaveBeenCalledWith(
         mockOctokit.rest.search.issuesAndPullRequests,
         expect.objectContaining({
           q: expect.stringContaining('milestone:"v1.0"'),
