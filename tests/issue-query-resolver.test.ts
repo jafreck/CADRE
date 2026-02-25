@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueQueryResolver } from '../src/github/query.js';
 import { IssueFetcher } from '../src/github/issues.js';
-import type { GitHubMCPClient } from '../src/github/mcp-client.js';
 import { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
@@ -20,10 +19,6 @@ function makeLogger(): Logger {
     warn: vi.fn(),
     error: vi.fn(),
   } as unknown as Logger;
-}
-
-function makeMCP(): GitHubMCPClient {
-  return {} as GitHubMCPClient;
 }
 
 function makeConfig(overrides: Partial<CadreConfig> = {}): CadreConfig {
@@ -66,7 +61,7 @@ describe('IssueQueryResolver', () => {
     vi.clearAllMocks();
     logger = makeLogger();
     config = makeConfig();
-    resolver = new IssueQueryResolver(config, logger, makeMCP());
+    resolver = new IssueQueryResolver(config, logger);
   });
 
   describe('resolve', () => {

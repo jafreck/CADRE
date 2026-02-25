@@ -1,15 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PullRequestCreator } from '../src/git/pr.js';
 import { GitHubAPI } from '../src/github/api.js';
-import { GitHubMCPClient } from '../src/github/mcp-client.js';
 import { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
+import type { Octokit } from '@octokit/rest';
 
 describe('PullRequestCreator', () => {
   let creator: PullRequestCreator;
   let mockLogger: Logger;
   let mockConfig: CadreConfig;
-  let mockMCP: GitHubMCPClient;
+  let mockOctokit: {
+    rest: {
+      pulls: {
+        list: ReturnType<typeof vi.fn>;
+        create: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        requestReviewers: ReturnType<typeof vi.fn>;
+        listReviewComments: ReturnType<typeof vi.fn>;
+        listReviews: ReturnType<typeof vi.fn>;
+        get: ReturnType<typeof vi.fn>;
+      };
+      issues: {
+        get: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        listComments: ReturnType<typeof vi.fn>;
+        createComment: ReturnType<typeof vi.fn>;
+        createLabel: ReturnType<typeof vi.fn>;
+        addLabels: ReturnType<typeof vi.fn>;
+      };
+      users: {
+        getAuthenticated: ReturnType<typeof vi.fn>;
+      };
+      search: {
+        issuesAndPullRequests: ReturnType<typeof vi.fn>;
+      };
+    };
+    paginate: ReturnType<typeof vi.fn>;
+  };
   let api: GitHubAPI;
 
   beforeEach(() => {
@@ -33,29 +60,52 @@ describe('PullRequestCreator', () => {
       },
     } as CadreConfig;
 
-    mockMCP = {
-      callTool: vi.fn(),
-      checkAuth: vi.fn(),
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-      isConnected: vi.fn().mockReturnValue(true),
-    } as unknown as GitHubMCPClient;
+    mockOctokit = {
+      rest: {
+        pulls: {
+          list: vi.fn(),
+          create: vi.fn(),
+          update: vi.fn(),
+          requestReviewers: vi.fn(),
+          listReviewComments: vi.fn(),
+          listReviews: vi.fn(),
+          get: vi.fn(),
+        },
+        issues: {
+          get: vi.fn(),
+          update: vi.fn(),
+          listComments: vi.fn(),
+          createComment: vi.fn(),
+          createLabel: vi.fn(),
+          addLabels: vi.fn(),
+        },
+        users: {
+          getAuthenticated: vi.fn(),
+        },
+        search: {
+          issuesAndPullRequests: vi.fn(),
+        },
+      },
+      paginate: vi.fn(),
+    };
 
-    api = new GitHubAPI('owner/repo', mockLogger, mockMCP);
+    api = new GitHubAPI('owner/repo', mockLogger, mockOctokit as unknown as Octokit);
     creator = new PullRequestCreator(mockConfig, mockLogger, api);
   });
 
   describe('exists', () => {
     it('should detect existing PR', async () => {
-      vi.mocked(mockMCP.callTool).mockResolvedValue([
-        {
-          number: 87,
-          html_url: 'https://github.com/owner/repo/pull/87',
-          title: 'Fix login',
-          head: { ref: 'cadre/issue-42' },
-          base: { ref: 'main' },
-        },
-      ]);
+      mockOctokit.rest.pulls.list.mockResolvedValue({
+        data: [
+          {
+            number: 87,
+            html_url: 'https://github.com/owner/repo/pull/87',
+            title: 'Fix login',
+            head: { ref: 'cadre/issue-42' },
+            base: { ref: 'main' },
+          },
+        ],
+      });
 
       const result = await creator.exists('cadre/issue-42');
       expect(result).toBeDefined();
@@ -63,7 +113,7 @@ describe('PullRequestCreator', () => {
     });
 
     it('should return null when no PR exists', async () => {
-      vi.mocked(mockMCP.callTool).mockResolvedValue([]);
+      mockOctokit.rest.pulls.list.mockResolvedValue({ data: [] });
 
       const result = await creator.exists('cadre/issue-42');
       expect(result).toBeNull();
@@ -72,11 +122,14 @@ describe('PullRequestCreator', () => {
 
   describe('create', () => {
     it('should create a PR with the correct title and return PullRequestInfo', async () => {
-      vi.mocked(mockMCP.callTool).mockResolvedValue({
-        number: 99,
-        html_url: 'https://github.com/owner/repo/pull/99',
-        title: 'Fix login (#42)',
+      mockOctokit.rest.pulls.create.mockResolvedValue({
+        data: {
+          number: 99,
+          html_url: 'https://github.com/owner/repo/pull/99',
+          title: 'Fix login (#42)',
+        },
       });
+      mockOctokit.rest.issues.addLabels.mockResolvedValue({ data: {} });
 
       const result = await creator.create(42, 'Fix login', 'cadre/issue-42', 'body text', '/tmp/wt');
 
@@ -88,39 +141,37 @@ describe('PullRequestCreator', () => {
     });
 
     it('should append "Closes #N" to body when linkIssue is true', async () => {
-      vi.mocked(mockMCP.callTool).mockResolvedValue({
-        number: 99,
-        html_url: 'https://github.com/owner/repo/pull/99',
+      mockOctokit.rest.pulls.create.mockResolvedValue({
+        data: { number: 99, html_url: 'https://github.com/owner/repo/pull/99' },
       });
+      mockOctokit.rest.issues.addLabels.mockResolvedValue({ data: {} });
 
       await creator.create(42, 'Fix login', 'cadre/issue-42', 'body text', '/tmp/wt');
 
-      const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-      const inputBody = (callArgs[1] as Record<string, unknown>)?.body as string;
-      expect(inputBody).toContain('Closes #42');
+      const callArgs = mockOctokit.rest.pulls.create.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArgs.body as string).toContain('Closes #42');
     });
 
     it('should not append "Closes #N" when linkIssue is false', async () => {
       mockConfig.pullRequest.linkIssue = false;
       creator = new PullRequestCreator(mockConfig, mockLogger, api);
 
-      vi.mocked(mockMCP.callTool).mockResolvedValue({
-        number: 99,
-        html_url: 'https://github.com/owner/repo/pull/99',
+      mockOctokit.rest.pulls.create.mockResolvedValue({
+        data: { number: 99, html_url: 'https://github.com/owner/repo/pull/99' },
       });
+      mockOctokit.rest.issues.addLabels.mockResolvedValue({ data: {} });
 
       await creator.create(42, 'Fix login', 'cadre/issue-42', 'body text', '/tmp/wt');
 
-      const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-      const inputBody = (callArgs[1] as Record<string, unknown>)?.body as string;
-      expect(inputBody).not.toContain('Closes #42');
+      const callArgs = mockOctokit.rest.pulls.create.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArgs.body as string).not.toContain('Closes #42');
     });
 
     it('should log info with PR number and URL after creation', async () => {
-      vi.mocked(mockMCP.callTool).mockResolvedValue({
-        number: 99,
-        html_url: 'https://github.com/owner/repo/pull/99',
+      mockOctokit.rest.pulls.create.mockResolvedValue({
+        data: { number: 99, html_url: 'https://github.com/owner/repo/pull/99' },
       });
+      mockOctokit.rest.issues.addLabels.mockResolvedValue({ data: {} });
 
       await creator.create(42, 'Fix login', 'cadre/issue-42', 'body', '/tmp/wt');
 
@@ -133,15 +184,15 @@ describe('PullRequestCreator', () => {
 
   describe('update', () => {
     it('should call api.updatePullRequest with prNumber and updates', async () => {
-      vi.mocked(mockMCP.callTool).mockResolvedValue({});
+      mockOctokit.rest.pulls.update.mockResolvedValue({ data: {} });
 
       await creator.update(99, { title: 'New Title', body: 'New body' });
 
-      expect(mockMCP.callTool).toHaveBeenCalled();
+      expect(mockOctokit.rest.pulls.update).toHaveBeenCalled();
     });
 
     it('should log warn and not throw when update fails', async () => {
-      vi.mocked(mockMCP.callTool).mockRejectedValueOnce(new Error('API error'));
+      mockOctokit.rest.pulls.update.mockRejectedValueOnce(new Error('API error'));
 
       await expect(creator.update(99, { title: 'New Title' })).resolves.toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalledWith(

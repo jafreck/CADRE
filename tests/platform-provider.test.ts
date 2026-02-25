@@ -193,6 +193,25 @@ describe('Platform Provider Factory', () => {
     delete process.env.TEST_KEY_FILE;
   });
 
+  it('should fall through to env var detection when configured token resolves to empty string', () => {
+    process.env.GITHUB_TOKEN = 'ghp_fallback_token';
+    const config = CadreConfigSchema.parse({
+      ...baseConfig,
+      repository: 'owner/repo',
+      github: {
+        auth: {
+          token: '${NONEXISTENT_ENV_VAR_XYZ}',
+        },
+      },
+    });
+
+    const provider = createPlatformProvider(config, mockLogger);
+    expect(provider).toBeInstanceOf(GitHubProvider);
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Auto-detected'));
+
+    delete process.env.GITHUB_TOKEN;
+  });
+
   it('should resolve env var references in Azure DevOps auth', () => {
     process.env.TEST_ADO_PAT = 'secret-token';
 

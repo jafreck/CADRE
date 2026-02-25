@@ -10,9 +10,9 @@ import type {
   PRComment,
   PRReview,
 } from './provider.js';
-import { GitHubMCPClient, type MCPServerConfig } from '../github/mcp-client.js';
 import { GitHubAPI } from '../github/api.js';
 import { Logger } from '../logging/logger.js';
+import { Octokit } from '@octokit/rest';
 
 function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -33,42 +33,38 @@ function asArray(value: unknown): unknown[] {
 /**
  * GitHub implementation of PlatformProvider.
  *
- * Delegates all operations to GitHubAPI / GitHubMCPClient,
- * normalizing responses to the platform-agnostic types.
+ * Delegates all operations to GitHubAPI, normalizing responses to the
+ * platform-agnostic types.
  */
 export class GitHubProvider implements PlatformProvider {
   readonly name = 'GitHub';
 
-  private readonly mcpClient: GitHubMCPClient;
   private api: GitHubAPI | null = null;
   private readonly owner: string;
   private readonly repo: string;
 
   constructor(
     private readonly repository: string,
-    private readonly mcpServerConfig: MCPServerConfig,
     private readonly logger: Logger,
+    private readonly octokit?: Octokit,
   ) {
     const [owner, repo] = repository.split('/');
     this.owner = owner;
     this.repo = repo;
-    this.mcpClient = new GitHubMCPClient(mcpServerConfig, logger);
   }
 
   // ── Lifecycle ──
 
   async connect(): Promise<void> {
-    await this.mcpClient.connect();
-    this.api = new GitHubAPI(this.repository, this.logger, this.mcpClient);
+    this.api = new GitHubAPI(this.repository, this.logger, this.octokit);
   }
 
   async disconnect(): Promise<void> {
-    await this.mcpClient.disconnect();
     this.api = null;
   }
 
   async checkAuth(): Promise<boolean> {
-    return this.mcpClient.checkAuth();
+    return this.getAPI().checkAuth();
   }
 
   // ── Issues ──
@@ -196,7 +192,7 @@ export class GitHubProvider implements PlatformProvider {
       items = raw;
     } else if (raw !== null && typeof raw === 'object') {
       const envelope = raw as Record<string, unknown>;
-      // Some MCP versions wrap reviews in an envelope
+      // Some API versions wrap reviews in an envelope
       items = Array.isArray(envelope.reviews) ? envelope.reviews : [];
     } else {
       return [];
@@ -255,7 +251,7 @@ export class GitHubProvider implements PlatformProvider {
   }
 
   private parseReviewThreads(prNumber: number, raw: unknown): ReviewThread[] {
-    // The MCP get_review_comments response is { reviewThreads: [...], pageInfo: {...}, totalCount: N }
+    // The get_review_comments response may be { reviewThreads: [...], pageInfo: {...}, totalCount: N }
     // with Go-serialized capitalized field names (ID, IsResolved, IsOutdated, Comments.Nodes, etc.)
     // It may also be a plain array of threads (legacy / test format).
     let threads: unknown[];
@@ -277,7 +273,7 @@ export class GitHubProvider implements PlatformProvider {
     return threads.map((t) => {
       const thread = asRecord(t);
 
-      // Support both Go-serialized capitalized keys (MCP server) and lowercase (tests/legacy)
+      // Support both Go-serialized capitalized keys and lowercase (tests/legacy)
       const rawCommentsContainer = thread.Comments ?? thread.comments;
       const rawComments = Array.isArray(rawCommentsContainer)
         ? rawCommentsContainer
