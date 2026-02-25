@@ -1,6 +1,5 @@
 import type { CadreConfig } from '../config/schema.js';
 import { IssueFetcher, type IssueDetail } from './issues.js';
-import type { GitHubMCPClient } from './mcp-client.js';
 import { Logger } from '../logging/logger.js';
 
 /**
@@ -13,9 +12,8 @@ export class IssueQueryResolver {
   constructor(
     private readonly config: CadreConfig,
     private readonly logger: Logger,
-    mcp: GitHubMCPClient,
   ) {
-    this.fetcher = new IssueFetcher(config.repository, logger, mcp);
+    this.fetcher = new IssueFetcher(config.repository, logger);
   }
 
   /**

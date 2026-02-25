@@ -1,6 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GitHubProvider } from '../src/platform/github-provider.js';
-import { GitHubMCPClient } from '../src/github/mcp-client.js';
+import { GitHubAPI } from '../src/github/api.js';
+
+vi.mock('../src/github/api.js', () => ({
+  GitHubAPI: vi.fn().mockImplementation(() => ({
+    getIssue: vi.fn(),
+    listIssues: vi.fn(),
+    createPullRequest: vi.fn(),
+    getPullRequest: vi.fn(),
+    updatePullRequest: vi.fn(),
+    getPRComments: vi.fn(),
+    getPRReviewComments: vi.fn(),
+    getPRReviews: vi.fn(),
+    listPullRequests: vi.fn(),
+    ensureLabel: vi.fn(),
+    applyLabels: vi.fn(),
+    addIssueComment: vi.fn(),
+    checkAuth: vi.fn(),
+  })),
+}));
 
 const mockLogger = {
   info: vi.fn(),
@@ -10,46 +28,48 @@ const mockLogger = {
   child: vi.fn().mockReturnThis(),
 } as any;
 
-function makeMockMCP() {
-  return {
-    callTool: vi.fn(),
-    checkAuth: vi.fn().mockResolvedValue(true),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-  } as unknown as GitHubMCPClient;
+function getApiMock() {
+  return vi.mocked(GitHubAPI).mock.results[0]?.value as {
+    getIssue: ReturnType<typeof vi.fn>;
+    listIssues: ReturnType<typeof vi.fn>;
+    createPullRequest: ReturnType<typeof vi.fn>;
+    getPullRequest: ReturnType<typeof vi.fn>;
+    updatePullRequest: ReturnType<typeof vi.fn>;
+    getPRComments: ReturnType<typeof vi.fn>;
+    getPRReviewComments: ReturnType<typeof vi.fn>;
+    getPRReviews: ReturnType<typeof vi.fn>;
+    listPullRequests: ReturnType<typeof vi.fn>;
+    ensureLabel: ReturnType<typeof vi.fn>;
+    applyLabels: ReturnType<typeof vi.fn>;
+    addIssueComment: ReturnType<typeof vi.fn>;
+    checkAuth: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe('GitHubProvider – parseIssue type guards', () => {
   let provider: GitHubProvider;
-  let mockMCP: GitHubMCPClient;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockMCP = makeMockMCP();
-    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
-    // Inject our mock MCP by replacing the private field after connect()
-    (provider as any).mcpClient = mockMCP;
-    // Manually trigger connect logic: set api using real GitHubAPI wired to mock MCP
+    provider = new GitHubProvider('owner/repo', mockLogger);
     await provider.connect();
   });
 
   it('should parse a fully-populated issue', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({
-        number: 42,
-        title: 'Fix bug',
-        body: 'Description here',
-        state: 'open',
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-02T00:00:00Z',
-        labels: [{ name: 'bug' }, { name: 'priority' }],
-        assignees: [{ login: 'alice' }],
-        milestone: { title: 'v1.0' },
-      })
-      .mockResolvedValueOnce([
+    getApiMock().getIssue.mockResolvedValue({
+      number: 42,
+      title: 'Fix bug',
+      body: 'Description here',
+      state: 'open',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-02T00:00:00Z',
+      labels: [{ name: 'bug' }, { name: 'priority' }],
+      assignees: [{ login: 'alice' }],
+      milestone: { title: 'v1.0' },
+      comments: [
         { author: { login: 'bob' }, body: 'Comment text', createdAt: '2024-01-03T00:00:00Z' },
-      ]);
+      ],
+    });
 
     const issue = await provider.getIssue(42);
 
@@ -68,9 +88,7 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should fall back to defaults when numeric fields are missing', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ title: 'No number' })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({ title: 'No number', comments: [] });
 
     const issue = await provider.getIssue(0);
 
@@ -78,9 +96,7 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should fall back to empty string when string fields are absent', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 1 })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({ number: 1, comments: [] });
 
     const issue = await provider.getIssue(1);
 
@@ -91,9 +107,7 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should fall back to empty string when string fields have wrong type', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 5, title: 99, body: true })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({ number: 5, title: 99, body: true, comments: [] });
 
     const issue = await provider.getIssue(5);
 
@@ -102,9 +116,7 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should default to "open" when state is not "closed"', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 3, state: 'unknown' })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({ number: 3, state: 'unknown', comments: [] });
 
     const issue = await provider.getIssue(3);
 
@@ -112,9 +124,7 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should parse state "closed" correctly', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 7, state: 'closed' })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({ number: 7, state: 'closed', comments: [] });
 
     const issue = await provider.getIssue(7);
 
@@ -122,9 +132,7 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should produce empty arrays when labels/assignees are absent', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 10 })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({ number: 10, comments: [] });
 
     const issue = await provider.getIssue(10);
 
@@ -134,9 +142,7 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should omit milestone when raw.milestone is falsy', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 11 })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({ number: 11, comments: [] });
 
     const issue = await provider.getIssue(11);
 
@@ -144,9 +150,10 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should use "unknown" as comment author fallback when author is absent', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 12 })
-      .mockResolvedValueOnce([{ body: 'hello', createdAt: '' }]);
+    getApiMock().getIssue.mockResolvedValue({
+      number: 12,
+      comments: [{ body: 'hello', createdAt: '' }],
+    });
 
     const issue = await provider.getIssue(12);
 
@@ -154,9 +161,11 @@ describe('GitHubProvider – parseIssue type guards', () => {
   });
 
   it('should handle label objects with non-string name gracefully', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({ number: 13, labels: [{ name: 123 }, { name: 'valid' }] })
-      .mockResolvedValueOnce([]);
+    getApiMock().getIssue.mockResolvedValue({
+      number: 13,
+      labels: [{ name: 123 }, { name: 'valid' }],
+      comments: [],
+    });
 
     const issue = await provider.getIssue(13);
 
@@ -166,18 +175,15 @@ describe('GitHubProvider – parseIssue type guards', () => {
 
 describe('GitHubProvider – createPullRequest type guards', () => {
   let provider: GitHubProvider;
-  let mockMCP: GitHubMCPClient;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockMCP = makeMockMCP();
-    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
-    (provider as any).mcpClient = mockMCP;
+    provider = new GitHubProvider('owner/repo', mockLogger);
     await provider.connect();
   });
 
   it('should parse a full createPullRequest response', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().createPullRequest.mockResolvedValue({
       number: 55,
       html_url: 'https://github.com/owner/repo/pull/55',
       title: 'My PR',
@@ -198,7 +204,7 @@ describe('GitHubProvider – createPullRequest type guards', () => {
   });
 
   it('should fall back to params.title when response title is absent', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().createPullRequest.mockResolvedValue({
       number: 56,
       html_url: 'https://github.com/owner/repo/pull/56',
     });
@@ -214,7 +220,7 @@ describe('GitHubProvider – createPullRequest type guards', () => {
   });
 
   it('should fall back to url when html_url is absent', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().createPullRequest.mockResolvedValue({
       number: 57,
       url: 'https://api.github.com/repos/owner/repo/pulls/57',
     });
@@ -230,7 +236,7 @@ describe('GitHubProvider – createPullRequest type guards', () => {
   });
 
   it('should default number to 0 when absent from response', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().createPullRequest.mockResolvedValue({
       html_url: 'https://github.com/owner/repo/pull/0',
       title: 'PR',
     });
@@ -245,14 +251,12 @@ describe('GitHubProvider – createPullRequest type guards', () => {
     expect(pr.number).toBe(0);
   });
 
-  it('should forward labels via a separate issue_write call after PR creation', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({
-        number: 60,
-        html_url: 'https://github.com/owner/repo/pull/60',
-        title: 'PR with labels',
-      })
-      .mockResolvedValueOnce({}); // issue_write response
+  it('should pass labels to api.createPullRequest', async () => {
+    getApiMock().createPullRequest.mockResolvedValue({
+      number: 60,
+      html_url: 'https://github.com/owner/repo/pull/60',
+      title: 'PR with labels',
+    });
 
     await provider.createPullRequest({
       title: 'PR with labels',
@@ -262,26 +266,17 @@ describe('GitHubProvider – createPullRequest type guards', () => {
       labels: ['bug', 'enhancement'],
     });
 
-    // create_pull_request does NOT receive labels (MCP tool schema does not support it)
-    const createCallArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-    expect(createCallArgs[0]).toBe('create_pull_request');
-    expect((createCallArgs[1] as Record<string, unknown>)).not.toHaveProperty('labels');
-
-    // Labels are applied via a follow-up issue_write call
-    const labelCallArgs = vi.mocked(mockMCP.callTool).mock.calls[1];
-    expect(labelCallArgs[0]).toBe('issue_write');
-    expect((labelCallArgs[1] as Record<string, unknown>).labels).toEqual(['bug', 'enhancement']);
-    expect((labelCallArgs[1] as Record<string, unknown>).issue_number).toBe(60);
+    expect(getApiMock().createPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: ['bug', 'enhancement'] }),
+    );
   });
 
-  it('should forward reviewers via a separate update_pull_request call after PR creation', async () => {
-    vi.mocked(mockMCP.callTool)
-      .mockResolvedValueOnce({
-        number: 61,
-        html_url: 'https://github.com/owner/repo/pull/61',
-        title: 'PR with reviewers',
-      })
-      .mockResolvedValueOnce({}); // update_pull_request response
+  it('should pass reviewers to api.createPullRequest', async () => {
+    getApiMock().createPullRequest.mockResolvedValue({
+      number: 61,
+      html_url: 'https://github.com/owner/repo/pull/61',
+      title: 'PR with reviewers',
+    });
 
     await provider.createPullRequest({
       title: 'PR with reviewers',
@@ -291,20 +286,13 @@ describe('GitHubProvider – createPullRequest type guards', () => {
       reviewers: ['alice', 'bob'],
     });
 
-    // create_pull_request does NOT receive reviewers (MCP tool schema does not support it)
-    const createCallArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-    expect(createCallArgs[0]).toBe('create_pull_request');
-    expect((createCallArgs[1] as Record<string, unknown>)).not.toHaveProperty('reviewers');
-
-    // Reviewers are requested via a follow-up update_pull_request call
-    const reviewerCallArgs = vi.mocked(mockMCP.callTool).mock.calls[1];
-    expect(reviewerCallArgs[0]).toBe('update_pull_request');
-    expect((reviewerCallArgs[1] as Record<string, unknown>).reviewers).toEqual(['alice', 'bob']);
-    expect((reviewerCallArgs[1] as Record<string, unknown>).pullNumber).toBe(61);
+    expect(getApiMock().createPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewers: ['alice', 'bob'] }),
+    );
   });
 
-  it('should not include labels or reviewers in MCP call when they are omitted', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+  it('should not include labels or reviewers when they are omitted', async () => {
+    getApiMock().createPullRequest.mockResolvedValue({
       number: 62,
       html_url: 'https://github.com/owner/repo/pull/62',
       title: 'Plain PR',
@@ -317,27 +305,23 @@ describe('GitHubProvider – createPullRequest type guards', () => {
       base: 'main',
     });
 
-    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-    const payload = callArgs[1] as Record<string, unknown>;
-    expect(payload).not.toHaveProperty('labels');
-    expect(payload).not.toHaveProperty('reviewers');
+    const callArgs = getApiMock().createPullRequest.mock.calls[0][0] as Record<string, unknown>;
+    expect(callArgs).not.toHaveProperty('labels');
+    expect(callArgs).not.toHaveProperty('reviewers');
   });
 });
 
 describe('GitHubProvider – getPullRequest type guards', () => {
   let provider: GitHubProvider;
-  let mockMCP: GitHubMCPClient;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockMCP = makeMockMCP();
-    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
-    (provider as any).mcpClient = mockMCP;
+    provider = new GitHubProvider('owner/repo', mockLogger);
     await provider.connect();
   });
 
   it('should parse a full getPullRequest response', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().getPullRequest.mockResolvedValue({
       number: 88,
       html_url: 'https://github.com/owner/repo/pull/88',
       title: 'Great PR',
@@ -355,7 +339,7 @@ describe('GitHubProvider – getPullRequest type guards', () => {
   });
 
   it('should default branch refs to empty string when head/base are absent', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().getPullRequest.mockResolvedValue({
       number: 89,
       title: 'PR no refs',
     });
@@ -367,7 +351,7 @@ describe('GitHubProvider – getPullRequest type guards', () => {
   });
 
   it('should default branch refs to empty string when head/base are not objects', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().getPullRequest.mockResolvedValue({
       number: 90,
       head: 'not-an-object',
       base: 42,
@@ -382,18 +366,15 @@ describe('GitHubProvider – getPullRequest type guards', () => {
 
 describe('GitHubProvider – listPRReviewComments parsing', () => {
   let provider: GitHubProvider;
-  let mockMCP: GitHubMCPClient;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockMCP = makeMockMCP();
-    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
-    (provider as any).mcpClient = mockMCP;
+    provider = new GitHubProvider('owner/repo', mockLogger);
     await provider.connect();
   });
 
   it('should return [] when the MCP response is an empty array', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([]);
+    getApiMock().getPRReviewComments.mockResolvedValue([]);
 
     const threads = await provider.listPRReviewComments(1);
 
@@ -401,7 +382,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should return [] when the MCP response is null or non-array', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce(null);
+    getApiMock().getPRReviewComments.mockResolvedValue(null);
 
     const threads = await provider.listPRReviewComments(1);
 
@@ -409,7 +390,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should parse a fully-populated review thread', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().getPRReviewComments.mockResolvedValue([
       {
         id: 'thread-1',
         isResolved: false,
@@ -444,7 +425,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should map isResolved and isOutdated correctly', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().getPRReviewComments.mockResolvedValue([
       { id: 'r', isResolved: true, isOutdated: true, comments: [] },
     ]);
 
@@ -455,7 +436,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should default isResolved and isOutdated to false when absent', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().getPRReviewComments.mockResolvedValue([
       { id: 'r', comments: [] },
     ]);
 
@@ -466,7 +447,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should default comment author to "unknown" when absent', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().getPRReviewComments.mockResolvedValue([
       {
         id: 'thread-2',
         isResolved: false,
@@ -481,7 +462,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should produce an empty comments array when thread has no comments', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().getPRReviewComments.mockResolvedValue([
       { id: 'empty-thread', isResolved: false, isOutdated: false, comments: [] },
     ]);
 
@@ -491,7 +472,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should omit line from comment when it is not a number', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().getPRReviewComments.mockResolvedValue([
       {
         id: 'thread-3',
         isResolved: false,
@@ -506,7 +487,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should parse multiple threads correctly', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().getPRReviewComments.mockResolvedValue([
       { id: 't1', isResolved: false, isOutdated: false, comments: [] },
       { id: 't2', isResolved: true, isOutdated: false, comments: [] },
     ]);
@@ -520,7 +501,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should parse threads from an envelope { threads: [...] } response', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({
+    getApiMock().getPRReviewComments.mockResolvedValue({
       threads: [
         { id: 'env-thread-1', isResolved: false, isOutdated: false, comments: [] },
       ],
@@ -533,7 +514,7 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should return [] when envelope threads field is missing or non-array', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce({ threads: null });
+    getApiMock().getPRReviewComments.mockResolvedValue({ threads: null });
 
     const threads = await provider.listPRReviewComments(9);
 
@@ -543,18 +524,15 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
 
 describe('GitHubProvider – listPullRequests type guards', () => {
   let provider: GitHubProvider;
-  let mockMCP: GitHubMCPClient;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockMCP = makeMockMCP();
-    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
-    (provider as any).mcpClient = mockMCP;
+    provider = new GitHubProvider('owner/repo', mockLogger);
     await provider.connect();
   });
 
   it('should parse a list of pull requests', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().listPullRequests.mockResolvedValue([
       {
         number: 10,
         html_url: 'https://github.com/owner/repo/pull/10',
@@ -581,7 +559,7 @@ describe('GitHubProvider – listPullRequests type guards', () => {
   });
 
   it('should produce empty list when API returns empty array', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([]);
+    getApiMock().listPullRequests.mockResolvedValue([]);
 
     const prs = await provider.listPullRequests();
 
@@ -589,7 +567,7 @@ describe('GitHubProvider – listPullRequests type guards', () => {
   });
 
   it('should default missing fields to empty string and 0 for each PR', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([{ url: 'https://api.github.com/repos/owner/repo/pulls/0' }]);
+    getApiMock().listPullRequests.mockResolvedValue([{ url: 'https://api.github.com/repos/owner/repo/pulls/0' }]);
 
     const prs = await provider.listPullRequests();
 
@@ -603,18 +581,15 @@ describe('GitHubProvider – listPullRequests type guards', () => {
 
 describe('GitHubProvider – findOpenPR', () => {
   let provider: GitHubProvider;
-  let mockMCP: GitHubMCPClient;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockMCP = makeMockMCP();
-    provider = new GitHubProvider('owner/repo', { command: 'github-mcp-server', args: ['stdio'] }, mockLogger);
-    (provider as any).mcpClient = mockMCP;
+    provider = new GitHubProvider('owner/repo', mockLogger);
     await provider.connect();
   });
 
   it('should return the matching PR when listPullRequests returns a PR with matching headBranch', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().listPullRequests.mockResolvedValue([
       {
         number: 42,
         html_url: 'https://github.com/owner/repo/pull/42',
@@ -633,7 +608,7 @@ describe('GitHubProvider – findOpenPR', () => {
   });
 
   it('should return null when listPullRequests returns an empty array', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([]);
+    getApiMock().listPullRequests.mockResolvedValue([]);
 
     const pr = await provider.findOpenPR(5, 'cadre/issue-5-some-feature');
 
@@ -641,7 +616,7 @@ describe('GitHubProvider – findOpenPR', () => {
   });
 
   it('should return null when no PR matches the given branch name', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().listPullRequests.mockResolvedValue([
       {
         number: 99,
         html_url: 'https://github.com/owner/repo/pull/99',
@@ -657,19 +632,17 @@ describe('GitHubProvider – findOpenPR', () => {
   });
 
   it('should call listPullRequests with head and state open filters', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([]);
+    getApiMock().listPullRequests.mockResolvedValue([]);
 
     await provider.findOpenPR(3, 'my-feature-branch');
 
-    const callArgs = vi.mocked(mockMCP.callTool).mock.calls[0];
-    expect(callArgs[0]).toBe('list_pull_requests');
-    const payload = callArgs[1] as Record<string, unknown>;
-    expect(payload.state).toBe('open');
-    expect(payload.head).toBe('owner:my-feature-branch');
+    expect(getApiMock().listPullRequests).toHaveBeenCalledWith(
+      expect.objectContaining({ head: 'my-feature-branch', state: 'open' }),
+    );
   });
 
   it('should return the first matching PR when multiple PRs match the branch', async () => {
-    vi.mocked(mockMCP.callTool).mockResolvedValueOnce([
+    getApiMock().listPullRequests.mockResolvedValue([
       {
         number: 10,
         html_url: 'https://github.com/owner/repo/pull/10',
@@ -690,5 +663,336 @@ describe('GitHubProvider – findOpenPR', () => {
 
     expect(pr).not.toBeNull();
     expect(pr!.number).toBe(10);
+  });
+});
+
+describe('GitHubProvider – listIssues', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should return a list of issue details', async () => {
+    getApiMock().listIssues.mockResolvedValue([{ number: 1 }, { number: 2 }]);
+    getApiMock().getIssue
+      .mockResolvedValueOnce({ number: 1, title: 'First', state: 'open', comments: [] })
+      .mockResolvedValueOnce({ number: 2, title: 'Second', state: 'closed', comments: [] });
+
+    const issues = await provider.listIssues({});
+
+    expect(issues).toHaveLength(2);
+    expect(issues[0].number).toBe(1);
+    expect(issues[1].number).toBe(2);
+  });
+
+  it('should skip issues that fail to fetch and log a warning', async () => {
+    getApiMock().listIssues.mockResolvedValue([{ number: 10 }, { number: 11 }]);
+    getApiMock().getIssue
+      .mockRejectedValueOnce(new Error('Not found'))
+      .mockResolvedValueOnce({ number: 11, title: 'Good', state: 'open', comments: [] });
+
+    const issues = await provider.listIssues({});
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].number).toBe(11);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('#10'),
+      expect.any(Object),
+    );
+  });
+
+  it('should return empty array when listIssues returns empty', async () => {
+    getApiMock().listIssues.mockResolvedValue([]);
+
+    const issues = await provider.listIssues({});
+
+    expect(issues).toEqual([]);
+  });
+});
+
+describe('GitHubProvider – addIssueComment', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should call api.addIssueComment with correct arguments', async () => {
+    getApiMock().addIssueComment.mockResolvedValue(undefined);
+
+    await provider.addIssueComment(42, 'Hello!');
+
+    expect(getApiMock().addIssueComment).toHaveBeenCalledWith(42, 'Hello!');
+  });
+});
+
+describe('GitHubProvider – updatePullRequest', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should call api.updatePullRequest with correct arguments', async () => {
+    getApiMock().updatePullRequest.mockResolvedValue(undefined);
+
+    await provider.updatePullRequest(55, { title: 'New Title', body: 'New body' });
+
+    expect(getApiMock().updatePullRequest).toHaveBeenCalledWith(55, { title: 'New Title', body: 'New body' });
+  });
+});
+
+describe('GitHubProvider – ensureLabel and applyLabels', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should call api.ensureLabel with name and color', async () => {
+    getApiMock().ensureLabel.mockResolvedValue(undefined);
+
+    await provider.ensureLabel('bug', 'ff0000');
+
+    expect(getApiMock().ensureLabel).toHaveBeenCalledWith('bug', 'ff0000');
+  });
+
+  it('should call api.ensureLabel without color', async () => {
+    getApiMock().ensureLabel.mockResolvedValue(undefined);
+
+    await provider.ensureLabel('enhancement');
+
+    expect(getApiMock().ensureLabel).toHaveBeenCalledWith('enhancement', undefined);
+  });
+
+  it('should call api.applyLabels with prNumber and labels', async () => {
+    getApiMock().applyLabels.mockResolvedValue(undefined);
+
+    await provider.applyLabels(10, ['bug', 'wontfix']);
+
+    expect(getApiMock().applyLabels).toHaveBeenCalledWith(10, ['bug', 'wontfix']);
+  });
+});
+
+describe('GitHubProvider – listPRComments', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should parse an array of PR comments', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      {
+        id: 'c1',
+        user: { login: 'alice', type: 'User' },
+        body: 'Looks good!',
+        created_at: '2024-01-01T00:00:00Z',
+        html_url: 'https://github.com/owner/repo/pull/1#comment-1',
+      },
+    ]);
+
+    const comments = await provider.listPRComments(1);
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0].id).toBe('c1');
+    expect(comments[0].author).toBe('alice');
+    expect(comments[0].isBot).toBe(false);
+    expect(comments[0].body).toBe('Looks good!');
+    expect(comments[0].createdAt).toBe('2024-01-01T00:00:00Z');
+    expect(comments[0].url).toBe('https://github.com/owner/repo/pull/1#comment-1');
+  });
+
+  it('should detect bot comments by login containing [bot]', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      { id: 'b1', user: { login: 'github-actions[bot]' }, body: 'CI passed', created_at: '', html_url: '' },
+    ]);
+
+    const comments = await provider.listPRComments(2);
+
+    expect(comments[0].isBot).toBe(true);
+  });
+
+  it('should detect bot comments by user type', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      { id: 'b2', user: { login: 'some-bot', type: 'Bot' }, body: 'Auto comment', created_at: '', html_url: '' },
+    ]);
+
+    const comments = await provider.listPRComments(3);
+
+    expect(comments[0].isBot).toBe(true);
+  });
+
+  it('should parse an envelope { comments: [...] } response', async () => {
+    getApiMock().getPRComments.mockResolvedValue({
+      comments: [{ id: 'e1', user: { login: 'bob' }, body: 'hi', created_at: '', html_url: '' }],
+    });
+
+    const comments = await provider.listPRComments(4);
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0].id).toBe('e1');
+  });
+
+  it('should return empty array for null or non-array non-object response', async () => {
+    getApiMock().getPRComments.mockResolvedValue(null);
+
+    const comments = await provider.listPRComments(5);
+
+    expect(comments).toEqual([]);
+  });
+
+  it('should fall back to author field when user is absent', async () => {
+    getApiMock().getPRComments.mockResolvedValue([
+      { id: 'c3', author: { login: 'charlie' }, body: 'noted', created_at: '', html_url: '' },
+    ]);
+
+    const comments = await provider.listPRComments(6);
+
+    expect(comments[0].author).toBe('charlie');
+  });
+});
+
+describe('GitHubProvider – listPRReviews', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+    await provider.connect();
+  });
+
+  it('should parse an array of PR reviews', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      {
+        id: 'r1',
+        user: { login: 'alice', type: 'User' },
+        body: 'LGTM',
+        state: 'APPROVED',
+        submitted_at: '2024-01-05T00:00:00Z',
+      },
+    ]);
+
+    const reviews = await provider.listPRReviews(1);
+
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].id).toBe('r1');
+    expect(reviews[0].author).toBe('alice');
+    expect(reviews[0].isBot).toBe(false);
+    expect(reviews[0].body).toBe('LGTM');
+    expect(reviews[0].state).toBe('APPROVED');
+    expect(reviews[0].submittedAt).toBe('2024-01-05T00:00:00Z');
+  });
+
+  it('should detect bot reviews by login', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      { id: 'rb1', user: { login: 'coderabbitai[bot]' }, body: '', state: 'COMMENTED', submitted_at: '' },
+    ]);
+
+    const reviews = await provider.listPRReviews(2);
+
+    expect(reviews[0].isBot).toBe(true);
+  });
+
+  it('should parse an envelope { reviews: [...] } response', async () => {
+    getApiMock().getPRReviews.mockResolvedValue({
+      reviews: [{ id: 'er1', user: { login: 'bob' }, body: 'ok', state: 'APPROVED', submitted_at: '' }],
+    });
+
+    const reviews = await provider.listPRReviews(3);
+
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].id).toBe('er1');
+  });
+
+  it('should return empty array for null response', async () => {
+    getApiMock().getPRReviews.mockResolvedValue(null);
+
+    const reviews = await provider.listPRReviews(4);
+
+    expect(reviews).toEqual([]);
+  });
+
+  it('should fall back to author field when user is absent', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      { id: 'r2', author: { login: 'dave' }, body: '', state: 'CHANGES_REQUESTED', submitted_at: '' },
+    ]);
+
+    const reviews = await provider.listPRReviews(5);
+
+    expect(reviews[0].author).toBe('dave');
+  });
+
+  it('should fall back to submittedAt field when submitted_at is absent', async () => {
+    getApiMock().getPRReviews.mockResolvedValue([
+      { id: 'r3', user: { login: 'eve' }, body: '', state: 'APPROVED', submittedAt: '2024-06-01T00:00:00Z' },
+    ]);
+
+    const reviews = await provider.listPRReviews(6);
+
+    expect(reviews[0].submittedAt).toBe('2024-06-01T00:00:00Z');
+  });
+});
+
+describe('GitHubProvider – lifecycle', () => {
+  let provider: GitHubProvider;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    provider = new GitHubProvider('owner/repo', mockLogger);
+  });
+
+  it('should throw when calling getIssue before connect()', async () => {
+    await expect(provider.getIssue(1)).rejects.toThrow('not connected');
+  });
+
+  it('should throw when calling checkAuth before connect()', async () => {
+    await expect(provider.checkAuth()).rejects.toThrow('not connected');
+  });
+
+  it('should not throw after connect()', async () => {
+    await provider.connect();
+    getApiMock().getIssue.mockResolvedValue({ number: 1, comments: [] });
+    await expect(provider.getIssue(1)).resolves.toBeDefined();
+  });
+
+  it('should throw after disconnect()', async () => {
+    await provider.connect();
+    await provider.disconnect();
+    await expect(provider.getIssue(1)).rejects.toThrow('not connected');
+  });
+
+  it('checkAuth should delegate to api.checkAuth and return true', async () => {
+    await provider.connect();
+    getApiMock().checkAuth.mockResolvedValue(true);
+
+    const result = await provider.checkAuth();
+
+    expect(result).toBe(true);
+    expect(getApiMock().checkAuth).toHaveBeenCalled();
+  });
+
+  it('checkAuth should return false when api.checkAuth returns false', async () => {
+    await provider.connect();
+    getApiMock().checkAuth.mockResolvedValue(false);
+
+    const result = await provider.checkAuth();
+
+    expect(result).toBe(false);
+  });
+
+  it('issueLinkSuffix should return correct closing suffix', () => {
+    expect(provider.issueLinkSuffix(42)).toBe('Closes #42');
   });
 });

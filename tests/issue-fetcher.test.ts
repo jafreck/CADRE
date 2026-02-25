@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueFetcher } from '../src/github/issues.js';
 import { GitHubAPI } from '../src/github/api.js';
-import type { GitHubMCPClient } from '../src/github/mcp-client.js';
 import { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 
@@ -19,16 +18,6 @@ function makeLogger(): Logger {
     warn: vi.fn(),
     error: vi.fn(),
   } as unknown as Logger;
-}
-
-function makeMCP(): GitHubMCPClient {
-  return {
-    callTool: vi.fn(),
-    checkAuth: vi.fn(),
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    isConnected: vi.fn().mockReturnValue(true),
-  } as unknown as GitHubMCPClient;
 }
 
 function getApiMock() {
@@ -61,7 +50,7 @@ describe('IssueFetcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     logger = makeLogger();
-    fetcher = new IssueFetcher('owner/repo', logger, makeMCP());
+    fetcher = new IssueFetcher('owner/repo', logger);
   });
 
   describe('fetchIssue', () => {
@@ -137,6 +126,105 @@ describe('IssueFetcher', () => {
         body: 'LGTM',
         createdAt: '2024-06-01T00:00:00Z',
       });
+    });
+
+    it('parses comment author from user.login (Octokit shape)', async () => {
+      getApiMock().getIssue.mockResolvedValue(
+        makeRawIssue({
+          comments: [
+            { user: { login: 'octocat' }, body: 'Looks good', created_at: '2024-07-01T00:00:00Z' },
+          ],
+        }),
+      );
+
+      const result = await fetcher.fetchIssue(1);
+
+      expect(result.comments[0].author).toBe('octocat');
+    });
+
+    it('parses comment timestamp from created_at (Octokit snake_case)', async () => {
+      getApiMock().getIssue.mockResolvedValue(
+        makeRawIssue({
+          comments: [
+            { user: { login: 'alice' }, body: 'hello', created_at: '2024-08-15T12:00:00Z' },
+          ],
+        }),
+      );
+
+      const result = await fetcher.fetchIssue(1);
+
+      expect(result.comments[0].createdAt).toBe('2024-08-15T12:00:00Z');
+    });
+
+    it('prefers user.login over author.login when both are present', async () => {
+      getApiMock().getIssue.mockResolvedValue(
+        makeRawIssue({
+          comments: [
+            { user: { login: 'user-login' }, author: { login: 'author-login' }, body: 'hi', created_at: '' },
+          ],
+        }),
+      );
+
+      const result = await fetcher.fetchIssue(1);
+
+      expect(result.comments[0].author).toBe('user-login');
+    });
+
+    it('falls back to author.login when user is absent', async () => {
+      getApiMock().getIssue.mockResolvedValue(
+        makeRawIssue({
+          comments: [
+            { author: { login: 'fallback-author' }, body: 'fallback', created_at: '' },
+          ],
+        }),
+      );
+
+      const result = await fetcher.fetchIssue(1);
+
+      expect(result.comments[0].author).toBe('fallback-author');
+    });
+
+    it('prefers created_at over createdAt when both are present', async () => {
+      getApiMock().getIssue.mockResolvedValue(
+        makeRawIssue({
+          comments: [
+            { user: { login: 'bob' }, body: 'test', created_at: '2024-09-01T00:00:00Z', createdAt: '2024-01-01T00:00:00Z' },
+          ],
+        }),
+      );
+
+      const result = await fetcher.fetchIssue(1);
+
+      expect(result.comments[0].createdAt).toBe('2024-09-01T00:00:00Z');
+    });
+
+    it('parses comments with Octokit user.login and created_at fields', async () => {
+      getApiMock().getIssue.mockResolvedValue(
+        makeRawIssue({
+          comments: [
+            { user: { login: 'octocat' }, body: 'Nice work', created_at: '2024-07-01T00:00:00Z' },
+          ],
+        }),
+      );
+
+      const result = await fetcher.fetchIssue(1);
+
+      expect(result.comments[0].author).toBe('octocat');
+      expect(result.comments[0].createdAt).toBe('2024-07-01T00:00:00Z');
+    });
+
+    it('falls back to createdAt when created_at is absent', async () => {
+      getApiMock().getIssue.mockResolvedValue(
+        makeRawIssue({
+          comments: [
+            { author: { login: 'x' }, body: 'hi', createdAt: '2024-02-01T00:00:00Z' },
+          ],
+        }),
+      );
+
+      const result = await fetcher.fetchIssue(1);
+
+      expect(result.comments[0].createdAt).toBe('2024-02-01T00:00:00Z');
     });
 
     it('defaults comment author to "unknown" when missing', async () => {

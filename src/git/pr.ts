@@ -11,7 +11,7 @@ export interface PullRequestInfo {
 }
 
 /**
- * Creates pull requests using the GitHub MCP server via GitHubAPI.
+ * Creates pull requests using GitHubAPI.
  */
 export class PullRequestCreator {
   constructor(
