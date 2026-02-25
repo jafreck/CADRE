@@ -12,6 +12,8 @@ You will receive:
 
 Read all task result summaries before composing the PR. Understand the full scope of changes to write an accurate, coherent description.
 
+If your context file's `payload` contains a `previousParseError` field, a prior attempt to compose the PR failed because the output could not be parsed. The error message describes what was wrong. **Fix the issue described in the error and ensure your output is valid this time.**
+
 ## Output Contract
 
 Write a `pr-content.md` file at the path specified by `outputPath` in your context file. The file must contain a `cadre-json` fenced block with the PR content. **The fence language must be `cadre-json` exactly — cadre uses this marker to parse the output; a plain `json` block will not be detected.**
