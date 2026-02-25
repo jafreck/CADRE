@@ -185,8 +185,11 @@ export class WorktreeManager {
       return this.git.revparse([this.baseBranch]);
     });
 
-    // Create the deps branch from the base commit
-    await this.git.branch([depsBranch, baseCommit.trim()]);
+    // Create the deps branch from the base commit; skip if resuming and it already exists
+    const depsBranchExists = await this.branchExistsLocal(depsBranch);
+    if (!depsBranchExists) {
+      await this.git.branch([depsBranch, baseCommit.trim()]);
+    }
 
     // Create a temporary worktree to perform merges on the deps branch
     const depsWorktreePath = join(this.worktreeRoot, `deps-${issueNumber}`);
@@ -194,6 +197,7 @@ export class WorktreeManager {
     await this.git.raw(['worktree', 'add', depsWorktreePath, depsBranch]);
     const depsGit = simpleGit(depsWorktreePath);
 
+    let mergeSucceeded = false;
     try {
       // Merge each dependency branch in order
       for (const dep of deps) {
@@ -225,9 +229,14 @@ export class WorktreeManager {
           );
         }
       }
+      mergeSucceeded = true;
     } finally {
       // Always clean up the temporary deps worktree
       await this.git.raw(['worktree', 'remove', depsWorktreePath, '--force']).catch(() => {});
+      // On failure, delete the deps branch so retries can recreate it cleanly
+      if (!mergeSucceeded) {
+        await this.git.branch(['-D', depsBranch]).catch(() => {});
+      }
     }
 
     // Create the issue branch from the HEAD of the deps branch
