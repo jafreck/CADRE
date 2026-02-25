@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { extractCadreJson } from '../util/cadre-json.js';
+import { extractCadreJson, extractCadreJsonWithError } from '../util/cadre-json.js';
 import type {
   AgentSession,
   AnalysisResult,
@@ -104,7 +104,7 @@ export class ResultParser {
   async parsePRContent(contentPath: string): Promise<PRContent> {
     const content = await readFile(contentPath, 'utf-8');
 
-    const parsed = extractCadreJson(content);
+    const { parsed, parseError } = extractCadreJsonWithError(content);
     if (parsed !== null) {
       const result = prContentSchema.parse(parsed);
       return { ...result, body: this.unescapeText(result.body) };
@@ -112,7 +112,8 @@ export class ResultParser {
 
     throw new Error(
       `Agent output in ${contentPath} is missing a \`cadre-json\` block. ` +
-      'The PR-content agent must emit a ```cadre-json``` fenced block containing title, body, and labels.',
+      'The PR-content agent must emit a ```cadre-json``` fenced block containing title, body, and labels.' +
+      (parseError ? ` Parse error: ${parseError}` : ''),
     );
   }
 
