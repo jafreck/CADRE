@@ -79,7 +79,7 @@ export class GitHubAPI {
     }
 
     const issues = await this.octokit.paginate(this.octokit.rest.issues.listForRepo, params);
-    return issues as unknown as Record<string, unknown>[];
+    return (filters.limit ? issues.slice(0, filters.limit) : issues) as unknown as Record<string, unknown>[];
   }
 
   /**
@@ -364,11 +364,12 @@ export class GitHubAPI {
       queryParts.push(`assignee:${filters.assignee}`);
     }
 
+    const limit = filters.limit ?? 30;
     const items = await this.octokit.paginate(this.octokit.rest.search.issuesAndPullRequests, {
       q: queryParts.join(' '),
-      per_page: filters.limit ?? 30,
+      per_page: Math.min(limit, 100),
     });
 
-    return items as unknown as Record<string, unknown>[];
+    return items.slice(0, limit) as unknown as Record<string, unknown>[];
   }
 }

@@ -43,9 +43,12 @@ function resolveGitHubAuthEnv(
   }
 
   if (auth && 'appId' in auth) {
-    // GitHub App auth
-    logger.info('Using GitHub App authentication');
-    // App credentials remain in config; token obtained at runtime
+    // GitHub App auth is not yet implemented via Octokit.
+    // Octokit will fall through to use GITHUB_TOKEN if set, or run unauthenticated.
+    logger.warn(
+      'GitHub App authentication (appId) is not yet supported in this implementation. ' +
+        'Set GITHUB_TOKEN or use github.auth.token instead.',
+    );
     return;
   }
 

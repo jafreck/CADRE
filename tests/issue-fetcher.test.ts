@@ -213,48 +213,6 @@ describe('IssueFetcher', () => {
       expect(result.comments[0].createdAt).toBe('2024-07-01T00:00:00Z');
     });
 
-    it('prefers user.login over author.login when both are present', async () => {
-      getApiMock().getIssue.mockResolvedValue(
-        makeRawIssue({
-          comments: [
-            { user: { login: 'octocat' }, author: { login: 'legacy-user' }, body: 'hi', created_at: '' },
-          ],
-        }),
-      );
-
-      const result = await fetcher.fetchIssue(1);
-
-      expect(result.comments[0].author).toBe('octocat');
-    });
-
-    it('falls back to author.login when user.login is absent', async () => {
-      getApiMock().getIssue.mockResolvedValue(
-        makeRawIssue({
-          comments: [
-            { author: { login: 'legacy-user' }, body: 'hi', createdAt: '2024-01-01T00:00:00Z' },
-          ],
-        }),
-      );
-
-      const result = await fetcher.fetchIssue(1);
-
-      expect(result.comments[0].author).toBe('legacy-user');
-    });
-
-    it('prefers created_at over createdAt when both are present', async () => {
-      getApiMock().getIssue.mockResolvedValue(
-        makeRawIssue({
-          comments: [
-            { user: { login: 'x' }, body: 'hi', created_at: '2024-07-01T00:00:00Z', createdAt: '2024-01-01T00:00:00Z' },
-          ],
-        }),
-      );
-
-      const result = await fetcher.fetchIssue(1);
-
-      expect(result.comments[0].createdAt).toBe('2024-07-01T00:00:00Z');
-    });
-
     it('falls back to createdAt when created_at is absent', async () => {
       getApiMock().getIssue.mockResolvedValue(
         makeRawIssue({

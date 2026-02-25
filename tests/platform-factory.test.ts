@@ -108,7 +108,7 @@ describe('createPlatformProvider', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('token-based'));
     });
 
-    it('should log info when GitHub App auth is used', () => {
+    it('should log warn when GitHub App auth is used', () => {
       const config = makeRuntimeConfig({
         platform: 'github',
         github: {
@@ -117,7 +117,7 @@ describe('createPlatformProvider', () => {
       });
       const logger = makeLogger();
       createPlatformProvider(config, logger);
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('GitHub App'));
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('GitHub App'));
     });
 
     it('should pass repository to GitHubProvider constructor', () => {
