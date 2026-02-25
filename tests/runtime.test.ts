@@ -137,6 +137,27 @@ vi.mock('../src/util/process.js', () => ({
   killAllTrackedProcesses: vi.fn(),
 }));
 
+vi.mock('simple-git', () => {
+  const mockGit = {
+    raw: vi.fn().mockResolvedValue(''),
+  };
+  return {
+    simpleGit: vi.fn(() => mockGit),
+    default: vi.fn(() => mockGit),
+  };
+});
+
+vi.mock('../src/validation/index.js', async (importActual) => {
+  const actual = await importActual<typeof import('../src/validation/index.js')>();
+  return {
+    ...actual,
+    PreRunValidationSuite: vi.fn().mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue(true),
+    })),
+    checkStaleState: vi.fn().mockResolvedValue({ hasConflicts: false, conflicts: new Map() }),
+  };
+});
+
 import { CadreRuntime } from '../src/core/runtime.js';
 import { createNotificationManager } from '../src/notifications/manager.js';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
@@ -144,6 +165,7 @@ import { createPlatformProvider } from '../src/platform/factory.js';
 import { FleetProgressWriter } from '../src/core/progress.js';
 import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoint.js';
 import { exists } from '../src/util/fs.js';
+import { checkStaleState } from '../src/validation/index.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
@@ -689,5 +711,216 @@ describe('CadreRuntime — status() rendering', () => {
     expect(output).toContain('Issue #42');
     expect(output).toContain('Fix the widget bug');
     expect(output).toContain('Implementation'); // phaseNames[2] for phase 3
+  });
+});
+
+describe('CadreRuntime — stale-state check wiring', () => {
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processExitSpy: ReturnType<typeof vi.spyOn>;
+  let mockCheckStaleState: ReturnType<typeof vi.fn>;
+
+  function makeConfigWithValidation(issueIds = [42]) {
+    return makeRuntimeConfig({
+      stateDir: '/tmp/cadre-state',
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: issueIds },
+      commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+      pullRequest: { autoCreate: true, draft: true, labels: [], reviewers: [], linkIssue: true },
+      options: {
+        maxParallelIssues: 3,
+        maxParallelAgents: 3,
+        maxRetriesPerTask: 3,
+        dryRun: false,
+        resume: false,
+        invocationDelayMs: 0,
+        buildVerification: false,
+        testVerification: false,
+        perTaskBuildCheck: true,
+        maxBuildFixRounds: 2,
+        skipValidation: false,
+        maxIntegrationFixRounds: 1,
+        ambiguityThreshold: 5,
+        haltOnAmbiguity: false,
+        respondToReviews: false,
+      },
+      agent: {
+        backend: 'copilot',
+        copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
+        claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+      },
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as unknown as (code?: number) => never);
+
+    mockCheckStaleState = checkStaleState as unknown as ReturnType<typeof vi.fn>;
+    mockCheckStaleState.mockResolvedValue({ hasConflicts: false, conflicts: new Map() });
+
+    MockCreateNotificationManager.mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    });
+
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      listPullRequests: vi.fn().mockResolvedValue([]),
+      getIssue: vi.fn().mockResolvedValue({
+        number: 42,
+        title: 'Test issue',
+        body: '',
+        labels: [],
+        state: 'open',
+        url: 'https://github.com/owner/repo/issues/42',
+        author: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+      }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        codeDoneNoPR: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    processOnSpy.mockRestore();
+    processExitSpy.mockRestore();
+  });
+
+  it('should skip the stale-state check when skipValidation is true', async () => {
+    const config = makeConfig([42]); // skipValidation: true
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+    expect(mockCheckStaleState).not.toHaveBeenCalled();
+  });
+
+  it('should skip the stale-state check when issues is a query (not explicit ids)', async () => {
+    const config = makeRuntimeConfig({
+      ...makeConfigWithValidation(),
+      issues: { query: { state: 'open', limit: 10 } },
+    });
+    const mockProvider = {
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      listIssues: vi.fn().mockResolvedValue([]),
+      listPullRequests: vi.fn().mockResolvedValue([]),
+    };
+    MockCreatePlatformProvider.mockReturnValue(mockProvider);
+
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+    expect(mockCheckStaleState).not.toHaveBeenCalled();
+  });
+
+  it('should run the stale-state check when skipValidation is false and ids are provided', async () => {
+    const config = makeConfigWithValidation([42]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+    expect(mockCheckStaleState).toHaveBeenCalledOnce();
+  });
+
+  it('should pass the issue ids to checkStaleState', async () => {
+    const config = makeConfigWithValidation([10, 20]);
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      listPullRequests: vi.fn().mockResolvedValue([]),
+      getIssue: vi.fn().mockResolvedValue({
+        number: 10,
+        title: 'Test issue',
+        body: '',
+        labels: [],
+        state: 'open',
+        url: '',
+        author: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+      }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+    const [issueNumbers] = mockCheckStaleState.mock.calls[0];
+    expect(issueNumbers).toEqual([10, 20]);
+  });
+
+  it('should call process.exit(1) when stale-state conflicts are found', async () => {
+    const conflicts = new Map([[42, [{ kind: 'worktree', description: 'exists' }]]]);
+    mockCheckStaleState.mockResolvedValue({ hasConflicts: true, conflicts });
+
+    const config = makeConfigWithValidation([42]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run().catch(() => {});
+
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('should not create FleetOrchestrator when stale-state conflicts are found', async () => {
+    const conflicts = new Map([[42, [{ kind: 'worktree', description: 'exists' }]]]);
+    mockCheckStaleState.mockResolvedValue({ hasConflicts: true, conflicts });
+
+    // Make process.exit throw so execution stops after the stale-state check
+    processExitSpy.mockImplementation((() => { throw new Error('process.exit called'); }) as unknown as (code?: number) => never);
+
+    const config = makeConfigWithValidation([42]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run().catch(() => {});
+
+    expect(MockFleetOrchestrator).not.toHaveBeenCalled();
+  });
+
+  it('should continue normally when checkStaleState returns no conflicts', async () => {
+    mockCheckStaleState.mockResolvedValue({ hasConflicts: false, conflicts: new Map() });
+
+    const config = makeConfigWithValidation([42]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    expect(MockFleetOrchestrator).toHaveBeenCalledOnce();
+  });
+
+  it('should call provider.connect() before checkStaleState', async () => {
+    const connectSpy = vi.fn().mockResolvedValue(undefined);
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: connectSpy,
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      listPullRequests: vi.fn().mockResolvedValue([]),
+      getIssue: vi.fn().mockResolvedValue({
+        number: 42, title: 'Test', body: '', labels: [], state: 'open',
+        url: '', author: 'u', createdAt: '', updatedAt: '', comments: [],
+      }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    const config = makeConfigWithValidation([42]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    const connectCallOrder = connectSpy.mock.invocationCallOrder[0];
+    const checkStaleCallOrder = mockCheckStaleState.mock.invocationCallOrder[0];
+    expect(connectCallOrder).toBeLessThan(checkStaleCallOrder);
   });
 });

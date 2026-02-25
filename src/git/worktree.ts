@@ -609,7 +609,7 @@ export class WorktreeManager {
   /**
    * Get the worktree directory path for an issue.
    */
-  private getWorktreePath(issueNumber: number): string {
+  public getWorktreePath(issueNumber: number): string {
     return join(this.worktreeRoot, `issue-${issueNumber}`);
   }
 

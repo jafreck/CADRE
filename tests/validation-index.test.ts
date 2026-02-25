@@ -6,8 +6,10 @@ import {
   platformValidator,
   commandValidator,
   diskValidator,
+  checkStaleState,
+  resolveStaleState,
 } from '../src/validation/index.js';
-import type { ValidationResult, PreRunValidator } from '../src/validation/index.js';
+import type { ValidationResult, PreRunValidator, StaleConflict, StaleStateResult } from '../src/validation/index.js';
 
 describe('src/validation/index.ts re-exports', () => {
   describe('type exports', () => {
@@ -74,6 +76,26 @@ describe('src/validation/index.ts re-exports', () => {
       ];
       const uniqueNames = new Set(names);
       expect(uniqueNames.size).toBe(5);
+    });
+  });
+
+  describe('stale-state validator exports', () => {
+    it('should export checkStaleState as a function', () => {
+      expect(typeof checkStaleState).toBe('function');
+    });
+
+    it('should export resolveStaleState as a function', () => {
+      expect(typeof resolveStaleState).toBe('function');
+    });
+
+    it('should export StaleConflict type usable as an object', () => {
+      const conflict: StaleConflict = { kind: 'worktree', description: 'test' };
+      expect(conflict.kind).toBe('worktree');
+    });
+
+    it('should export StaleStateResult type usable as an object', () => {
+      const result: StaleStateResult = { hasConflicts: false, conflicts: new Map() };
+      expect(result.hasConflicts).toBe(false);
     });
   });
 });
