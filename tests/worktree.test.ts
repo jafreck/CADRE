@@ -620,5 +620,75 @@ describe('WorktreeManager', () => {
       expect(thrown!.issueNumber).toBe(42);
       expect(thrown!.conflictingBranch).toContain('issue-10');
     });
+
+    it('should write dep-conflict.json with required fields on merge conflict', async () => {
+      const mockWriteFile = vi.mocked(fsp.writeFile);
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\nsrc/bar.ts\n');
+        return Promise.resolve('');
+      });
+
+      const dep = makeDep(10, 'dep issue');
+      await expect(manager.provisionWithDeps(42, 'my issue', [dep])).rejects.toThrow(
+        DependencyMergeConflictError,
+      );
+
+      const writeFileCalls = mockWriteFile.mock.calls;
+      const conflictWrite = writeFileCalls.find((args) =>
+        String(args[0]).endsWith('dep-conflict.json'),
+      );
+      expect(conflictWrite).toBeDefined();
+
+      const writtenContent = JSON.parse(conflictWrite![1] as string);
+      expect(writtenContent.issueNumber).toBe(42);
+      expect(writtenContent.conflictingBranch).toContain('issue-10');
+      expect(Array.isArray(writtenContent.conflictedFiles)).toBe(true);
+      expect(writtenContent.conflictedFiles).toContain('src/foo.ts');
+      expect(typeof writtenContent.timestamp).toBe('string');
+      // Timestamp should be a valid ISO 8601 string
+      expect(() => new Date(writtenContent.timestamp).toISOString()).not.toThrow();
+    });
+
+    it('should merge each dep branch in the order provided', async () => {
+      const mergeFn = vi.fn().mockResolvedValue(undefined);
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = mergeFn;
+
+      const deps = [makeDep(10, 'first dep'), makeDep(20, 'second dep'), makeDep(30, 'third dep')];
+      await manager.provisionWithDeps(42, 'my issue', deps);
+
+      expect(mergeFn).toHaveBeenCalledTimes(3);
+      const mergeArgs = mergeFn.mock.calls.map((c: string[][]) => c[0][0]);
+      expect(mergeArgs[0]).toContain('issue-10');
+      expect(mergeArgs[1]).toContain('issue-20');
+      expect(mergeArgs[2]).toContain('issue-30');
+    });
+
+    it('should remove the temp deps worktree even when a merge conflict occurs', async () => {
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\n');
+        return Promise.resolve('');
+      });
+
+      const dep = makeDep(10, 'dep issue');
+      await expect(manager.provisionWithDeps(42, 'my issue', [dep])).rejects.toThrow(
+        DependencyMergeConflictError,
+      );
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls;
+      const worktreeRemove = rawCalls.find(
+        (args: string[][]) =>
+          Array.isArray(args[0]) &&
+          args[0][0] === 'worktree' &&
+          args[0][1] === 'remove' &&
+          (args[0][2] as string)?.includes('deps-42'),
+      );
+      expect(worktreeRemove).toBeDefined();
+    });
   });
 });
