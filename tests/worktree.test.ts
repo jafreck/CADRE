@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { simpleGit } from 'simple-git';
+import * as fsp from 'node:fs/promises';
 import { WorktreeManager, RemoteBranchMissingError } from '../src/git/worktree.js';
 import { DependencyMergeConflictError } from '../src/errors.js';
 import { Logger } from '../src/logging/logger.js';
 import * as fsUtils from '../src/util/fs.js';
+
+// Mock node:fs/promises so we can assert dep-conflict.json writes without touching disk
+vi.mock('node:fs/promises', () => ({
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockResolvedValue(''),
+  readdir: vi.fn().mockResolvedValue([]),
+}));
 
 // Mock simple-git
 vi.mock('simple-git', () => {
