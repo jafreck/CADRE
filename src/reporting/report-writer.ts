@@ -100,7 +100,7 @@ export class ReportWriter {
    * Returns the path of the written file.
    */
   async write(report: RunReport): Promise<string> {
-    const reportsDir = join(this.config.repoPath, '.cadre', 'reports');
+    const reportsDir = join(this.config.stateDir, 'reports');
     await ensureDir(reportsDir);
 
     const timestamp = report.startTime.replace(/[:.]/g, '-');
