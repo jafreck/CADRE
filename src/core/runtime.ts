@@ -25,6 +25,9 @@ import {
 } from '../validation/index.js';
 import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
+import { DependencyResolver } from './dependency-resolver.js';
+import type { IssueDag } from './issue-dag.js';
+import { DependencyResolutionError } from '../errors.js';
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
@@ -163,6 +166,22 @@ export class CadreRuntime {
     const launcher = new AgentLauncher(this.config, this.logger);
     await launcher.init();
 
+    // 3b. Optionally resolve issue dependency graph (DAG mode)
+    let dag: IssueDag | undefined;
+    if (this.config.dag?.enabled) {
+      this.logger.info('DAG mode enabled — resolving issue dependency graph');
+      const resolver = new DependencyResolver(this.config, launcher, this.logger);
+      try {
+        dag = await resolver.resolve(issues, this.config.repoPath);
+        this.logger.info(`DAG resolved: ${dag.getWaves().length} wave(s)`);
+      } catch (err) {
+        if (err instanceof DependencyResolutionError) {
+          throw new Error(`DAG dependency resolution failed: ${err.message}`);
+        }
+        throw err;
+      }
+    }
+
     // 4. Create and run fleet orchestrator
     const fleet = new FleetOrchestrator(
       this.config,
@@ -172,6 +191,7 @@ export class CadreRuntime {
       this.provider,
       this.logger,
       this.notifications,
+      dag,
     );
 
     const result = this.config.options.respondToReviews

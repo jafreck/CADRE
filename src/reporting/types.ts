@@ -6,6 +6,7 @@ export interface RunIssueSummary {
   tokens: number;
   duration: number;
   error?: string;
+  wave?: number;
 }
 
 export interface RunPhaseSummary {

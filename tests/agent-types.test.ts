@@ -5,6 +5,7 @@ import type { AgentName } from '../src/agents/types.js';
 const ALL_AGENT_NAMES: AgentName[] = [
   'issue-analyst',
   'codebase-scout',
+  'dependency-analyst',
   'implementation-planner',
   'adjudicator',
   'code-writer',
@@ -16,8 +17,8 @@ const ALL_AGENT_NAMES: AgentName[] = [
 ];
 
 describe('AGENT_DEFINITIONS', () => {
-  it('should contain exactly 12 entries', () => {
-    expect(AGENT_DEFINITIONS).toHaveLength(12);
+  it('should contain exactly 13 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(13);
   });
 
   it('should have one entry for each AgentName', () => {
@@ -115,5 +116,14 @@ describe('AGENT_DEFINITIONS', () => {
     const def = AGENT_DEFINITIONS.find((d) => d.name === 'pr-composer');
     expect(def?.phase).toBe(5);
     expect(def?.phaseName).toBe('PR Composition');
+  });
+
+  it('should have dependency-analyst with correct metadata', () => {
+    const def = AGENT_DEFINITIONS.find((d) => d.name === 'dependency-analyst');
+    expect(def).toBeDefined();
+    expect(def?.phase).toBe(1);
+    expect(def?.phaseName).toBe('Analysis & Scouting');
+    expect(def?.hasStructuredOutput).toBe(true);
+    expect(def?.templateFile).toBe('dependency-analyst.md');
   });
 });

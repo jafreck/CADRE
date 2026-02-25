@@ -59,7 +59,8 @@ function buildProgram(): Command {
     .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
     .option('--no-pr', 'Skip PR creation')
     .option('--respond-to-reviews', 'Respond to pull request reviews instead of processing new issues')
-    .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files');
+    .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files')
+    .option('--dag', 'Enable DAG-based dependency ordering of issues (overrides config)');
   program.command('status').description('Show current pipeline status');
   program.command('reset').description('Reset pipeline state');
   program.command('worktrees').description('List or prune CADRE-managed worktrees');
@@ -175,6 +176,37 @@ describe('src/index.ts command registration', () => {
     const runCmd = program.commands.find((c) => c.name() === 'run')!;
     runCmd.parseOptions([]);
     expect(runCmd.opts().respondToReviews).toBeUndefined();
+  });
+
+  it('should register --dag option on the run command', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run');
+    expect(runCmd).toBeDefined();
+    const optionNames = runCmd!.options.map((o) => o.long);
+    expect(optionNames).toContain('--dag');
+  });
+
+  it('should set dag to true when --dag is provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions(['--dag']);
+    expect(runCmd.opts().dag).toBe(true);
+  });
+
+  it('should not set dag when --dag is not provided', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions([]);
+    expect(runCmd.opts().dag).toBeUndefined();
+  });
+
+  it('should accept --dag combined with --issue', () => {
+    const program = buildProgram();
+    const runCmd = program.commands.find((c) => c.name() === 'run')!;
+    runCmd.parseOptions(['--dag', '--issue', '1', '2']);
+    const opts = runCmd.opts();
+    expect(opts.dag).toBe(true);
+    expect(opts.issue).toEqual(['1', '2']);
   });
 
   it('should accept --respond-to-reviews combined with --issue', () => {
@@ -330,5 +362,74 @@ describe('cadre run autoscaffold behavior', () => {
 
     expect(scaffoldMissingAgentsMock).not.toHaveBeenCalled();
     expect(process.exit).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('cadre run --dag flag runtime behavior', () => {
+  const originalArgv = process.argv;
+
+  beforeEach(() => {
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  async function loadRunWithDag(args: string[]) {
+    process.argv = ['node', 'index.js', 'run', ...args];
+    vi.resetModules();
+
+    let capturedConfig: Record<string, unknown> | null = null;
+    const baseConfig = {
+      copilot: { agentDir: '/agent-dir' },
+      agent: {
+        backend: 'copilot',
+        copilot: { agentDir: '/agent-dir' },
+        claude: { agentDir: '/agent-dir' },
+      },
+      dag: { enabled: false },
+    };
+
+    vi.doMock('../src/config/loader.js', () => ({
+      loadConfig: vi.fn().mockResolvedValue({ ...baseConfig }),
+      applyOverrides: vi.fn((c: unknown) => c),
+    }));
+    vi.doMock('../src/core/runtime.js', () => ({
+      CadreRuntime: vi.fn().mockImplementation((cfg: Record<string, unknown>) => {
+        capturedConfig = cfg;
+        return { run: vi.fn().mockResolvedValue({ success: true }) };
+      }),
+    }));
+    vi.doMock('../src/core/agent-launcher.js', () => ({
+      AgentLauncher: { validateAgentFiles: vi.fn().mockResolvedValue([]) },
+    }));
+    vi.doMock('../src/cli/agents.js', () => ({
+      registerAgentsCommand: vi.fn(),
+      refreshAgentsFromTemplates: vi.fn().mockResolvedValue(0),
+      scaffoldMissingAgents: vi.fn().mockResolvedValue(0),
+    }));
+
+    await import('../src/index.js').catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    return capturedConfig as Record<string, unknown> | null;
+  }
+
+  it('should set config.dag.enabled to true when --dag flag is provided', async () => {
+    const config = await loadRunWithDag(['--dag']);
+    expect(config).not.toBeNull();
+    expect((config as Record<string, unknown> & { dag?: { enabled: boolean } })?.dag?.enabled).toBe(true);
+  });
+
+  it('should not change dag.enabled when --dag flag is not provided', async () => {
+    const config = await loadRunWithDag([]);
+    expect(config).not.toBeNull();
+    // dag.enabled should remain false (the config file value)
+    expect((config as Record<string, unknown> & { dag?: { enabled: boolean } })?.dag?.enabled).toBe(false);
   });
 });

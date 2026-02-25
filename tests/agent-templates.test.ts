@@ -7,8 +7,8 @@ const TEMPLATES_DIR = resolve(__dirname, '../src/agents/templates');
 
 describe('Agent Template Files', () => {
   describe('AGENT_DEFINITIONS templateFile entries', () => {
-    it('should have 12 agent definitions', () => {
-      expect(AGENT_DEFINITIONS).toHaveLength(12);
+    it('should have 13 agent definitions', () => {
+      expect(AGENT_DEFINITIONS).toHaveLength(13);
     });
 
     it('each templateFile should be a .md file', () => {
@@ -52,9 +52,9 @@ describe('Agent Template Files', () => {
   });
 
   describe('src/agents/templates/ directory', () => {
-    it('should contain exactly 12 .md files', () => {
+    it('should contain exactly 13 .md files', () => {
       const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.md'));
-      expect(files).toHaveLength(12);
+      expect(files).toHaveLength(13);
     });
 
     it('should not contain any non-.md files', () => {

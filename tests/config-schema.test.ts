@@ -856,6 +856,47 @@ describe('CadreConfigSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('dag', () => {
+    it('should default dag to { enabled: false, verifyDepsBuild: false, autoMerge: false } when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.dag).toEqual({ enabled: false, verifyDepsBuild: false, autoMerge: false });
+    });
+
+    it('should accept dag with all fields set to true', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dag: { enabled: true, verifyDepsBuild: true, autoMerge: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.dag.enabled).toBe(true);
+        expect(result.data.dag.verifyDepsBuild).toBe(true);
+        expect(result.data.dag.autoMerge).toBe(true);
+      }
+    });
+
+    it('should accept dag with only enabled set', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dag: { enabled: true },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.dag.enabled).toBe(true);
+        expect(result.data.dag.verifyDepsBuild).toBe(false);
+        expect(result.data.dag.autoMerge).toBe(false);
+      }
+    });
+
+    it('should reject non-boolean dag.enabled', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dag: { enabled: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
 
 describe('AgentConfigSchema', () => {

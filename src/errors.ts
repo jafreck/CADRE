@@ -45,3 +45,32 @@ export class SchemaValidationError extends Error {
     this.received = received;
   }
 }
+
+export class CyclicDependencyError extends Error {
+  issueNumbers: number[];
+
+  constructor(message: string, issueNumbers: number[]) {
+    super(message);
+    this.name = 'CyclicDependencyError';
+    this.issueNumbers = issueNumbers;
+  }
+}
+
+export class DependencyResolutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DependencyResolutionError';
+  }
+}
+
+export class DependencyMergeConflictError extends Error {
+  issueNumber: number;
+  conflictingBranch: string;
+
+  constructor(message: string, issueNumber: number, conflictingBranch: string) {
+    super(message);
+    this.name = 'DependencyMergeConflictError';
+    this.issueNumber = issueNumber;
+    this.conflictingBranch = conflictingBranch;
+  }
+}

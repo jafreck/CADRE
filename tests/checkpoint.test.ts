@@ -585,4 +585,60 @@ describe('FleetCheckpointManager', () => {
     };
     expect(withUpdatedAt.updatedAt).toBe('2024-01-01T00:00:00.000Z');
   });
+
+  it('FleetIssueStatus should accept dep-failed, dep-merge-conflict, dep-build-broken, dep-blocked as valid statuses', () => {
+    const depFailed: FleetIssueStatus = { status: 'dep-failed', issueTitle: 'Dep failed', worktreePath: '/path', branchName: 'branch', lastPhase: 1 };
+    const depMerge: FleetIssueStatus = { status: 'dep-merge-conflict', issueTitle: 'Dep merge conflict', worktreePath: '/path', branchName: 'branch', lastPhase: 1 };
+    const depBroken: FleetIssueStatus = { status: 'dep-build-broken', issueTitle: 'Dep build broken', worktreePath: '/path', branchName: 'branch', lastPhase: 1 };
+    const depBlocked: FleetIssueStatus = { status: 'dep-blocked', issueTitle: 'Dep blocked', worktreePath: '/path', branchName: 'branch', lastPhase: 0 };
+
+    expect(depFailed.status).toBe('dep-failed');
+    expect(depMerge.status).toBe('dep-merge-conflict');
+    expect(depBroken.status).toBe('dep-build-broken');
+    expect(depBlocked.status).toBe('dep-blocked');
+  });
+
+  it('isIssueCompleted should return true for dep-blocked status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(50, 'dep-blocked', '/path', 'branch', 0, 'Dep blocked issue');
+    expect(manager.isIssueCompleted(50)).toBe(true);
+  });
+
+  it('isIssueCompleted should return false for dep-failed status', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(51, 'dep-failed', '/path', 'branch', 0, 'Dep failed issue');
+    expect(manager.isIssueCompleted(51)).toBe(false);
+  });
+
+  it('setDag and markWaveComplete should round-trip through save/load', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+
+    const dag: Record<number, number[]> = { 1: [], 2: [1], 3: [1] };
+    const waves: number[][] = [[1], [2, 3]];
+    await manager.setDag(dag, waves);
+
+    const manager2 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager2.load();
+    const state2 = manager2.getState();
+    expect(state2.dag).toEqual(dag);
+    expect(state2.waves).toEqual(waves);
+    expect(state2.completedWaves).toEqual([]);
+
+    await manager2.markWaveComplete(0);
+    const manager3 = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager3.load();
+    expect(manager3.getState().completedWaves).toEqual([0]);
+  });
+
+  it('markWaveComplete should not duplicate entries', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setDag({ 1: [] }, [[1]]);
+    await manager.markWaveComplete(0);
+    await manager.markWaveComplete(0);
+    expect(manager.getState().completedWaves).toEqual([0]);
+  });
 });

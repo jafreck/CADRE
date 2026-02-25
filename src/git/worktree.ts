@@ -4,6 +4,8 @@ import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir } from '../util/fs.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
+import { DependencyMergeConflictError } from '../errors.js';
+import type { IssueDetail } from '../platform/provider.js';
 
 export class RemoteBranchMissingError extends Error {
   constructor(branch: string) {
@@ -145,6 +147,120 @@ export class WorktreeManager {
       issueNumber,
       path: worktreePath,
       branch,
+      exists: true,
+      baseCommit: baseCommit.trim(),
+      syncedAgentFiles,
+    };
+  }
+
+  /**
+   * Create a worktree for an issue that depends on other issues.
+   * Merges dependency branches (in topological order as provided) onto a
+   * `cadre/deps-{issueNumber}` base branch, then creates the issue branch from it.
+   * Throws DependencyMergeConflictError on merge conflict and writes .cadre/dep-conflict.json.
+   */
+  async provisionWithDeps(
+    issueNumber: number,
+    issueTitle: string,
+    deps: IssueDetail[],
+    resume?: boolean,
+  ): Promise<WorktreeInfo> {
+    const depsBranch = `cadre/deps-${issueNumber}`;
+    const issueBranch = this.resolveBranchName(issueNumber, issueTitle);
+    const worktreePath = this.getWorktreePath(issueNumber);
+
+    // Return existing worktree if already on disk
+    if (await exists(worktreePath)) {
+      this.logger.info(`Worktree already exists for issue #${issueNumber}`, {
+        issueNumber,
+        data: { path: worktreePath, branch: issueBranch },
+      });
+      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
+      const baseCommit = await this.getBaseCommit(worktreePath);
+      return { issueNumber, path: worktreePath, branch: issueBranch, exists: true, baseCommit, syncedAgentFiles };
+    }
+
+    // Resolve base commit from origin or local
+    const baseCommit = await this.git.revparse([`origin/${this.baseBranch}`]).catch(async () => {
+      return this.git.revparse([this.baseBranch]);
+    });
+
+    // Create the deps branch from the base commit; skip if resuming and it already exists
+    const depsBranchExists = await this.branchExistsLocal(depsBranch);
+    if (!depsBranchExists) {
+      await this.git.branch([depsBranch, baseCommit.trim()]);
+    }
+
+    // Create a temporary worktree to perform merges on the deps branch
+    const depsWorktreePath = join(this.worktreeRoot, `deps-${issueNumber}`);
+    await ensureDir(this.worktreeRoot);
+    await this.git.raw(['worktree', 'add', depsWorktreePath, depsBranch]);
+    const depsGit = simpleGit(depsWorktreePath);
+
+    let mergeSucceeded = false;
+    try {
+      // Merge each dependency branch in order
+      for (const dep of deps) {
+        const depBranch = this.resolveBranchName(dep.number, dep.title);
+        try {
+          await depsGit.merge([depBranch, '--no-edit']);
+        } catch {
+          // Collect conflicted files before aborting
+          const conflictedFiles = await this.getConflictedFiles(depsWorktreePath);
+
+          // Write conflict metadata to the main repo's .cadre/ directory
+          const cadreDir = join(this.repoPath, '.cadre');
+          await ensureDir(cadreDir);
+          await writeFile(
+            join(cadreDir, 'dep-conflict.json'),
+            JSON.stringify(
+              { issueNumber, conflictingBranch: depBranch, conflictedFiles, timestamp: new Date().toISOString() },
+              null,
+              2,
+            ),
+            'utf-8',
+          );
+
+          await depsGit.raw(['merge', '--abort']).catch(() => {});
+          throw new DependencyMergeConflictError(
+            `Merge conflict when merging '${depBranch}' into '${depsBranch}' for issue #${issueNumber}`,
+            issueNumber,
+            depBranch,
+          );
+        }
+      }
+      mergeSucceeded = true;
+    } finally {
+      // Always clean up the temporary deps worktree
+      await this.git.raw(['worktree', 'remove', depsWorktreePath, '--force']).catch(() => {});
+      // On failure, delete the deps branch so retries can recreate it cleanly
+      if (!mergeSucceeded) {
+        await this.git.branch(['-D', depsBranch]).catch(() => {});
+      }
+    }
+
+    // Create the issue branch from the HEAD of the deps branch
+    const depsHead = await this.git.revparse([depsBranch]);
+    const branchExists = await this.branchExistsLocal(issueBranch);
+    if (!branchExists) {
+      await this.git.branch([issueBranch, depsHead.trim()]);
+    }
+
+    // Create worktree for the issue branch
+    await this.git.raw(['worktree', 'add', worktreePath, issueBranch]);
+
+    await this.initCadreDir(worktreePath, issueNumber);
+    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
+
+    this.logger.info(`Provisioned worktree with deps for issue #${issueNumber}`, {
+      issueNumber,
+      data: { path: worktreePath, branch: issueBranch, depsBranch, baseCommit: baseCommit.trim().slice(0, 8) },
+    });
+
+    return {
+      issueNumber,
+      path: worktreePath,
+      branch: issueBranch,
       exists: true,
       baseCommit: baseCommit.trim(),
       syncedAgentFiles,

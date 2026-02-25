@@ -336,6 +336,18 @@ export const CadreConfigSchema = z.object({
       autoReplyOnResolved: z.boolean().default(false),
     })
     .default({}),
+
+  /** DAG (dependency graph) configuration for ordering issues by dependency. */
+  dag: z
+    .object({
+      /** Enable DAG-based dependency ordering. */
+      enabled: z.boolean().default(false),
+      /** Run build verification on dependency branches before merging. */
+      verifyDepsBuild: z.boolean().default(false),
+      /** Automatically merge dependency branches when ready. */
+      autoMerge: z.boolean().default(false),
+    })
+    .default({ enabled: false, verifyDepsBuild: false, autoMerge: false }),
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;

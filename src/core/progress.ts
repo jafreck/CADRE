@@ -21,7 +21,7 @@ export interface PullRequestRef {
 export interface IssueProgressInfo {
   issueNumber: number;
   issueTitle: string;
-  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete';
+  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete' | 'dep-failed' | 'dep-merge-conflict' | 'dep-build-broken' | 'dep-blocked';
   currentPhase: number;
   totalPhases: number;
   prNumber?: number;
@@ -86,6 +86,10 @@ export class FleetProgressWriter {
         blocked: '🚫',
         'budget-exceeded': '💸',
         'code-complete': '⚠️',
+        'dep-failed': '❌',
+        'dep-merge-conflict': '⚠️',
+        'dep-build-broken': '❌',
+        'dep-blocked': '🚫',
       }[issue.status];
       md += `\n| #${issue.issueNumber} | ${issue.issueTitle} | ${statusEmoji} ${issue.status} | ${issue.currentPhase}/${issue.totalPhases} | ${prLink} |`;
     }

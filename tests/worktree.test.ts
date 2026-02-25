@@ -1,8 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { simpleGit } from 'simple-git';
+import * as fsp from 'node:fs/promises';
 import { WorktreeManager, RemoteBranchMissingError } from '../src/git/worktree.js';
+import { DependencyMergeConflictError } from '../src/errors.js';
 import { Logger } from '../src/logging/logger.js';
 import * as fsUtils from '../src/util/fs.js';
+
+// Mock node:fs/promises so we can assert dep-conflict.json writes without touching disk
+vi.mock('node:fs/promises', () => ({
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockResolvedValue(''),
+  readdir: vi.fn().mockResolvedValue([]),
+}));
 
 // Mock simple-git
 vi.mock('simple-git', () => {
@@ -458,6 +467,228 @@ describe('WorktreeManager', () => {
         'Provisioned worktree from branch cadre/issue-42 for issue #42',
         expect.objectContaining({ issueNumber: 42 }),
       );
+    });
+  });
+
+  describe('provisionWithDeps', () => {
+    let mockGit: ReturnType<typeof simpleGit>;
+
+    const makeDep = (number: number, title: string) => ({
+      number,
+      title,
+      body: '',
+      labels: [],
+      assignees: [],
+      comments: [],
+      state: 'open' as const,
+      createdAt: '',
+      updatedAt: '',
+      linkedPRs: [],
+    });
+
+    beforeEach(() => {
+      mockGit = simpleGit('/tmp/repo');
+      vi.clearAllMocks();
+      vi.mocked(fsUtils.exists).mockResolvedValue(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('basesha');
+      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: [] });
+      (mockGit.branch as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
+    });
+
+    it('should have provisionWithDeps method', () => {
+      expect(typeof manager.provisionWithDeps).toBe('function');
+    });
+
+    it('should create deps branch from baseBranch', async () => {
+      await manager.provisionWithDeps(42, 'my issue', []);
+
+      expect(mockGit.branch).toHaveBeenCalledWith(
+        expect.arrayContaining(['cadre/deps-42']),
+      );
+    });
+
+    it('should add a temporary worktree for the deps branch', async () => {
+      await manager.provisionWithDeps(42, 'my issue', []);
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls;
+      const depsWorktreeAdd = rawCalls.find(
+        (args: string[][]) =>
+          Array.isArray(args[0]) &&
+          args[0][0] === 'worktree' &&
+          args[0][1] === 'add' &&
+          (args[0][2] as string)?.includes('deps-42'),
+      );
+      expect(depsWorktreeAdd).toBeDefined();
+    });
+
+    it('should create the issue branch from the deps branch HEAD', async () => {
+      await manager.provisionWithDeps(42, 'my issue', []);
+
+      expect(mockGit.branch).toHaveBeenCalledWith(
+        expect.arrayContaining(['cadre/issue-42']),
+      );
+    });
+
+    it('should add a worktree for the issue branch (not the deps branch)', async () => {
+      await manager.provisionWithDeps(42, 'my issue', []);
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls;
+      const issueWorktreeAdd = rawCalls.find(
+        (args: string[][]) =>
+          Array.isArray(args[0]) &&
+          args[0][0] === 'worktree' &&
+          args[0][1] === 'add' &&
+          args[0][2] === '/tmp/worktrees/issue-42',
+      );
+      expect(issueWorktreeAdd).toBeDefined();
+    });
+
+    it('should return WorktreeInfo with issue branch name (not deps branch)', async () => {
+      const result = await manager.provisionWithDeps(42, 'my issue', []);
+
+      expect(result.branch).toBe('cadre/issue-42');
+      expect(result.branch).not.toContain('deps');
+    });
+
+    it('should return WorktreeInfo with correct issueNumber and path', async () => {
+      const result = await manager.provisionWithDeps(42, 'my issue', []);
+
+      expect(result.issueNumber).toBe(42);
+      expect(result.path).toBe('/tmp/worktrees/issue-42');
+      expect(result.exists).toBe(true);
+    });
+
+    it('should remove the temp deps worktree after successful merges', async () => {
+      await manager.provisionWithDeps(42, 'my issue', []);
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls;
+      const worktreeRemove = rawCalls.find(
+        (args: string[][]) =>
+          Array.isArray(args[0]) &&
+          args[0][0] === 'worktree' &&
+          args[0][1] === 'remove' &&
+          (args[0][2] as string)?.includes('deps-42'),
+      );
+      expect(worktreeRemove).toBeDefined();
+    });
+
+    it('should return existing worktree info if directory already exists', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+
+      const result = await manager.provisionWithDeps(42, 'my issue', []);
+
+      expect(result.issueNumber).toBe(42);
+      expect(result.branch).toBe('cadre/issue-42');
+      expect(mockGit.branch).not.toHaveBeenCalled();
+    });
+
+    it('should throw DependencyMergeConflictError on merge conflict', async () => {
+      // simpleGit mock returns the same instance for all calls (including depsWorktreePath)
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\n');
+        return Promise.resolve('');
+      });
+
+      const dep = makeDep(10, 'dep issue');
+      await expect(manager.provisionWithDeps(42, 'my issue', [dep])).rejects.toThrow(
+        DependencyMergeConflictError,
+      );
+    });
+
+    it('should include issueNumber and conflictingBranch in DependencyMergeConflictError', async () => {
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\n');
+        return Promise.resolve('');
+      });
+
+      const dep = makeDep(10, 'dep issue');
+      let thrown: DependencyMergeConflictError | undefined;
+      try {
+        await manager.provisionWithDeps(42, 'my issue', [dep]);
+      } catch (e) {
+        thrown = e as DependencyMergeConflictError;
+      }
+
+      expect(thrown).toBeDefined();
+      expect(thrown!.issueNumber).toBe(42);
+      expect(thrown!.conflictingBranch).toContain('issue-10');
+    });
+
+    it('should write dep-conflict.json with required fields on merge conflict', async () => {
+      const mockWriteFile = vi.mocked(fsp.writeFile);
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\nsrc/bar.ts\n');
+        return Promise.resolve('');
+      });
+
+      const dep = makeDep(10, 'dep issue');
+      await expect(manager.provisionWithDeps(42, 'my issue', [dep])).rejects.toThrow(
+        DependencyMergeConflictError,
+      );
+
+      const writeFileCalls = mockWriteFile.mock.calls;
+      const conflictWrite = writeFileCalls.find((args) =>
+        String(args[0]).endsWith('dep-conflict.json'),
+      );
+      expect(conflictWrite).toBeDefined();
+
+      const writtenContent = JSON.parse(conflictWrite![1] as string);
+      expect(writtenContent.issueNumber).toBe(42);
+      expect(writtenContent.conflictingBranch).toContain('issue-10');
+      expect(Array.isArray(writtenContent.conflictedFiles)).toBe(true);
+      expect(writtenContent.conflictedFiles).toContain('src/foo.ts');
+      expect(typeof writtenContent.timestamp).toBe('string');
+      // Timestamp should be a valid ISO 8601 string
+      expect(() => new Date(writtenContent.timestamp).toISOString()).not.toThrow();
+    });
+
+    it('should merge each dep branch in the order provided', async () => {
+      const mergeFn = vi.fn().mockResolvedValue(undefined);
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = mergeFn;
+
+      const deps = [makeDep(10, 'first dep'), makeDep(20, 'second dep'), makeDep(30, 'third dep')];
+      await manager.provisionWithDeps(42, 'my issue', deps);
+
+      expect(mergeFn).toHaveBeenCalledTimes(3);
+      const mergeArgs = mergeFn.mock.calls.map((c: string[][]) => c[0][0]);
+      expect(mergeArgs[0]).toContain('issue-10');
+      expect(mergeArgs[1]).toContain('issue-20');
+      expect(mergeArgs[2]).toContain('issue-30');
+    });
+
+    it('should remove the temp deps worktree even when a merge conflict occurs', async () => {
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\n');
+        return Promise.resolve('');
+      });
+
+      const dep = makeDep(10, 'dep issue');
+      await expect(manager.provisionWithDeps(42, 'my issue', [dep])).rejects.toThrow(
+        DependencyMergeConflictError,
+      );
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls;
+      const worktreeRemove = rawCalls.find(
+        (args: string[][]) =>
+          Array.isArray(args[0]) &&
+          args[0][0] === 'worktree' &&
+          args[0][1] === 'remove' &&
+          (args[0][2] as string)?.includes('deps-42'),
+      );
+      expect(worktreeRemove).toBeDefined();
     });
   });
 });
