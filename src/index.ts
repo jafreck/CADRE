@@ -29,6 +29,7 @@ program
   .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
   .option('--skip-validation', 'Skip pre-run validation checks')
   .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files')
+  .option('--dag', 'Enable DAG-based dependency ordering of issues (overrides config)')
   .action(async (opts) => {
     try {
       let config = await loadConfig(opts.config);
@@ -41,6 +42,11 @@ program
         noPr: !opts.pr,
         respondToReviews: opts.respondToReviews,
       });
+
+      // Enable DAG mode when --dag flag is provided
+      if (opts.dag) {
+        config = { ...config, dag: { ...config.dag, enabled: true } };
+      }
 
       if (opts.dryRun) {
         console.log(chalk.green('✓ Configuration is valid'));

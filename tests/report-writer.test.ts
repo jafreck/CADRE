@@ -386,4 +386,113 @@ describe('ReportWriter', () => {
       await expect(ReportWriter.readReport('/nonexistent.json')).rejects.toThrow('File not found');
     });
   });
+
+  describe('buildReport with waveMap', () => {
+    it('should include wave number in RunIssueSummary when waveMap is provided', () => {
+      const result = makeFleetResult();
+      const waveMap = new Map([[1, 0]]);
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000, waveMap);
+
+      expect(report.issues[0].wave).toBe(0);
+    });
+
+    it('should not include wave when waveMap is not provided', () => {
+      const result = makeFleetResult();
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+
+      expect(report.issues[0].wave).toBeUndefined();
+    });
+
+    it('should not include wave when issue is not in waveMap', () => {
+      const result = makeFleetResult();
+      const waveMap = new Map([[99, 0]]); // issue 1 not in map
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000, waveMap);
+
+      expect(report.issues[0].wave).toBeUndefined();
+    });
+
+    it('should include correct wave for each issue in a multi-issue run', () => {
+      const result = makeFleetResult({
+        issues: [
+          { issueNumber: 1, issueTitle: 'First', success: true, phases: [], totalDuration: 100, tokenUsage: 100 },
+          { issueNumber: 2, issueTitle: 'Second', success: true, phases: [], totalDuration: 100, tokenUsage: 100 },
+        ],
+      });
+      const waveMap = new Map([[1, 0], [2, 1]]);
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000, waveMap);
+
+      expect(report.issues[0].wave).toBe(0);
+      expect(report.issues[1].wave).toBe(1);
+    });
+  });
+
+  describe('formatIssueEntry (static)', () => {
+    it('should include "Wave N" prefix when wave is present', () => {
+      const issue = { issueNumber: 1, issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0, wave: 2 };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('Wave 2');
+    });
+
+    it('should not include Wave prefix when wave is absent', () => {
+      const issue = { issueNumber: 1, issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0 };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).not.toContain('Wave');
+    });
+
+    it('should show success indicator for successful non-DAG issue', () => {
+      const issue = { issueNumber: 1, issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0 };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('✓');
+      expect(line).not.toContain('FAILED');
+    });
+
+    it('should show FAILED for unsuccessful non-DAG issue', () => {
+      const issue = { issueNumber: 2, issueTitle: 'Broken', success: false, tokens: 0, duration: 0, error: 'Timeout' };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('FAILED');
+      expect(line).toContain('Timeout');
+    });
+
+    it('should display dep-blocked with ⊘ label', () => {
+      const issue = { issueNumber: 3, issueTitle: 'Blocked', success: false, tokens: 0, duration: 0, error: 'dep-blocked' };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('⊘ dep-blocked');
+      expect(line).not.toContain('FAILED');
+    });
+
+    it('should display dep-failed with descriptive label', () => {
+      const issue = { issueNumber: 4, issueTitle: 'Dep failed', success: false, tokens: 0, duration: 0, error: 'dep-failed' };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('dep-failed');
+      expect(line).not.toContain('FAILED');
+    });
+
+    it('should display dep-merge-conflict with descriptive label', () => {
+      const issue = { issueNumber: 5, issueTitle: 'Conflict', success: false, tokens: 0, duration: 0, error: 'dep-merge-conflict' };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('dep-merge-conflict');
+      expect(line).not.toContain('FAILED');
+    });
+
+    it('should display dep-build-broken with descriptive label', () => {
+      const issue = { issueNumber: 6, issueTitle: 'Build broken', success: false, tokens: 0, duration: 0, error: 'dep-build-broken' };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('dep-build-broken');
+      expect(line).not.toContain('FAILED');
+    });
+
+    it('should combine Wave prefix with DAG status label', () => {
+      const issue = { issueNumber: 7, issueTitle: 'Blocked', success: false, tokens: 0, duration: 0, wave: 1, error: 'dep-blocked' };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('Wave 1');
+      expect(line).toContain('⊘ dep-blocked');
+    });
+
+    it('should include issue number and title in the line', () => {
+      const issue = { issueNumber: 42, issueTitle: 'My feature', success: true, tokens: 0, duration: 0 };
+      const line = ReportWriter.formatIssueEntry(issue);
+      expect(line).toContain('#42');
+      expect(line).toContain('My feature');
+    });
+  });
 });

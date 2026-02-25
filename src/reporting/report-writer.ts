@@ -9,6 +9,14 @@ import { ISSUE_PHASES } from '../core/phase-registry.js';
 import { atomicWriteJSON, ensureDir, readJSON } from '../util/fs.js';
 import type { RunReport, RunIssueSummary, RunPhaseSummary, RunTotals } from './types.js';
 
+/** Human-readable labels for DAG-specific failure statuses. */
+const DAG_STATUS_LABELS: Record<string, string> = {
+  'dep-blocked': '⊘ dep-blocked',
+  'dep-failed': '✗ dep-failed',
+  'dep-merge-conflict': '⚡ dep-merge-conflict',
+  'dep-build-broken': '⚠ dep-build-broken',
+};
+
 export class ReportWriter {
   constructor(
     private readonly config: RuntimeConfig,
@@ -17,11 +25,15 @@ export class ReportWriter {
 
   /**
    * Assemble a RunReport from fleet execution results.
+   *
+   * @param waveMap Optional mapping of issue number → wave index, used to populate
+   *   `RunIssueSummary.wave` for DAG runs.
    */
   buildReport(
     result: FleetResult,
     issues: IssueDetail[],
     startTime: number,
+    waveMap?: Map<number, number>,
   ): RunReport {
     const endTime = Date.now();
     const duration = endTime - startTime;
@@ -35,6 +47,7 @@ export class ReportWriter {
       tokens: ir.tokenUsage ?? 0,
       duration: ir.totalDuration,
       error: ir.error,
+      wave: waveMap?.get(ir.issueNumber),
     }));
 
     // Derive per-phase summaries from byPhase token usage
@@ -122,5 +135,31 @@ export class ReportWriter {
    */
   static async readReport(filePath: string): Promise<RunReport> {
     return readJSON<RunReport>(filePath);
+  }
+
+  /**
+   * Format a single issue summary as a human-readable line, including:
+   * - Wave number prefix when the issue belongs to a DAG wave
+   * - Descriptive labels for DAG-specific failure statuses
+   * - Standard success/failure indicator for non-DAG issues
+   */
+  static formatIssueEntry(issue: RunIssueSummary): string {
+    const parts: string[] = [];
+
+    if (issue.wave !== undefined) {
+      parts.push(`[Wave ${issue.wave}]`);
+    }
+
+    parts.push(`#${issue.issueNumber}: ${issue.issueTitle}`);
+
+    if (issue.error && issue.error in DAG_STATUS_LABELS) {
+      parts.push(`— ${DAG_STATUS_LABELS[issue.error]}`);
+    } else if (!issue.success) {
+      parts.push(`— FAILED${issue.error ? `: ${issue.error}` : ''}`);
+    } else {
+      parts.push('— ✓');
+    }
+
+    return parts.join(' ');
   }
 }

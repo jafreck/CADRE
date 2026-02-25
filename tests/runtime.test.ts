@@ -64,6 +64,14 @@ vi.mock('../src/core/fleet-orchestrator.js', () => ({
   })),
 }));
 
+const mockDag = { getWaves: vi.fn().mockReturnValue([[{ number: 1, title: 'Test issue' }]]) };
+
+vi.mock('../src/core/dependency-resolver.js', () => ({
+  DependencyResolver: vi.fn().mockImplementation(() => ({
+    resolve: vi.fn().mockResolvedValue(mockDag),
+  })),
+}));
+
 vi.mock('../src/git/worktree.js', () => ({
   WorktreeManager: vi.fn(),
 }));
@@ -166,6 +174,8 @@ import { FleetProgressWriter } from '../src/core/progress.js';
 import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoint.js';
 import { exists } from '../src/util/fs.js';
 import { checkStaleState } from '../src/validation/index.js';
+import { DependencyResolver } from '../src/core/dependency-resolver.js';
+import { DependencyResolutionError } from '../src/errors.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
@@ -174,6 +184,7 @@ const MockFleetProgressWriter = FleetProgressWriter as unknown as ReturnType<typ
 const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnType<typeof vi.fn>;
 const MockCheckpointManager = CheckpointManager as unknown as ReturnType<typeof vi.fn>;
 const mockExists = exists as unknown as ReturnType<typeof vi.fn>;
+const MockDependencyResolver = DependencyResolver as unknown as ReturnType<typeof vi.fn>;
 
 function makeConfig(issueIds = [1]) {
   return makeRuntimeConfig({
@@ -922,5 +933,124 @@ describe('CadreRuntime — stale-state check wiring', () => {
     const connectCallOrder = connectSpy.mock.invocationCallOrder[0];
     const checkStaleCallOrder = mockCheckStaleState.mock.invocationCallOrder[0];
     expect(connectCallOrder).toBeLessThan(checkStaleCallOrder);
+  });
+});
+
+describe('CadreRuntime — DAG wiring', () => {
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+
+    MockCreateNotificationManager.mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    });
+
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      getIssue: vi.fn().mockResolvedValue({
+        number: 1,
+        title: 'Test issue',
+        body: '',
+        labels: [],
+        state: 'open',
+        url: 'https://github.com/owner/repo/issues/1',
+        author: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+      }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        codeDoneNoPR: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      }),
+    }));
+
+    // Reset mock dag
+    mockDag.getWaves.mockReturnValue([[{ number: 1, title: 'Test issue' }]]);
+
+    MockDependencyResolver.mockImplementation(() => ({
+      resolve: vi.fn().mockResolvedValue(mockDag),
+    }));
+  });
+
+  afterEach(() => {
+    processOnSpy.mockRestore();
+  });
+
+  it('does not instantiate DependencyResolver when dag.enabled is false', async () => {
+    const config = makeConfig([1]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    expect(MockDependencyResolver).not.toHaveBeenCalled();
+  });
+
+  it('instantiates DependencyResolver and calls resolve() when dag.enabled is true', async () => {
+    const config = makeRuntimeConfig({
+      ...makeConfig([1]),
+      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false },
+    });
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    expect(MockDependencyResolver).toHaveBeenCalledOnce();
+    const resolverInstance = MockDependencyResolver.mock.results[0].value;
+    expect(resolverInstance.resolve).toHaveBeenCalledOnce();
+  });
+
+  it('passes the resolved dag to FleetOrchestrator when dag.enabled is true', async () => {
+    const config = makeRuntimeConfig({
+      ...makeConfig([1]),
+      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false },
+    });
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    expect(MockFleetOrchestrator).toHaveBeenCalledOnce();
+    const ctorArgs = MockFleetOrchestrator.mock.calls[0];
+    // dag is the 8th argument (index 7)
+    expect(ctorArgs[7]).toBe(mockDag);
+  });
+
+  it('passes undefined dag to FleetOrchestrator when dag.enabled is false', async () => {
+    const config = makeConfig([1]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    expect(MockFleetOrchestrator).toHaveBeenCalledOnce();
+    const ctorArgs = MockFleetOrchestrator.mock.calls[0];
+    expect(ctorArgs[7]).toBeUndefined();
+  });
+
+  it('aborts run with a clear error message when DependencyResolutionError is thrown', async () => {
+    MockDependencyResolver.mockImplementation(() => ({
+      resolve: vi.fn().mockRejectedValue(
+        new DependencyResolutionError('Could not infer dependency graph'),
+      ),
+    }));
+
+    const config = makeRuntimeConfig({
+      ...makeConfig([1]),
+      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false },
+    });
+    const runtime = new CadreRuntime(config);
+
+    await expect(runtime.run()).rejects.toThrow('DAG dependency resolution failed');
+    expect(MockFleetOrchestrator).not.toHaveBeenCalled();
   });
 });
