@@ -1253,5 +1253,151 @@ describe('ImplementationPhaseExecutor', () => {
 
       expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('whole-pr-reviewer', 50);
     });
+
+    it('should skip and log warning when parseReview throws during whole-PR review', async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn()
+          .mockResolvedValueOnce({ verdict: 'pass' })         // per-session code-reviewer passes
+          .mockRejectedValueOnce(new Error('malformed cadre-json block')), // whole-PR review parse fails
+      };
+
+      const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
+      // Should not throw — gracefully skips and logs a warning
+      await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'implementation-plan.md'));
+
+      expect(
+        (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
+      ).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse review output'),
+        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+      );
+    });
+
+    it('should skip and log warning when whole-pr-reviewer agent does not succeed', async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+
+      const failedReviewer: AgentResult = {
+        agent: 'whole-pr-reviewer',
+        success: false,
+        exitCode: 1,
+        timedOut: false,
+        duration: 50,
+        stdout: '',
+        stderr: 'timeout',
+        tokenUsage: 0,
+        outputPath: '/progress/whole-pr-review.md',
+        outputExists: false,
+      };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValueOnce(failedReviewer),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn().mockResolvedValueOnce({ verdict: 'pass' }),  // per-session only
+      };
+
+      const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
+      await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'implementation-plan.md'));
+
+      expect(
+        (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
+      ).toHaveBeenCalledWith(
+        expect.stringContaining('Reviewer agent did not succeed'),
+        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+      );
+    });
+
+    it('should skip and log warning when whole-PR review output file is not produced', async () => {
+      // Exists returns false for 'whole-pr-review.md' (output), but true for session plan paths
+      vi.mocked(exists).mockImplementation(async (path) => !String(path).endsWith('whole-pr-review.md'));
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn().mockResolvedValueOnce({ verdict: 'pass' }),  // per-session code-reviewer
+      };
+
+      const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
+      await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'implementation-plan.md'));
+
+      expect(
+        (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
+      ).toHaveBeenCalledWith(
+        expect.stringContaining('No output file produced'),
+        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+      );
+    });
+
+    it('should abort review loop and log warning when fix-surgeon fails during whole-PR review', async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+
+      const failedFixSurgeon: AgentResult = {
+        agent: 'fix-surgeon',
+        success: false,
+        exitCode: 1,
+        timedOut: false,
+        duration: 50,
+        stdout: '',
+        stderr: 'error',
+        tokenUsage: 0,
+        outputPath: '/progress/output.md',
+        outputExists: false,
+      };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer'))  // attempt 0: needs-fixes
+          .mockResolvedValueOnce(failedFixSurgeon),                            // fix-surgeon fails
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn()
+          .mockResolvedValueOnce({ verdict: 'pass' })         // per-session code-reviewer
+          .mockResolvedValueOnce({ verdict: 'needs-fixes' }), // whole-PR review attempt 0
+      };
+
+      const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
+      // Should not throw — aborts the review loop gracefully and continues to phase 4
+      await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'implementation-plan.md'));
+
+      expect(
+        (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
+      ).toHaveBeenCalledWith(
+        expect.stringContaining('Fix surgeon failed'),
+        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+      );
+
+      // Should not have launched a second whole-pr-reviewer after the fix-surgeon failure
+      const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
+      expect(agents.filter((a: string) => a === 'whole-pr-reviewer')).toHaveLength(1);
+    });
   });
 });
