@@ -501,6 +501,43 @@ export class WorktreeManager {
   }
 
   /**
+   * Provision a fresh ephemeral worktree for the dependency-analyst agent,
+   * unique to this run via `runId`.  The worktree is checked out detached from
+   * the local base branch so no permanent branch is created.
+   *
+   * Each call always creates a new directory (`dag-resolver-<runId>`) so
+   * concurrent cadre runs never collide and stale state from a prior run is
+   * never reused.  Callers are responsible for cleaning it up with
+   * `removeWorktreeAtPath()` once the agent run completes.
+   *
+   * Returns the absolute path to the new worktree.
+   */
+  async provisionForDependencyAnalyst(runId: string): Promise<string> {
+    const worktreePath = join(this.worktreeRoot, `dag-resolver-${runId}`);
+    await ensureDir(this.worktreeRoot);
+
+    this.logger.info(`Creating dag-resolver worktree for dependency-analyst agent (run ${runId})`);
+    await this.git.raw(['worktree', 'add', '--detach', worktreePath, this.baseBranch]);
+
+    await this.syncAgentFiles(worktreePath, 0);
+    return worktreePath;
+  }
+
+  /**
+   * Remove a worktree by its absolute path.  Used to clean up ephemeral
+   * worktrees (e.g. the dag-resolver worktree) after they are no longer needed.
+   * Non-fatal on failure — logs a warning instead of throwing.
+   */
+  async removeWorktreeAtPath(worktreePath: string): Promise<void> {
+    try {
+      await this.git.raw(['worktree', 'remove', worktreePath, '--force']);
+      this.logger.debug(`Removed ephemeral worktree at ${worktreePath}`);
+    } catch (err) {
+      this.logger.warn(`Could not remove ephemeral worktree at ${worktreePath}: ${err}`);
+    }
+  }
+
+  /**
    * List all active CADRE worktrees.
    */
   async listActive(): Promise<WorktreeInfo[]> {

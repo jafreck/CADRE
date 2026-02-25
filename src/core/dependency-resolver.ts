@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { IssueDetail } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { AgentLauncher } from './agent-launcher.js';
+import type { WorktreeManager } from '../git/worktree.js';
 import { IssueDag } from './issue-dag.js';
 import { CyclicDependencyError, DependencyResolutionError } from '../errors.js';
 import { Logger } from '../logging/logger.js';
@@ -29,64 +30,77 @@ export class DependencyResolver {
     private readonly config: RuntimeConfig,
     private readonly launcher: AgentLauncher,
     private readonly logger: Logger,
+    private readonly worktreeManager?: WorktreeManager,
   ) {}
 
   async resolve(issues: IssueDetail[], repoPath: string): Promise<IssueDag> {
     const validIssueNumbers = new Set(issues.map((i) => i.number));
     let cycleHint: string | undefined;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const rawOutput = await this.invokeAgent(issues, repoPath, cycleHint);
+    // Provision the worktree once for all retry attempts, then clean it up.
+    const runId = randomUUID();
+    const agentCwd = this.worktreeManager
+      ? await this.worktreeManager.provisionForDependencyAnalyst(runId)
+      : repoPath;
 
-      // Parse and Zod-validate the output
-      let rawDepMap: DepMapOutput;
-      try {
-        const parsed: unknown = JSON.parse(rawOutput);
-        rawDepMap = depMapSchema.parse(parsed);
-      } catch (err) {
-        if (attempt === 0) {
-          this.logger.warn('DependencyResolver: malformed JSON on first attempt, retrying');
-          continue;
-        }
-        throw new DependencyResolutionError(
-          `Dependency analyst produced invalid output after retry: ${String(err)}`,
-        );
-      }
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const rawOutput = await this.invokeAgent(issues, agentCwd, cycleHint);
 
-      // Filter to only issue numbers present in the provided issue list
-      const filteredDepMap: Record<number, number[]> = {};
-      for (const [key, deps] of Object.entries(rawDepMap)) {
-        const issueNum = parseInt(key, 10);
-        if (!validIssueNumbers.has(issueNum)) continue;
-        filteredDepMap[issueNum] = deps.filter((d) => validIssueNumbers.has(d));
-      }
-
-      try {
-        return new IssueDag(issues, filteredDepMap);
-      } catch (err) {
-        if (err instanceof CyclicDependencyError) {
+        // Parse and Zod-validate the output
+        let rawDepMap: DepMapOutput;
+        try {
+          const parsed: unknown = JSON.parse(rawOutput);
+          rawDepMap = depMapSchema.parse(parsed);
+        } catch (err) {
           if (attempt === 0) {
-            cycleHint =
-              'The previous dependency graph contained cycles. Please produce an acyclic dependency graph with no cycles.';
-            this.logger.warn('DependencyResolver: cycle detected on first attempt, retrying with hint');
+            this.logger.warn('DependencyResolver: malformed JSON on first attempt, retrying');
             continue;
           }
-          throw new DependencyResolutionError(`Cycle detected after retry: ${err.message}`);
+          throw new DependencyResolutionError(
+            `Dependency analyst produced invalid output after retry: ${String(err)}`,
+          );
         }
-        throw err;
+
+        // Filter to only issue numbers present in the provided issue list
+        const filteredDepMap: Record<number, number[]> = {};
+        for (const [key, deps] of Object.entries(rawDepMap)) {
+          const issueNum = parseInt(key, 10);
+          if (!validIssueNumbers.has(issueNum)) continue;
+          filteredDepMap[issueNum] = deps.filter((d) => validIssueNumbers.has(d));
+        }
+
+        try {
+          return new IssueDag(issues, filteredDepMap);
+        } catch (err) {
+          if (err instanceof CyclicDependencyError) {
+            if (attempt === 0) {
+              cycleHint =
+                'The previous dependency graph contained cycles. Please produce an acyclic dependency graph with no cycles.';
+              this.logger.warn('DependencyResolver: cycle detected on first attempt, retrying with hint');
+              continue;
+            }
+            throw new DependencyResolutionError(`Cycle detected after retry: ${err.message}`);
+          }
+          throw err;
+        }
+      }
+
+      throw new DependencyResolutionError('Dependency resolution failed after all retries');
+    } finally {
+      if (this.worktreeManager) {
+        await this.worktreeManager.removeWorktreeAtPath(agentCwd);
       }
     }
-
-    throw new DependencyResolutionError('Dependency resolution failed after all retries');
   }
 
   private async invokeAgent(
     issues: IssueDetail[],
-    repoPath: string,
+    agentCwd: string,
     hint?: string,
   ): Promise<string> {
-    const runId = randomUUID();
-    const tmpDir = join(tmpdir(), `cadre-dep-resolver-${runId}`);
+    const invocationId = randomUUID();
+    const tmpDir = join(tmpdir(), `cadre-dep-resolver-${invocationId}`);
     await mkdir(tmpDir, { recursive: true });
 
     const contextPath = join(tmpDir, 'context.json');
@@ -97,7 +111,7 @@ export class DependencyResolver {
       issueNumber: 0,
       projectName: this.config.projectName,
       repository: this.config.repository,
-      worktreePath: repoPath,
+      worktreePath: agentCwd,
       phase: 1,
       config: { commands: this.config.commands ?? {} },
       inputFiles: [],
@@ -115,7 +129,7 @@ export class DependencyResolver {
         contextPath,
         outputPath,
       },
-      repoPath,
+      agentCwd,
     );
 
     if (!result.success || !result.outputExists) {

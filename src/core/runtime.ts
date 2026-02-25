@@ -170,7 +170,7 @@ export class CadreRuntime {
     let dag: IssueDag | undefined;
     if (this.config.dag?.enabled) {
       this.logger.info('DAG mode enabled — resolving issue dependency graph');
-      const resolver = new DependencyResolver(this.config, launcher, this.logger);
+      const resolver = new DependencyResolver(this.config, launcher, this.logger, worktreeManager);
       try {
         dag = await resolver.resolve(issues, this.config.repoPath);
         this.logger.info(`DAG resolved: ${dag.getWaves().length} wave(s)`);

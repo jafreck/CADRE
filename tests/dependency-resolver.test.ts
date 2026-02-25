@@ -5,6 +5,7 @@ import { IssueDag } from '../src/core/issue-dag.js';
 import { DependencyResolutionError } from '../src/errors.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
+import type { WorktreeManager } from '../src/git/worktree.js';
 import type { AgentResult } from '../src/agents/types.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
 import { Logger } from '../src/logging/logger.js';
@@ -221,5 +222,36 @@ describe('DependencyResolver', () => {
 
     const resolver = new DependencyResolver(config, launcher, logger);
     await expect(resolver.resolve(issues, '/repo')).rejects.toThrow(DependencyResolutionError);
+  });
+
+  it('uses worktreeManager.provisionForDependencyAnalyst() as agent cwd when provided', async () => {
+    const issues = [makeIssue(1), makeIssue(2)];
+    const depMap = { '2': [1] };
+    const dagWorktreePath = '/tmp/worktrees/dag-resolver-test-run-id';
+
+    const mockProvision = vi.fn().mockResolvedValue(dagWorktreePath);
+    const mockRemove = vi.fn().mockResolvedValue(undefined);
+    const worktreeManager = {
+      provisionForDependencyAnalyst: mockProvision,
+      removeWorktreeAtPath: mockRemove,
+    } as unknown as WorktreeManager;
+
+    mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }, cwd: string) => {
+      await writeFile(invocation.outputPath, JSON.stringify(depMap), 'utf-8');
+      expect(cwd).toBe(dagWorktreePath);
+      return makeAgentResult(invocation.outputPath);
+    });
+
+    const resolver = new DependencyResolver(config, launcher, logger, worktreeManager);
+    const dag = await resolver.resolve(issues, '/repo');
+
+    expect(dag).toBeInstanceOf(IssueDag);
+    expect(mockProvision).toHaveBeenCalledTimes(1);
+    // runId is a UUID — just verify it was called with a non-empty string
+    expect(typeof mockProvision.mock.calls[0][0]).toBe('string');
+    expect(mockProvision.mock.calls[0][0].length).toBeGreaterThan(0);
+    // Worktree should be cleaned up after resolution
+    expect(mockRemove).toHaveBeenCalledTimes(1);
+    expect(mockRemove).toHaveBeenCalledWith(dagWorktreePath);
   });
 });
