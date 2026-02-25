@@ -392,6 +392,7 @@ export class ContextBuilder {
     integrationReportPath: string,
     diffPath: string,
     progressDir: string,
+    previousParseError?: string,
   ): Promise<string> {
     return this.writeContext(progressDir, 'pr-composer', issueNumber, {
       agent: 'pr-composer',
@@ -406,6 +407,7 @@ export class ContextBuilder {
       payload: {
         issueTitle: issue.title,
         issueBody: issue.body,
+        ...(previousParseError ? { previousParseError } : {}),
       },
       outputSchema: zodToJsonSchema(prContentSchema) as Record<string, unknown>,
     });
