@@ -308,6 +308,55 @@ describe('CheckpointManager', () => {
 
     await expect(manager.recordGateResult(1, result)).rejects.toThrow('Checkpoint not loaded');
   });
+
+  it('loadTokenRecords should return empty array when checkpoint has no tokenRecords', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+    expect(manager.loadTokenRecords()).toEqual([]);
+  });
+
+  it('saveTokenRecords and loadTokenRecords should round-trip correctly', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+
+    const records = [
+      { issueNumber: 42, agent: 'issue-analyst', phase: 1, tokens: 3000, timestamp: '2024-01-01T00:00:00.000Z', input: 1000, output: 2000 },
+      { issueNumber: 42, agent: 'codebase-scout', phase: 1, tokens: 4000, timestamp: '2024-01-01T00:01:00.000Z' },
+    ];
+    await manager.saveTokenRecords(records);
+
+    const manager2 = new CheckpointManager(tempDir, mockLogger);
+    await manager2.load('42');
+    expect(manager2.loadTokenRecords()).toEqual(records);
+  });
+
+  it('loadTokenRecords should return empty array for legacy checkpoint without tokenRecords field', async () => {
+    // Write a checkpoint file that lacks the tokenRecords field
+    const { writeFile } = await import('node:fs/promises');
+    const legacyState = {
+      issueNumber: 99,
+      version: 1,
+      currentPhase: 0,
+      currentTask: null,
+      completedPhases: [],
+      completedTasks: [],
+      failedTasks: [],
+      blockedTasks: [],
+      phaseOutputs: {},
+      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+      worktreePath: '',
+      branchName: '',
+      baseCommit: '',
+      startedAt: new Date().toISOString(),
+      lastCheckpoint: new Date().toISOString(),
+      resumeCount: 0,
+    };
+    await writeFile(join(tempDir, 'checkpoint.json'), JSON.stringify(legacyState));
+
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('99');
+    expect(manager.loadTokenRecords()).toEqual([]);
+  });
 });
 
 describe('FleetCheckpointManager', () => {

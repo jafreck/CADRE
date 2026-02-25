@@ -179,6 +179,8 @@ export const CadreConfigSchema = z.object({
       respondToReviews: z.boolean().default(false),
       /** Max fix-surgeon retries for the whole-PR review. */
       maxWholePrReviewRetries: z.number().int().min(1).max(5).default(2),
+      /** Post an issue comment with the cost summary when the pipeline finishes. */
+      postCostComment: z.boolean().default(false),
     })
     .default({}),
 
