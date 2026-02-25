@@ -443,16 +443,18 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         return;
       }
 
-      // Commit fix-surgeon output so the next review sees an updated diff.
+      // Commit fix-surgeon output and exit — one successful fix round is sufficient.
       await ctx.io.commitManager.commit(
         `fix: whole-PR review fixes (round ${attempt + 1})`,
         ctx.issue.number,
         'fix',
       );
 
-      // Refresh diff for re-review.
-      const updatedRawDiff = await ctx.io.commitManager.getDiff(ctx.worktree.baseCommit);
-      await writeFile(diffPath, truncateDiff(updatedRawDiff, 200_000), 'utf-8');
+      ctx.services.logger.info('[Whole-PR review] Fix applied successfully; continuing to phase 4', {
+        issueNumber: ctx.issue.number,
+        phase: 3,
+      });
+      return;
     }
   }
 

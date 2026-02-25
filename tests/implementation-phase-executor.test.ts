@@ -1134,7 +1134,7 @@ describe('ImplementationPhaseExecutor', () => {
       );
     });
 
-    it('needs-fixes → fix-surgeon → re-review path', async () => {
+    it('needs-fixes → fix-surgeon → exits after successful fix (no re-review)', async () => {
       vi.mocked(exists).mockResolvedValue(true);
 
       const launcher = {
@@ -1143,27 +1143,26 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer'))  // attempt 0: needs-fixes
-          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
-          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')), // attempt 1: pass
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon')),       // fix succeeds → done
       };
 
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn()
           .mockResolvedValueOnce({ verdict: 'pass' })         // per-session code-reviewer
-          .mockResolvedValueOnce({ verdict: 'needs-fixes' })  // whole-PR attempt 0
-          .mockResolvedValueOnce({ verdict: 'pass' }),        // whole-PR attempt 1
+          .mockResolvedValueOnce({ verdict: 'needs-fixes' }), // whole-PR: needs-fixes
       };
 
       const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
       await executor.execute(ctx);
 
       const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
-      expect(agents.filter((a: string) => a === 'whole-pr-reviewer')).toHaveLength(2);
+      // A successful fix exits immediately — whole-pr-reviewer should only be called once
+      expect(agents.filter((a: string) => a === 'whole-pr-reviewer')).toHaveLength(1);
       expect(agents).toContain('fix-surgeon');
     });
 
-    it('should commit fix-surgeon output before re-running whole-PR review', async () => {
+    it('should commit fix-surgeon output after a successful fix', async () => {
       vi.mocked(exists).mockResolvedValue(true);
 
       const launcher = {
@@ -1172,16 +1171,14 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer'))
-          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
-          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')),
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon')),
       };
 
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn()
           .mockResolvedValueOnce({ verdict: 'pass' })
-          .mockResolvedValueOnce({ verdict: 'needs-fixes' })
-          .mockResolvedValueOnce({ verdict: 'pass' }),
+          .mockResolvedValueOnce({ verdict: 'needs-fixes' }),
       };
 
       const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
@@ -1194,33 +1191,32 @@ describe('ImplementationPhaseExecutor', () => {
       expect(fixCommit).toBeDefined();
     });
 
-    it('should stop and log a warning when max retries exceeded', async () => {
+    it('should stop and log a warning when max retries exceeded (maxWholePrReviewRetries=0)', async () => {
       vi.mocked(exists).mockResolvedValue(true);
 
-      // Always needs-fixes: triggers fix-surgeon then re-review, maxWholePrReviewRetries=2
-      const wholePrAgent = makeSuccessAgentResult('whole-pr-reviewer');
-      const fixAgent = makeSuccessAgentResult('fix-surgeon');
-
+      // With maxWholePrReviewRetries=0 the guard fires on attempt 0 before fix-surgeon runs
       const launcher = {
         launchAgent: vi.fn()
           .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
-          .mockResolvedValueOnce(wholePrAgent)   // attempt 0: needs-fixes
-          .mockResolvedValueOnce(fixAgent)
-          .mockResolvedValueOnce(wholePrAgent)   // attempt 1: needs-fixes
-          .mockResolvedValueOnce(fixAgent)
-          .mockResolvedValueOnce(wholePrAgent),  // attempt 2: needs-fixes → max retries exceeded
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')), // needs-fixes → exceeded immediately
       };
 
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn()
           .mockResolvedValueOnce({ verdict: 'pass' })         // per-session
-          .mockResolvedValue({ verdict: 'needs-fixes' }),     // whole-PR always needs-fixes
+          .mockResolvedValueOnce({ verdict: 'needs-fixes' }), // whole-PR: exceeded with retries=0
       };
 
-      const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
+      const ctx = makeWholePrCtx({
+        services: { launcher: launcher, resultParser: resultParser } as never,
+        config: {
+          commands: { build: undefined },
+          options: { maxParallelAgents: 2, maxRetriesPerTask: 3, perTaskBuildCheck: true, maxBuildFixRounds: 2, maxWholePrReviewRetries: 0 },
+        } as never,
+      });
       // Should NOT throw — just logs a warning and continues to phase 4
       await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'implementation-plan.md'));
 
