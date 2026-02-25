@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { simpleGit } from 'simple-git';
 import type { RuntimeConfig } from '../config/loader.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
@@ -20,6 +21,7 @@ import {
   platformValidator,
   commandValidator,
   diskValidator,
+  checkStaleState,
 } from '../validation/index.js';
 import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
@@ -84,6 +86,33 @@ export class CadreRuntime {
       const passed = await this.validate();
       if (!passed) {
         throw new Error('Pre-run validation failed. Fix the errors above or use --skip-validation to bypass.');
+      }
+
+      // Run stale-state pre-flight check for explicit issue IDs
+      if ('ids' in this.config.issues && this.config.issues.ids.length > 0) {
+        const git = simpleGit(this.config.repoPath);
+        await this.provider.connect();
+        try {
+          const staleResult = await checkStaleState(
+            this.config.issues.ids,
+            this.config,
+            this.provider,
+            git,
+          );
+          if (staleResult.hasConflicts) {
+            console.error('\nStale state detected — aborting run. Resolve the conflicts below before starting:\n');
+            for (const [issueNumber, issueConflicts] of staleResult.conflicts) {
+              console.error(`  Issue #${issueNumber}:`);
+              for (const conflict of issueConflicts) {
+                console.error(`    [${conflict.kind}] ${conflict.description}`);
+              }
+            }
+            console.error('');
+            process.exit(1);
+          }
+        } finally {
+          await this.provider.disconnect();
+        }
       }
     }
 

@@ -112,6 +112,21 @@ describe('WorktreeManager', () => {
     expect(typeof manager.rebase).toBe('function');
   });
 
+  describe('getWorktreePath', () => {
+    it('should be a public method', () => {
+      expect(typeof manager.getWorktreePath).toBe('function');
+    });
+
+    it('should return the correct path for an issue number', () => {
+      const path = manager.getWorktreePath(42);
+      expect(path).toBe('/tmp/worktrees/issue-42');
+    });
+
+    it('should include the issue number in the path', () => {
+      expect(manager.getWorktreePath(100)).toContain('issue-100');
+    });
+  });
+
   describe('RemoteBranchMissingError', () => {
     it('should extend Error', () => {
       const err = new RemoteBranchMissingError('cadre/issue-42');
