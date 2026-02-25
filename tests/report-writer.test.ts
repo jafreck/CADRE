@@ -252,7 +252,7 @@ describe('ReportWriter', () => {
 
       const filePath = await writer.write(report);
 
-      const expectedDir = join('/repo', '.cadre', 'reports');
+      const expectedDir = join('/tmp/.cadre/test-project', 'reports');
       expect(fsUtil.ensureDir).toHaveBeenCalledWith(expectedDir);
       expect(fsUtil.atomicWriteJSON).toHaveBeenCalledWith(filePath, report);
     });
@@ -296,7 +296,7 @@ describe('ReportWriter', () => {
       };
 
       const filePath = await writer.write(report);
-      expect(filePath).toContain(join('/repo', '.cadre', 'reports'));
+      expect(filePath).toContain(join('/tmp/.cadre/test-project', 'reports'));
     });
   });
 
