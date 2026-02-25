@@ -1,6 +1,7 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join, relative, basename } from 'node:path';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { join, relative } from 'node:path';
+import { tmpdir } from 'node:os';
+import { readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir } from '../util/fs.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
@@ -501,39 +502,52 @@ export class WorktreeManager {
   }
 
   /**
-   * Provision a fresh ephemeral worktree for the dependency-analyst agent,
-   * unique to this run via `runId`.  The worktree is checked out detached from
-   * the local base branch so no permanent branch is created.
+   * Provision a fresh ephemeral directory for the dependency-analyst agent,
+   * unique to this run via `runId`.
    *
-   * Each call always creates a new directory (`dag-resolver-<runId>`) so
-   * concurrent cadre runs never collide and stale state from a prior run is
-   * never reused.  Callers are responsible for cleaning it up with
-   * `removeWorktreeAtPath()` once the agent run completes.
+   * **Why a temp dir instead of a git worktree?**
+   * The Copilot CLI resolves its "project root" by following the `.git` pointer
+   * file that every git worktree contains.  That pointer references the main
+   * checkout's `.git/worktrees/<name>` directory, so the CLI sees the *main
+   * checkout* as the project root — regardless of CWD — and looks for agent
+   * files in `<main-repo>/.github/agents/` rather than in the worktree.
    *
-   * Returns the absolute path to the new worktree.
+   * By using a plain temp directory initialised with `git init` we give the CLI
+   * a self-contained git root with no pointer back to the main repo.  It finds
+   * the agent files in `<tempDir>/.github/agents/` and everything works.
+   *
+   * Callers are responsible for cleaning up with `removeWorktreeAtPath()` once
+   * the agent run completes.
+   *
+   * Returns the absolute path to the ephemeral directory.
    */
   async provisionForDependencyAnalyst(runId: string): Promise<string> {
-    const worktreePath = join(this.worktreeRoot, `dag-resolver-${runId}`);
-    await ensureDir(this.worktreeRoot);
+    const agentDir = join(tmpdir(), `cadre-dag-${runId}`);
+    await ensureDir(agentDir);
 
-    this.logger.info(`Creating dag-resolver worktree for dependency-analyst agent (run ${runId})`);
-    await this.git.raw(['worktree', 'add', '--detach', worktreePath, this.baseBranch]);
+    this.logger.info(`Creating dag-resolver temp dir for dependency-analyst agent (run ${runId})`);
 
-    await this.syncAgentFiles(worktreePath, 0);
-    return worktreePath;
+    // Initialise a minimal git repo so the Copilot CLI recognises this
+    // directory as a self-contained project root containing .github/agents/.
+    const tempGit = simpleGit(agentDir);
+    await tempGit.init();
+    await tempGit.addConfig('user.email', 'cadre@localhost');
+    await tempGit.addConfig('user.name', 'cadre');
+
+    await this.syncAgentFiles(agentDir, 0);
+    return agentDir;
   }
 
   /**
-   * Remove a worktree by its absolute path.  Used to clean up ephemeral
-   * worktrees (e.g. the dag-resolver worktree) after they are no longer needed.
+   * Remove an ephemeral directory created by `provisionForDependencyAnalyst`.
    * Non-fatal on failure — logs a warning instead of throwing.
    */
   async removeWorktreeAtPath(worktreePath: string): Promise<void> {
     try {
-      await this.git.raw(['worktree', 'remove', worktreePath, '--force']);
-      this.logger.debug(`Removed ephemeral worktree at ${worktreePath}`);
+      await rm(worktreePath, { recursive: true, force: true });
+      this.logger.debug(`Removed ephemeral dag-resolver dir at ${worktreePath}`);
     } catch (err) {
-      this.logger.warn(`Could not remove ephemeral worktree at ${worktreePath}: ${err}`);
+      this.logger.warn(`Could not remove ephemeral dag-resolver dir at ${worktreePath}: ${err}`);
     }
   }
 
