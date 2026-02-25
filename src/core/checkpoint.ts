@@ -42,7 +42,7 @@ export interface CheckpointState {
 // ── Fleet Checkpoint ──
 
 export interface FleetIssueStatus {
-  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete';
+  status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete' | 'dep-failed' | 'dep-merge-conflict' | 'dep-build-broken' | 'dep-blocked';
   issueTitle: string;
   worktreePath: string;
   branchName: string;
@@ -59,6 +59,9 @@ export interface FleetCheckpointState {
   startedAt: string;
   lastCheckpoint: string;
   resumeCount: number;
+  dag?: Record<number, number[]>;
+  waves?: number[][];
+  completedWaves?: number[];
 }
 
 /**
@@ -441,6 +444,23 @@ export class FleetCheckpointManager {
     await this.save();
   }
 
+  async setDag(dag: Record<number, number[]>, waves: number[][]): Promise<void> {
+    if (!this.state) throw new Error('Fleet checkpoint not loaded');
+    this.state.dag = dag;
+    this.state.waves = waves;
+    this.state.completedWaves = [];
+    await this.save();
+  }
+
+  async markWaveComplete(waveIndex: number): Promise<void> {
+    if (!this.state) throw new Error('Fleet checkpoint not loaded');
+    if (!this.state.completedWaves) this.state.completedWaves = [];
+    if (!this.state.completedWaves.includes(waveIndex)) {
+      this.state.completedWaves.push(waveIndex);
+    }
+    await this.save();
+  }
+
   async recordTokenUsage(issueNumber: number, tokens: number): Promise<void> {
     if (!this.state) throw new Error('Fleet checkpoint not loaded');
     this.state.tokenUsage.total += tokens;
@@ -455,7 +475,7 @@ export class FleetCheckpointManager {
 
   isIssueCompleted(issueNumber: number): boolean {
     const status = this.state?.issues[issueNumber]?.status;
-    return status === 'completed' || status === 'budget-exceeded';
+    return status === 'completed' || status === 'budget-exceeded' || status === 'dep-blocked';
     // Note: 'code-complete' intentionally returns false — the issue still needs a PR.
   }
 

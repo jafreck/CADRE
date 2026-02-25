@@ -11,6 +11,10 @@ const STATUS_EMOJI: Record<FleetIssueStatus['status'], string> = {
   blocked: '🚫',
   'budget-exceeded': '💸',
   'code-complete': '⚠️',
+  'dep-failed': '❌',
+  'dep-merge-conflict': '⚠️',
+  'dep-build-broken': '❌',
+  'dep-blocked': '🚫',
 };
 
 /**

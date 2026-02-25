@@ -55,6 +55,41 @@ describe('RunIssueSummary', () => {
     expect(summary.tokens).toBe(0);
     expect(summary.duration).toBe(0);
   });
+
+  it('should accept RunIssueSummary with optional wave field', () => {
+    const summary: RunIssueSummary = {
+      issueNumber: 5,
+      issueTitle: 'Wave issue',
+      success: true,
+      tokens: 800,
+      duration: 4000,
+      wave: 2,
+    };
+    expect(summary.wave).toBe(2);
+  });
+
+  it('wave field should be undefined when not provided', () => {
+    const summary: RunIssueSummary = {
+      issueNumber: 6,
+      issueTitle: 'No wave',
+      success: true,
+      tokens: 100,
+      duration: 1000,
+    };
+    expect(summary.wave).toBeUndefined();
+  });
+
+  it('should accept wave 0 as a valid wave number', () => {
+    const summary: RunIssueSummary = {
+      issueNumber: 7,
+      issueTitle: 'First wave',
+      success: true,
+      tokens: 500,
+      duration: 2000,
+      wave: 0,
+    };
+    expect(summary.wave).toBe(0);
+  });
 });
 
 describe('RunPhaseSummary', () => {
