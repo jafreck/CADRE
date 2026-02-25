@@ -17,18 +17,24 @@ export interface StaleStateResult {
 }
 
 /**
- * Build a branch name from the template, substituting only the issue number.
- * Mirrors the sanitisation logic in WorktreeManager.resolveBranchName().
+ * Build a branch name from the template, substituting the issue number and optional title.
+ * Mirrors the sanitisation and truncation logic in WorktreeManager.resolveBranchName().
  */
-function buildBranchName(template: string, issueNumber: number): string {
-  return template
+function buildBranchName(template: string, issueNumber: number, issueTitle?: string): string {
+  let branch = template
     .replace('{issue}', String(issueNumber))
-    .replace('{title}', '')
+    .replace('{title}', issueTitle ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9/\-_]/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/-$/, '')
     .replace(/^-/, '');
+
+  if (branch.length > 100) {
+    branch = branch.slice(0, 100).replace(/-$/, '');
+  }
+
+  return branch;
 }
 
 /**
@@ -47,7 +53,20 @@ export async function checkStaleState(
 
   for (const issueNumber of issueNumbers) {
     const issueConflicts: StaleConflict[] = [];
-    const branchName = buildBranchName(config.branchTemplate, issueNumber);
+
+    // Fetch the issue title when the template references {title} so the
+    // branch name matches what WorktreeManager.resolveBranchName() produces.
+    let issueTitle: string | undefined;
+    if (config.branchTemplate.includes('{title}')) {
+      try {
+        const issue = await provider.getIssue(issueNumber);
+        issueTitle = issue.title;
+      } catch {
+        // Fail open — provider errors should not block the run
+      }
+    }
+
+    const branchName = buildBranchName(config.branchTemplate, issueNumber, issueTitle);
 
     // 1. Local worktree check
     const worktreePath = join(config.worktreeRoot, `issue-${issueNumber}`);
