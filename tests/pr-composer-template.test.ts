@@ -84,6 +84,17 @@ describe('pr-composer.md template', () => {
     });
   });
 
+  describe('json escaping instructions', () => {
+    it('should instruct that double-quotes inside JSON string values must be escaped as \\"', () => {
+      expect(content).toMatch(/\\\\"/);
+    });
+
+    it('should include a concrete example with escaped quotes', () => {
+      // The template must show \" inside a cadre-json block value
+      expect(content).toMatch(/\\"[^"]+\\"/);
+    });
+  });
+
   describe('style constraints', () => {
     it('should mention imperative mood for the title', () => {
       expect(content).toMatch(/imperative/i);

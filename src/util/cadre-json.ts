@@ -9,9 +9,61 @@
 export function extractCadreJson(content: string): unknown | null {
   const match = content.match(/```cadre-json[ \t]*\n([\s\S]*?)\n```[ \t]*(\n|$)/);
   if (!match) return null;
+  const raw = match[1].trim();
   try {
-    return JSON.parse(match[1].trim());
+    return JSON.parse(raw);
   } catch {
-    return null;
+    // Best-effort recovery: fix unescaped double-quotes inside JSON string values.
+    try {
+      return JSON.parse(recoverUnescapedQuotes(raw));
+    } catch {
+      return null;
+    }
   }
+}
+
+/**
+ * Walk through `raw` character-by-character and escape any `"` that appear
+ * inside a JSON string value but are not already escaped.
+ *
+ * Heuristic: a `"` ends the current string only when the next non-whitespace
+ * character is a valid JSON structural character (`,`, `}`, `]`, `:`) or
+ * end-of-input. Otherwise the `"` is treated as an unescaped inner quote and
+ * replaced with `\"`.
+ */
+function recoverUnescapedQuotes(raw: string): string {
+  let result = '';
+  let inString = false;
+  let i = 0;
+  while (i < raw.length) {
+    const ch = raw[i];
+    if (!inString) {
+      result += ch;
+      if (ch === '"') inString = true;
+    } else {
+      if (ch === '\\') {
+        // Consume the escape sequence as-is.
+        result += ch;
+        i++;
+        if (i < raw.length) result += raw[i];
+      } else if (ch === '"') {
+        // Peek past whitespace to determine if this is the closing quote.
+        let j = i + 1;
+        while (j < raw.length && /[ \t\r\n]/.test(raw[j])) j++;
+        const next = j < raw.length ? raw[j] : '';
+        if (next === '' || /[,}\]:]/.test(next)) {
+          // Closing quote — end the string.
+          result += ch;
+          inString = false;
+        } else {
+          // Unescaped quote inside the string — escape it.
+          result += '\\"';
+        }
+      } else {
+        result += ch;
+      }
+    }
+    i++;
+  }
+  return result;
 }

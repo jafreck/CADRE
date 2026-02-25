@@ -26,6 +26,16 @@ Write a `pr-content.md` file at the path specified by `outputPath` in your conte
 
 **You MUST write this file before finishing.** If the file is not written, the pipeline will fail.
 
+**JSON escaping rule**: All double-quote characters (`"`) that appear inside a JSON string value MUST be escaped as `\"`. Failing to escape them produces invalid JSON that cannot be parsed. For example, if the PR title or body contains backtick code spans, quoted identifiers, or any literal `"` character, escape each one:
+
+```cadre-json
+{
+  "title": "Fix \"foo\" parsing in extractCadreJson",
+  "body": "## Summary\n\nUse `\\\"` to escape quotes inside JSON string values.\n\nCloses #42",
+  "labels": ["bug"]
+}
+```
+
 ### PR Body Structure
 
 The body must include these sections in order:
