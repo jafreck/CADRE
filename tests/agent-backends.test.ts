@@ -233,22 +233,12 @@ describe('CopilotBackend', () => {
     expect(result.timedOut).toBe(true);
   });
 
-  it('should return success=false when stderr contains "No such agent:" even if exitCode=0', async () => {
+  it('should return success=false and include the stderr message in result.error when stderr contains "No such agent:" even if exitCode=0', async () => {
     const backend = new CopilotBackend(config, logger as never);
-    setupSpawn(makeProcessResult({
-      exitCode: 0,
-      stderr: 'No such agent: conflict-resolver, available: adjudicator, code-writer',
-    }));
+    const noSuchAgentMsg = 'No such agent: conflict-resolver, available: adjudicator, code-writer';
+    setupSpawn(makeProcessResult({ exitCode: 0, stderr: noSuchAgentMsg }));
     const result = await backend.invoke(makeInvocation({ agent: 'conflict-resolver' }), '/tmp/worktree');
     expect(result.success).toBe(false);
-    expect(result.error).toContain('No such agent:');
-  });
-
-  it('should include the "No such agent" message in result.error', async () => {
-    const backend = new CopilotBackend(config, logger as never);
-    const noSuchAgentMsg = 'No such agent: my-agent, available: code-writer';
-    setupSpawn(makeProcessResult({ exitCode: 0, stderr: noSuchAgentMsg }));
-    const result = await backend.invoke(makeInvocation(), '/tmp/worktree');
     expect(result.error).toBe(noSuchAgentMsg);
   });
 
