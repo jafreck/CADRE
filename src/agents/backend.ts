@@ -118,6 +118,90 @@ async function writeAgentLog(
 }
 
 /**
+ * Shared invoke pipeline: handles log-dir creation, process spawn, log writing,
+ * token parsing, and result construction. Backend-specific arg building and
+ * success detection are injected as parameters.
+ *
+ * @param detectSuccess - Returns `{ success, error, failureMessage? }` where
+ *   `failureMessage` overrides the default logger message on failure.
+ */
+async function runInvokePipeline(
+  cliCommand: string,
+  args: string[],
+  invocation: AgentInvocation,
+  worktreePath: string,
+  config: RuntimeConfig,
+  logger: Logger,
+  backendName: string,
+  timeout: number,
+  detectSuccess: (r: ProcessResult) => { success: boolean; error?: string; failureMessage?: string },
+): Promise<AgentResult> {
+  const startTime = Date.now();
+  const logDir = join(worktreePath, '.cadre', 'issues', String(invocation.issueNumber), 'logs');
+  await ensureDir(logDir);
+
+  const timestamp = Date.now();
+  const sessionSuffix = invocation.sessionId ? `-${invocation.sessionId}` : '';
+  const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${timestamp}.log`);
+
+  logger.info(`Launching agent (${backendName}): ${invocation.agent}`, {
+    issueNumber: invocation.issueNumber,
+    phase: invocation.phase,
+    sessionId: invocation.sessionId,
+  });
+
+  const env = buildEnv(invocation, worktreePath, config);
+  const { promise, process: child } = spawnProcess(cliCommand, args, {
+    cwd: worktreePath,
+    env,
+    timeout,
+  });
+
+  trackProcess(child);
+  const processResult = await promise;
+
+  await writeAgentLog(logFile, invocation, startTime, processResult);
+
+  const tokenUsage = parseTokenUsage(processResult);
+  const outputExists = await exists(invocation.outputPath);
+  const duration = Date.now() - startTime;
+  const { success, error, failureMessage } = detectSuccess(processResult);
+
+  if (success) {
+    logger.info(`Agent ${invocation.agent} completed in ${duration}ms`, {
+      issueNumber: invocation.issueNumber,
+      phase: invocation.phase,
+      sessionId: invocation.sessionId,
+      data: { tokenUsage, outputExists },
+    });
+  } else {
+    logger.error(
+      failureMessage ?? `Agent ${invocation.agent} failed (exit: ${processResult.exitCode}, timeout: ${processResult.timedOut})`,
+      {
+        issueNumber: invocation.issueNumber,
+        phase: invocation.phase,
+        sessionId: invocation.sessionId,
+        data: { stderr: processResult.stderr.slice(0, 500) },
+      },
+    );
+  }
+
+  return {
+    agent: invocation.agent,
+    success,
+    exitCode: processResult.exitCode,
+    timedOut: processResult.timedOut,
+    duration,
+    stdout: processResult.stdout,
+    stderr: processResult.stderr,
+    tokenUsage,
+    outputPath: invocation.outputPath,
+    outputExists,
+    error,
+  };
+}
+
+/**
  * Backend that invokes agents via the GitHub Copilot CLI.
  */
 export class CopilotBackend implements AgentBackend {
@@ -144,22 +228,7 @@ export class CopilotBackend implements AgentBackend {
   }
 
   async invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
-    const startTime = Date.now();
-    const logDir = join(worktreePath, '.cadre', 'issues', String(invocation.issueNumber), 'logs');
-    await ensureDir(logDir);
-
-    const timestamp = Date.now();
-    const sessionSuffix = invocation.sessionId ? `-${invocation.sessionId}` : '';
-    const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${timestamp}.log`);
-
-    this.logger.info(`Launching agent (copilot): ${invocation.agent}`, {
-      issueNumber: invocation.issueNumber,
-      phase: invocation.phase,
-      sessionId: invocation.sessionId,
-    });
-
     const prompt = `Read your context file at: ${invocation.contextPath}`;
-
     const args = [
       '--agent', invocation.agent,
       '-p', prompt,
@@ -168,72 +237,26 @@ export class CopilotBackend implements AgentBackend {
       '--no-ask-user',
       '-s',
     ];
-
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }
-
-    const env = buildEnv(invocation, worktreePath, this.config);
     const timeout = invocation.timeout ?? this.defaultTimeout;
-    const { promise, process: child } = spawnProcess(this.cliCommand, args, {
-      cwd: worktreePath,
-      env,
-      timeout,
-    });
-
-    trackProcess(child);
-    const processResult = await promise;
-
-    await writeAgentLog(logFile, invocation, startTime, processResult);
-
-    const tokenUsage = parseTokenUsage(processResult);
-    const outputExists = await exists(invocation.outputPath);
-    const duration = Date.now() - startTime;
-
-    // The Copilot CLI exits 0 but writes "No such agent: <name>" to stderr when the
-    // agent instruction file is missing.  Treat this as a hard failure so callers
-    // are not misled into thinking the agent ran successfully.
-    const noSuchAgent = processResult.stderr.includes('No such agent:');
-    const success = processResult.exitCode === 0 && !processResult.timedOut && !noSuchAgent;
-
-    if (success) {
-      this.logger.info(`Agent ${invocation.agent} completed in ${duration}ms`, {
-        issueNumber: invocation.issueNumber,
-        phase: invocation.phase,
-        sessionId: invocation.sessionId,
-        data: { tokenUsage, outputExists },
-      });
-    } else {
-      this.logger.error(
-        noSuchAgent
-          ? `Agent ${invocation.agent} not found in Copilot agent directory — run 'cadre agents scaffold' or check agentDir config`
-          : `Agent ${invocation.agent} failed (exit: ${processResult.exitCode}, timeout: ${processResult.timedOut})`,
-        {
-          issueNumber: invocation.issueNumber,
-          phase: invocation.phase,
-          sessionId: invocation.sessionId,
-          data: { stderr: processResult.stderr.slice(0, 500) },
-        },
-      );
-    }
-
-    return {
-      agent: invocation.agent,
-      success,
-      exitCode: processResult.exitCode,
-      timedOut: processResult.timedOut,
-      duration,
-      stdout: processResult.stdout,
-      stderr: processResult.stderr,
-      tokenUsage,
-      outputPath: invocation.outputPath,
-      outputExists,
-      error: success
-        ? undefined
-        : noSuchAgent
-          ? processResult.stderr.trim()
-          : processResult.stderr || `Exit code: ${processResult.exitCode}`,
-    };
+    return runInvokePipeline(
+      this.cliCommand, args, invocation, worktreePath, this.config, this.logger, 'copilot', timeout,
+      (r) => {
+        // The Copilot CLI exits 0 but writes "No such agent: <name>" to stderr when the
+        // agent instruction file is missing. Treat this as a hard failure.
+        const noSuchAgent = r.stderr.includes('No such agent:');
+        const success = r.exitCode === 0 && !r.timedOut && !noSuchAgent;
+        return {
+          success,
+          error: success ? undefined : noSuchAgent ? r.stderr.trim() : r.stderr || `Exit code: ${r.exitCode}`,
+          failureMessage: noSuchAgent
+            ? `Agent ${invocation.agent} not found in Copilot agent directory — run 'cadre agents scaffold' or check agentDir config`
+            : undefined,
+        };
+      },
+    );
   }
 }
 
@@ -261,78 +284,25 @@ export class ClaudeBackend implements AgentBackend {
   }
 
   async invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
-    const startTime = Date.now();
-    const logDir = join(worktreePath, '.cadre', 'issues', String(invocation.issueNumber), 'logs');
-    await ensureDir(logDir);
-
-    const timestamp = Date.now();
-    const sessionSuffix = invocation.sessionId ? `-${invocation.sessionId}` : '';
-    const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${timestamp}.log`);
-
-    this.logger.info(`Launching agent (claude): ${invocation.agent}`, {
-      issueNumber: invocation.issueNumber,
-      phase: invocation.phase,
-      sessionId: invocation.sessionId,
-    });
-
     const prompt = `Read your context file at: ${invocation.contextPath}`;
-
     const args = [
       '-p', prompt,
       '--allowedTools', 'Bash,Read,Write,Edit,MultiEdit,Glob,Grep,TodoRead,TodoWrite,mcp__*',
       '--output-format', 'json',
     ];
-
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }
-
-    const env = buildEnv(invocation, worktreePath, this.config);
     const timeout = invocation.timeout ?? this.defaultTimeout;
-    const { promise, process: child } = spawnProcess(this.cliCommand, args, {
-      cwd: worktreePath,
-      env,
-      timeout,
-    });
-
-    trackProcess(child);
-    const processResult = await promise;
-
-    await writeAgentLog(logFile, invocation, startTime, processResult);
-
-    const tokenUsage = parseTokenUsage(processResult);
-    const outputExists = await exists(invocation.outputPath);
-    const duration = Date.now() - startTime;
-    const success = processResult.exitCode === 0 && !processResult.timedOut;
-
-    if (success) {
-      this.logger.info(`Agent ${invocation.agent} completed in ${duration}ms`, {
-        issueNumber: invocation.issueNumber,
-        phase: invocation.phase,
-        sessionId: invocation.sessionId,
-        data: { tokenUsage, outputExists },
-      });
-    } else {
-      this.logger.error(`Agent ${invocation.agent} failed (exit: ${processResult.exitCode}, timeout: ${processResult.timedOut})`, {
-        issueNumber: invocation.issueNumber,
-        phase: invocation.phase,
-        sessionId: invocation.sessionId,
-        data: { stderr: processResult.stderr.slice(0, 500) },
-      });
-    }
-
-    return {
-      agent: invocation.agent,
-      success,
-      exitCode: processResult.exitCode,
-      timedOut: processResult.timedOut,
-      duration,
-      stdout: processResult.stdout,
-      stderr: processResult.stderr,
-      tokenUsage,
-      outputPath: invocation.outputPath,
-      outputExists,
-      error: success ? undefined : processResult.stderr || `Exit code: ${processResult.exitCode}`,
-    };
+    return runInvokePipeline(
+      this.cliCommand, args, invocation, worktreePath, this.config, this.logger, 'claude', timeout,
+      (r) => {
+        const success = r.exitCode === 0 && !r.timedOut;
+        return {
+          success,
+          error: success ? undefined : r.stderr || `Exit code: ${r.exitCode}`,
+        };
+      },
+    );
   }
 }
