@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+export { WorktreeProvisioner } from './git/worktree-provisioner.js';
+export { AgentFileSync } from './git/agent-file-sync.js';
+export { WorktreeCleaner } from './git/worktree-cleaner.js';
+export { DependencyBranchMerger } from './git/dependency-branch-merger.js';
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { runInit } from './cli/init.js';
