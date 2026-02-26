@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
-import type { AgentSession } from '../agents/types.js';
+import type { AgentSession, SessionReviewSummary } from '../agents/types.js';
 import { SessionQueue } from '../execution/task-queue.js';
 import { exists } from '../util/fs.js';
 import { execShell } from '../util/process.js';
@@ -249,6 +249,19 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               }
               throw err;
             }
+            // Write per-session summary JSON for later use by whole-PR reviewer (non-fatal)
+            try {
+              const summaryPath = join(ctx.io.progressDir, `review-${session.id}-summary.json`);
+              const summaryData: SessionReviewSummary = {
+                sessionId: session.id,
+                verdict: review.verdict,
+                summary: review.summary ?? '',
+                keyFindings: (review.issues ?? []).map((i) => i.description),
+              };
+              await writeFile(summaryPath, JSON.stringify(summaryData, null, 2), 'utf-8');
+            } catch {
+              // Non-fatal: summary write failure should not block session completion
+            }
             if (review.verdict === 'needs-fixes') {
               // Launch fix-surgeon
               const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
@@ -316,18 +329,26 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       phase: 3,
     });
 
-    // Build full PR diff against base commit.
+    // Build full PR diff against base commit (no truncation — full diff referenced by path).
     const rawDiff = await ctx.io.commitManager.getDiff(ctx.worktree.baseCommit);
-    const diff = truncateDiff(rawDiff, 200_000);
     const diffPath = join(ctx.io.progressDir, 'whole-pr-diff.patch');
-    await writeFile(diffPath, diff, 'utf-8');
+    await writeFile(diffPath, rawDiff, 'utf-8');
 
-    // Collect all session plan file paths written during implementation.
+    // Collect all session plan file paths and per-session review summaries.
     const sessionPlanPaths: string[] = [];
+    const sessionSummaries: SessionReviewSummary[] = [];
     for (const session of sessions) {
       const planPath = join(ctx.io.progressDir, `session-${session.id}.md`);
       if (await exists(planPath)) {
         sessionPlanPaths.push(planPath);
+      }
+      const summaryPath = join(ctx.io.progressDir, `review-${session.id}-summary.json`);
+      try {
+        const raw = await readFile(summaryPath, 'utf-8');
+        const parsed = JSON.parse(raw) as SessionReviewSummary;
+        sessionSummaries.push(parsed);
+      } catch {
+        // No summary for this session — omit from array
       }
     }
 
@@ -342,6 +363,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         diffPath,
         sessionPlanPaths,
         ctx.io.progressDir,
+        sessionSummaries,
       );
 
       const reviewResult = await ctx.services.launcher.launchAgent(

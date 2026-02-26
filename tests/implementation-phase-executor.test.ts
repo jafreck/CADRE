@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { ImplementationPhaseExecutor } from '../src/executors/implementation-phase-executor.js';
 import { BudgetExceededError } from '../src/core/issue-orchestrator.js';
 import type { PhaseContext } from '../src/core/phase-executor.js';
-import type { AgentResult, AgentSession } from '../src/agents/types.js';
+import type { AgentResult, AgentSession, SessionReviewSummary } from '../src/agents/types.js';
 
 vi.mock('../src/util/fs.js', () => ({
   exists: vi.fn().mockResolvedValue(false),
@@ -11,6 +11,7 @@ vi.mock('../src/util/fs.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockRejectedValue(Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })),
 }));
 
 vi.mock('../src/util/process.js', () => ({
@@ -18,7 +19,7 @@ vi.mock('../src/util/process.js', () => ({
 }));
 
 import { exists } from '../src/util/fs.js';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import { execShell } from '../src/util/process.js';
 
 function makeSession(id: string, deps: string[] = [], files: string[] = []): AgentSession {
@@ -336,6 +337,75 @@ describe('ImplementationPhaseExecutor', () => {
         expect.any(String),
         'utf-8',
       );
+    });
+
+    it('should write review-<session-id>-summary.json after successful per-session code-reviewer run', async () => {
+      // exists returns true only for the per-session review file so parseReview is called
+      vi.mocked(exists).mockImplementation(async (path) =>
+        String(path).includes('review-session-'),
+      );
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn().mockResolvedValueOnce({
+          verdict: 'pass' as const,
+          summary: 'Looks good',
+          issues: [{ file: 'src/a.ts', severity: 'warning' as const, description: 'Minor style issue' }],
+        }),
+      };
+
+      const ctx = makeCtx({ services: { resultParser: resultParser } as never });
+      await executor.execute(ctx);
+
+      expect(writeFile).toHaveBeenCalledWith(
+        join('/tmp/progress', 'review-session-001-summary.json'),
+        expect.stringContaining('"sessionId"'),
+        'utf-8',
+      );
+    });
+
+    it('should include correct fields in review summary JSON', async () => {
+      vi.mocked(exists).mockImplementation(async (path) =>
+        String(path).includes('review-session-'),
+      );
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn().mockResolvedValueOnce({
+          verdict: 'pass' as const,
+          summary: 'All checks passed',
+          issues: [
+            { file: 'src/a.ts', severity: 'warning' as const, description: 'unused var' },
+            { file: 'src/b.ts', severity: 'error' as const, description: 'type error' },
+          ],
+        }),
+      };
+
+      const ctx = makeCtx({ services: { resultParser: resultParser } as never });
+      await executor.execute(ctx);
+
+      const summaryCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('review-session-001-summary.json'),
+      );
+      expect(summaryCall).toBeDefined();
+      const written = JSON.parse(summaryCall![1] as string) as SessionReviewSummary;
+      expect(written.sessionId).toBe('session-001');
+      expect(written.verdict).toBe('pass');
+      expect(written.summary).toBe('All checks passed');
+      expect(written.keyFindings).toEqual(['unused var', 'type error']);
+    });
+
+    it('should not write review summary JSON when review file does not exist', async () => {
+      // exists returns false everywhere (default), so parseReview is never called
+      vi.mocked(exists).mockResolvedValue(false);
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const summaryCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('review-session-001-summary.json'),
+      );
+      expect(summaryCall).toBeUndefined();
     });
 
     it('should append started and completed events to progress', async () => {
@@ -1131,6 +1201,117 @@ describe('ImplementationPhaseExecutor', () => {
         join('/tmp/progress', 'whole-pr-diff.patch'),
         expect.any(String),
         'utf-8',
+      );
+    });
+
+    it('should write full (untruncated) whole-pr diff even when diff exceeds 200,000 chars', async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+
+      const largeDiff = 'x'.repeat(300_000);
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue(''),
+        getDiff: vi.fn().mockResolvedValue(largeDiff),
+        commit: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn().mockResolvedValue({ verdict: 'pass' }),
+      };
+
+      const ctx = makeWholePrCtx({
+        services: { launcher: launcher, resultParser: resultParser } as never,
+        io: { commitManager: commitManager } as never,
+      });
+      await executor.execute(ctx);
+
+      const patchCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('whole-pr-diff.patch'),
+      );
+      expect(patchCall).toBeDefined();
+      const written = patchCall![1] as string;
+      expect(written).toBe(largeDiff);
+      expect(written).not.toContain('[Diff truncated');
+    });
+
+    it('should pass collected sessionSummaries to buildForWholePrCodeReviewer', async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+
+      const summaryData: SessionReviewSummary = {
+        sessionId: 'session-001',
+        verdict: 'pass',
+        summary: 'Code looks good',
+        keyFindings: ['minor lint issue'],
+      };
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(summaryData) as never);
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn().mockResolvedValue({ verdict: 'pass' }),
+      };
+
+      const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.services.contextBuilder as never as { buildForWholePrCodeReviewer: ReturnType<typeof vi.fn> }).buildForWholePrCodeReviewer,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.arrayContaining([expect.objectContaining({ sessionId: 'session-001', verdict: 'pass' })]),
+      );
+    });
+
+    it('should pass empty sessionSummaries when no summary files exist', async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+      // Explicitly ensure readFile rejects (ENOENT) so no summaries are found
+      vi.mocked(readFile).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
+        parseReview: vi.fn().mockResolvedValue({ verdict: 'pass' }),
+      };
+
+      const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.services.contextBuilder as never as { buildForWholePrCodeReviewer: ReturnType<typeof vi.fn> }).buildForWholePrCodeReviewer,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        [],
       );
     });
 
