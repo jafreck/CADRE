@@ -31,8 +31,8 @@ vi.mock('chalk', () => ({
 import { loadConfig } from '../src/config/loader.js';
 import { exists, statOrNull } from '../src/util/fs.js';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { scaffoldMissingAgents } from '../src/cli/agents.js';
-// Note: scaffoldMissingAgents helper is still exported for programmatic use by 'cadre run'
+import { scaffoldMissingAgents, refreshAgentsFromTemplates } from '../src/cli/agents.js';
+// Note: scaffoldMissingAgents and refreshAgentsFromTemplates are exported for programmatic use by 'cadre run'
 
 const mockConfig = {
   copilot: { agentDir: '/mock/agent-dir' },
@@ -145,6 +145,70 @@ describe('agents validate CLI', () => {
 
     const allErrors = errorSpy.mock.calls.map((c) => c[0] as string).join('\n');
     expect(allErrors).toContain('cadre run');
+  });
+});
+
+describe('refreshAgentsFromTemplates helper', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(writeFile).mockResolvedValue(undefined);
+    vi.mocked(mkdir).mockResolvedValue(undefined);
+    vi.mocked(readFile).mockResolvedValue('# template content' as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should overwrite existing destination files (overwrite=true)', async () => {
+    // templates exist AND destinations also exist → should still write
+    vi.mocked(exists).mockResolvedValue(true);
+
+    const count = await refreshAgentsFromTemplates('/mock/agent-dir', '/mock/templates');
+
+    expect(count).toBe(AGENT_DEFINITIONS.length);
+    expect(writeFile).toHaveBeenCalledTimes(AGENT_DEFINITIONS.length);
+  });
+
+  it('should return count of files written', async () => {
+    vi.mocked(exists).mockResolvedValue(true);
+
+    const count = await refreshAgentsFromTemplates('/mock/agent-dir', '/mock/templates');
+
+    expect(count).toBe(AGENT_DEFINITIONS.length);
+  });
+
+  it('should write {agent.name}.md filenames', async () => {
+    vi.mocked(exists).mockResolvedValue(true);
+
+    await refreshAgentsFromTemplates('/mock/agent-dir', '/mock/templates');
+
+    const writtenPaths = vi.mocked(writeFile).mock.calls.map((c) => c[0] as string);
+    for (const p of writtenPaths) {
+      expect(p).toMatch(/\/mock\/agent-dir\/.+\.md$/);
+    }
+  });
+
+  it('should skip files when template is missing', async () => {
+    // nothing exists (no templates) → nothing to write
+    vi.mocked(exists).mockResolvedValue(false);
+
+    const count = await refreshAgentsFromTemplates('/mock/agent-dir', '/mock/templates');
+
+    expect(count).toBe(0);
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it('should write correct content from template', async () => {
+    vi.mocked(exists).mockResolvedValue(true);
+    vi.mocked(readFile).mockResolvedValue('# my agent template' as never);
+
+    await refreshAgentsFromTemplates('/mock/agent-dir', '/mock/templates');
+
+    const writtenContents = vi.mocked(writeFile).mock.calls.map((c) => c[1] as string);
+    expect(writtenContents.every((c) => c === '# my agent template')).toBe(true);
   });
 });
 

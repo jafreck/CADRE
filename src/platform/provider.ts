@@ -186,6 +186,9 @@ export interface PlatformProvider {
   /** Add labels to a pull request without clobbering any existing ones. */
   applyLabels(prNumber: number, labels: string[]): Promise<void>;
 
+  /** Merge a pull request into the given base branch. */
+  mergePullRequest(prNumber: number, baseBranch: string): Promise<void>;
+
   // ── Issue Linking ──
 
   /**

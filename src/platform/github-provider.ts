@@ -155,6 +155,16 @@ export class GitHubProvider implements PlatformProvider {
     return prs.find((pr) => pr.headBranch === branch) ?? null;
   }
 
+  async mergePullRequest(prNumber: number, _baseBranch: string): Promise<void> {
+    const oct = this.octokit ?? new Octokit({ auth: process.env.GITHUB_TOKEN });
+    await oct.rest.pulls.merge({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+      merge_method: 'merge',
+    });
+  }
+
   // ── Labels ──
 
   async ensureLabel(labelName: string, color?: string): Promise<void> {

@@ -395,6 +395,29 @@ export class AzureDevOpsProvider implements PlatformProvider {
     return prs.find((pr) => pr.headBranch === branch) ?? null;
   }
 
+  async mergePullRequest(prNumber: number, _baseBranch: string): Promise<void> {
+    this.ensureConnected();
+
+    const repoName = this.adoConfig.repositoryName ?? this.adoConfig.project;
+    const url =
+      `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/git/repositories/${repoName}/pullrequests/${prNumber}?api-version=${this.apiVersion}`;
+
+    // Fetch the PR to get the latest source commit (required by ADO API)
+    const pr = await this.fetch(url);
+    const lastMergeSourceCommit = pr.lastMergeSourceCommit as Record<string, unknown> | undefined;
+
+    await this.fetch(url, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'completed',
+        lastMergeSourceCommit,
+        completionOptions: {
+          mergeStrategy: 'noFastForward',
+        },
+      }),
+    });
+  }
+
   // ── Issue Linking ──
 
   issueLinkSuffix(issueNumber: number): string {
