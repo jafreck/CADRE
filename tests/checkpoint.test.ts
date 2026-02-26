@@ -309,6 +309,71 @@ describe('CheckpointManager', () => {
     await expect(manager.recordGateResult(1, result)).rejects.toThrow('Checkpoint not loaded');
   });
 
+  it('should initialize subTasks as empty object on fresh checkpoint', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    const state = await manager.load('42');
+    expect(state.subTasks).toEqual({});
+  });
+
+  it('isSubTaskCompleted should return false before completeSubTask is called', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+    expect(manager.isSubTaskCompleted('task-001:step-1')).toBe(false);
+  });
+
+  it('isSubTaskCompleted should return true after completeSubTask is called', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+    await manager.completeSubTask('task-001:step-1');
+    expect(manager.isSubTaskCompleted('task-001:step-1')).toBe(true);
+  });
+
+  it('startSubTask should set sub-task entry to false', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+    await manager.startSubTask('task-001:step-1');
+    expect(manager.isSubTaskCompleted('task-001:step-1')).toBe(false);
+  });
+
+  it('sub-task state should persist across checkpoint reload', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+    await manager.completeSubTask('task-001:step-1');
+
+    const manager2 = new CheckpointManager(tempDir, mockLogger);
+    await manager2.load('42');
+    expect(manager2.isSubTaskCompleted('task-001:step-1')).toBe(true);
+  });
+
+  it('resetPhases should clear subTasks entries', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+    await manager.completeSubTask('task-001:step-1');
+    await manager.completeSubTask('task-002:step-1');
+
+    await manager.resetPhases([3]);
+
+    const state = manager.getState();
+    expect(state.subTasks).toEqual({});
+  });
+
+  it('completeTask should remove sub-task entries for the completed task', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
+    await manager.load('42');
+    await manager.startTask('task-001');
+    await manager.completeSubTask('task-001:step-1');
+    await manager.completeSubTask('task-001:step-2');
+    await manager.completeSubTask('task-002:step-1');
+
+    await manager.completeTask('task-001');
+
+    const state = manager.getState();
+    expect(state.subTasks?.['task-001:step-1']).toBeUndefined();
+    expect(state.subTasks?.['task-001:step-2']).toBeUndefined();
+    // Sub-tasks for other tasks should remain
+    expect(state.subTasks?.['task-002:step-1']).toBe(true);
+  });
+
   it('loadTokenRecords should return empty array when checkpoint has no tokenRecords', async () => {
     const manager = new CheckpointManager(tempDir, mockLogger);
     await manager.load('42');

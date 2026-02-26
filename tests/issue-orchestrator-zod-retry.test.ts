@@ -294,6 +294,14 @@ function makeMockCheckpoint(completedPhaseIds: number[] = []): CheckpointManager
     blockTask: vi.fn().mockResolvedValue(undefined),
     recordTokenUsage: vi.fn().mockResolvedValue(undefined),
     recordGateResult: vi.fn().mockResolvedValue(undefined),
+    startSubTask: vi.fn().mockResolvedValue(undefined),
+    ...(() => {
+      const completedSubTasks = new Set<string>();
+      return {
+        completeSubTask: vi.fn(async (id: string) => { completedSubTasks.add(id); }),
+        isSubTaskCompleted: vi.fn((id: string) => completedSubTasks.has(id)),
+      };
+    })(),
   } as unknown as CheckpointManager;
 }
 

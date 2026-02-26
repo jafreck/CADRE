@@ -68,5 +68,6 @@
     "branch": "cadre/issue-42",
     "baseCommit": "abc123def456"
   },
-  "resumeCount": 0
+  "resumeCount": 0,
+  "subTasks": {}
 }
