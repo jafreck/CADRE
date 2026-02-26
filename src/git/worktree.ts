@@ -1,13 +1,12 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { writeFile } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir } from '../util/fs.js';
-import { DependencyMergeConflictError } from '../errors.js';
 import type { IssueDetail } from '../platform/provider.js';
 import { AgentFileSync } from './agent-file-sync.js';
 import { WorktreeCleaner } from './worktree-cleaner.js';
+import { DependencyBranchMerger } from './dependency-branch-merger.js';
 
 export class RemoteBranchMissingError extends Error {
   constructor(branch: string) {
@@ -43,6 +42,7 @@ export class WorktreeManager {
   private readonly git: SimpleGit;
   private readonly agentFileSync: AgentFileSync;
   private readonly worktreeCleaner: WorktreeCleaner;
+  private readonly dependencyBranchMerger: DependencyBranchMerger;
 
   constructor(
     private readonly repoPath: string,
@@ -56,6 +56,12 @@ export class WorktreeManager {
     this.git = simpleGit(repoPath);
     this.agentFileSync = new AgentFileSync(agentDir, backend, logger);
     this.worktreeCleaner = new WorktreeCleaner(this.git, worktreeRoot, logger);
+    this.dependencyBranchMerger = new DependencyBranchMerger(
+      this.git,
+      repoPath,
+      logger,
+      this.resolveBranchName.bind(this),
+    );
   }
 
   /**
@@ -162,62 +168,15 @@ export class WorktreeManager {
       return this.git.revparse([this.baseBranch]);
     });
 
-    // Create the deps branch from the base commit; skip if resuming and it already exists
-    const depsBranchExists = await this.branchExistsLocal(depsBranch);
-    if (!depsBranchExists) {
-      await this.git.branch([depsBranch, baseCommit.trim()]);
-    }
-
-    // Create a temporary worktree to perform merges on the deps branch
-    const depsWorktreePath = join(this.worktreeRoot, `deps-${issueNumber}`);
-    await ensureDir(this.worktreeRoot);
-    await this.git.raw(['worktree', 'add', depsWorktreePath, depsBranch]);
-    const depsGit = simpleGit(depsWorktreePath);
-
-    let mergeSucceeded = false;
-    try {
-      // Merge each dependency branch in order
-      for (const dep of deps) {
-        const depBranch = this.resolveBranchName(dep.number, dep.title);
-        try {
-          await depsGit.merge([depBranch, '--no-edit']);
-        } catch {
-          // Collect conflicted files before aborting
-          const conflictedFiles = await this.getConflictedFiles(depsWorktreePath);
-
-          // Write conflict metadata to the main repo's .cadre/ directory
-          const cadreDir = join(this.repoPath, '.cadre');
-          await ensureDir(cadreDir);
-          await writeFile(
-            join(cadreDir, 'dep-conflict.json'),
-            JSON.stringify(
-              { issueNumber, conflictingBranch: depBranch, conflictedFiles, timestamp: new Date().toISOString() },
-              null,
-              2,
-            ),
-            'utf-8',
-          );
-
-          await depsGit.raw(['merge', '--abort']).catch(() => {});
-          throw new DependencyMergeConflictError(
-            `Merge conflict when merging '${depBranch}' into '${depsBranch}' for issue #${issueNumber}`,
-            issueNumber,
-            depBranch,
-          );
-        }
-      }
-      mergeSucceeded = true;
-    } finally {
-      // Always clean up the temporary deps worktree
-      await this.git.raw(['worktree', 'remove', depsWorktreePath, '--force']).catch(() => {});
-      // On failure, delete the deps branch so retries can recreate it cleanly
-      if (!mergeSucceeded) {
-        await this.git.branch(['-D', depsBranch]).catch(() => {});
-      }
-    }
+    // Delegate dependency branch creation and merge to DependencyBranchMerger
+    const depsHead = await this.dependencyBranchMerger.mergeDependencies(
+      issueNumber,
+      deps,
+      baseCommit,
+      this.worktreeRoot,
+    );
 
     // Create the issue branch from the HEAD of the deps branch
-    const depsHead = await this.git.revparse([depsBranch]);
     const branchExists = await this.branchExistsLocal(issueBranch);
     if (!branchExists) {
       await this.git.branch([issueBranch, depsHead.trim()]);
