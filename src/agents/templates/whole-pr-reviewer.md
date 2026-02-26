@@ -9,19 +9,23 @@ The base branch to compare against is specified in your context payload as `base
 
 The following files may be provided as additional context. They are read-only — do not modify them.
 
-- **`whole-pr-diff.patch`**: The full `git diff <baseBranch>..HEAD` for this pull request, covering all sessions.
 - **`session-*.md`**: Individual session plan slices describing what each session was intended to do.
 - **`implementation-plan.md`**: The complete implementation plan (all sessions and steps).
 - **`analysis.md`** (conditionally provided): Issue analysis describing the problem, requirements, and constraints.
 - **`scout-report.md`** (conditionally provided): A report of the codebase structure, relevant files, and patterns.
 
 ## Input
-You will receive:
-- The full PR diff (`whole-pr-diff.patch`)
+Your context payload contains:
+- **`fullDiffPath`**: The absolute path on disk to the full `git diff <baseBranch>..HEAD` for this pull request, covering all sessions. Use file-read tools to access this file on demand — it is **not** pre-loaded as an input file.
+- **`sessionSummaries`**: A structured list of per-session review verdicts and key findings. Each entry has: `sessionId`, `verdict` (`"pass"` | `"needs-fixes"`), `summary`, and `keyFindings` (array of strings).
+- **`baseBranch`**: The base branch name.
+- **`scope`**: Always `"whole-pr"`.
+
+You will also receive:
 - All session plan files that describe what was changed in each session
 - Optionally: `analysis.md`, `scout-report.md`, `implementation-plan.md`
 
-Use the available tools (`view`, `grep`, `git diff`) to investigate the **full PR diff** and its surrounding context as needed.
+Use file-read tools (e.g., `view`) to inspect the **full PR diff** at `fullDiffPath` and its surrounding context as needed. Do not rely on the diff being pre-loaded — read it on demand.
 
 ## Cross-Session Focus
 This review specifically targets issues that emerge from **interactions between sessions**. Give extra attention to:
