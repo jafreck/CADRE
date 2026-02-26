@@ -1,12 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   ISSUE_PHASES,
+  PHASE_MANIFEST,
   REVIEW_RESPONSE_PHASES,
   getPhase,
   getPhaseCount,
   getPhaseSubset,
   isLastPhase,
   PhaseRegistry,
+  buildRegistry,
+  buildGateMap,
 } from '../src/core/phase-registry.js';
 import type { PhaseExecutor } from '../src/core/phase-executor.js';
 
@@ -167,5 +170,106 @@ describe('PhaseRegistry class', () => {
     r1.register(makeExecutor(1, 'Phase One'));
     expect(r1.getAll()).toHaveLength(1);
     expect(r2.getAll()).toHaveLength(0);
+  });
+});
+
+describe('PHASE_MANIFEST', () => {
+  it('should have exactly 5 entries', () => {
+    expect(PHASE_MANIFEST).toHaveLength(5);
+  });
+
+  it('should have phaseIds 1 through 5 in order', () => {
+    expect(PHASE_MANIFEST.map((e) => e.phaseId)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('should have the correct names matching ISSUE_PHASES', () => {
+    for (let i = 0; i < PHASE_MANIFEST.length; i++) {
+      expect(PHASE_MANIFEST[i].name).toBe(ISSUE_PHASES[i].name);
+    }
+  });
+
+  it('should mark all phases as critical', () => {
+    for (const entry of PHASE_MANIFEST) {
+      expect(entry.critical).toBe(true);
+    }
+  });
+
+  it('should include gates for phases 1–4 and null for phase 5', () => {
+    expect(PHASE_MANIFEST[0].gate).not.toBeNull();
+    expect(PHASE_MANIFEST[1].gate).not.toBeNull();
+    expect(PHASE_MANIFEST[2].gate).not.toBeNull();
+    expect(PHASE_MANIFEST[3].gate).not.toBeNull();
+    expect(PHASE_MANIFEST[4].gate).toBeNull();
+  });
+
+  it('should mark phases 3, 4, 5 as includeInReviewResponse and phases 1, 2 as not', () => {
+    expect(PHASE_MANIFEST[0].includeInReviewResponse).toBe(false);
+    expect(PHASE_MANIFEST[1].includeInReviewResponse).toBe(false);
+    expect(PHASE_MANIFEST[2].includeInReviewResponse).toBe(true);
+    expect(PHASE_MANIFEST[3].includeInReviewResponse).toBe(true);
+    expect(PHASE_MANIFEST[4].includeInReviewResponse).toBe(true);
+  });
+
+  it('should have executorFactory functions for each entry', () => {
+    for (const entry of PHASE_MANIFEST) {
+      expect(typeof entry.executorFactory).toBe('function');
+    }
+  });
+
+  it('should have matching commitType values as ISSUE_PHASES', () => {
+    for (let i = 0; i < PHASE_MANIFEST.length; i++) {
+      expect(PHASE_MANIFEST[i].commitType).toBe(ISSUE_PHASES[i].commitType);
+    }
+  });
+});
+
+describe('buildRegistry', () => {
+  it('should return a PhaseRegistry with 5 executors', () => {
+    const registry = buildRegistry();
+    expect(registry.getAll()).toHaveLength(5);
+  });
+
+  it('should return executors in phase-ID order (1 to 5)', () => {
+    const registry = buildRegistry();
+    const ids = registry.getAll().map((e) => e.phaseId);
+    expect(ids).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('should return a PhaseRegistry instance', () => {
+    const registry = buildRegistry();
+    expect(registry).toBeInstanceOf(PhaseRegistry);
+  });
+
+  it('should create independent registries on each call', () => {
+    const r1 = buildRegistry();
+    const r2 = buildRegistry();
+    expect(r1.getAll()).not.toBe(r2.getAll());
+    expect(r1).not.toBe(r2);
+  });
+});
+
+describe('buildGateMap', () => {
+  it('should return a record with keys 1, 2, 3, 4', () => {
+    const gateMap = buildGateMap();
+    const keys = Object.keys(gateMap).map(Number).sort((a, b) => a - b);
+    expect(keys).toEqual([1, 2, 3, 4]);
+  });
+
+  it('should not include phase 5 (no gate)', () => {
+    const gateMap = buildGateMap();
+    expect(gateMap[5]).toBeUndefined();
+  });
+
+  it('should return gate objects with a validate function for each phase', () => {
+    const gateMap = buildGateMap();
+    for (const key of [1, 2, 3, 4]) {
+      expect(typeof gateMap[key].validate).toBe('function');
+    }
+  });
+
+  it('should return independent gate maps on each call', () => {
+    const m1 = buildGateMap();
+    const m2 = buildGateMap();
+    expect(m1).not.toBe(m2);
   });
 });
