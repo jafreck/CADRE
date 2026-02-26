@@ -259,8 +259,12 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 keyFindings: (review.issues ?? []).map((i) => i.description),
               };
               await writeFile(summaryPath, JSON.stringify(summaryData, null, 2), 'utf-8');
-            } catch {
+            } catch (err) {
               // Non-fatal: summary write failure should not block session completion
+              const msg = err instanceof Error ? err.message : String(err);
+              ctx.services.logger.warn(`Failed to write per-session review summary for ${session.id}: ${msg}`, {
+                sessionId: session.id,
+              });
             }
             if (review.verdict === 'needs-fixes') {
               // Launch fix-surgeon

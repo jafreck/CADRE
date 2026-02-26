@@ -238,12 +238,7 @@ export interface ScoutReport {
 }
 
 /** Summary produced by a whole-pr-reviewer or session-review agent. */
-export interface SessionReviewSummary {
-  sessionId: string;
-  verdict: 'pass' | 'needs-fixes';
-  summary: string;
-  keyFindings: string[];
-}
+export type { SessionReviewSummary } from './schemas/session-review-summary.schema.js';
 
 /** Parsed code review output. */
 export interface ReviewResult {
