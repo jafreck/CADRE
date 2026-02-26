@@ -1,12 +1,13 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readFile, writeFile, readdir, rm } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir } from '../util/fs.js';
-import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { DependencyMergeConflictError } from '../errors.js';
 import type { IssueDetail } from '../platform/provider.js';
+import { AgentFileSync } from './agent-file-sync.js';
+import { WorktreeCleaner } from './worktree-cleaner.js';
 
 export class RemoteBranchMissingError extends Error {
   constructor(branch: string) {
@@ -40,6 +41,8 @@ export interface WorktreeInfo {
  */
 export class WorktreeManager {
   private readonly git: SimpleGit;
+  private readonly agentFileSync: AgentFileSync;
+  private readonly worktreeCleaner: WorktreeCleaner;
 
   constructor(
     private readonly repoPath: string,
@@ -51,6 +54,8 @@ export class WorktreeManager {
     private readonly backend: string = 'copilot',
   ) {
     this.git = simpleGit(repoPath);
+    this.agentFileSync = new AgentFileSync(agentDir, backend, logger);
+    this.worktreeCleaner = new WorktreeCleaner(this.git, worktreeRoot, logger);
   }
 
   /**
@@ -88,7 +93,7 @@ export class WorktreeManager {
       await ensureDir(this.worktreeRoot);
       await this.git.raw(['worktree', 'add', worktreePath, branch]);
 
-      await this.initCadreDir(worktreePath, issueNumber);
+      await this.agentFileSync.initCadreDir(worktreePath, issueNumber);
       const worktreeInfo = await this.buildWorktreeInfo(worktreePath, issueNumber, branch);
       this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
         issueNumber,
@@ -118,7 +123,7 @@ export class WorktreeManager {
     await this.git.raw(['worktree', 'add', worktreePath, branch]);
 
     // 4. Bootstrap the worktree's .cadre/ directory and gitignore cadre artifacts
-    await this.initCadreDir(worktreePath, issueNumber);
+    await this.agentFileSync.initCadreDir(worktreePath, issueNumber);
     this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
       issueNumber,
       data: { path: worktreePath, branch, baseCommit: baseCommit.trim().slice(0, 8) },
@@ -221,7 +226,7 @@ export class WorktreeManager {
     // Create worktree for the issue branch
     await this.git.raw(['worktree', 'add', worktreePath, issueBranch]);
 
-    await this.initCadreDir(worktreePath, issueNumber);
+    await this.agentFileSync.initCadreDir(worktreePath, issueNumber);
     this.logger.info(`Provisioned worktree with deps for issue #${issueNumber}`, {
       issueNumber,
       data: { path: worktreePath, branch: issueBranch, depsBranch, baseCommit: baseCommit.trim().slice(0, 8) },
@@ -259,7 +264,7 @@ export class WorktreeManager {
     await this.git.raw(['worktree', 'add', '-B', branch, worktreePath, `origin/${branch}`]);
 
     // Bootstrap the worktree's .cadre/ directory
-    await this.initCadreDir(worktreePath, issueNumber);
+    await this.agentFileSync.initCadreDir(worktreePath, issueNumber);
     const worktreeInfo = await this.buildWorktreeInfo(worktreePath, issueNumber, branch);
 
     this.logger.info(`Provisioned worktree from branch ${branch} for issue #${issueNumber}`, {
@@ -284,165 +289,10 @@ export class WorktreeManager {
   }
 
   /**
-   * Bootstrap the worktree's `.cadre/` directory and add both `.cadre/` and
-   * the backend-specific agent directory to the worktree's private git exclude
-   * file (`{git-dir}/info/exclude`) so they are never tracked or accidentally
-   * committed — without touching the repo's `.gitignore`.
-   *
-   * The agent directory (`.github/agents/` for Copilot, `.claude/agents/` for
-   * Claude) is added as a primary defence; `CommitManager.unstageArtifacts`
-   * is the belt-and-suspenders secondary defence.
-   */
-  private async initCadreDir(worktreePath: string, issueNumber: number): Promise<void> {
-    const cadreDir = join(worktreePath, '.cadre');
-    await ensureDir(cadreDir);
-
-    // Ensure cadre's tasks scratch dir exists too so agents can write there
-    await ensureDir(join(cadreDir, 'tasks'));
-
-    // Write exclusions to the worktree-local git exclude instead of .gitignore
-    // so the exclusions are never staged or committed.
-    try {
-      // Use a git instance rooted at the *worktree* so that
-      // `git rev-parse --git-dir` returns the worktree's own git-dir path
-      // (e.g. /path/to/repo/.git/worktrees/issue-N), not the main repo's `.git`.
-      const { simpleGit: makeGit } = await import('simple-git');
-      const worktreeGit = makeGit(worktreePath);
-      const gitDir = (await worktreeGit.raw(['rev-parse', '--git-dir'])).trim();
-      const excludePath = join(
-        gitDir.startsWith('/') ? gitDir : join(worktreePath, gitDir),
-        'info',
-        'exclude',
-      );
-      await ensureDir(join(excludePath, '..'));
-      const { readFile: readFileNode, writeFile } = await import('node:fs/promises');
-      const existing = await readFileNode(excludePath, 'utf-8').catch(() => '');
-      const existingLines = existing.split('\n').map((l) => l.trim());
-
-      // Entries to protect: cadre state dir + backend-specific agent directory.
-      const agentExcludeDir =
-        this.backend === 'claude' ? '.claude/agents/' : '.github/agents/';
-      const entriesToAdd = ['.cadre/', agentExcludeDir].filter(
-        (entry) => !existingLines.some((l) => l === entry),
-      );
-
-      if (entriesToAdd.length > 0) {
-        const suffix = entriesToAdd.join('\n') + '\n';
-        const updated =
-          existing === '' || existing.endsWith('\n')
-            ? existing + suffix
-            : `${existing}\n${suffix}`;
-        await writeFile(excludePath, updated, 'utf-8');
-        this.logger.debug(
-          `Added ${entriesToAdd.join(', ')} to worktree git exclude`,
-          { issueNumber },
-        );
-      }
-    } catch {
-      // Non-fatal: CommitManager.unstageArtifacts provides the secondary guard.
-      this.logger.debug('Could not write worktree git exclude; relying on unstageArtifacts', { issueNumber });
-    }
-  }
-
-  /**
-   * Copy agent files from agentDir into the worktree's agent directory.
-   * Source files in agentDir are always plain `{name}.md` with no frontmatter.
-   *
-   * - **Copilot**: reads `{name}.md`, injects YAML frontmatter, writes
-   *   `{name}.agent.md` into `.github/agents/` (the format Copilot CLI expects).
-   * - **Claude**: reads `{name}.md`, injects YAML frontmatter, writes
-   *   `{name}.md` into `.claude/agents/` (the format Claude CLI expects).
-   *
-   * No-op if agentDir is not configured or does not exist.
-   */
-  private async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<string[]> {
-    if (!this.agentDir) return [];
-
-    if (!(await exists(this.agentDir))) {
-      this.logger.debug(`agentDir ${this.agentDir} does not exist — skipping agent sync`, { issueNumber });
-      return [];
-    }
-
-    const destDir =
-      this.backend === 'claude'
-        ? join(worktreePath, '.claude', 'agents')
-        : join(worktreePath, '.github', 'agents');
-    await ensureDir(destDir);
-
-    const entries = await readdir(this.agentDir);
-    const sourceFiles = entries.filter((f) => f.endsWith('.md') && !f.endsWith('.agent.md'));
-    // Track the exact paths written so CommitManager can precisely unstage them.
-    const syncedRelPaths: string[] = [];
-
-    for (const file of sourceFiles) {
-      const agentName = file.replace(/\.md$/, '');
-      const srcPath = join(this.agentDir!, file);
-
-      const definition = AGENT_DEFINITIONS.find((d) => d.name === agentName);
-      const displayName = agentName
-        .split('-')
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ');
-      const description = definition?.description ?? displayName;
-      const body = await readFile(srcPath, 'utf-8');
-
-      let destAbsPath: string;
-      if (this.backend === 'claude') {
-        // Claude expects {name}.md with YAML frontmatter
-        const frontmatter = [
-          '---',
-          `name: ${displayName}`,
-          `description: "${description.replace(/"/g, '\\"')}"`,
-          '---',
-          '',
-        ].join('\n');
-        destAbsPath = join(destDir, file);
-        await writeFile(destAbsPath, frontmatter + body, 'utf-8');
-      } else {
-        // Copilot expects {name}.agent.md with YAML frontmatter
-        const frontmatter = [
-          '---',
-          `name: ${displayName}`,
-          `description: "${description.replace(/"/g, '\\"')}"`,
-          'tools: ["read", "edit", "search", "execute"]',
-          '---',
-          '',
-        ].join('\n');
-        destAbsPath = join(destDir, `${agentName}.agent.md`);
-        await writeFile(destAbsPath, frontmatter + body, 'utf-8');
-      }
-      syncedRelPaths.push(relative(worktreePath, destAbsPath));
-    }
-
-    if (syncedRelPaths.length > 0) {
-      this.logger.debug(
-        `Synced ${syncedRelPaths.length} agent file(s) from ${this.agentDir} → ${destDir}`,
-        { issueNumber },
-      );
-    }
-    return syncedRelPaths;
-  }
-
-  /**
    * Remove a worktree after the PR is created.
    */
   async remove(issueNumber: number): Promise<void> {
-    const worktreePath = this.getWorktreePath(issueNumber);
-
-    if (!(await exists(worktreePath))) {
-      this.logger.debug(`Worktree for issue #${issueNumber} already removed`, { issueNumber });
-      return;
-    }
-
-    try {
-      await this.git.raw(['worktree', 'remove', worktreePath, '--force']);
-      this.logger.info(`Removed worktree for issue #${issueNumber}`, { issueNumber });
-    } catch (err) {
-      this.logger.error(`Failed to remove worktree for issue #${issueNumber}: ${err}`, {
-        issueNumber,
-      });
-      throw err;
-    }
+    return this.worktreeCleaner.remove(issueNumber);
   }
 
   /**
@@ -478,7 +328,7 @@ export class WorktreeManager {
     await tempGit.addConfig('user.email', 'cadre@localhost');
     await tempGit.addConfig('user.name', 'cadre');
 
-    await this.syncAgentFiles(agentDir, 0);
+    await this.agentFileSync.syncAgentFiles(agentDir, 0);
     return agentDir;
   }
 
@@ -487,12 +337,7 @@ export class WorktreeManager {
    * Non-fatal on failure — logs a warning instead of throwing.
    */
   async removeWorktreeAtPath(worktreePath: string): Promise<void> {
-    try {
-      await rm(worktreePath, { recursive: true, force: true });
-      this.logger.debug(`Removed ephemeral dag-resolver dir at ${worktreePath}`);
-    } catch (err) {
-      this.logger.warn(`Could not remove ephemeral dag-resolver dir at ${worktreePath}: ${err}`);
-    }
+    return this.worktreeCleaner.removeWorktreeAtPath(worktreePath);
   }
 
   /**
@@ -721,7 +566,7 @@ export class WorktreeManager {
    * Get the worktree directory path for an issue.
    */
   public getWorktreePath(issueNumber: number): string {
-    return join(this.worktreeRoot, `issue-${issueNumber}`);
+    return this.worktreeCleaner.getWorktreePath(issueNumber);
   }
 
   /**
@@ -747,7 +592,7 @@ export class WorktreeManager {
     branch: string,
     baseCommit?: string,
   ): Promise<WorktreeInfo> {
-    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
+    const syncedAgentFiles = await this.agentFileSync.syncAgentFiles(worktreePath, issueNumber);
     const resolvedBaseCommit = baseCommit ?? (await this.getBaseCommit(worktreePath));
     return {
       issueNumber,
