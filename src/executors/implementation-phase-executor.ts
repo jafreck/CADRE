@@ -90,202 +90,229 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         const sessionFileList = Array.from(sessionFileSet);
 
         // 2. Launch code-writer (receives entire session with all steps)
-        const writerContextPath = await ctx.services.contextBuilder.buildForCodeWriter(
-          ctx.issue.number,
-          ctx.worktree.path,
-          session,
-          sessionPlanPath,
-          sessionFileList.map((f) => join(ctx.worktree.path, f)),
-          ctx.io.progressDir,
-        );
-
-        const writerResult = await ctx.services.launcher.launchAgent(
-          {
-            agent: 'code-writer',
-            issueNumber: ctx.issue.number,
-            phase: 3,
-            sessionId: session.id,
-            contextPath: writerContextPath,
-            outputPath: ctx.worktree.path,
-          },
-          ctx.worktree.path,
-        );
-
-        ctx.callbacks.recordTokens('code-writer', writerResult.tokenUsage);
-        ctx.callbacks.checkBudget();
-
-        if (!writerResult.success) {
-          throw new Error(`Code writer failed: ${writerResult.error}`);
-        }
-
-        // 2.5. Per-session build check (optional) — runs once after all steps complete
-        if (ctx.config.commands.build && ctx.config.options.perTaskBuildCheck) {
-          let buildResult = await execShell(ctx.config.commands.build, {
-            cwd: ctx.worktree.path,
-            timeout: 300_000,
-          });
-
-          for (
-            let round = 0;
-            round < ctx.config.options.maxBuildFixRounds && buildResult.exitCode !== 0;
-            round++
-          ) {
-            const buildFailurePath = join(ctx.io.progressDir, `build-failure-${session.id}-${round}.txt`);
-            await writeFile(buildFailurePath, buildResult.stderr + buildResult.stdout, 'utf-8');
-            const buildFixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
-              ctx.issue.number,
-              ctx.worktree.path,
-              session.id,
-              buildFailurePath,
-              sessionFileList.map((f) => join(ctx.worktree.path, f)),
-              ctx.io.progressDir,
-              'build',
-              3,
-            );
-
-            const buildFixResult = await ctx.services.launcher.launchAgent(
-              {
-                agent: 'fix-surgeon',
-                issueNumber: ctx.issue.number,
-                phase: 3,
-                sessionId: session.id,
-                contextPath: buildFixContextPath,
-                outputPath: ctx.worktree.path,
-              },
-              ctx.worktree.path,
-            );
-
-            ctx.callbacks.recordTokens('fix-surgeon', buildFixResult.tokenUsage);
-            ctx.callbacks.checkBudget();
-
-            buildResult = await execShell(ctx.config.commands.build, {
-              cwd: ctx.worktree.path,
-              timeout: 300_000,
-            });
-          }
-
-          if (buildResult.exitCode !== 0) {
-            throw new Error(`Build failed after ${ctx.config.options.maxBuildFixRounds} fix rounds`);
-          }
-        }
-
-        // 3. Launch test-writer (once per session, after all steps are done)
-        const changedFiles = await ctx.io.commitManager.getChangedFiles();
-        if (session.testable === false) {
-          ctx.services.logger.info(
-            `Skipping test-writer for session ${session.id} (testable: false)`,
-            { issueNumber: ctx.issue.number, sessionId: session.id },
-          );
-        } else {
-          const testWriterContextPath = await ctx.services.contextBuilder.buildForTestWriter(
+        if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:code-writer`)) {
+          await ctx.io.checkpoint.startSubTask(`${session.id}:code-writer`);
+          const writerContextPath = await ctx.services.contextBuilder.buildForCodeWriter(
             ctx.issue.number,
             ctx.worktree.path,
             session,
-            changedFiles.map((f) => join(ctx.worktree.path, f)),
             sessionPlanPath,
+            sessionFileList.map((f) => join(ctx.worktree.path, f)),
             ctx.io.progressDir,
           );
 
-          const testResult = await ctx.services.launcher.launchAgent(
+          const writerResult = await ctx.services.launcher.launchAgent(
             {
-              agent: 'test-writer',
+              agent: 'code-writer',
               issueNumber: ctx.issue.number,
               phase: 3,
               sessionId: session.id,
-              contextPath: testWriterContextPath,
+              contextPath: writerContextPath,
               outputPath: ctx.worktree.path,
             },
             ctx.worktree.path,
           );
 
-          ctx.callbacks.recordTokens('test-writer', testResult.tokenUsage);
+          ctx.callbacks.recordTokens('code-writer', writerResult.tokenUsage);
           ctx.callbacks.checkBudget();
+
+          if (!writerResult.success) {
+            throw new Error(`Code writer failed: ${writerResult.error}`);
+          }
+          await ctx.io.checkpoint.completeSubTask(`${session.id}:code-writer`);
         }
 
-        // 4. Commit code-writer + test-writer output so getTaskDiff() reflects this session's changes
-        await ctx.io.commitManager.commit(
-          `wip: ${session.name} (attempt ${attempt})`,
-          ctx.issue.number,
-          'feat',
-        );
+        // 2.5. Per-session build check (optional) — runs once after all steps complete
+        if (ctx.config.commands.build && ctx.config.options.perTaskBuildCheck) {
+          if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:build-check`)) {
+            await ctx.io.checkpoint.startSubTask(`${session.id}:build-check`);
+            let buildResult = await execShell(ctx.config.commands.build, {
+              cwd: ctx.worktree.path,
+              timeout: 300_000,
+            });
 
-        // 5. Launch code-reviewer
-        const diffPath = join(ctx.io.progressDir, `diff-${session.id}.patch`);
-        const rawDiff = await ctx.io.commitManager.getTaskDiff();
-        const diff = truncateDiff(rawDiff, 200_000);
-        await writeFile(diffPath, diff, 'utf-8');
-
-        const reviewerContextPath = await ctx.services.contextBuilder.buildForCodeReviewer(
-          ctx.issue.number,
-          ctx.worktree.path,
-          session,
-          diffPath,
-          sessionPlanPath,
-          ctx.io.progressDir,
-        );
-
-        const reviewResult = await ctx.services.launcher.launchAgent(
-          {
-            agent: 'code-reviewer',
-            issueNumber: ctx.issue.number,
-            phase: 3,
-            sessionId: session.id,
-            contextPath: reviewerContextPath,
-            outputPath: join(ctx.io.progressDir, `review-${session.id}.md`),
-          },
-          ctx.worktree.path,
-        );
-
-        ctx.callbacks.recordTokens('code-reviewer', reviewResult.tokenUsage);
-        ctx.callbacks.checkBudget();
-
-        // 6. Check review verdict
-        if (reviewResult.success) {
-          const reviewPath = join(ctx.io.progressDir, `review-${session.id}.md`);
-          if (await exists(reviewPath)) {
-            let review;
-            try {
-              review = await ctx.services.resultParser.parseReview(reviewPath);
-            } catch (err) {
-              if (err instanceof ZodError) {
-                const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
-                ctx.services.logger.warn(`Review validation failed (will retry): ${msg}`, {
-                  issueNumber: ctx.issue.number,
-                  sessionId: session.id,
-                });
-              }
-              throw err;
-            }
-            if (review.verdict === 'needs-fixes') {
-              // Launch fix-surgeon
-              const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
+            for (
+              let round = 0;
+              round < ctx.config.options.maxBuildFixRounds && buildResult.exitCode !== 0;
+              round++
+            ) {
+              const buildFailurePath = join(ctx.io.progressDir, `build-failure-${session.id}-${round}.txt`);
+              await writeFile(buildFailurePath, buildResult.stderr + buildResult.stdout, 'utf-8');
+              const buildFixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
                 ctx.issue.number,
                 ctx.worktree.path,
                 session.id,
-                reviewPath,
-                changedFiles.map((f) => join(ctx.worktree.path, f)),
+                buildFailurePath,
+                sessionFileList.map((f) => join(ctx.worktree.path, f)),
                 ctx.io.progressDir,
-                'review',
+                'build',
                 3,
               );
 
-              const fixResult = await ctx.services.launcher.launchAgent(
+              const buildFixResult = await ctx.services.launcher.launchAgent(
                 {
                   agent: 'fix-surgeon',
                   issueNumber: ctx.issue.number,
                   phase: 3,
                   sessionId: session.id,
-                  contextPath: fixContextPath,
+                  contextPath: buildFixContextPath,
                   outputPath: ctx.worktree.path,
                 },
                 ctx.worktree.path,
               );
 
-              ctx.callbacks.recordTokens('fix-surgeon', fixResult.tokenUsage);
+              ctx.callbacks.recordTokens('fix-surgeon', buildFixResult.tokenUsage);
               ctx.callbacks.checkBudget();
 
-              if (!fixResult.success) {
-                throw new Error(`Fix surgeon failed: ${fixResult.error}`);
+              buildResult = await execShell(ctx.config.commands.build, {
+                cwd: ctx.worktree.path,
+                timeout: 300_000,
+              });
+            }
+
+            if (buildResult.exitCode !== 0) {
+              throw new Error(`Build failed after ${ctx.config.options.maxBuildFixRounds} fix rounds`);
+            }
+            await ctx.io.checkpoint.completeSubTask(`${session.id}:build-check`);
+          }
+        }
+
+        // 3. Launch test-writer (once per session, after all steps are done)
+        const changedFiles = await ctx.io.commitManager.getChangedFiles();
+        if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:test-writer`)) {
+          await ctx.io.checkpoint.startSubTask(`${session.id}:test-writer`);
+          if (session.testable === false) {
+            ctx.services.logger.info(
+              `Skipping test-writer for session ${session.id} (testable: false)`,
+              { issueNumber: ctx.issue.number, sessionId: session.id },
+            );
+          } else {
+            const testWriterContextPath = await ctx.services.contextBuilder.buildForTestWriter(
+              ctx.issue.number,
+              ctx.worktree.path,
+              session,
+              changedFiles.map((f) => join(ctx.worktree.path, f)),
+              sessionPlanPath,
+              ctx.io.progressDir,
+            );
+
+            const testResult = await ctx.services.launcher.launchAgent(
+              {
+                agent: 'test-writer',
+                issueNumber: ctx.issue.number,
+                phase: 3,
+                sessionId: session.id,
+                contextPath: testWriterContextPath,
+                outputPath: ctx.worktree.path,
+              },
+              ctx.worktree.path,
+            );
+
+            ctx.callbacks.recordTokens('test-writer', testResult.tokenUsage);
+            ctx.callbacks.checkBudget();
+          }
+          await ctx.io.checkpoint.completeSubTask(`${session.id}:test-writer`);
+        }
+
+        // 4. Commit code-writer + test-writer output so getTaskDiff() reflects this session's changes
+        if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:commit`)) {
+          await ctx.io.checkpoint.startSubTask(`${session.id}:commit`);
+          await ctx.io.commitManager.commit(
+            `wip: ${session.name} (attempt ${attempt})`,
+            ctx.issue.number,
+            'feat',
+          );
+          await ctx.io.checkpoint.completeSubTask(`${session.id}:commit`);
+        }
+
+        // 5. Launch code-reviewer
+        if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:code-reviewer`)) {
+          await ctx.io.checkpoint.startSubTask(`${session.id}:code-reviewer`);
+          const diffPath = join(ctx.io.progressDir, `diff-${session.id}.patch`);
+          const rawDiff = await ctx.io.commitManager.getTaskDiff();
+          const diff = truncateDiff(rawDiff, 200_000);
+          await writeFile(diffPath, diff, 'utf-8');
+
+          const reviewerContextPath = await ctx.services.contextBuilder.buildForCodeReviewer(
+            ctx.issue.number,
+            ctx.worktree.path,
+            session,
+            diffPath,
+            sessionPlanPath,
+            ctx.io.progressDir,
+          );
+
+          const reviewResult = await ctx.services.launcher.launchAgent(
+            {
+              agent: 'code-reviewer',
+              issueNumber: ctx.issue.number,
+              phase: 3,
+              sessionId: session.id,
+              contextPath: reviewerContextPath,
+              outputPath: join(ctx.io.progressDir, `review-${session.id}.md`),
+            },
+            ctx.worktree.path,
+          );
+
+          ctx.callbacks.recordTokens('code-reviewer', reviewResult.tokenUsage);
+          ctx.callbacks.checkBudget();
+
+          if (reviewResult.success) {
+            await ctx.io.checkpoint.completeSubTask(`${session.id}:code-reviewer`);
+          }
+        }
+
+        // 6. Check review verdict (only when code-reviewer sub-task completed successfully)
+        if (ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:code-reviewer`)) {
+          if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:fix-surgeon`)) {
+            const reviewPath = join(ctx.io.progressDir, `review-${session.id}.md`);
+            if (await exists(reviewPath)) {
+              let review;
+              try {
+                review = await ctx.services.resultParser.parseReview(reviewPath);
+              } catch (err) {
+                if (err instanceof ZodError) {
+                  const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
+                  ctx.services.logger.warn(`Review validation failed (will retry): ${msg}`, {
+                    issueNumber: ctx.issue.number,
+                    sessionId: session.id,
+                  });
+                }
+                throw err;
+              }
+              if (review.verdict === 'needs-fixes') {
+                // Launch fix-surgeon
+                await ctx.io.checkpoint.startSubTask(`${session.id}:fix-surgeon`);
+                const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
+                  ctx.issue.number,
+                  ctx.worktree.path,
+                  session.id,
+                  reviewPath,
+                  changedFiles.map((f) => join(ctx.worktree.path, f)),
+                  ctx.io.progressDir,
+                  'review',
+                  3,
+                );
+
+                const fixResult = await ctx.services.launcher.launchAgent(
+                  {
+                    agent: 'fix-surgeon',
+                    issueNumber: ctx.issue.number,
+                    phase: 3,
+                    sessionId: session.id,
+                    contextPath: fixContextPath,
+                    outputPath: ctx.worktree.path,
+                  },
+                  ctx.worktree.path,
+                );
+
+                ctx.callbacks.recordTokens('fix-surgeon', fixResult.tokenUsage);
+                ctx.callbacks.checkBudget();
+
+                if (!fixResult.success) {
+                  throw new Error(`Fix surgeon failed: ${fixResult.error}`);
+                }
+                await ctx.io.checkpoint.completeSubTask(`${session.id}:fix-surgeon`);
               }
             }
           }

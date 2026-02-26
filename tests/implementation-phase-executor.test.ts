@@ -89,12 +89,16 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     parseReview: vi.fn().mockResolvedValue({ verdict: 'approved' }),
   };
 
+  const completedSubTasks = new Set<string>();
   const checkpoint = {
     getState: vi.fn().mockReturnValue({ completedTasks: [], blockedTasks: [], currentPhase: 3 }),
     isTaskCompleted: vi.fn().mockReturnValue(false),
     startTask: vi.fn().mockResolvedValue(undefined),
     completeTask: vi.fn().mockResolvedValue(undefined),
     blockTask: vi.fn().mockResolvedValue(undefined),
+    startSubTask: vi.fn().mockResolvedValue(undefined),
+    completeSubTask: vi.fn(async (id: string) => { completedSubTasks.add(id); }),
+    isSubTaskCompleted: vi.fn((id: string) => completedSubTasks.has(id)),
   };
 
   const commitManager = {
@@ -1494,6 +1498,114 @@ describe('ImplementationPhaseExecutor', () => {
       // Should not have launched a second whole-pr-reviewer after the fix-surgeon failure
       const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
       expect(agents.filter((a: string) => a === 'whole-pr-reviewer')).toHaveLength(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sub-task checkpoint resume tests
+  // ---------------------------------------------------------------------------
+
+  describe('sub-task checkpoint resume', () => {
+    it('skips code-writer on retry when sub-task already completed', async () => {
+      // Track which sub-tasks have been completed across attempts
+      const completedSubTasks = new Set<string>();
+
+      const checkpoint = {
+        getState: vi.fn().mockReturnValue({ completedTasks: [], blockedTasks: [], currentPhase: 3 }),
+        isTaskCompleted: vi.fn().mockReturnValue(false),
+        startTask: vi.fn().mockResolvedValue(undefined),
+        completeTask: vi.fn().mockResolvedValue(undefined),
+        blockTask: vi.fn().mockResolvedValue(undefined),
+        startSubTask: vi.fn().mockResolvedValue(undefined),
+        completeSubTask: vi.fn(async (id: string) => { completedSubTasks.add(id); }),
+        isSubTaskCompleted: vi.fn((id: string) => completedSubTasks.has(id)),
+      };
+
+      // Retry executor calls fn twice: first attempt fails after code-writer (commit throws),
+      // second attempt succeeds. Code-writer sub-task is complete after first attempt.
+      const retryExecutor = {
+        execute: vi.fn(async ({ fn }: { fn: (attempt: number) => Promise<unknown> }) => {
+          try {
+            await fn(1);
+          } catch {
+            // first attempt failed — expected
+          }
+          try {
+            const result = await fn(2);
+            return { success: true, result };
+          } catch (err) {
+            return { success: false, error: (err as Error).message };
+          }
+        }),
+      };
+
+      // Commit fails on first attempt, succeeds on second
+      const commitManager = {
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getTaskDiff: vi.fn().mockResolvedValue('diff'),
+        getDiff: vi.fn().mockResolvedValue(''),
+        commit: vi.fn()
+          .mockRejectedValueOnce(new Error('commit failed'))
+          .mockResolvedValue(undefined),
+      };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))   // 1st attempt: runs
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))   // 1st attempt: runs
+          // 2nd attempt: code-writer and test-writer are skipped (sub-tasks complete)
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')) // 2nd attempt
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const ctx = makeCtx({
+        io: { checkpoint: checkpoint, commitManager: commitManager } as never,
+        services: { retryExecutor: retryExecutor, launcher: launcher } as never,
+      });
+      await executor.execute(ctx);
+
+      const codeWriterCalls = launcher.launchAgent.mock.calls.filter(
+        (c: [{ agent: string }]) => c[0].agent === 'code-writer',
+      );
+      expect(codeWriterCalls).toHaveLength(1);
+    });
+
+    it('resumes from code-reviewer after partial completion', async () => {
+      // Pre-mark code-writer, build-check, test-writer, and commit as complete
+      const completedSubTasks = new Set([
+        'session-001:code-writer',
+        'session-001:build-check',
+        'session-001:test-writer',
+        'session-001:commit',
+      ]);
+
+      const checkpoint = {
+        getState: vi.fn().mockReturnValue({ completedTasks: [], blockedTasks: [], currentPhase: 3 }),
+        isTaskCompleted: vi.fn().mockReturnValue(false),
+        startTask: vi.fn().mockResolvedValue(undefined),
+        completeTask: vi.fn().mockResolvedValue(undefined),
+        blockTask: vi.fn().mockResolvedValue(undefined),
+        startSubTask: vi.fn().mockResolvedValue(undefined),
+        completeSubTask: vi.fn(async (id: string) => { completedSubTasks.add(id); }),
+        isSubTaskCompleted: vi.fn((id: string) => completedSubTasks.has(id)),
+      };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const ctx = makeCtx({
+        io: { checkpoint: checkpoint } as never,
+        services: { launcher: launcher } as never,
+      });
+      await executor.execute(ctx);
+
+      const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
+      expect(agents).not.toContain('code-writer');
+      expect(agents).not.toContain('test-writer');
+      expect(agents).toContain('code-reviewer');
     });
   });
 });
