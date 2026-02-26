@@ -468,7 +468,7 @@ describe('ContextBuilder', () => {
         expect(typeof result).toBe('string');
       });
 
-      it('always includes diffPath and sessionPlanPaths in inputFiles', async () => {
+      it('does NOT include diffPath in inputFiles; sets fullDiffPath in payload', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
         await builder.buildForWholePrCodeReviewer(
           42,
@@ -479,9 +479,11 @@ describe('ContextBuilder', () => {
         );
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
-        expect(inputFiles).toContain('/tmp/whole-pr-diff.patch');
+        expect(inputFiles).not.toContain('/tmp/whole-pr-diff.patch');
         expect(inputFiles).toContain('/tmp/progress/session-001.md');
         expect(inputFiles).toContain('/tmp/progress/session-002.md');
+        const payload = ctx.payload as Record<string, unknown>;
+        expect(payload.fullDiffPath).toBe('/tmp/whole-pr-diff.patch');
       });
 
       it('conditionally includes analysis.md, scout-report.md, and implementation-plan.md when they exist', async () => {
@@ -530,7 +532,27 @@ describe('ContextBuilder', () => {
         expect(typeof ctx.outputSchema).toBe('object');
       });
 
-      it('sets payload.scope to "whole-pr" and payload.baseBranch to config.baseBranch', async () => {
+      it('sets payload.scope to "whole-pr", payload.baseBranch to config.baseBranch, and includes sessionSummaries', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        const sessionSummaries = [
+          { sessionId: 'session-001', verdict: 'pass' as const, summary: 'All good', keyFindings: [] },
+        ];
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+          sessionSummaries,
+        );
+        const ctx = captureWrittenContext();
+        const payload = ctx.payload as Record<string, unknown>;
+        expect(payload.scope).toBe('whole-pr');
+        expect(payload.baseBranch).toBe('main');
+        expect(payload.sessionSummaries).toEqual(sessionSummaries);
+      });
+
+      it('defaults sessionSummaries to empty array when not provided', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
         await builder.buildForWholePrCodeReviewer(
           42,
@@ -541,8 +563,8 @@ describe('ContextBuilder', () => {
         );
         const ctx = captureWrittenContext();
         const payload = ctx.payload as Record<string, unknown>;
-        expect(payload.scope).toBe('whole-pr');
-        expect(payload.baseBranch).toBe('main');
+        expect(Array.isArray(payload.sessionSummaries)).toBe(true);
+        expect((payload.sessionSummaries as unknown[]).length).toBe(0);
       });
 
       it('sets agent to "whole-pr-reviewer" and phase to 3', async () => {

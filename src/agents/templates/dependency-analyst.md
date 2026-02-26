@@ -22,20 +22,18 @@ Produce a dependency map indicating which issues must be completed before others
 - An issue with no dependencies should map to an empty array `[]`.
 
 ### Schema
-The output is a JSON object where:
-- Each **key** is an issue number (as a string).
-- Each **value** is an array of issue numbers (integers) that the key issue depends on.
 
-Example:
 ```json
 {
-  "101": [],
-  "102": [101],
-  "103": [101, 102]
+  "$schema": "dependency-map",
+  "type": "object",
+  "description": "Maps each issue number (string key) to an array of issue numbers it depends on.",
+  "additionalProperties": {
+    "type": "array",
+    "items": { "type": "integer" }
+  }
 }
 ```
-
-In this example, issue 103 depends on both 101 and 102; issue 102 depends on 101; issue 101 has no dependencies.
 
 ## Instructions
 
@@ -48,17 +46,17 @@ In this example, issue 103 depends on both 101 and 102; issue 102 depends on 101
 
 ## Machine-readable output (MANDATORY)
 
-After any analysis prose, you MUST append a `cadre-json` fenced block containing the dependency map. **cadre does not read the markdown prose — it reads only this block.**
+Read the `outputPath` field from your context file. Write your output to that file as a markdown document containing a `cadre-json` fenced block with the dependency map.
+
+**CADRE parses the `cadre-json` block from the file at `outputPath`. The `cadre-json` block is required — output without it will fail.**
+
+Example — issue 103 depends on 101 and 102; issue 102 depends on 101; issue 101 has no dependencies:
 
 ```cadre-json
 {
-  "$schema": "dependency-map",
-  "type": "object",
-  "description": "Maps each issue number (string key) to an array of issue numbers it depends on.",
-  "additionalProperties": {
-    "type": "array",
-    "items": { "type": "integer" }
-  }
+  "101": [],
+  "102": [101],
+  "103": [101, 102]
 }
 ```
 
@@ -66,3 +64,4 @@ After any analysis prose, you MUST append a `cadre-json` fenced block containing
 
 - **GitHub issue read**: Fetch issue details and comments.
 - **File read**: Examine source files to understand module relationships.
+- **File write**: Write the output markdown file (containing the `cadre-json` block) to `outputPath`.
