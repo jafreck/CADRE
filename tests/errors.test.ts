@@ -7,7 +7,12 @@ import {
   CyclicDependencyError,
   DependencyResolutionError,
   DependencyMergeConflictError,
+  StaleStateError,
+  AuthenticationError,
+  ValidationFailedError,
+  RuntimeInterruptedError,
 } from '../src/errors.js';
+import type { StaleStateResult } from '../src/validation/stale-state-validator.js';
 
 describe('BudgetExceededError', () => {
   it('instantiates with correct name, message, and properties', () => {
@@ -219,5 +224,95 @@ describe('DependencyMergeConflictError', () => {
   it('can be caught as a generic Error', () => {
     const throwIt = () => { throw new DependencyMergeConflictError('merge conflict', 42, 'cadre/issue-42'); };
     expect(throwIt).toThrowError('merge conflict');
+  });
+});
+
+describe('StaleStateError', () => {
+  const result: StaleStateResult = {
+    hasConflicts: true,
+    conflicts: new Map([[1, [{ kind: 'worktree', description: 'existing worktree' }]]]),
+  };
+
+  it('instantiates with correct name, message, and result', () => {
+    const err = new StaleStateError('stale state detected', result);
+    expect(err.name).toBe('StaleStateError');
+    expect(err.message).toBe('stale state detected');
+    expect(err.result).toBe(result);
+    expect(err instanceof Error).toBe(true);
+  });
+
+  it('is an instance of StaleStateError', () => {
+    const err = new StaleStateError('stale state', result);
+    expect(err instanceof StaleStateError).toBe(true);
+  });
+
+  it('can be caught as a generic Error', () => {
+    const throwIt = () => { throw new StaleStateError('stale state detected', result); };
+    expect(throwIt).toThrowError('stale state detected');
+  });
+});
+
+describe('AuthenticationError', () => {
+  it('instantiates with correct name and message', () => {
+    const err = new AuthenticationError('authentication failed');
+    expect(err.name).toBe('AuthenticationError');
+    expect(err.message).toBe('authentication failed');
+    expect(err instanceof Error).toBe(true);
+  });
+
+  it('is an instance of AuthenticationError', () => {
+    const err = new AuthenticationError('auth failed');
+    expect(err instanceof AuthenticationError).toBe(true);
+  });
+
+  it('can be caught as a generic Error', () => {
+    const throwIt = () => { throw new AuthenticationError('authentication failed'); };
+    expect(throwIt).toThrowError('authentication failed');
+  });
+});
+
+describe('ValidationFailedError', () => {
+  it('instantiates with correct name and message', () => {
+    const err = new ValidationFailedError('validation failed');
+    expect(err.name).toBe('ValidationFailedError');
+    expect(err.message).toBe('validation failed');
+    expect(err instanceof Error).toBe(true);
+  });
+
+  it('is an instance of ValidationFailedError', () => {
+    const err = new ValidationFailedError('validation failed');
+    expect(err instanceof ValidationFailedError).toBe(true);
+  });
+
+  it('can be caught as a generic Error', () => {
+    const throwIt = () => { throw new ValidationFailedError('validation failed'); };
+    expect(throwIt).toThrowError('validation failed');
+  });
+});
+
+describe('RuntimeInterruptedError', () => {
+  it('instantiates with correct name, message, signal, and exitCode', () => {
+    const err = new RuntimeInterruptedError('runtime interrupted', 'SIGINT', 130);
+    expect(err.name).toBe('RuntimeInterruptedError');
+    expect(err.message).toBe('runtime interrupted');
+    expect(err.signal).toBe('SIGINT');
+    expect(err.exitCode).toBe(130);
+    expect(err instanceof Error).toBe(true);
+  });
+
+  it('is an instance of RuntimeInterruptedError', () => {
+    const err = new RuntimeInterruptedError('interrupted', 'SIGTERM', 143);
+    expect(err instanceof RuntimeInterruptedError).toBe(true);
+  });
+
+  it('handles different signal names', () => {
+    const err = new RuntimeInterruptedError('terminated', 'SIGTERM', 143);
+    expect(err.signal).toBe('SIGTERM');
+    expect(err.exitCode).toBe(143);
+  });
+
+  it('can be caught as a generic Error', () => {
+    const throwIt = () => { throw new RuntimeInterruptedError('runtime interrupted', 'SIGINT', 130); };
+    expect(throwIt).toThrowError('runtime interrupted');
   });
 });

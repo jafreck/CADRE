@@ -112,8 +112,11 @@ describe('CadreRuntime.validate()', () => {
 
 describe('CadreRuntime.run() – validation integration', () => {
   let mockRunSuite: ReturnType<typeof vi.fn>;
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    // Prevent real SIGINT/SIGTERM listeners from being registered on the process
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
     mockRunSuite = vi.fn();
     (PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
       run: mockRunSuite,
@@ -121,6 +124,7 @@ describe('CadreRuntime.run() – validation integration', () => {
   });
 
   afterEach(() => {
+    processOnSpy.mockRestore();
     vi.clearAllMocks();
   });
 
