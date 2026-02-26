@@ -65,6 +65,8 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   const platform = {
     issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
     createPullRequest: vi.fn().mockResolvedValue(undefined),
+    updatePullRequest: vi.fn().mockResolvedValue(undefined),
+    findOpenPR: vi.fn().mockResolvedValue(null),
   };
 
   const logger = {
@@ -447,6 +449,8 @@ describe('PRCompositionPhaseExecutor', () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue('Closes #42'),
         createPullRequest: vi.fn().mockRejectedValue(new Error('API rate limit')),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const ctx = makeAutoCreateCtx({ platform: platform as never });
       await expect(executor.execute(ctx)).rejects.toThrow('API rate limit');
@@ -457,6 +461,8 @@ describe('PRCompositionPhaseExecutor', () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const setPR = vi.fn();
       const ctx = makeAutoCreateCtx({
@@ -473,6 +479,8 @@ describe('PRCompositionPhaseExecutor', () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         createPullRequest: vi.fn().mockRejectedValue(new Error('API error')),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const setPR = vi.fn();
       const ctx = makeAutoCreateCtx({
@@ -489,6 +497,8 @@ describe('PRCompositionPhaseExecutor', () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       // No setPR in callbacks — should not throw
       const ctx = makeAutoCreateCtx({
@@ -496,6 +506,101 @@ describe('PRCompositionPhaseExecutor', () => {
       });
 
       await expect(executor.execute(ctx)).resolves.toBeDefined();
+    });
+  });
+
+  describe('execute() with existing open PR (findOpenPR returns non-null)', () => {
+    const existingPR = { number: 55, url: 'https://github.com/owner/repo/pull/55', title: 'Old title' };
+
+    function makeExistingPRCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' }),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(existingPR),
+      };
+      return makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+        ...overrides,
+      });
+    }
+
+    it('should call findOpenPR with the issue number and branch', async () => {
+      const ctx = makeExistingPRCtx();
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { findOpenPR: ReturnType<typeof vi.fn> }).findOpenPR,
+      ).toHaveBeenCalledWith(42, 'cadre/issue-42');
+    });
+
+    it('should call updatePullRequest with existing PR number, new title, and new body', async () => {
+      const ctx = makeExistingPRCtx();
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { updatePullRequest: ReturnType<typeof vi.fn> }).updatePullRequest,
+      ).toHaveBeenCalledWith(
+        55,
+        expect.objectContaining({ title: 'Fix: resolve issue (#42)', body: 'This PR resolves the issue.' }),
+      );
+    });
+
+    it('should NOT call createPullRequest when findOpenPR returns existing PR', async () => {
+      const ctx = makeExistingPRCtx();
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should call ctx.callbacks.setPR with the existing PR object', async () => {
+      const setPR = vi.fn();
+      const ctx = makeExistingPRCtx({ callbacks: { setPR } as never });
+      await executor.execute(ctx);
+      expect(setPR).toHaveBeenCalledWith(existingPR);
+    });
+  });
+
+  describe('execute() with findOpenPR returning null (new PR path)', () => {
+    const newPR = { number: 99, url: 'https://github.com/owner/repo/pull/99', title: 'Fix: resolve issue (#42)' };
+
+    function makeNullFindCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(newPR),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+      };
+      return makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+        ...overrides,
+      });
+    }
+
+    it('should call createPullRequest when findOpenPR returns null', async () => {
+      const ctx = makeNullFindCtx();
+      await executor.execute(ctx);
+      expect(
+        (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
+      ).toHaveBeenCalled();
+    });
+
+    it('should call ctx.callbacks.setPR with the newly created PR', async () => {
+      const setPR = vi.fn();
+      const ctx = makeNullFindCtx({ callbacks: { setPR } as never });
+      await executor.execute(ctx);
+      expect(setPR).toHaveBeenCalledWith(newPR);
     });
   });
 
@@ -520,6 +625,8 @@ describe('PRCompositionPhaseExecutor', () => {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         ensureLabel,
         createPullRequest,
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const ctx = makeSelfRunCtx({ platform: platform as never });
       await executor.execute(ctx);
@@ -535,6 +642,8 @@ describe('PRCompositionPhaseExecutor', () => {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         ensureLabel: vi.fn().mockResolvedValue(undefined),
         createPullRequest,
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const ctx = makeSelfRunCtx({ platform: platform as never });
       await executor.execute(ctx);
@@ -549,6 +658,8 @@ describe('PRCompositionPhaseExecutor', () => {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         ensureLabel: vi.fn().mockResolvedValue(undefined),
         createPullRequest,
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const ctx = makeCtx({
         config: {
@@ -572,6 +683,8 @@ describe('PRCompositionPhaseExecutor', () => {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         ensureLabel,
         createPullRequest: vi.fn().mockResolvedValue(undefined),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const ctx = makeCtx({
         config: {
@@ -592,6 +705,8 @@ describe('PRCompositionPhaseExecutor', () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         createPullRequest,
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const ctx = makeCtx({
         config: {
@@ -690,6 +805,8 @@ describe('PRCompositionPhaseExecutor', () => {
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         createPullRequest,
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
       };
       const ctx = makeAutoCreateCtx({
         services: { resultParser: { parsePRContent } as never } as never,
