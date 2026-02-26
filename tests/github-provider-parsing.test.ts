@@ -996,3 +996,75 @@ describe('GitHubProvider – lifecycle', () => {
     expect(provider.issueLinkSuffix(42)).toBe('Closes #42');
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// mergePullRequest
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('GitHubProvider – mergePullRequest', () => {
+  it('should call octokit.rest.pulls.merge with the correct parameters', async () => {
+    const mergeMock = vi.fn().mockResolvedValue({ data: { merged: true } });
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+    await provider.connect();
+
+    await provider.mergePullRequest(42, 'main');
+
+    expect(mergeMock).toHaveBeenCalledWith({
+      owner: 'owner',
+      repo: 'repo',
+      pull_number: 42,
+      merge_method: 'merge',
+    });
+  });
+
+  it('should ignore baseBranch parameter (uses Octokit merge defaults)', async () => {
+    const mergeMock = vi.fn().mockResolvedValue({ data: { merged: true } });
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+    await provider.connect();
+
+    // baseBranch is intentionally unused — just verify no error is thrown
+    await expect(provider.mergePullRequest(10, 'develop')).resolves.toBeUndefined();
+    expect(mergeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should propagate errors thrown by octokit merge', async () => {
+    const mergeMock = vi.fn().mockRejectedValue(new Error('PR not mergeable'));
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+    await provider.connect();
+
+    await expect(provider.mergePullRequest(99, 'main')).rejects.toThrow('PR not mergeable');
+  });
+
+  it('should work without connecting first (uses injected octokit directly)', async () => {
+    const mergeMock = vi.fn().mockResolvedValue({ data: { merged: true } });
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock },
+      },
+    };
+
+    // Not connected — mergePullRequest should still work with injected octokit
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(5, 'main')).resolves.toBeUndefined();
+    expect(mergeMock).toHaveBeenCalled();
+  });
+});

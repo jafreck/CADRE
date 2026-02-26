@@ -71,16 +71,7 @@ export class WorktreeManager {
         data: { path: worktreePath, branch },
       });
 
-      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
-      const baseCommit = await this.getBaseCommit(worktreePath);
-      return {
-        issueNumber,
-        path: worktreePath,
-        branch,
-        exists: true,
-        baseCommit,
-        syncedAgentFiles,
-      };
+      return this.buildWorktreeInfo(worktreePath, issueNumber, branch);
     }
 
     // Resume path: worktree is absent, re-create from remote branch
@@ -98,22 +89,13 @@ export class WorktreeManager {
       await this.git.raw(['worktree', 'add', worktreePath, branch]);
 
       await this.initCadreDir(worktreePath, issueNumber);
-      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
-
-      const baseCommit = await this.getBaseCommit(worktreePath);
+      const worktreeInfo = await this.buildWorktreeInfo(worktreePath, issueNumber, branch);
       this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
         issueNumber,
         data: { path: worktreePath, branch },
       });
 
-      return {
-        issueNumber,
-        path: worktreePath,
-        branch,
-        exists: true,
-        baseCommit,
-        syncedAgentFiles,
-      };
+      return worktreeInfo;
     }
 
     // 1. Get the base commit SHA
@@ -137,21 +119,12 @@ export class WorktreeManager {
 
     // 4. Bootstrap the worktree's .cadre/ directory and gitignore cadre artifacts
     await this.initCadreDir(worktreePath, issueNumber);
-    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
-
     this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
       issueNumber,
       data: { path: worktreePath, branch, baseCommit: baseCommit.trim().slice(0, 8) },
     });
 
-    return {
-      issueNumber,
-      path: worktreePath,
-      branch,
-      exists: true,
-      baseCommit: baseCommit.trim(),
-      syncedAgentFiles,
-    };
+    return this.buildWorktreeInfo(worktreePath, issueNumber, branch, baseCommit.trim());
   }
 
   /**
@@ -176,9 +149,7 @@ export class WorktreeManager {
         issueNumber,
         data: { path: worktreePath, branch: issueBranch },
       });
-      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
-      const baseCommit = await this.getBaseCommit(worktreePath);
-      return { issueNumber, path: worktreePath, branch: issueBranch, exists: true, baseCommit, syncedAgentFiles };
+      return this.buildWorktreeInfo(worktreePath, issueNumber, issueBranch);
     }
 
     // Resolve base commit from origin or local
@@ -251,21 +222,12 @@ export class WorktreeManager {
     await this.git.raw(['worktree', 'add', worktreePath, issueBranch]);
 
     await this.initCadreDir(worktreePath, issueNumber);
-    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
-
     this.logger.info(`Provisioned worktree with deps for issue #${issueNumber}`, {
       issueNumber,
       data: { path: worktreePath, branch: issueBranch, depsBranch, baseCommit: baseCommit.trim().slice(0, 8) },
     });
 
-    return {
-      issueNumber,
-      path: worktreePath,
-      branch: issueBranch,
-      exists: true,
-      baseCommit: baseCommit.trim(),
-      syncedAgentFiles,
-    };
+    return this.buildWorktreeInfo(worktreePath, issueNumber, issueBranch, baseCommit.trim());
   }
 
   /**
@@ -283,16 +245,7 @@ export class WorktreeManager {
         data: { path: worktreePath, branch },
       });
 
-      const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
-      const baseCommit = await this.getBaseCommit(worktreePath);
-      return {
-        issueNumber,
-        path: worktreePath,
-        branch,
-        exists: true,
-        baseCommit,
-        syncedAgentFiles,
-      };
+      return this.buildWorktreeInfo(worktreePath, issueNumber, branch);
     }
 
     // Fetch the remote branch so it's available locally
@@ -307,23 +260,14 @@ export class WorktreeManager {
 
     // Bootstrap the worktree's .cadre/ directory
     await this.initCadreDir(worktreePath, issueNumber);
-    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
-
-    const baseCommit = await this.getBaseCommit(worktreePath);
+    const worktreeInfo = await this.buildWorktreeInfo(worktreePath, issueNumber, branch);
 
     this.logger.info(`Provisioned worktree from branch ${branch} for issue #${issueNumber}`, {
       issueNumber,
-      data: { path: worktreePath, branch, baseCommit: baseCommit.slice(0, 8) },
+      data: { path: worktreePath, branch, baseCommit: worktreeInfo.baseCommit.slice(0, 8) },
     });
 
-    return {
-      issueNumber,
-      path: worktreePath,
-      branch,
-      exists: true,
-      baseCommit,
-      syncedAgentFiles,
-    };
+    return worktreeInfo;
   }
 
   /**
@@ -790,6 +734,29 @@ export class WorktreeManager {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Syncs agent files, resolves the base commit, and returns a WorktreeInfo for the given worktree.
+   * Pass a pre-computed `baseCommit` to skip the `getBaseCommit` call (e.g. when it was already
+   * resolved from `git revparse`).
+   */
+  private async buildWorktreeInfo(
+    worktreePath: string,
+    issueNumber: number,
+    branch: string,
+    baseCommit?: string,
+  ): Promise<WorktreeInfo> {
+    const syncedAgentFiles = await this.syncAgentFiles(worktreePath, issueNumber);
+    const resolvedBaseCommit = baseCommit ?? (await this.getBaseCommit(worktreePath));
+    return {
+      issueNumber,
+      path: worktreePath,
+      branch,
+      exists: true,
+      baseCommit: resolvedBaseCommit,
+      syncedAgentFiles,
+    };
   }
 
   /**

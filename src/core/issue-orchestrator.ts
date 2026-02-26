@@ -3,8 +3,6 @@ import { join } from 'node:path';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { CadreConfig } from '../config/schema.js';
 import type {
-  AgentInvocation,
-  AgentResult,
   ImplementationTask,
   PhaseResult,
   TokenUsageDetail,
@@ -374,49 +372,6 @@ export class IssueOrchestrator {
 
 
   // ── Helper Methods ──
-
-  private async launchWithRetry(
-    agentName: string,
-    invocation: Omit<AgentInvocation, 'timeout'>,
-  ): Promise<AgentResult> {
-    const result = await this.retryExecutor.execute<AgentResult>({
-      fn: async () => {
-        this.checkBudget();
-        const agentResult = await this.launcher.launchAgent(
-          invocation as AgentInvocation,
-          this.worktree.path,
-        );
-        this.recordTokens(agentName, agentResult.tokenUsage);
-        this.checkBudget();
-        if (!agentResult.success) {
-          throw new Error(agentResult.error ?? `Agent ${agentName} failed`);
-        }
-        return agentResult;
-      },
-      maxAttempts: this.config.options.maxRetriesPerTask,
-      description: agentName,
-    });
-
-    this.checkBudget();
-
-    if (!result.success || !result.result) {
-      return {
-        agent: invocation.agent,
-        success: false,
-        exitCode: 1,
-        timedOut: false,
-        duration: 0,
-        stdout: '',
-        stderr: result.error ?? 'Unknown failure',
-        tokenUsage: null,
-        outputPath: invocation.outputPath,
-        outputExists: false,
-        error: result.error,
-      };
-    }
-
-    return result.result;
-  }
 
   private recordTokens(agent: string, tokens: TokenUsageDetail | number | null): void {
     const isDetail = typeof tokens === 'object' && tokens !== null;

@@ -536,7 +536,7 @@ export class FleetOrchestrator {
             const issueNumber = result.value.issueNumber;
             const pr = result.value.pr;
             try {
-              await (this.platform as any).mergePullRequest(pr.number, this.config.baseBranch);
+              await this.platform.mergePullRequest(pr.number, this.config.baseBranch);
             } catch (err) {
               this.logger.warn(
                 `Failed to merge PR #${pr.number} for issue #${issueNumber}: ${err}`,

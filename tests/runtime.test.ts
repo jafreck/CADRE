@@ -166,6 +166,20 @@ vi.mock('../src/validation/index.js', async (importActual) => {
   };
 });
 
+vi.mock('../src/reporting/report-writer.js', () => ({
+  ReportWriter: {
+    listReports: vi.fn().mockResolvedValue([]),
+    readReport: vi.fn().mockResolvedValue({
+      runId: 'run-001',
+      project: 'test-project',
+      duration: 5000,
+      totalTokens: 1000,
+      totals: { issues: 2, prsCreated: 1, failures: 0 },
+      issues: [],
+    }),
+  },
+}));
+
 import { CadreRuntime } from '../src/core/runtime.js';
 import { createNotificationManager } from '../src/notifications/manager.js';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
@@ -176,6 +190,9 @@ import { exists } from '../src/util/fs.js';
 import { checkStaleState } from '../src/validation/index.js';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../src/errors.js';
+import { ReportWriter } from '../src/reporting/report-writer.js';
+import { PreRunValidationSuite } from '../src/validation/index.js';
+import { WorktreeManager } from '../src/git/worktree.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
@@ -185,6 +202,9 @@ const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnTy
 const MockCheckpointManager = CheckpointManager as unknown as ReturnType<typeof vi.fn>;
 const mockExists = exists as unknown as ReturnType<typeof vi.fn>;
 const MockDependencyResolver = DependencyResolver as unknown as ReturnType<typeof vi.fn>;
+const MockReportWriter = ReportWriter as unknown as { listReports: ReturnType<typeof vi.fn>; readReport: ReturnType<typeof vi.fn> };
+const MockPreRunValidationSuite = PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>;
+const MockWorktreeManager = WorktreeManager as unknown as ReturnType<typeof vi.fn>;
 
 function makeConfig(issueIds = [1]) {
   return makeRuntimeConfig({
@@ -1075,5 +1095,443 @@ describe('CadreRuntime — DAG wiring', () => {
 
     await expect(runtime.run()).rejects.toThrow('DAG dependency resolution failed');
     expect(MockFleetOrchestrator).not.toHaveBeenCalled();
+  });
+});
+
+describe('CadreRuntime — validate()', () => {
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    MockPreRunValidationSuite.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue(true),
+    }));
+  });
+
+  afterEach(() => {
+    processOnSpy.mockRestore();
+  });
+
+  it('should return true when all validators pass', async () => {
+    MockPreRunValidationSuite.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue(true),
+    }));
+    const runtime = new CadreRuntime(makeConfig());
+    const result = await runtime.validate();
+    expect(result).toBe(true);
+  });
+
+  it('should return false when validators fail', async () => {
+    MockPreRunValidationSuite.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue(false),
+    }));
+    const runtime = new CadreRuntime(makeConfig());
+    const result = await runtime.validate();
+    expect(result).toBe(false);
+  });
+
+  it('should instantiate PreRunValidationSuite with required validators', async () => {
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.validate();
+    expect(MockPreRunValidationSuite).toHaveBeenCalledOnce();
+    // Validators array passed as first arg should have elements
+    const [validators] = MockPreRunValidationSuite.mock.calls[0];
+    expect(Array.isArray(validators)).toBe(true);
+    expect(validators.length).toBeGreaterThan(0);
+  });
+});
+
+describe('CadreRuntime — reset()', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        issues: {
+          10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
+          20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
+        },
+        tokenUsage: { total: 0, byIssue: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+        projectName: 'test',
+        version: 1,
+        startedAt: '',
+      }),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    processOnSpy.mockRestore();
+  });
+
+  it('should reset a specific issue by number', async () => {
+    const mockSetIssueStatus = vi.fn().mockResolvedValue(undefined);
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        issues: {
+          10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
+        },
+        tokenUsage: { total: 0, byIssue: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+        projectName: 'test',
+        version: 1,
+        startedAt: '',
+      }),
+      setIssueStatus: mockSetIssueStatus,
+    }));
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset(10);
+
+    expect(mockSetIssueStatus).toHaveBeenCalledOnce();
+    expect(mockSetIssueStatus).toHaveBeenCalledWith(10, 'not-started', '', '', 0, 'Issue 10');
+    expect(consoleSpy).toHaveBeenCalledWith('Reset issue #10');
+  });
+
+  it('should reset all issues when no issue number is provided', async () => {
+    const mockSetIssueStatus = vi.fn().mockResolvedValue(undefined);
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        issues: {
+          10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
+          20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
+        },
+        tokenUsage: { total: 0, byIssue: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+        projectName: 'test',
+        version: 1,
+        startedAt: '',
+      }),
+      setIssueStatus: mockSetIssueStatus,
+    }));
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.reset();
+
+    expect(mockSetIssueStatus).toHaveBeenCalledTimes(2);
+    expect(consoleSpy).toHaveBeenCalledWith('Reset all issues');
+  });
+});
+
+describe('CadreRuntime — report()', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    MockReportWriter.listReports.mockResolvedValue([]);
+    MockReportWriter.readReport.mockResolvedValue({
+      runId: 'run-001',
+      project: 'test-project',
+      duration: 5000,
+      totalTokens: 1000,
+      totals: { issues: 2, prsCreated: 1, failures: 0 },
+      issues: [],
+    });
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    processOnSpy.mockRestore();
+  });
+
+  it('should print "No reports found." when no reports exist', async () => {
+    MockReportWriter.listReports.mockResolvedValue([]);
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.report();
+    expect(consoleSpy).toHaveBeenCalledWith('No reports found.');
+  });
+
+  it('should print report paths when history option is true and reports exist', async () => {
+    MockReportWriter.listReports.mockResolvedValue(['/tmp/report-1.json', '/tmp/report-2.json']);
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.report({ history: true });
+    expect(consoleSpy).toHaveBeenCalledWith('/tmp/report-1.json');
+    expect(consoleSpy).toHaveBeenCalledWith('/tmp/report-2.json');
+  });
+
+  it('should print "No reports found." for history option with no reports', async () => {
+    MockReportWriter.listReports.mockResolvedValue([]);
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.report({ history: true });
+    expect(consoleSpy).toHaveBeenCalledWith('No reports found.');
+  });
+
+  it('should print JSON when format is json', async () => {
+    MockReportWriter.listReports.mockResolvedValue(['/tmp/report-1.json']);
+    const report = { runId: 'run-001', project: 'test-project', duration: 5000, totalTokens: 1000, totals: { issues: 2, prsCreated: 1, failures: 0 }, issues: [] };
+    MockReportWriter.readReport.mockResolvedValue(report);
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.report({ format: 'json' });
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(report));
+  });
+
+  it('should print human-readable summary for most recent report', async () => {
+    MockReportWriter.listReports.mockResolvedValue(['/tmp/report-1.json']);
+    MockReportWriter.readReport.mockResolvedValue({
+      runId: 'run-abc',
+      project: 'my-project',
+      duration: 3000,
+      totalTokens: 500,
+      totals: { issues: 1, prsCreated: 1, failures: 0 },
+      issues: [],
+    });
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.report();
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('run-abc');
+    expect(output).toContain('my-project');
+  });
+});
+
+describe('CadreRuntime — listWorktrees()', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    processOnSpy.mockRestore();
+  });
+
+  it('should print "No active worktrees" when none exist', async () => {
+    MockWorktreeManager.mockImplementation(() => ({
+      listActive: vi.fn().mockResolvedValue([]),
+    }));
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.listWorktrees();
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('No active worktrees');
+  });
+
+  it('should print worktree details when worktrees exist', async () => {
+    MockWorktreeManager.mockImplementation(() => ({
+      listActive: vi.fn().mockResolvedValue([
+        { issueNumber: 42, path: '/tmp/wt-42', branch: 'cadre/issue-42', baseCommit: 'abc12345', exists: true, agentFiles: [] },
+      ]),
+    }));
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.listWorktrees();
+    const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
+    expect(output).toContain('Issue #42');
+    expect(output).toContain('/tmp/wt-42');
+    expect(output).toContain('cadre/issue-42');
+  });
+});
+
+describe('CadreRuntime — pruneWorktrees()', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    MockCreateNotificationManager.mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    });
+
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      listPullRequests: vi.fn().mockResolvedValue([]),
+      getIssue: vi.fn().mockResolvedValue({ number: 1, title: 'Test', body: '', labels: [], state: 'open', url: '', author: 'u', createdAt: '', updatedAt: '', comments: [] }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        issues: {},
+        tokenUsage: { total: 0, byIssue: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+        projectName: 'test',
+        version: 1,
+        startedAt: '',
+      }),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    processOnSpy.mockRestore();
+  });
+
+  it('should prune worktrees that are locally completed', async () => {
+    const mockRemove = vi.fn().mockResolvedValue(undefined);
+    MockWorktreeManager.mockImplementation(() => ({
+      listActive: vi.fn().mockResolvedValue([
+        { issueNumber: 7, path: '/tmp/wt-7', branch: 'cadre/issue-7', baseCommit: 'abc1', exists: true, agentFiles: [] },
+      ]),
+      remove: mockRemove,
+    }));
+
+    MockFleetCheckpointManager.mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        issues: { 7: { status: 'completed', issueTitle: 'Issue 7', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' } },
+        tokenUsage: { total: 0, byIssue: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+        projectName: 'test',
+        version: 1,
+        startedAt: '',
+      }),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.pruneWorktrees();
+
+    expect(mockRemove).toHaveBeenCalledWith(7);
+    const output = consoleSpy.mock.calls.map(([msg]) => String(msg)).join('\n');
+    expect(output).toContain('Pruned: issue #7');
+    expect(output).toContain('Pruned 1 worktrees');
+  });
+
+  it('should prune worktrees whose PR is closed on the platform', async () => {
+    const mockRemove = vi.fn().mockResolvedValue(undefined);
+    MockWorktreeManager.mockImplementation(() => ({
+      listActive: vi.fn().mockResolvedValue([
+        { issueNumber: 8, path: '/tmp/wt-8', branch: 'cadre/issue-8', baseCommit: 'abc2', exists: true, agentFiles: [] },
+      ]),
+      remove: mockRemove,
+    }));
+
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      listPullRequests: vi.fn().mockResolvedValue([
+        { number: 99, headBranch: 'cadre/issue-8', state: 'closed', url: '' },
+      ]),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.pruneWorktrees();
+
+    expect(mockRemove).toHaveBeenCalledWith(8);
+    const output = consoleSpy.mock.calls.map(([msg]) => String(msg)).join('\n');
+    expect(output).toContain('Pruned: issue #8');
+  });
+
+  it('should skip worktrees whose PR is still open', async () => {
+    const mockRemove = vi.fn().mockResolvedValue(undefined);
+    MockWorktreeManager.mockImplementation(() => ({
+      listActive: vi.fn().mockResolvedValue([
+        { issueNumber: 9, path: '/tmp/wt-9', branch: 'cadre/issue-9', baseCommit: 'abc3', exists: true, agentFiles: [] },
+      ]),
+      remove: mockRemove,
+    }));
+
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      listPullRequests: vi.fn().mockResolvedValue([
+        { number: 100, headBranch: 'cadre/issue-9', state: 'open', url: '' },
+      ]),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    const runtime = new CadreRuntime(makeConfig());
+    await runtime.pruneWorktrees();
+
+    expect(mockRemove).not.toHaveBeenCalled();
+    const output = consoleSpy.mock.calls.map(([msg]) => String(msg)).join('\n');
+    expect(output).toContain('Skipped: issue #9');
+    expect(output).toContain('Pruned 0 worktrees');
+  });
+});
+
+describe('CadreRuntime — resolveIssues() error handling', () => {
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        codeDoneNoPR: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    processOnSpy.mockRestore();
+  });
+
+  it('should continue processing other issues when one getIssue call fails', async () => {
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      getIssue: vi.fn()
+        .mockRejectedValueOnce(new Error('Issue not found'))
+        .mockResolvedValueOnce({ number: 2, title: 'Issue 2', body: '', labels: [], state: 'open', url: '', author: 'u', createdAt: '', updatedAt: '', comments: [] }),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    const config = makeConfig([1, 2]);
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    // FleetOrchestrator should be called with the 1 successfully fetched issue
+    expect(MockFleetOrchestrator).toHaveBeenCalledOnce();
+    const [, issues] = MockFleetOrchestrator.mock.calls[0];
+    expect(issues).toHaveLength(1);
+    expect(issues[0].number).toBe(2);
+  });
+
+  it('should return empty result when all getIssue calls fail', async () => {
+    MockCreatePlatformProvider.mockReturnValue({
+      name: 'github',
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      checkAuth: vi.fn().mockResolvedValue(true),
+      getIssue: vi.fn().mockRejectedValue(new Error('Not found')),
+      listIssues: vi.fn().mockResolvedValue([]),
+    });
+
+    const config = makeConfig([1]);
+    const runtime = new CadreRuntime(config);
+    const result = await runtime.run();
+
+    expect(MockFleetOrchestrator).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.issues).toHaveLength(0);
   });
 });

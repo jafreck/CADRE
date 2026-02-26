@@ -470,6 +470,99 @@ describe('WorktreeManager', () => {
     });
   });
 
+  describe('buildWorktreeInfo (via public provision methods)', () => {
+    let mockGit: ReturnType<typeof simpleGit>;
+
+    beforeEach(() => {
+      mockGit = simpleGit('/tmp/repo');
+      vi.clearAllMocks();
+      vi.mocked(fsUtils.exists).mockResolvedValue(false);
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('basesha');
+      (mockGit.branchLocal as ReturnType<typeof vi.fn>).mockResolvedValue({ all: [] });
+      (mockGit.branch as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
+    });
+
+    it('should use the pre-computed baseCommit from revparse in the fresh provision path', async () => {
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('precomputed-sha');
+
+      const result = await manager.provision(42, 'my issue');
+
+      expect(result.baseCommit).toBe('precomputed-sha');
+    });
+
+    it('should fall back to getBaseCommit (merge-base) when no baseCommit is pre-computed (existing worktree)', async () => {
+      // Existing worktree: buildWorktreeInfo called without a baseCommit
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'merge-base') return Promise.resolve('merge-base-sha\n');
+        return Promise.resolve('');
+      });
+
+      const result = await manager.provision(42, 'my issue');
+
+      expect(result.baseCommit).toBe('merge-base-sha');
+    });
+
+    it('should fall back to HEAD when merge-base calls both fail (new worktree, no common ancestor)', async () => {
+      // Existing worktree: buildWorktreeInfo called without a baseCommit; merge-base returns empty
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'merge-base') return Promise.resolve('');
+        return Promise.resolve('');
+      });
+      (mockGit.revparse as ReturnType<typeof vi.fn>).mockResolvedValue('head-sha');
+
+      const result = await manager.provision(42, 'my issue');
+
+      expect(result.baseCommit).toBe('head-sha');
+    });
+
+    it('should return syncedAgentFiles as an empty array when no agentDir is configured', async () => {
+      const result = await manager.provision(42, 'my issue');
+
+      expect(result.syncedAgentFiles).toEqual([]);
+    });
+
+    it('should populate syncedAgentFiles when agentDir contains .md source files', async () => {
+      const managerWithAgentDir = new WorktreeManager(
+        '/tmp/repo',
+        '/tmp/worktrees',
+        'main',
+        'cadre/issue-{issue}',
+        mockLogger,
+        '/tmp/agents',
+      );
+
+      // agentDir exists and contains an agent file
+      vi.mocked(fsUtils.exists).mockImplementation(async (p: string) => {
+        // worktree path does not exist (fresh provision)
+        if (p === '/tmp/worktrees/issue-42') return false;
+        // agentDir exists
+        if (p === '/tmp/agents') return true;
+        return false;
+      });
+      vi.mocked(fsp.readdir).mockResolvedValue(['code-writer.md'] as unknown as Awaited<ReturnType<typeof fsp.readdir>>);
+      vi.mocked(fsp.readFile).mockResolvedValue('agent body content' as unknown as Buffer);
+
+      const result = await managerWithAgentDir.provision(42, 'my issue');
+
+      expect(result.syncedAgentFiles.length).toBeGreaterThan(0);
+      expect(result.syncedAgentFiles[0]).toContain('code-writer');
+    });
+
+    it('should include all three provision methods consistently returning syncedAgentFiles array', async () => {
+      // provision
+      const r1 = await manager.provision(42, 'my issue');
+      expect(Array.isArray(r1.syncedAgentFiles)).toBe(true);
+
+      // provisionFromBranch (existing)
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      const r2 = await manager.provisionFromBranch(42, 'cadre/issue-42');
+      expect(Array.isArray(r2.syncedAgentFiles)).toBe(true);
+    });
+  });
+
   describe('provisionWithDeps', () => {
     let mockGit: ReturnType<typeof simpleGit>;
 
