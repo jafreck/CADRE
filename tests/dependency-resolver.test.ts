@@ -80,6 +80,10 @@ function makeAgentResult(outputPath: string, overrides: Partial<AgentResult> = {
   };
 }
 
+function cadreJson(obj: unknown): string {
+  return `\`\`\`cadre-json\n${JSON.stringify(obj)}\n\`\`\`\n`;
+}
+
 describe('DependencyResolver', () => {
   let config: RuntimeConfig;
   let logger: Logger;
@@ -99,7 +103,7 @@ describe('DependencyResolver', () => {
     const depMap = { '2': [1], '3': [1] };
 
     mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
-      await writeFile(invocation.outputPath, JSON.stringify(depMap), 'utf-8');
+      await writeFile(invocation.outputPath, cadreJson(depMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
 
@@ -122,7 +126,7 @@ describe('DependencyResolver', () => {
     const depMap = { '1': [], '2': [1], '999': [1] };
 
     mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
-      await writeFile(invocation.outputPath, JSON.stringify(depMap), 'utf-8');
+      await writeFile(invocation.outputPath, cadreJson(depMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
 
@@ -146,9 +150,9 @@ describe('DependencyResolver', () => {
       await writeFile(invocation.outputPath, 'not valid json!!!', 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
-    // Second call (retry): write valid JSON
+    // Second call (retry): write valid cadre-json
     mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
-      await writeFile(invocation.outputPath, JSON.stringify(validDepMap), 'utf-8');
+      await writeFile(invocation.outputPath, cadreJson(validDepMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
 
@@ -167,11 +171,11 @@ describe('DependencyResolver', () => {
     const validDepMap = { '2': [1] };
 
     mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
-      await writeFile(invocation.outputPath, JSON.stringify(cyclicDepMap), 'utf-8');
+      await writeFile(invocation.outputPath, cadreJson(cyclicDepMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
     mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
-      await writeFile(invocation.outputPath, JSON.stringify(validDepMap), 'utf-8');
+      await writeFile(invocation.outputPath, cadreJson(validDepMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
 
@@ -204,7 +208,7 @@ describe('DependencyResolver', () => {
     const cyclicDepMap = { '1': [2], '2': [1] };
 
     mockLaunchAgent.mockImplementation(async (invocation: { outputPath: string }) => {
-      await writeFile(invocation.outputPath, JSON.stringify(cyclicDepMap), 'utf-8');
+      await writeFile(invocation.outputPath, cadreJson(cyclicDepMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
 
@@ -237,7 +241,7 @@ describe('DependencyResolver', () => {
     } as unknown as WorktreeManager;
 
     mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }, cwd: string) => {
-      await writeFile(invocation.outputPath, JSON.stringify(depMap), 'utf-8');
+      await writeFile(invocation.outputPath, cadreJson(depMap), 'utf-8');
       expect(cwd).toBe(dagWorktreePath);
       return makeAgentResult(invocation.outputPath);
     });
