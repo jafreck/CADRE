@@ -74,3 +74,39 @@ export class DependencyMergeConflictError extends Error {
     this.conflictingBranch = conflictingBranch;
   }
 }
+
+export class StaleStateError extends Error {
+  result: import('./validation/stale-state-validator.js').StaleStateResult;
+
+  constructor(message: string, result: import('./validation/stale-state-validator.js').StaleStateResult) {
+    super(message);
+    this.name = 'StaleStateError';
+    this.result = result;
+  }
+}
+
+export class AuthenticationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthenticationError';
+  }
+}
+
+export class ValidationFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationFailedError';
+  }
+}
+
+export class RuntimeInterruptedError extends Error {
+  signal: string;
+  exitCode: number;
+
+  constructor(message: string, signal: string, exitCode: number) {
+    super(message);
+    this.name = 'RuntimeInterruptedError';
+    this.signal = signal;
+    this.exitCode = exitCode;
+  }
+}
