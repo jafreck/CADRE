@@ -237,6 +237,14 @@ export interface ScoutReport {
   estimatedChanges: Array<{ path: string; linesEstimate: number }>;
 }
 
+/** Summary produced by a whole-pr-reviewer or session-review agent. */
+export interface SessionReviewSummary {
+  sessionId: string;
+  verdict: 'pass' | 'needs-fixes';
+  summary: string;
+  keyFindings: string[];
+}
+
 /** Parsed code review output. */
 export interface ReviewResult {
   verdict: 'pass' | 'needs-fixes';
