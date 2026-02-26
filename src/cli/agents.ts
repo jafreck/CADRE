@@ -42,6 +42,34 @@ export function agentFileName(name: string): string {
 }
 
 /**
+ * Copy agent templates to `agentDir`. When `overwrite` is true every file is
+ * written unconditionally; when false existing destination files are skipped.
+ * Returns the count of files written.
+ */
+async function copyAgentTemplates(
+  agentDir: string,
+  templateDir: string,
+  overwrite: boolean,
+): Promise<number> {
+  let written = 0;
+
+  for (const agent of AGENT_DEFINITIONS) {
+    const srcPath = join(templateDir, agent.templateFile);
+    const destPath = join(agentDir, agentFileName(agent.name));
+
+    if (!(await exists(srcPath))) continue;
+    if (!overwrite && (await exists(destPath))) continue;
+
+    const content = await readFile(srcPath, 'utf-8');
+    await mkdir(dirname(destPath), { recursive: true });
+    await writeFile(destPath, content, 'utf-8');
+    written++;
+  }
+
+  return written;
+}
+
+/**
  * Refresh all agent instruction files in `agentDir` from the bundled templates,
  * always overwriting existing files. Called on every `run` so that updates to
  * bundled templates are picked up without requiring a manual scaffold.
@@ -52,22 +80,7 @@ export async function refreshAgentsFromTemplates(
   agentDir: string,
   templateDir?: string,
 ): Promise<number> {
-  const resolvedTemplateDir = templateDir ?? getTemplateDir();
-  let written = 0;
-
-  for (const agent of AGENT_DEFINITIONS) {
-    const srcPath = join(resolvedTemplateDir, agent.templateFile);
-    const destPath = join(agentDir, agentFileName(agent.name));
-
-    if (!(await exists(srcPath))) continue;
-
-    const content = await readFile(srcPath, 'utf-8');
-    await mkdir(dirname(destPath), { recursive: true });
-    await writeFile(destPath, content, 'utf-8');
-    written++;
-  }
-
-  return written;
+  return copyAgentTemplates(agentDir, templateDir ?? getTemplateDir(), true);
 }
 
 /**
@@ -81,23 +94,7 @@ export async function scaffoldMissingAgents(
   agentDir: string,
   templateDir?: string,
 ): Promise<number> {
-  const resolvedTemplateDir = templateDir ?? getTemplateDir();
-  let written = 0;
-
-  for (const agent of AGENT_DEFINITIONS) {
-    const srcPath = join(resolvedTemplateDir, agent.templateFile);
-    const destPath = join(agentDir, agentFileName(agent.name));
-
-    if (!(await exists(srcPath))) continue;
-    if (await exists(destPath)) continue;
-
-    const content = await readFile(srcPath, 'utf-8');
-    await mkdir(dirname(destPath), { recursive: true });
-    await writeFile(destPath, content, 'utf-8');
-    written++;
-  }
-
-  return written;
+  return copyAgentTemplates(agentDir, templateDir ?? getTemplateDir(), false);
 }
 
 /**
