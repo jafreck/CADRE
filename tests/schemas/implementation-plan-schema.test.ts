@@ -59,6 +59,22 @@ describe('implementationTaskSchema', () => {
       expect(Object.keys(result.data)).not.toContain('unexpectedField');
     }
   });
+
+  it('should default testable to true when omitted', () => {
+    const result = implementationTaskSchema.safeParse(validTask);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.testable).toBe(true);
+    }
+  });
+
+  it('should accept testable: false', () => {
+    const result = implementationTaskSchema.safeParse({ ...validTask, testable: false });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.testable).toBe(false);
+    }
+  });
 });
 
 describe('implementationPlanSchema', () => {
