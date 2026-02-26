@@ -117,4 +117,28 @@ describe('MockPlatformProvider', () => {
     expect(provider.issueLinkSuffix(0)).toBe('Closes #0');
     expect(provider.issueLinkSuffix(100)).toBe('Closes #100');
   });
+
+  it('ensureLabel() resolves without error', async () => {
+    const provider = new MockPlatformProvider();
+    await expect(provider.ensureLabel('bug', 'ff0000')).resolves.toBeUndefined();
+    await expect(provider.ensureLabel('enhancement')).resolves.toBeUndefined();
+  });
+
+  it('applyLabels() accumulates labels additively', async () => {
+    const provider = new MockPlatformProvider();
+    await provider.applyLabels(1, ['bug', 'enhancement']);
+    await provider.applyLabels(1, ['bug', 'help wanted']);
+    expect(provider.appliedLabels).toEqual(['bug', 'enhancement', 'help wanted']);
+  });
+
+  it('applyLabels() deduplicates labels', async () => {
+    const provider = new MockPlatformProvider();
+    await provider.applyLabels(1, ['bug', 'bug', 'enhancement']);
+    expect(provider.appliedLabels).toEqual(['bug', 'enhancement']);
+  });
+
+  it('appliedLabels starts empty', () => {
+    const provider = new MockPlatformProvider();
+    expect(provider.appliedLabels).toEqual([]);
+  });
 });
