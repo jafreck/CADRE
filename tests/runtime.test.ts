@@ -175,7 +175,7 @@ import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoin
 import { exists } from '../src/util/fs.js';
 import { checkStaleState } from '../src/validation/index.js';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
-import { DependencyResolutionError } from '../src/errors.js';
+import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../src/errors.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
@@ -544,30 +544,54 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
     expect(interruptedCall![0].issuesInProgress).toHaveLength(2);
   });
 
-  it('calls process.exit(130) on SIGINT', async () => {
+  it('causes run() to reject with RuntimeInterruptedError(exitCode=130) on SIGINT', async () => {
     MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
+
+    // Make fleet.run() never resolve so the interrupt can fire first
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockReturnValue(new Promise(() => {})),
+    }));
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
-    await runtime.run();
+    const runPromise = runtime.run();
+
+    // Allow run() to reach the race
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
 
     const sigintHandler = capturedHandlers.get('SIGINT');
-    await sigintHandler!();
+    expect(sigintHandler).toBeDefined();
+    void sigintHandler!();
 
-    expect(processExitSpy).toHaveBeenCalledWith(130);
+    await expect(runPromise).rejects.toMatchObject({
+      name: 'RuntimeInterruptedError',
+      exitCode: 130,
+    });
   });
 
-  it('calls process.exit(143) on SIGTERM', async () => {
+  it('causes run() to reject with RuntimeInterruptedError(exitCode=143) on SIGTERM', async () => {
     MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
+
+    // Make fleet.run() never resolve so the interrupt can fire first
+    MockFleetOrchestrator.mockImplementation(() => ({
+      run: vi.fn().mockReturnValue(new Promise(() => {})),
+    }));
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
-    await runtime.run();
+    const runPromise = runtime.run();
+
+    // Allow run() to reach the race
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
 
     const sigtermHandler = capturedHandlers.get('SIGTERM');
-    await sigtermHandler!();
+    expect(sigtermHandler).toBeDefined();
+    void sigtermHandler!();
 
-    expect(processExitSpy).toHaveBeenCalledWith(143);
+    await expect(runPromise).rejects.toMatchObject({
+      name: 'RuntimeInterruptedError',
+      exitCode: 143,
+    });
   });
 
   it('does not dispatch fleet-interrupted twice if handler is called multiple times', async () => {
@@ -876,23 +900,22 @@ describe('CadreRuntime — stale-state check wiring', () => {
     expect(issueNumbers).toEqual([10, 20]);
   });
 
-  it('should call process.exit(1) when stale-state conflicts are found', async () => {
+  it('should throw StaleStateError when stale-state conflicts are found', async () => {
     const conflicts = new Map([[42, [{ kind: 'worktree', description: 'exists' }]]]);
-    mockCheckStaleState.mockResolvedValue({ hasConflicts: true, conflicts });
+    const staleResult = { hasConflicts: true, conflicts };
+    mockCheckStaleState.mockResolvedValue(staleResult);
 
     const config = makeConfigWithValidation([42]);
     const runtime = new CadreRuntime(config);
-    await runtime.run().catch(() => {});
+    const err = await runtime.run().catch((e: unknown) => e);
 
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    expect(err).toBeInstanceOf(StaleStateError);
+    expect((err as StaleStateError).result).toBe(staleResult);
   });
 
   it('should not create FleetOrchestrator when stale-state conflicts are found', async () => {
     const conflicts = new Map([[42, [{ kind: 'worktree', description: 'exists' }]]]);
     mockCheckStaleState.mockResolvedValue({ hasConflicts: true, conflicts });
-
-    // Make process.exit throw so execution stops after the stale-state check
-    processExitSpy.mockImplementation((() => { throw new Error('process.exit called'); }) as unknown as (code?: number) => never);
 
     const config = makeConfigWithValidation([42]);
     const runtime = new CadreRuntime(config);

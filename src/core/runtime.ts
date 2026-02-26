@@ -27,7 +27,7 @@ import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
 import { DependencyResolver } from './dependency-resolver.js';
 import type { IssueDag } from './issue-dag.js';
-import { DependencyResolutionError } from '../errors.js';
+import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../errors.js';
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
@@ -39,6 +39,7 @@ export class CadreRuntime {
   private readonly notifications: NotificationManager;
   private isShuttingDown = false;
   private activeIssueNumbers: number[] = [];
+  private interruptReject: ((err: RuntimeInterruptedError) => void) | null = null;
 
   private get agentDir(): string {
     return this.config.agent.copilot.agentDir;
@@ -103,15 +104,10 @@ export class CadreRuntime {
             git,
           );
           if (staleResult.hasConflicts) {
-            console.error('\nStale state detected — aborting run. Resolve the conflicts below before starting:\n');
-            for (const [issueNumber, issueConflicts] of staleResult.conflicts) {
-              console.error(`  Issue #${issueNumber}:`);
-              for (const conflict of issueConflicts) {
-                console.error(`    [${conflict.kind}] ${conflict.description}`);
-              }
-            }
-            console.error('');
-            process.exit(1);
+            throw new StaleStateError(
+              `Stale state detected for ${staleResult.conflicts.size} issue(s)`,
+              staleResult,
+            );
           }
         } finally {
           await this.provider.disconnect();
@@ -121,6 +117,11 @@ export class CadreRuntime {
 
     // Set up graceful shutdown
     this.setupShutdownHandlers();
+
+    // Create a deferred promise that rejects when a signal fires during execution
+    const interruptPromise = new Promise<never>((_resolve, reject) => {
+      this.interruptReject = reject;
+    });
 
     this.logger.info('CADRE Runtime starting', {
       data: {
@@ -194,9 +195,13 @@ export class CadreRuntime {
       dag,
     );
 
-    const result = this.config.options.respondToReviews
-      ? await fleet.runReviewResponse(this.activeIssueNumbers)
-      : await fleet.run();
+    const result = await Promise.race([
+      this.config.options.respondToReviews
+        ? fleet.runReviewResponse(this.activeIssueNumbers)
+        : fleet.run(),
+      interruptPromise,
+    ]);
+    this.interruptReject = null;
 
     // 5. Disconnect platform provider
     await this.provider.disconnect();
@@ -476,6 +481,13 @@ export class CadreRuntime {
 
       this.logger.warn(`Received ${signal} — shutting down gracefully`);
 
+      // Reject the deferred promise to propagate RuntimeInterruptedError to the caller
+      this.interruptReject?.(new RuntimeInterruptedError(
+        `Runtime interrupted by ${signal}`,
+        signal,
+        signal === 'SIGINT' ? 130 : 143,
+      ));
+
       // Kill all running agent processes
       killAllTrackedProcesses();
 
@@ -492,9 +504,6 @@ export class CadreRuntime {
         signal,
         issuesInProgress: this.activeIssueNumbers,
       });
-
-      // Exit with appropriate code
-      process.exit(signal === 'SIGINT' ? 130 : 143);
     };
 
     process.on('SIGINT', () => void handler('SIGINT'));
