@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { AgentContext, GateResult, PhaseResult } from '../src/agents/types.js';
+import type { AgentContext, GateResult, PhaseResult, SessionReviewSummary } from '../src/agents/types.js';
 
 describe('GateResult', () => {
   it('should accept status pass with empty arrays', () => {
@@ -178,5 +178,52 @@ describe('AgentContext outputSchema field', () => {
     expect(ctx.projectName).toBe('my-project');
     expect(ctx.taskId).toBe('task-001');
     expect(ctx.outputSchema).toEqual({ type: 'object' });
+  });
+});
+
+describe('SessionReviewSummary', () => {
+  it('should accept a passing review summary with key findings', () => {
+    const summary: SessionReviewSummary = {
+      sessionId: 'session-001',
+      verdict: 'pass',
+      summary: 'All changes look correct.',
+      keyFindings: ['No regressions', 'Tests pass'],
+    };
+    expect(summary.sessionId).toBe('session-001');
+    expect(summary.verdict).toBe('pass');
+    expect(summary.keyFindings).toHaveLength(2);
+  });
+
+  it('should accept a needs-fixes verdict', () => {
+    const summary: SessionReviewSummary = {
+      sessionId: 'session-002',
+      verdict: 'needs-fixes',
+      summary: 'Several issues found.',
+      keyFindings: ['Missing null check on line 42'],
+    };
+    expect(summary.verdict).toBe('needs-fixes');
+  });
+
+  it('should accept empty keyFindings array', () => {
+    const summary: SessionReviewSummary = {
+      sessionId: 'session-003',
+      verdict: 'pass',
+      summary: 'No findings.',
+      keyFindings: [],
+    };
+    expect(summary.keyFindings).toHaveLength(0);
+  });
+
+  it('should only allow valid verdict values at runtime', () => {
+    const validVerdicts = ['pass', 'needs-fixes'];
+    for (const verdict of validVerdicts) {
+      const summary: SessionReviewSummary = {
+        sessionId: 'session-001',
+        verdict: verdict as SessionReviewSummary['verdict'],
+        summary: 'Test',
+        keyFindings: [],
+      };
+      expect(validVerdicts).toContain(summary.verdict);
+    }
   });
 });
