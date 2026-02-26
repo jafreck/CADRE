@@ -171,29 +171,36 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
         // 3. Launch test-writer (once per session, after all steps are done)
         const changedFiles = await ctx.io.commitManager.getChangedFiles();
-        const testWriterContextPath = await ctx.services.contextBuilder.buildForTestWriter(
-          ctx.issue.number,
-          ctx.worktree.path,
-          session,
-          changedFiles.map((f) => join(ctx.worktree.path, f)),
-          sessionPlanPath,
-          ctx.io.progressDir,
-        );
+        if (session.testable === false) {
+          ctx.services.logger.info(
+            `Skipping test-writer for session ${session.id} (testable: false)`,
+            { issueNumber: ctx.issue.number, sessionId: session.id },
+          );
+        } else {
+          const testWriterContextPath = await ctx.services.contextBuilder.buildForTestWriter(
+            ctx.issue.number,
+            ctx.worktree.path,
+            session,
+            changedFiles.map((f) => join(ctx.worktree.path, f)),
+            sessionPlanPath,
+            ctx.io.progressDir,
+          );
 
-        const testResult = await ctx.services.launcher.launchAgent(
-          {
-            agent: 'test-writer',
-            issueNumber: ctx.issue.number,
-            phase: 3,
-            sessionId: session.id,
-            contextPath: testWriterContextPath,
-            outputPath: ctx.worktree.path,
-          },
-          ctx.worktree.path,
-        );
+          const testResult = await ctx.services.launcher.launchAgent(
+            {
+              agent: 'test-writer',
+              issueNumber: ctx.issue.number,
+              phase: 3,
+              sessionId: session.id,
+              contextPath: testWriterContextPath,
+              outputPath: ctx.worktree.path,
+            },
+            ctx.worktree.path,
+          );
 
-        ctx.callbacks.recordTokens('test-writer', testResult.tokenUsage);
-        ctx.callbacks.checkBudget();
+          ctx.callbacks.recordTokens('test-writer', testResult.tokenUsage);
+          ctx.callbacks.checkBudget();
+        }
 
         // 4. Commit code-writer + test-writer output so getTaskDiff() reflects this session's changes
         await ctx.io.commitManager.commit(

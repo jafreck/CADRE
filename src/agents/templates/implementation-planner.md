@@ -91,6 +91,18 @@ The block must match this exact schema:
 - Do not include sessions for changes outside the scope identified in analysis.md.
 - **The cadre-json block must be the last thing in the file.**
 
+## testable field
+
+Each session may optionally include a `"testable"` boolean field. It defaults to `true` — **only set it to `false` when no meaningful tests can be written for the session's changes**.
+
+Set `"testable": false` when the session exclusively contains:
+- **Config-only changes** (e.g., `tsconfig.json`, `.eslintrc`, `package.json` scripts with no logic changes)
+- **Lockfile changes** (e.g., `package-lock.json`, `yarn.lock`)
+- **Type-definition-only changes** (e.g., adding fields to a TypeScript interface with no runtime behaviour)
+- **Foundational scaffolding with no testable logic** (e.g., creating empty directory structure, boilerplate stubs with no meaningful implementation)
+
+When `testable: false`, the test-writer agent is skipped for that session. Leave `testable` out (or set it to `true`) for all other sessions.
+
 ## Tool Permissions
 
 - **Read files** (required): Read analysis.md, scout-report.md, and every source file you intend to reference before making any claims about its contents or structure.

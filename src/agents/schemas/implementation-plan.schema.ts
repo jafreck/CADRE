@@ -15,6 +15,7 @@ export const agentSessionSchema = z.object({
   rationale: z.string(),
   dependencies: z.array(z.string()),
   steps: z.array(agentStepSchema),
+  testable: z.boolean().optional().default(true),
 });
 
 export const implementationPlanSchema = z.array(agentSessionSchema);
