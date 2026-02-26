@@ -1412,6 +1412,47 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     expect(mockCheckpoint.setDag).toHaveBeenCalledWith(depMap, [[1]]);
   });
 
+  it('logs the DAG wave plan before executing', async () => {
+    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const mockCheckpoint = makeMockFleetCheckpoint();
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+
+    const config = makeConfig();
+    const issue1 = makeIssue(1);
+    const issue2 = makeIssue(2);
+    const issue3 = makeIssue(3);
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockImplementation(async (num: number) => ({
+      path: `/tmp/worktree/${num}`,
+      branch: `cadre/issue-${num}`,
+      baseCommit: 'abc123',
+    }));
+    worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
+
+    const dag = makeMockDag([[issue1, issue2], [issue3]]);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      [issue1, issue2, issue3],
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+      dag as any,
+    );
+
+    await fleet.run();
+
+    const wavePlanCall = logger.info.mock.calls.find(
+      (call: any[]) => typeof call[0] === 'string' && call[0].includes('DAG wave plan'),
+    );
+    expect(wavePlanCall).toBeDefined();
+    expect(wavePlanCall![0]).toBe('DAG wave plan: Wave 0 → [#1, #2] | Wave 1 → [#3]');
+  });
+
   it('calls markWaveComplete() after each wave', async () => {
     const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
     const mockCheckpoint = makeMockFleetCheckpoint();
