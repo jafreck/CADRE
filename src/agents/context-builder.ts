@@ -6,6 +6,7 @@ import type {
   AgentName,
   AgentContext,
   AgentSession,
+  SessionReviewSummary,
 } from './types.js';
 import type { IssueDetail, ReviewThread } from '../platform/provider.js';
 import { Logger } from '../logging/logger.js';
@@ -234,8 +235,10 @@ export class ContextBuilder {
 
   /**
    * Build a context file for the whole-PR code-reviewer agent.
-   * Receives the full diff against main/base, all session plan files, and the
+   * Receives the path to the full diff on disk, all session plan files, and the
    * standard analysis/scout context — giving it cross-session visibility.
+   * The diff is referenced by path in the payload (`fullDiffPath`) rather than
+   * being inlined as an input file; the agent uses file-read tools to access it.
    */
   async buildForWholePrCodeReviewer(
     issueNumber: number,
@@ -243,8 +246,9 @@ export class ContextBuilder {
     diffPath: string,
     sessionPlanPaths: string[],
     progressDir: string,
+    sessionSummaries: SessionReviewSummary[] = [],
   ): Promise<string> {
-    const inputFiles = [diffPath, ...sessionPlanPaths];
+    const inputFiles = [...sessionPlanPaths];
     if (await exists(join(progressDir, 'analysis.md'))) {
       inputFiles.push(join(progressDir, 'analysis.md'));
     }
@@ -267,6 +271,8 @@ export class ContextBuilder {
       payload: {
         scope: 'whole-pr',
         baseBranch: this.config.baseBranch,
+        fullDiffPath: diffPath,
+        sessionSummaries,
       },
       outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
     });

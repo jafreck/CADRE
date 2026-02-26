@@ -237,6 +237,9 @@ export interface ScoutReport {
   estimatedChanges: Array<{ path: string; linesEstimate: number }>;
 }
 
+/** Summary produced by a whole-pr-reviewer or session-review agent. */
+export type { SessionReviewSummary } from './schemas/session-review-summary.schema.js';
+
 /** Parsed code review output. */
 export interface ReviewResult {
   verdict: 'pass' | 'needs-fixes';
