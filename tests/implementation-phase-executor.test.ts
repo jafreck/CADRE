@@ -1121,6 +1121,106 @@ describe('ImplementationPhaseExecutor', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // testable: false
+  // ---------------------------------------------------------------------------
+
+  describe('testable: false', () => {
+    it('should not launch test-writer when session.testable is false', async () => {
+      const session = { ...makeSession('session-001'), testable: false };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([session]),
+        parseReview: vi.fn().mockResolvedValue({ verdict: 'pass' }),
+      };
+
+      const ctx = makeCtx({ services: { launcher, resultParser } as never });
+      await executor.execute(ctx);
+
+      const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
+      expect(agents).not.toContain('test-writer');
+    });
+
+    it('should log info message with session ID when skipping test-writer', async () => {
+      const session = { ...makeSession('session-001'), testable: false };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([session]),
+        parseReview: vi.fn().mockResolvedValue({ verdict: 'pass' }),
+      };
+
+      const ctx = makeCtx({ services: { launcher, resultParser } as never });
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info,
+      ).toHaveBeenCalledWith(
+        expect.stringContaining('session-001'),
+        expect.objectContaining({ sessionId: 'session-001' }),
+      );
+    });
+
+    it('should launch test-writer when session.testable is true', async () => {
+      const session = { ...makeSession('session-001'), testable: true };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([session]),
+        parseReview: vi.fn().mockResolvedValue({ verdict: 'pass' }),
+      };
+
+      const ctx = makeCtx({ services: { launcher, resultParser } as never });
+      await executor.execute(ctx);
+
+      const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
+      expect(agents).toContain('test-writer');
+    });
+
+    it('should launch test-writer when session.testable is omitted', async () => {
+      const session = makeSession('session-001'); // no testable field
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
+          .mockResolvedValue(makeSuccessAgentResult('whole-pr-reviewer')),
+      };
+
+      const resultParser = {
+        parseImplementationPlan: vi.fn().mockResolvedValue([session]),
+        parseReview: vi.fn().mockResolvedValue({ verdict: 'pass' }),
+      };
+
+      const ctx = makeCtx({ services: { launcher, resultParser } as never });
+      await executor.execute(ctx);
+
+      const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
+      expect(agents).toContain('test-writer');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Whole-PR review tests
   // ---------------------------------------------------------------------------
 
