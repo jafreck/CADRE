@@ -27,9 +27,14 @@ export class MockPlatformProvider implements PlatformProvider {
   readonly name = 'Mock';
 
   private readonly issueDetail: IssueDetail;
+  private _appliedLabels: string[] = [];
 
   constructor(issueDetail?: Partial<IssueDetail>) {
     this.issueDetail = { ...DEFAULT_ISSUE, ...issueDetail };
+  }
+
+  get appliedLabels(): string[] {
+    return [...this._appliedLabels];
   }
 
   async connect(): Promise<void> {}
@@ -93,6 +98,16 @@ export class MockPlatformProvider implements PlatformProvider {
 
   async listPRReviews(_prNumber: number): Promise<PRReview[]> {
     return [];
+  }
+
+  async ensureLabel(_labelName: string, _color?: string): Promise<void> {}
+
+  async applyLabels(_prNumber: number, labels: string[]): Promise<void> {
+    for (const label of labels) {
+      if (!this._appliedLabels.includes(label)) {
+        this._appliedLabels.push(label);
+      }
+    }
   }
 
   issueLinkSuffix(issueNumber: number): string {
