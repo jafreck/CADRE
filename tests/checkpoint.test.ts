@@ -374,7 +374,8 @@ describe('CheckpointManager', () => {
     expect(state.subTasks?.['task-002:step-1']).toBe(true);
   });
 
-  it('loadTokenRecords should return empty array when checkpoint has no tokenRecords', async () => {    const manager = new CheckpointManager(tempDir, mockLogger);
+  it('loadTokenRecords should return empty array when checkpoint has no tokenRecords', async () => {
+    const manager = new CheckpointManager(tempDir, mockLogger);
     await manager.load('42');
     expect(manager.loadTokenRecords()).toEqual([]);
   });

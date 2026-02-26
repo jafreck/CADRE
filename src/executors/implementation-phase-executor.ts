@@ -313,6 +313,9 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                   throw new Error(`Fix surgeon failed: ${fixResult.error}`);
                 }
                 await ctx.io.checkpoint.completeSubTask(`${session.id}:fix-surgeon`);
+              } else {
+                // Verdict is approved — no fixes needed; mark gate passed so retries skip this block
+                await ctx.io.checkpoint.completeSubTask(`${session.id}:fix-surgeon`);
               }
             }
           }
