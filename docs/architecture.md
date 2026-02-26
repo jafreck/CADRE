@@ -562,6 +562,62 @@ Adding a new phase requires only a single new object in `PHASE_MANIFEST`; all de
 
 ---
 
+## 9. IssueOrchestrator Service Decomposition
+
+`IssueOrchestrator` is a **thin coordinator**: it constructs the four services below, wires their dependencies, and delegates to them. It contains no business logic of its own.
+
+### Extracted Services
+
+| Service | File | Responsibility |
+|---------|------|---------------|
+| `PhaseRunner` | `src/core/phase-runner.ts` | Single-phase execution and the gate-retry loop (execute → runGate → optional retry → abort on second failure) |
+| `GateCoordinator` | `src/core/gate-coordinator.ts` | Gate validation, ambiguity gate merging for phase 1, gate-result recording on the checkpoint |
+| `IssueBudgetGuard` | `src/core/issue-budget-guard.ts` | Per-issue token recording, budget-exceeded detection, and one-shot budget-warning notification dispatch |
+| `IssueLifecycleNotifier` | `src/core/issue-lifecycle-notifier.ts` | Issue-started, phase-completed, issue-failed, and issue-completed notification events |
+
+### Dependency Relationships
+
+```mermaid
+graph TD
+    IO["IssueOrchestrator\n(thin coordinator)"]
+
+    PR["PhaseRunner"]
+    GC["GateCoordinator"]
+    IBG["IssueBudgetGuard"]
+    ILN["IssueLifecycleNotifier"]
+
+    CM["CheckpointManager"]
+    TT["TokenTracker"]
+    NM["NotificationManager"]
+    PW["IssueProgressWriter"]
+    LOG["Logger"]
+
+    IO --> PR
+    IO --> GC
+    IO --> IBG
+    IO --> ILN
+
+    PR --> GC
+    PR --> CM
+    PR --> PW
+    PR --> TT
+    PR --> LOG
+
+    GC --> CM
+    GC --> PW
+    GC --> LOG
+
+    IBG --> TT
+    IBG --> NM
+    IBG --> CM
+
+    ILN --> NM
+```
+
+`PhaseRunner` holds a reference to `GateCoordinator` so that gate validation and the retry decision remain encapsulated away from the orchestrator loop. `IssueBudgetGuard` owns budget state (`_budgetExceeded`, `budgetWarningSent`) so that `IssueOrchestrator` never inspects raw token counts directly.
+
+---
+
 ## Key Design Principles
 
 | Principle | Implementation |
