@@ -10,6 +10,7 @@ import type { WorktreeManager } from '../git/worktree.js';
 import { IssueDag } from './issue-dag.js';
 import { CyclicDependencyError, DependencyResolutionError } from '../errors.js';
 import { Logger } from '../logging/logger.js';
+import { extractCadreJson } from '../util/cadre-json.js';
 
 /** Zod schema for the dependency-analyst agent output: maps issue number (string key) to list of dependency issue numbers. */
 export const depMapSchema = z.record(z.string(), z.array(z.number()));
@@ -47,10 +48,14 @@ export class DependencyResolver {
       for (let attempt = 0; attempt < 2; attempt++) {
         const rawOutput = await this.invokeAgent(issues, agentCwd, cycleHint);
 
-        // Parse and Zod-validate the output
+        // Parse and Zod-validate the output.
+        // The agent must emit a cadre-json fenced block in dep-map.md.
         let rawDepMap: DepMapOutput;
         try {
-          const parsed: unknown = JSON.parse(rawOutput);
+          const parsed = extractCadreJson(rawOutput);
+          if (parsed === null || parsed === undefined) {
+            throw new Error('Agent output is missing a cadre-json block');
+          }
           rawDepMap = depMapSchema.parse(parsed);
         } catch (err) {
           if (attempt === 0) {
@@ -104,7 +109,7 @@ export class DependencyResolver {
     await mkdir(tmpDir, { recursive: true });
 
     const contextPath = join(tmpDir, 'context.json');
-    const outputPath = join(tmpDir, 'dep-map.json');
+    const outputPath = join(tmpDir, 'dep-map.md');
 
     const context = {
       agent: 'dependency-analyst',
