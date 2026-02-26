@@ -7,12 +7,14 @@ import type { CheckpointState } from '../src/core/checkpoint.js';
 
 function makeTokenTracker(overrides: {
   getTotal?: () => number;
+  getIssueTotal?: (issueNumber: number) => number;
   checkIssueBudget?: (issueNumber: number, budget?: number) => 'ok' | 'warning' | 'exceeded';
   record?: () => void;
 } = {}): TokenTracker {
   return {
     record: vi.fn(),
     getTotal: vi.fn().mockReturnValue(0),
+    getIssueTotal: vi.fn().mockReturnValue(0),
     checkIssueBudget: vi.fn().mockReturnValue('ok'),
     ...overrides,
   } as unknown as TokenTracker;
@@ -94,7 +96,7 @@ describe('IssueBudgetGuard', () => {
 
     it('dispatches budget-warning notification exactly once on warning transition', async () => {
       const tracker = makeTokenTracker({
-        getTotal: vi.fn().mockReturnValue(8_500),
+        getIssueTotal: vi.fn().mockReturnValue(8_500),
         checkIssueBudget: vi.fn().mockReturnValue('warning'),
       });
       const notifier = makeNotificationManager();

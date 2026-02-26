@@ -63,7 +63,7 @@ export class IssueBudgetGuard {
       this.tokenTracker.checkIssueBudget(this.issueNumber, this.tokenBudget) === 'warning'
     ) {
       this.budgetWarningSent = true;
-      const currentUsage = this.tokenTracker.getTotal() ?? 0;
+      const currentUsage = this.tokenTracker.getIssueTotal(this.issueNumber) ?? 0;
       const budget = this.tokenBudget ?? 0;
       void this.notificationManager.dispatch({
         type: 'budget-warning',
