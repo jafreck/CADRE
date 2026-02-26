@@ -89,6 +89,19 @@ export class IssueDag {
     return this.waves;
   }
 
+  /** Returns all issues in the DAG. */
+  getAllIssues(): IssueDetail[] {
+    return [...this.issues.values()];
+  }
+
+  /**
+   * Returns the direct dependency issue numbers for the given issue
+   * (only those present in the DAG's issue set).
+   */
+  getDirectDeps(issueNumber: number): number[] {
+    return (this.depMap[issueNumber] ?? []).filter((n) => this.issues.has(n));
+  }
+
   /**
    * Returns all transitive dependencies of the given issue in topological order
    * (deepest/earliest dependencies first).
