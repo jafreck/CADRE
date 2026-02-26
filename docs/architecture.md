@@ -518,6 +518,50 @@ graph TD
 
 ---
 
+## 8. Manifest-Driven Pipeline Configuration
+
+`PHASE_MANIFEST` in `src/core/phase-registry.ts` is the **single source of truth** for all pipeline phase metadata. Rather than scattering phase registrations, gate assignments, and review-response membership across multiple files, every piece of per-phase configuration lives in one typed array entry.
+
+### `PhaseManifestEntry` Fields
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `phaseId` | `number` | 1-based phase number (execution order) |
+| `name` | `string` | Human-readable phase label |
+| `executorFactory` | `() => PhaseExecutor` | Factory that instantiates the phase executor |
+| `gate` | `PhaseGate \| null` | Post-phase gate for output validation; `null` for the final phase |
+| `critical` | `boolean` | If `true`, a gate failure aborts the issue pipeline |
+| `commitType` | `string?` | Conventional-commit type for the per-phase git commit |
+| `commitMessage` | `string?` | Commit message template; `{issueNumber}` is interpolated |
+| `includeInReviewResponse` | `boolean` | Whether this phase runs in the `--respond-to-reviews` pipeline |
+
+### Derived Constructs
+
+All downstream constructs are computed from `PHASE_MANIFEST` at module load time — no imperative setup code is needed at call sites:
+
+- **`buildRegistry()`** — iterates `PHASE_MANIFEST` in order, calls each `executorFactory()`, and appends the result to a new `PhaseRegistry`. `IssueOrchestrator` calls this once during construction instead of five individual `registry.register()` calls.
+
+- **`buildGateMap()`** — iterates `PHASE_MANIFEST` and collects entries where `gate !== null` into a `Record<number, PhaseGate>` keyed by `phaseId`. `IssueOrchestrator` uses this map to look up the correct gate after each phase completes.
+
+- **`REVIEW_RESPONSE_PHASES`** — a derived `readonly number[]` computed by filtering `PHASE_MANIFEST` on `includeInReviewResponse === true` and mapping to `phaseId`. `ReviewResponseOrchestrator` imports this constant directly instead of maintaining a separate, duplicated list.
+
+```mermaid
+flowchart TD
+    M["PHASE_MANIFEST\n(PhaseManifestEntry[])"]
+
+    M -->|"buildRegistry()"| R["PhaseRegistry\n(executors in order)"]
+    M -->|"buildGateMap()"| G["Record&lt;number, PhaseGate&gt;"]
+    M -->|"filter includeInReviewResponse"| RRP["REVIEW_RESPONSE_PHASES\nnumber[]"]
+
+    R --> IO["IssueOrchestrator"]
+    G --> IO
+    RRP --> RRO["ReviewResponseOrchestrator"]
+```
+
+Adding a new phase requires only a single new object in `PHASE_MANIFEST`; all derived constructs update automatically.
+
+---
+
 ## Key Design Principles
 
 | Principle | Implementation |
