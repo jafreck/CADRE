@@ -466,6 +466,9 @@ export class FleetOrchestrator {
   private async runWithDag(dag: IssueDag): Promise<PromiseSettledResult<IssueResult>[]> {
     const waves = dag.getWaves();
     const waveNumbers = waves.map((w) => w.map((i) => i.number));
+    this.logger.info(
+      `DAG wave plan: ${waveNumbers.map((w, i) => `Wave ${i} → [${w.map((n) => `#${n}`).join(', ')}]`).join(' | ')}`,
+    );
     await this.fleetCheckpoint.setDag(this.dagDepMap ?? {}, waveNumbers);
 
     const checkpoint = this.fleetCheckpoint.getState();
