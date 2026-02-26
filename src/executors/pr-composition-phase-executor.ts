@@ -144,6 +144,13 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
 
     const labels = await this.resolveLabels(ctx);
 
+    const existingPR = await ctx.platform.findOpenPR(ctx.issue.number, ctx.worktree.branch);
+    if (existingPR !== null) {
+      await ctx.platform.updatePullRequest(existingPR.number, { title: prTitle, body: prBody });
+      ctx.callbacks.setPR?.(existingPR);
+      return;
+    }
+
     const pr = await ctx.platform.createPullRequest({
       title: prTitle,
       body: prBody,

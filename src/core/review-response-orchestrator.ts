@@ -8,14 +8,13 @@ import { CommitManager } from '../git/commit.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager } from './checkpoint.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
+import { REVIEW_RESPONSE_PHASES } from './phase-registry.js';
+export { REVIEW_RESPONSE_PHASES };
 import { Logger } from '../logging/logger.js';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
-
-/** The phases executed during a review-response cycle (skips analysis & planning). */
-export const REVIEW_RESPONSE_PHASES = [3, 4, 5];
 
 export interface ReviewResponseIssueOutcome {
   issueNumber: number;
@@ -338,7 +337,7 @@ export class ReviewResponseOrchestrator {
         // Reset phases 3–5 so they re-execute against the new review-response
         // implementation plan.  Without this, IssueOrchestrator sees them as
         // already completed and skips them entirely.
-        await checkpoint.resetPhases(REVIEW_RESPONSE_PHASES);
+        await checkpoint.resetPhases([...REVIEW_RESPONSE_PHASES]);
         // Ensure phases 1 and 2 are marked completed so IssueOrchestrator starts
         // at phase 3.  On a fresh worktree the checkpoint has no completed phases,
         // which would cause the orchestrator to fall back to phase 1.

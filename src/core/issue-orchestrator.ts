@@ -12,17 +12,9 @@ import type {
 import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';
-import { PhaseRegistry, getPhase, type PhaseDefinition } from './phase-registry.js';
+import { PhaseRegistry, getPhase, buildRegistry, buildGateMap, type PhaseDefinition } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
-import {
-  AnalysisAmbiguityGate,
-  AnalysisToPlanningGate,
-  ImplementationToIntegrationGate,
-  IntegrationToPRGate,
-  PlanningToImplementationGate,
-  type GateContext,
-  type PhaseGate,
-} from './phase-gate.js';
+import { AnalysisAmbiguityGate, type GateContext, type PhaseGate } from './phase-gate.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { IssueProgressWriter } from './progress.js';
 import { AgentLauncher } from './agent-launcher.js';
@@ -34,11 +26,6 @@ import { TokenTracker } from '../budget/token-tracker.js';
 import { Logger } from '../logging/logger.js';
 import { IssueNotifier } from './issue-notifier.js';
 import { extractCadreJson } from '../util/cadre-json.js';
-import { AnalysisPhaseExecutor } from '../executors/analysis-phase-executor.js';
-import { PlanningPhaseExecutor } from '../executors/planning-phase-executor.js';
-import { ImplementationPhaseExecutor } from '../executors/implementation-phase-executor.js';
-import { IntegrationPhaseExecutor } from '../executors/integration-phase-executor.js';
-import { PRCompositionPhaseExecutor } from '../executors/pr-composition-phase-executor.js';
 
 export class BudgetExceededError extends Error {
   constructor() {
@@ -61,12 +48,7 @@ export interface IssueResult {
 }
 
 /** Stateless gates — constructed once and reused across all runGate() calls. */
-const GATE_MAP: Record<number, PhaseGate> = {
-  1: new AnalysisToPlanningGate(),
-  2: new PlanningToImplementationGate(),
-  3: new ImplementationToIntegrationGate(),
-  4: new IntegrationToPRGate(),
-};
+const GATE_MAP = buildGateMap();
 
 /**
  * Runs the 5-phase pipeline for a single issue within its worktree.
@@ -134,12 +116,7 @@ export class IssueOrchestrator {
       });
     }
 
-    this.registry = new PhaseRegistry();
-    this.registry.register(new AnalysisPhaseExecutor());
-    this.registry.register(new PlanningPhaseExecutor());
-    this.registry.register(new ImplementationPhaseExecutor());
-    this.registry.register(new IntegrationPhaseExecutor());
-    this.registry.register(new PRCompositionPhaseExecutor());
+    this.registry = buildRegistry();
   }
 
   /**
