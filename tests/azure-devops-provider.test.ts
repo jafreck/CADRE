@@ -1122,3 +1122,95 @@ describe('AzureDevOpsProvider.listPRReviews()', () => {
     );
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// mergePullRequest
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('AzureDevOpsProvider.mergePullRequest()', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('should fetch the PR then PATCH with status completed', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    const lastMergeSourceCommit = { commitId: 'abc123', url: 'https://example.com' };
+    // First call: GET PR to retrieve lastMergeSourceCommit
+    fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit }));
+    // Second call: PATCH to complete the PR
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 55, status: 'completed' }));
+
+    await provider.mergePullRequest(55, 'main');
+
+    // Verify the GET call
+    const getCall = fetchStub.mock.calls[1];
+    expect(getCall[0]).toContain('/pullrequests/55');
+    expect(getCall[1]?.method ?? 'GET').toBe('GET');
+
+    // Verify the PATCH call
+    const patchCall = fetchStub.mock.calls[2];
+    expect(patchCall[0]).toContain('/pullrequests/55');
+    expect(patchCall[1].method).toBe('PATCH');
+
+    const body = JSON.parse(patchCall[1].body as string);
+    expect(body.status).toBe('completed');
+    expect(body.lastMergeSourceCommit).toEqual(lastMergeSourceCommit);
+    expect(body.completionOptions.mergeStrategy).toBe('noFastForward');
+  });
+
+  it('should use repositoryName when provided', async () => {
+    const provider = await makeConnectedProvider(fetchStub, 'custom-repo');
+
+    fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit: null }));
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 10, status: 'completed' }));
+
+    await provider.mergePullRequest(10, 'main');
+
+    const patchCall = fetchStub.mock.calls[2];
+    expect(patchCall[0]).toContain('/repositories/custom-repo/pullrequests/10');
+  });
+
+  it('should fall back to project name as repository when repositoryName is omitted', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit: null }));
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 20, status: 'completed' }));
+
+    await provider.mergePullRequest(20, 'main');
+
+    const patchCall = fetchStub.mock.calls[2];
+    expect(patchCall[0]).toContain('/repositories/my-project/pullrequests/20');
+  });
+
+  it('should throw when not connected', async () => {
+    const provider = makeProvider();
+
+    await expect(provider.mergePullRequest(1, 'main')).rejects.toThrow('not connected');
+  });
+
+  it('should propagate fetch errors from the GET call', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
+
+    await expect(provider.mergePullRequest(99, 'main')).rejects.toThrow('Azure DevOps API error');
+  });
+
+  it('should propagate fetch errors from the PATCH call', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit: { commitId: 'xyz' } }));
+    fetchStub.mockResolvedValueOnce(new Response('Conflict', { status: 409 }));
+
+    await expect(provider.mergePullRequest(77, 'main')).rejects.toThrow('Azure DevOps API error');
+  });
+});
