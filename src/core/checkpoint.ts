@@ -31,6 +31,7 @@ export interface CheckpointState {
   };
   budgetExceeded?: boolean;
   tokenRecords?: TokenRecord[];
+  subTasks?: Record<string, boolean>;
   worktreePath: string;
   branchName: string;
   baseCommit: string;
@@ -140,6 +141,7 @@ export class CheckpointManager {
       blockedTasks: [],
       phaseOutputs: {},
       gateResults: {},
+      subTasks: {},
       tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
       worktreePath: '',
       branchName: '',
@@ -211,6 +213,15 @@ export class CheckpointManager {
       this.state.completedTasks.push(taskId);
     }
     this.state.currentTask = null;
+    // Remove sub-task entries scoped to this task to keep checkpoint size bounded
+    if (this.state.subTasks) {
+      const prefix = `${taskId}:`;
+      for (const key of Object.keys(this.state.subTasks)) {
+        if (key.startsWith(prefix)) {
+          delete this.state.subTasks[key];
+        }
+      }
+    }
     await this.save();
   }
 
@@ -308,6 +319,7 @@ export class CheckpointManager {
     this.state.failedTasks = [];
     this.state.blockedTasks = [];
     this.state.currentTask = null;
+    this.state.subTasks = {};
     for (const phaseId of phaseIds) {
       delete this.state.phaseOutputs[phaseId];
       if (this.state.gateResults) {
@@ -346,6 +358,33 @@ export class CheckpointManager {
    */
   isTaskBlocked(taskId: string): boolean {
     return this.state?.blockedTasks.includes(taskId) ?? false;
+  }
+
+  /**
+   * Mark a sub-task as started (sets its entry to false).
+   */
+  async startSubTask(subTaskId: string): Promise<void> {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+    if (!this.state.subTasks) this.state.subTasks = {};
+    this.state.subTasks[subTaskId] = false;
+    await this.save();
+  }
+
+  /**
+   * Mark a sub-task as completed (sets its entry to true).
+   */
+  async completeSubTask(subTaskId: string): Promise<void> {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+    if (!this.state.subTasks) this.state.subTasks = {};
+    this.state.subTasks[subTaskId] = true;
+    await this.save();
+  }
+
+  /**
+   * Check if a sub-task was already completed.
+   */
+  isSubTaskCompleted(subTaskId: string): boolean {
+    return this.state?.subTasks?.[subTaskId] === true;
   }
 
   /**
