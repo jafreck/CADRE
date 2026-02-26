@@ -425,3 +425,75 @@ describe('cadre run --dag flag runtime behavior', () => {
     expect((config as Record<string, unknown> & { dag?: { enabled: boolean } })?.dag?.enabled).toBe(false);
   });
 });
+
+describe('cadre run typed error handling', () => {
+  const originalArgv = process.argv;
+
+  beforeEach(() => {
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  async function loadRunWithErrorFactory(errorFactory: () => Promise<unknown>) {
+    process.argv = ['node', 'index.js', 'run'];
+    vi.resetModules();
+    vi.doMock('../src/config/loader.js', () => ({
+      loadConfig: vi.fn().mockResolvedValue({
+        agent: {
+          backend: 'copilot',
+          copilot: { agentDir: '/agent-dir' },
+          claude: { agentDir: '/agent-dir' },
+        },
+      }),
+      applyOverrides: vi.fn((c: unknown) => c),
+    }));
+    vi.doMock('../src/core/runtime.js', () => ({
+      CadreRuntime: vi.fn().mockImplementation(() => ({
+        run: vi.fn().mockImplementation(async () => { throw await errorFactory(); }),
+      })),
+    }));
+    vi.doMock('../src/core/agent-launcher.js', () => ({
+      AgentLauncher: { validateAgentFiles: vi.fn().mockResolvedValue([]) },
+    }));
+    vi.doMock('../src/cli/agents.js', () => ({
+      registerAgentsCommand: vi.fn(),
+      refreshAgentsFromTemplates: vi.fn().mockResolvedValue(0),
+      scaffoldMissingAgents: vi.fn().mockResolvedValue(0),
+    }));
+    await import('../src/index.js').catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  it('should print conflict map to stderr and exit 1 when StaleStateError is thrown', async () => {
+    await loadRunWithErrorFactory(async () => {
+      const { StaleStateError } = await import('../src/errors.js');
+      const conflicts = new Map([
+        [42, [{ kind: 'worktree' as const, description: 'Worktree already exists at /path/worktree' }]],
+      ]);
+      return new StaleStateError('stale state detected', { hasConflicts: true, conflicts });
+    });
+
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Issue #42'));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('worktree'));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Worktree already exists'));
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('should exit with error.exitCode (130) and not print extra error when RuntimeInterruptedError(SIGINT) is thrown', async () => {
+    await loadRunWithErrorFactory(async () => {
+      const { RuntimeInterruptedError } = await import('../src/errors.js');
+      return new RuntimeInterruptedError('interrupted by SIGINT', 'SIGINT', 130);
+    });
+
+    expect(process.exit).toHaveBeenCalledWith(130);
+    // Should not print any additional error message for this error type
+    expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining('Error:'));
+  });
+});

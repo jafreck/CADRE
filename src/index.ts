@@ -6,6 +6,7 @@ import { runInit } from './cli/init.js';
 import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
 import { AgentLauncher } from './core/agent-launcher.js';
+import { StaleStateError, RuntimeInterruptedError } from './errors.js';
 import { registerAgentsCommand, scaffoldMissingAgents, refreshAgentsFromTemplates } from './cli/agents.js';
 
 const program = new Command();
@@ -95,6 +96,20 @@ program
 
       process.exit(result.success ? 0 : 1);
     } catch (err: unknown) {
+      if (err instanceof StaleStateError) {
+        const { conflicts } = err.result;
+        for (const [issueNumber, issueConflicts] of conflicts) {
+          console.error(chalk.red(`Issue #${issueNumber} has stale state conflicts:`));
+          for (const conflict of issueConflicts) {
+            console.error(chalk.yellow(`  [${conflict.kind}] ${conflict.description}`));
+          }
+        }
+        process.exit(1);
+        return;
+      } else if (err instanceof RuntimeInterruptedError) {
+        process.exit(err.exitCode);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));
       process.exit(1);
