@@ -1,18 +1,11 @@
-import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { RuntimeConfig } from '../config/loader.js';
-import type { CadreConfig } from '../config/schema.js';
-import type {
-  ImplementationTask,
-  PhaseResult,
-  TokenUsageDetail,
-} from '../agents/types.js';
+import type { PhaseResult } from '../agents/types.js';
 import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';
-import { PhaseRegistry, getPhase, buildRegistry, buildGateMap, type PhaseDefinition } from './phase-registry.js';
+import { PhaseRegistry, getPhase, buildRegistry, type PhaseDefinition } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
-import { AnalysisAmbiguityGate, type GateContext, type PhaseGate } from './phase-gate.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { IssueProgressWriter } from './progress.js';
 import { AgentLauncher } from './agent-launcher.js';
@@ -23,14 +16,11 @@ import { RetryExecutor } from '../execution/retry.js';
 import { TokenTracker } from '../budget/token-tracker.js';
 import { Logger } from '../logging/logger.js';
 import { IssueNotifier } from './issue-notifier.js';
-import { extractCadreJson } from '../util/cadre-json.js';
+import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
+import { GateCoordinator } from './gate-coordinator.js';
+import { IssueLifecycleNotifier } from './issue-lifecycle-notifier.js';
 
-export class BudgetExceededError extends Error {
-  constructor() {
-    super('Per-issue token budget exceeded');
-    this.name = 'BudgetExceededError';
-  }
-}
+export { BudgetExceededError } from './issue-budget-guard.js';
 
 export interface IssueResult {
   issueNumber: number;
@@ -44,9 +34,6 @@ export interface IssueResult {
   error?: string;
   budgetExceeded?: boolean;
 }
-
-/** Stateless gates — constructed once and reused across all runGate() calls. */
-const GATE_MAP = buildGateMap();
 
 /**
  * Runs the 5-phase pipeline for a single issue within its worktree.
@@ -63,8 +50,6 @@ export class IssueOrchestrator {
   private readonly registry: PhaseRegistry;
   private ctx!: PhaseContext;
   private readonly phases: PhaseResult[] = [];
-  private budgetExceeded = false;
-  private budgetWarningSent = false;
   private createdPR: PullRequestInfo | undefined;
 
   constructor(
@@ -124,6 +109,33 @@ export class IssueOrchestrator {
     const startTime = Date.now();
     const resumePoint = this.checkpoint.getResumePoint();
 
+    // Instantiate per-run services
+    const budgetGuard = new IssueBudgetGuard(
+      this.tokenTracker,
+      this.notificationManager,
+      this.checkpoint,
+      this.issue.number,
+      this.config.options.tokenBudget,
+    );
+    const gateCoordinator = new GateCoordinator(
+      this.checkpoint,
+      this.progressWriter,
+      this.logger,
+      {
+        ambiguityThreshold: this.config.options.ambiguityThreshold,
+        haltOnAmbiguity: this.config.options.haltOnAmbiguity,
+      },
+      this.progressDir,
+      this.worktree.path,
+      this.worktree.baseCommit,
+      this.issue.number,
+    );
+    const lifecycleNotifier = new IssueLifecycleNotifier(
+      this.notificationManager,
+      this.issue.number,
+      this.issue.title,
+    );
+
     this.ctx = {
       issue: this.issue,
       worktree: this.worktree,
@@ -144,8 +156,8 @@ export class IssueOrchestrator {
         commitManager: this.commitManager,
       },
       callbacks: {
-        recordTokens: (agent, tokens) => this.recordTokens(agent, tokens),
-        checkBudget: () => this.checkBudget(),
+        recordTokens: (agent, tokens) => budgetGuard.recordTokens(agent, tokens),
+        checkBudget: () => budgetGuard.checkBudget(),
         updateProgress: () => this.updateProgress(),
         setPR: (pr) => { this.createdPR = pr; },
       },
@@ -158,12 +170,7 @@ export class IssueOrchestrator {
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
 
-    await this.notificationManager.dispatch({
-      type: 'issue-started',
-      issueNumber: this.issue.number,
-      issueTitle: this.issue.title,
-      worktreePath: this.worktree.path,
-    });
+    await lifecycleNotifier.notifyIssueStarted(this.worktree.path);
 
     for (const executor of this.registry.getAll()) {
       // Skip completed phases on resume
@@ -206,13 +213,7 @@ export class IssueOrchestrator {
             { issueNumber: this.issue.number },
           );
           await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
-          await this.notificationManager.dispatch({
-            type: 'issue-failed',
-            issueNumber: this.issue.number,
-            issueTitle: this.issue.title,
-            error: 'Per-issue token budget exceeded',
-            phase: cpState.currentPhase,
-          });
+          await lifecycleNotifier.notifyIssueFailed('Per-issue token budget exceeded', cpState.currentPhase);
           return this.buildResult(false, 'Per-issue token budget exceeded', startTime, true);
         }
         throw err;
@@ -224,7 +225,7 @@ export class IssueOrchestrator {
 
         // After Phase 1, log ambiguities and notify; halt pipeline if configured
         if (executor.phaseId === 1) {
-          const ambiguities = await this.readAmbiguitiesFromAnalysis();
+          const ambiguities = await gateCoordinator.readAmbiguities();
           for (const a of ambiguities) {
             this.logger.warn(`Ambiguity in issue #${this.issue.number}: ${a}`, { issueNumber: this.issue.number });
           }
@@ -247,7 +248,7 @@ export class IssueOrchestrator {
 
         // Run gate validators after phases 1–4
         if (executor.phaseId >= 1 && executor.phaseId <= 4) {
-          const gateStatus = await this.runGate(executor.phaseId);
+          const gateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
           if (gateStatus === 'fail') {
             this.logger.warn(`Gate failed for phase ${executor.phaseId}; retrying`, {
               issueNumber: this.issue.number,
@@ -264,7 +265,7 @@ export class IssueOrchestrator {
             }
 
             await this.checkpoint.completePhase(executor.phaseId, retryResult.outputPath ?? '');
-            const retryGateStatus = await this.runGate(executor.phaseId);
+            const retryGateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
             if (retryGateStatus === 'fail') {
               this.logger.error(`Gate still failing for phase ${executor.phaseId} after retry; aborting`, {
                 issueNumber: this.issue.number,
@@ -288,41 +289,29 @@ export class IssueOrchestrator {
         }
 
         await this.updateProgress();
-        await this.notificationManager.dispatch({
-          type: 'phase-completed',
-          issueNumber: this.issue.number,
-          phase: executor.phaseId,
-          phaseName: executor.name,
-          duration: phaseResult.duration,
-        });
+        await lifecycleNotifier.notifyPhaseCompleted(executor.phaseId, executor.name, phaseResult.duration);
       } else if (phaseDef.critical) {
         this.logger.error(`Critical phase ${executor.phaseId} failed, aborting pipeline`, {
           issueNumber: this.issue.number,
           phase: executor.phaseId,
         });
         await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} failed`);
-        await this.notificationManager.dispatch({
-          type: 'issue-failed',
-          issueNumber: this.issue.number,
-          issueTitle: this.issue.title,
-          error: phaseResult.error ?? `Phase ${executor.phaseId} failed`,
-          phase: executor.phaseId,
-          phaseName: executor.name,
-        });
+        await lifecycleNotifier.notifyIssueFailed(
+          phaseResult.error ?? `Phase ${executor.phaseId} failed`,
+          executor.phaseId,
+          executor.name,
+        );
         return this.buildResult(false, phaseResult.error, startTime);
       }
     }
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
     const successResult = this.buildResult(true, undefined, startTime);
-    await this.notificationManager.dispatch({
-      type: 'issue-completed',
-      issueNumber: successResult.issueNumber,
-      issueTitle: successResult.issueTitle,
-      success: successResult.success,
-      duration: successResult.totalDuration,
-      tokenUsage: successResult.tokenUsage ?? 0,
-    });
+    await lifecycleNotifier.notifyIssueCompleted(
+      successResult.success,
+      successResult.totalDuration,
+      successResult.tokenUsage ?? 0,
+    );
     return successResult;
   }
 
@@ -370,55 +359,7 @@ export class IssueOrchestrator {
     }
   }
 
-
   // ── Helper Methods ──
-
-  private recordTokens(agent: string, tokens: TokenUsageDetail | number | null): void {
-    const isDetail = typeof tokens === 'object' && tokens !== null;
-    const tokenCount = isDetail ? tokens.input + tokens.output : tokens;
-    if (tokenCount != null && tokenCount > 0) {
-      this.tokenTracker.record(
-        this.issue.number,
-        agent,
-        this.checkpoint.getState().currentPhase,
-        tokenCount,
-        isDetail ? tokens.input : undefined,
-        isDetail ? tokens.output : undefined,
-      );
-      void this.checkpoint.recordTokenUsage(
-        agent,
-        this.checkpoint.getState().currentPhase,
-        tokenCount,
-      );
-    }
-    if (
-      !this.budgetExceeded &&
-      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'exceeded'
-    ) {
-      this.budgetExceeded = true;
-    }
-    if (
-      !this.budgetWarningSent &&
-      !this.budgetExceeded &&
-      this.tokenTracker.checkIssueBudget(this.issue.number, this.config.options.tokenBudget) === 'warning'
-    ) {
-      this.budgetWarningSent = true;
-      const currentUsage = this.tokenTracker.getTotal() ?? 0;
-      const budget = this.config.options.tokenBudget ?? 0;
-      void this.notificationManager.dispatch({
-        type: 'budget-warning',
-        scope: 'issue',
-        issueNumber: this.issue.number,
-        currentUsage,
-        budget,
-        percentUsed: budget > 0 ? Math.round((currentUsage / budget) * 100) : 0,
-      });
-    }
-  }
-
-  private checkBudget(): void {
-    if (this.budgetExceeded) throw new BudgetExceededError();
-  }
 
   private async commitPhase(phase: PhaseDefinition): Promise<void> {
     try {
@@ -456,88 +397,6 @@ export class IssueOrchestrator {
       taskStatuses,
       this.tokenTracker.getTotal(),
     );
-  }
-
-  private async runGate(phaseId: number): Promise<'pass' | 'warn' | 'fail'> {
-    const gate = GATE_MAP[phaseId];
-    if (!gate) return 'pass';
-
-    const context: GateContext = {
-      progressDir: this.progressDir,
-      worktreePath: this.worktree.path,
-      baseCommit: this.worktree.baseCommit,
-    };
-
-    let result = await gate.validate(context);
-
-    // For phase 1, also run the ambiguity gate and merge results
-    if (phaseId === 1) {
-      const ambiguityGate = new AnalysisAmbiguityGate({
-        ambiguityThreshold: this.config.options.ambiguityThreshold,
-        haltOnAmbiguity: this.config.options.haltOnAmbiguity,
-      });
-      const ambiguityResult = await ambiguityGate.validate(context);
-      const mergedErrors = [...result.errors, ...ambiguityResult.errors];
-      const mergedWarnings = [...result.warnings, ...ambiguityResult.warnings];
-      const mergedStatus = mergedErrors.length > 0 ? 'fail' : mergedWarnings.length > 0 ? 'warn' : 'pass';
-      result = { status: mergedStatus, errors: mergedErrors, warnings: mergedWarnings };
-    }
-
-    await this.checkpoint.recordGateResult(phaseId, result);
-
-    this.phases[this.phases.length - 1] = {
-      ...this.phases[this.phases.length - 1],
-      gateResult: result,
-    };
-
-    if (result.status === 'warn') {
-      for (const w of result.warnings) {
-        this.logger.warn(`Gate phase ${phaseId}: ${w}`, { issueNumber: this.issue.number, phase: phaseId });
-      }
-      await this.progressWriter.appendEvent(
-        `Gate phase ${phaseId}: passed with ${result.warnings.length} warning(s)`,
-      );
-    } else if (result.status === 'fail') {
-      for (const e of result.errors) {
-        this.logger.error(`Gate phase ${phaseId}: ${e}`, { issueNumber: this.issue.number, phase: phaseId });
-      }
-      await this.progressWriter.appendEvent(`Gate phase ${phaseId} failed: ${result.errors.join('; ')}`);
-    } else {
-      await this.progressWriter.appendEvent(`Gate phase ${phaseId}: passed`);
-    }
-
-    return result.status;
-  }
-
-  private async readAmbiguitiesFromAnalysis(): Promise<string[]> {
-    const analysisPath = join(this.progressDir, 'analysis.md');
-    let content: string;
-    try {
-      content = await readFile(analysisPath, 'utf-8');
-    } catch {
-      return [];
-    }
-
-    const data = extractCadreJson(content) as Record<string, unknown> | null;
-    if (data === null) {
-      this.logger.warn(`analysis.md for issue #${this.issue.number} has no cadre-json block; ambiguities will not be reported`, {
-        issueNumber: this.issue.number,
-      });
-      return [];
-    }
-
-    try {
-      const ambiguities = data['ambiguities'];
-      if (Array.isArray(ambiguities)) {
-        return ambiguities.filter((a): a is string => typeof a === 'string');
-      }
-      return [];
-    } catch (err) {
-      this.logger.warn(`Failed to parse cadre-json block in analysis.md for issue #${this.issue.number}: ${err}`, {
-        issueNumber: this.issue.number,
-      });
-      return [];
-    }
   }
 
   private buildResult(success: boolean, error?: string, startTime?: number, budgetExceeded?: boolean): IssueResult {
