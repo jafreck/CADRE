@@ -5,6 +5,9 @@
   "license": "MIT",
   "author": "Jacob Freck",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "files": [
     "dist/",
     "src/agents/templates/"

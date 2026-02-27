@@ -6,6 +6,7 @@
     "lib": ["ES2022"],
     "outDir": "dist",
     "rootDir": "src",
+    "composite": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -16,8 +17,5 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"],
-  "references": [
-    { "path": "./packages/command-diagnostics" }
-  ]
+  "exclude": ["node_modules", "dist"]
 }
