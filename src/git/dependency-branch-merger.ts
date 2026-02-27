@@ -42,6 +42,7 @@ export class DependencyBranchMerger {
     baseCommit: string,
     worktreeRoot: string,
     resolveMergeConflict?: (context: DependencyMergeConflictContext) => Promise<boolean>,
+    prepareDepsWorktree?: (worktreePath: string, issueNumber: number) => Promise<void>,
   ): Promise<string> {
     const depsBranch = `cadre/deps-${issueNumber}`;
 
@@ -55,6 +56,11 @@ export class DependencyBranchMerger {
     const depsWorktreePath = join(worktreeRoot, `deps-${issueNumber}`);
     await ensureDir(worktreeRoot);
     await this.git.raw(['worktree', 'add', depsWorktreePath, depsBranch]);
+
+    if (prepareDepsWorktree) {
+      await prepareDepsWorktree(depsWorktreePath, issueNumber);
+    }
+
     const depsGit = simpleGit(depsWorktreePath);
 
     let mergeSucceeded = false;

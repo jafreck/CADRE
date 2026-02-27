@@ -80,6 +80,22 @@ describe('DependencyBranchMerger', () => {
   });
 
   describe('successful multi-dep merge', () => {
+    it('should call deps worktree preparation callback after creating worktree', async () => {
+      const prepareDepsWorktree = vi.fn().mockResolvedValue(undefined);
+
+      await merger.mergeDependencies(
+        42,
+        [],
+        'basesha',
+        '/tmp/worktrees',
+        undefined,
+        prepareDepsWorktree,
+      );
+
+      expect(prepareDepsWorktree).toHaveBeenCalledOnce();
+      expect(prepareDepsWorktree).toHaveBeenCalledWith('/tmp/worktrees/deps-42', 42);
+    });
+
     it('should create deps branch from baseCommit when it does not exist', async () => {
       await merger.mergeDependencies(42, [], 'basesha', '/tmp/worktrees');
 
