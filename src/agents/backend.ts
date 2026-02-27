@@ -201,6 +201,16 @@ async function runInvokePipeline(
   };
 }
 
+function isCopilotCliInvocationError(stderr: string): boolean {
+  const text = stderr.toLowerCase();
+  return (
+    text.includes('no such agent:')
+    || text.includes('error: option')
+    || text.includes('is invalid. allowed choices are')
+    || text.includes('unknown option')
+  );
+}
+
 /**
  * Backend that invokes agents via the GitHub Copilot CLI.
  */
@@ -242,16 +252,23 @@ export class CopilotBackend implements AgentBackend {
     }
     const timeout = invocation.timeout ?? this.defaultTimeout;
     return runInvokePipeline(
-      this.cliCommand, args, invocation, worktreePath, this.config, this.logger, 'copilot', timeout,
+      this.cliCommand,
+      args,
+      invocation,
+      worktreePath,
+      this.config,
+      this.logger,
+      'copilot',
+      timeout,
       (r) => {
-        // The Copilot CLI exits 0 but writes "No such agent: <name>" to stderr when the
-        // agent instruction file is missing. Treat this as a hard failure.
-        const noSuchAgent = r.stderr.includes('No such agent:');
-        const success = r.exitCode === 0 && !r.timedOut && !noSuchAgent;
+        // The Copilot CLI can exit 0 while still reporting invocation errors in stderr
+        // (e.g. missing agent, invalid model). Treat these as hard failures.
+        const invocationError = isCopilotCliInvocationError(r.stderr);
+        const success = r.exitCode === 0 && !r.timedOut && !invocationError;
         return {
           success,
-          error: success ? undefined : noSuchAgent ? r.stderr.trim() : r.stderr || `Exit code: ${r.exitCode}`,
-          failureMessage: noSuchAgent
+          error: success ? undefined : r.stderr.trim() || `Exit code: ${r.exitCode}`,
+          failureMessage: r.stderr.includes('No such agent:')
             ? `Agent ${invocation.agent} not found in Copilot agent directory — run 'cadre agents scaffold' or check agentDir config`
             : undefined,
         };
@@ -295,7 +312,14 @@ export class ClaudeBackend implements AgentBackend {
     }
     const timeout = invocation.timeout ?? this.defaultTimeout;
     return runInvokePipeline(
-      this.cliCommand, args, invocation, worktreePath, this.config, this.logger, 'claude', timeout,
+      this.cliCommand,
+      args,
+      invocation,
+      worktreePath,
+      this.config,
+      this.logger,
+      'claude',
+      timeout,
       (r) => {
         const success = r.exitCode === 0 && !r.timedOut;
         return {
