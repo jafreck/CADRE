@@ -414,6 +414,22 @@ describe('ContextBuilder', () => {
         expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
         expect(inputFiles).not.toContain('/tmp/progress/scout-report.md');
       });
+
+      it('includes issueBody in payload when provided', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForCodeReviewer(42, '/tmp/worktree', session, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress', 'Fix the login bug');
+        const ctx = captureWrittenContext();
+        const payload = ctx.payload as Record<string, unknown>;
+        expect(payload.issueBody).toBe('Fix the login bug');
+      });
+
+      it('omits issueBody from payload when not provided', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForCodeReviewer(42, '/tmp/worktree', session, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress');
+        const ctx = captureWrittenContext();
+        const payload = ctx.payload as Record<string, unknown>;
+        expect(payload.issueBody).toBeUndefined();
+      });
     });
 
     describe('buildForFixSurgeon', () => {
@@ -604,6 +620,36 @@ describe('ContextBuilder', () => {
         const ctx = captureWrittenContext();
         expect(ctx.agent).toBe('whole-pr-reviewer');
         expect(ctx.phase).toBe(3);
+      });
+
+      it('includes issueBody in payload when provided', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+          [],
+          'Add granular git commit workflow for migrated output',
+        );
+        const ctx = captureWrittenContext();
+        const payload = ctx.payload as Record<string, unknown>;
+        expect(payload.issueBody).toBe('Add granular git commit workflow for migrated output');
+      });
+
+      it('omits issueBody from payload when not provided', async () => {
+        vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+        await builder.buildForWholePrCodeReviewer(
+          42,
+          '/tmp/worktree',
+          '/tmp/whole-pr-diff.patch',
+          [],
+          '/tmp/progress',
+        );
+        const ctx = captureWrittenContext();
+        const payload = ctx.payload as Record<string, unknown>;
+        expect(payload.issueBody).toBeUndefined();
       });
     });
   });

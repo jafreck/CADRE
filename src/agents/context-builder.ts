@@ -204,6 +204,7 @@ export class ContextBuilder {
     diffPath: string,
     sessionPlanPath: string,
     progressDir: string,
+    issueBody?: string,
   ): Promise<string> {
     // Aggregate acceptance criteria from all steps in the session
     const acceptanceCriteria = session.steps.flatMap((s) => s.acceptanceCriteria);
@@ -228,6 +229,7 @@ export class ContextBuilder {
       payload: {
         sessionId: session.id,
         acceptanceCriteria,
+        ...(issueBody ? { issueBody } : {}),
       },
       outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
     });
@@ -247,6 +249,7 @@ export class ContextBuilder {
     sessionPlanPaths: string[],
     progressDir: string,
     sessionSummaries: SessionReviewSummary[] = [],
+    issueBody?: string,
   ): Promise<string> {
     const inputFiles = [...sessionPlanPaths];
     if (await exists(join(progressDir, 'analysis.md'))) {
@@ -273,6 +276,7 @@ export class ContextBuilder {
         baseBranch: this.config.baseBranch,
         fullDiffPath: diffPath,
         sessionSummaries,
+        ...(issueBody ? { issueBody } : {}),
       },
       outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
     });

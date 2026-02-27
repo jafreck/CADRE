@@ -1383,6 +1383,7 @@ describe('ImplementationPhaseExecutor', () => {
         expect.anything(),
         expect.anything(),
         expect.arrayContaining([expect.objectContaining({ sessionId: 'session-001', verdict: 'pass' })]),
+        expect.anything(),
       );
     });
 
@@ -1416,6 +1417,7 @@ describe('ImplementationPhaseExecutor', () => {
         expect.anything(),
         expect.anything(),
         [],
+        expect.anything(),
       );
     });
 
