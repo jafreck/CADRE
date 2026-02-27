@@ -121,6 +121,20 @@ describe('ResultParser', () => {
       expect(result.summary).not.toContain('\\n');
     });
 
+    it('should normalize double-escaped newlines in cadre-json review issue descriptions', async () => {
+      const review = {
+        verdict: 'needs-fixes',
+        issues: [{ file: 'src/a.ts', line: 1, severity: 'warning', description: 'Missing check\\nSee docs\\tfor details' }],
+        summary: 'One issue',
+      };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(review)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parseReview('/tmp/review.md');
+      expect(result.issues[0].description).toBe('Missing check\nSee docs\tfor details');
+      expect(result.issues[0].description).not.toContain('\\n');
+    });
+
     it('should throw when cadre-json block is missing', async () => {
       vi.mocked(readFile).mockResolvedValue('## Verdict: pass\n\n## Summary\nok');
 
@@ -211,10 +225,25 @@ describe('ResultParser', () => {
       expect(result.ambiguities).toHaveLength(1);
     });
 
+    it('should normalize double-escaped newlines in cadre-json analysis fields', async () => {
+      const analysis = {
+        requirements: ['Req A\\nReq B'],
+        changeType: 'feature',
+        scope: 'small',
+        affectedAreas: ['Area X\\tArea Y'],
+        ambiguities: ['Ambiguity\\r\\n1'],
+      };
+      const content = `\`\`\`cadre-json\n${JSON.stringify(analysis)}\n\`\`\``;
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      const result = await parser.parseAnalysis('/tmp/analysis.md');
+      expect(result.requirements[0]).toBe('Req A\nReq B');
+      expect(result.affectedAreas[0]).toBe('Area X\tArea Y');
+      expect(result.ambiguities[0]).toBe('Ambiguity\n1');
+    });
+
     it('should throw when cadre-json block is missing', async () => {
       vi.mocked(readFile).mockResolvedValue('# Analysis\n\n## Requirements\n- Something');
-
-      await expect(parser.parseAnalysis('/tmp/analysis.md')).rejects.toThrow('cadre-json');
     });
 
     it('should throw ZodError for analysis cadre-json with invalid changeType', async () => {
@@ -255,6 +284,57 @@ describe('ResultParser', () => {
       vi.mocked(readFile).mockResolvedValue(content);
 
       await expect(parser.parseScoutReport('/tmp/scout.md')).rejects.toBeInstanceOf(ZodError);
+    });
+  });
+
+  describe('parseArtifact error messages', () => {
+    it('should include file path in error when cadre-json block is missing', async () => {
+      vi.mocked(readFile).mockResolvedValue('no block here');
+
+      await expect(parser.parseImplementationPlan('/tmp/some/plan.md')).rejects.toThrow('/tmp/some/plan.md');
+    });
+
+    it('should include agent description in error for implementation-planner', async () => {
+      vi.mocked(readFile).mockResolvedValue('no block');
+
+      await expect(parser.parseImplementationPlan('/tmp/plan.md')).rejects.toThrow('implementation-planner');
+    });
+
+    it('should include agent description in error for code-reviewer', async () => {
+      vi.mocked(readFile).mockResolvedValue('no block');
+
+      await expect(parser.parseReview('/tmp/review.md')).rejects.toThrow('code-reviewer');
+    });
+
+    it('should include agent description in error for integration-checker', async () => {
+      vi.mocked(readFile).mockResolvedValue('no block');
+
+      await expect(parser.parseIntegrationReport('/tmp/report.md')).rejects.toThrow('integration-checker');
+    });
+
+    it('should include agent description in error for PR-content', async () => {
+      vi.mocked(readFile).mockResolvedValue('no block');
+
+      await expect(parser.parsePRContent('/tmp/pr.md')).rejects.toThrow('PR-content');
+    });
+
+    it('should include agent description in error for codebase-scout', async () => {
+      vi.mocked(readFile).mockResolvedValue('no block');
+
+      await expect(parser.parseScoutReport('/tmp/scout.md')).rejects.toThrow('codebase-scout');
+    });
+
+    it('should include agent description in error for issue-analyst', async () => {
+      vi.mocked(readFile).mockResolvedValue('no block');
+
+      await expect(parser.parseAnalysis('/tmp/analysis.md')).rejects.toThrow('issue-analyst');
+    });
+
+    it('should include parse error detail for malformed JSON in any method', async () => {
+      const content = '```cadre-json\n{ broken json }\n```';
+      vi.mocked(readFile).mockResolvedValue(content);
+
+      await expect(parser.parseImplementationPlan('/tmp/plan.md')).rejects.toThrow(/Parse error:/);
     });
   });
 
