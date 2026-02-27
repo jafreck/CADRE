@@ -191,6 +191,17 @@ describe('CopilotBackend', () => {
     expect(result.error).toBe(noSuchAgentMsg);
   });
 
+  it('should return success=false when stderr contains invalid model option error even if exitCode=0', async () => {
+    const backend = new CopilotBackend(config, logger as never);
+    setupSpawn(makeProcessResult({
+      exitCode: 0,
+      stderr: "error: option '--model <model>' argument 'GPT-5.3-Codex' is invalid. Allowed choices are gpt-5.3-codex",
+    }));
+    const result = await backend.invoke(makeInvocation(), '/tmp/worktree');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('is invalid');
+  });
+
   it('should return the agent name in the result', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
