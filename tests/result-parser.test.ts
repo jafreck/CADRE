@@ -244,6 +244,7 @@ describe('ResultParser', () => {
 
     it('should throw when cadre-json block is missing', async () => {
       vi.mocked(readFile).mockResolvedValue('# Analysis\n\n## Requirements\n- Something');
+      await expect(parser.parseAnalysis('/tmp/analysis.md')).rejects.toThrow('cadre-json');
     });
 
     it('should throw ZodError for analysis cadre-json with invalid changeType', async () => {
