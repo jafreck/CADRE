@@ -1122,6 +1122,56 @@ describe('ImplementationPhaseExecutor', () => {
       // maxBuildFixRounds is 2
       expect(fixSurgeonCalls).toHaveLength(2);
     });
+
+    it('should include round index in build failure file name', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error round 0' })
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error round 1' })
+        .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValue(makeSuccessAgentResult('fix-surgeon')),
+      };
+
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
+      // Build will fail twice then pass; fix-surgeon launched for each round
+      await executor.execute(ctx);
+
+      const writeCalls = vi.mocked(writeFile).mock.calls;
+      const failureWrites = writeCalls.filter(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('build-failure-session-001-'),
+      );
+      expect(failureWrites.length).toBeGreaterThanOrEqual(1);
+      expect(failureWrites[0][0]).toContain('build-failure-session-001-0');
+    });
+
+    it('should write combined stderr+stdout output to build failure file', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 1, stdout: 'stdout-content', stderr: 'stderr-content' })
+        .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer')),
+      };
+
+      const ctx = makeCtxWithBuild({ services: { launcher: launcher } as never });
+      await executor.execute(ctx);
+
+      const writeCalls = vi.mocked(writeFile).mock.calls;
+      const failureWrite = writeCalls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('build-failure-session-001-'),
+      );
+      expect(failureWrite).toBeDefined();
+      const content = failureWrite![1] as string;
+      expect(content).toContain('stderr-content');
+      expect(content).toContain('stdout-content');
+    });
   });
 
   // ---------------------------------------------------------------------------
