@@ -556,4 +556,36 @@ describe('AnalysisPhaseExecutor', () => {
       }));
     });
   });
+
+  describe('captureBaseline() with runWithRetry', () => {
+    const baselinePath = '/tmp/worktree/.cadre/baseline-results.json';
+
+    it('should treat null exit code from build as buildExitCode 1', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: null as unknown as number, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ buildExitCode: 1 }));
+    });
+
+    it('should treat null exit code from test as testExitCode 1', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: null as unknown as number, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { test: 'npm test' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ testExitCode: 1 }));
+    });
+
+    it('should not attempt retries during baseline capture (maxFixRounds=0)', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 1, stdout: 'FAIL src/a.ts', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      // Only one call to execShell for the build command — no retry
+      expect(execShell).toHaveBeenCalledTimes(1);
+    });
+  });
 });

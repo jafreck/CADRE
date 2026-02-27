@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import type { RuntimeConfig } from '../config/loader.js';
-import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
+import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { CommitManager } from '../git/commit.js';
@@ -15,6 +15,9 @@ import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
+import { ReviewDiscoveryService, isSkipResult } from './review-discovery-service.js';
+import { RebaseRecoveryService } from './rebase-recovery-service.js';
+import { ReviewPlanBuilder } from './review-plan-builder.js';
 
 export interface ReviewResponseIssueOutcome {
   issueNumber: number;
@@ -43,6 +46,9 @@ export interface ReviewResponseResult {
 export class ReviewResponseOrchestrator {
   private readonly contextBuilder: ContextBuilder;
   private readonly cadreDir: string;
+  private readonly discoveryService: ReviewDiscoveryService;
+  private readonly rebaseService: RebaseRecoveryService;
+  private readonly planBuilder: ReviewPlanBuilder;
 
   constructor(
     private readonly config: RuntimeConfig,
@@ -54,6 +60,9 @@ export class ReviewResponseOrchestrator {
   ) {
     this.contextBuilder = new ContextBuilder(config, logger);
     this.cadreDir = config.stateDir;
+    this.discoveryService = new ReviewDiscoveryService(config, platform, logger);
+    this.rebaseService = new RebaseRecoveryService(worktreeManager, launcher, this.contextBuilder, logger);
+    this.planBuilder = new ReviewPlanBuilder(logger);
   }
 
   /**
@@ -61,15 +70,8 @@ export class ReviewResponseOrchestrator {
    * if no issue numbers are provided).
    */
   async run(issueNumbers?: number[]): Promise<ReviewResponseResult> {
-    // 1. List open PRs and build issue → PR mapping
-    const openPRs = await this.platform.listPullRequests({ state: 'open' });
-    const issueToPR = this.mapIssuesToPRs(openPRs);
-
-    // 2. Determine which issues to consider
-    const issuesToConsider =
-      issueNumbers != null
-        ? issueNumbers
-        : Array.from(issueToPR.keys());
+    // 1. Discover actionable issues via the discovery service
+    const discoveryResults = await this.discoveryService.discoverActionableIssues(issueNumbers);
 
     const result: ReviewResponseResult = {
       processed: 0,
@@ -79,54 +81,18 @@ export class ReviewResponseOrchestrator {
       issues: [],
     };
 
-    for (const issueNumber of issuesToConsider) {
-      // 3. Skip issues with no open PR
-      const pr = issueToPR.get(issueNumber);
-      if (!pr) {
-        this.logger.info(
-          `Issue #${issueNumber}: no open PR found, skipping`,
-          { issueNumber },
-        );
-        result.skipped++;
-        result.issues.push({ issueNumber, skipped: true, skipReason: 'no open PR' });
-        continue;
-      }
-
-      // 4. Get review threads and filter to active (unresolved, non-outdated)
-      const threads = await this.platform.listPRReviewComments(pr.number);
-      const activeThreads = threads.filter((t) => !t.isResolved && !t.isOutdated);
-
-      // 4b. Also fetch regular PR conversation comments (non-bot, non-empty).
-      let actionableComments: import('../platform/provider.js').PRComment[] = [];
-      try {
-        const prComments = await this.platform.listPRComments(pr.number);
-        actionableComments = prComments.filter((c) => !c.isBot && c.body.trim().length > 0);
-      } catch (err) {
-        this.logger.warn(`Issue #${issueNumber}: could not fetch PR comments: ${err}`, { issueNumber });
-      }
-
-      // 4c. Also fetch top-level PR reviews with non-empty bodies (non-bot).
-      let actionableReviews: import('../platform/provider.js').PRReview[] = [];
-      try {
-        const prReviews = await this.platform.listPRReviews(pr.number);
-        actionableReviews = prReviews.filter((r) => !r.isBot && r.body.trim().length > 0);
-      } catch (err) {
-        this.logger.warn(`Issue #${issueNumber}: could not fetch PR reviews: ${err}`, { issueNumber });
-      }
-
-      if (activeThreads.length === 0 && actionableComments.length === 0 && actionableReviews.length === 0) {
-        this.logger.info(
-          `Issue #${issueNumber} (PR #${pr.number}): all review threads resolved or outdated, skipping`,
-          { issueNumber },
-        );
+    for (const discovery of discoveryResults) {
+      if (isSkipResult(discovery)) {
         result.skipped++;
         result.issues.push({
-          issueNumber,
+          issueNumber: discovery.issueNumber,
           skipped: true,
-          skipReason: 'no unresolved review threads or PR comments',
+          skipReason: discovery.skipReason,
         });
         continue;
       }
+
+      const { issueNumber, pr, activeThreads, actionableComments, actionableReviews } = discovery;
 
       try {
         // 5. Fetch issue details
@@ -143,110 +109,13 @@ export class ReviewResponseOrchestrator {
         const progressDir = join(worktree.path, '.cadre', 'issues', String(issueNumber));
         await mkdir(progressDir, { recursive: true });
 
-        // 6b. Rebase onto the latest base branch so the PR is in a clean,
-        //     conflict-free state before agents make further changes.
-        //     If conflicts arise, the conflict-resolver agent is invoked to
-        //     resolve them in place; then the rebase is continued.  Any
-        //     failure during this sequence aborts the rebase and throws so
-        //     the issue lands in result.failed.
-        const rebaseStartResult = await this.worktreeManager.rebaseStart(issueNumber);
-
-        if (rebaseStartResult.status === 'conflict') {
-          if (rebaseStartResult.conflictedFiles.length === 0) {
-            // Rebase is paused but all conflict markers are already resolved
-            // (e.g. a previous run's conflict-resolver cleared them).  Skip
-            // the agent and go straight to rebase --continue.
-            this.logger.info(
-              `Rebase paused for PR #${pr.number} with 0 conflicted files — continuing rebase without conflict-resolver`,
-              { issueNumber },
-            );
-          } else {
-            this.logger.info(
-              `Merge conflicts detected for PR #${pr.number}; launching conflict-resolver agent`,
-              { issueNumber, data: { conflictedFiles: rebaseStartResult.conflictedFiles } },
-            );
-
-            // Build context for the conflict-resolver agent.
-            const conflictContextPath = await this.contextBuilder.build('conflict-resolver', {
-              issueNumber,
-              worktreePath: worktree.path,
-              conflictedFiles: rebaseStartResult.conflictedFiles,
-              progressDir,
-            });
-
-            // Launch the agent; it writes resolved file content directly to disk.
-            const resolverResult = await this.launcher.launchAgent(
-              {
-                agent: 'conflict-resolver',
-                issueNumber,
-                phase: 0,
-                contextPath: conflictContextPath,
-                outputPath: join(progressDir, 'conflict-resolution-report.md'),
-              },
-              worktree.path,
-            );
-
-            if (!resolverResult.success) {
-              // Build a human-readable detail string for the log and thrown error
-              // so timeouts are clearly distinguishable from non-zero exit codes.
-              const detail = resolverResult.timedOut
-                ? `timed out after ${resolverResult.duration}ms`
-                : `exit ${resolverResult.exitCode}`;
-              this.logger.error(
-                `Conflict-resolver agent failed for PR #${pr.number} (${detail})`,
-                {
-                  issueNumber,
-                  data: {
-                    timedOut: resolverResult.timedOut,
-                    exitCode: resolverResult.exitCode,
-                    stderr: resolverResult.stderr?.slice(-500) ?? '',
-                  },
-                },
-              );
-              await this.worktreeManager.rebaseAbort(issueNumber);
-              throw new Error(`Conflict-resolver agent failed for PR #${pr.number} (${detail})`);
-            }
-
-            // Agent exited 0 but may not have written its resolution report.
-            // This happens when the process is killed mid-turn (e.g. timeout fires
-            // after conflict markers are cleared but before the report is written),
-            // or when the agent crashes without producing output.  Without this guard
-            // a successful-looking exit would allow rebaseContinue to run on files
-            // that may still contain unresolved markers.
-            if (!resolverResult.outputExists) {
-              this.logger.error(
-                `Conflict-resolver agent for PR #${pr.number} exited successfully but produced no output at ${resolverResult.outputPath}`,
-                {
-                  issueNumber,
-                  data: {
-                    outputPath: resolverResult.outputPath,
-                    stderr: resolverResult.stderr?.slice(-300) ?? '',
-                  },
-                },
-              );
-              await this.worktreeManager.rebaseAbort(issueNumber);
-              throw new Error(
-                `Conflict-resolver agent produced no output for PR #${pr.number} — resolution report missing at ${resolverResult.outputPath}`,
-              );
-            }
-          } // end else (conflictedFiles.length > 0)
-
-          // Stage all resolved files and finish the rebase.
-          const continueResult = await this.worktreeManager.rebaseContinue(issueNumber);
-          if (!continueResult.success) {
-            // rebaseContinue already logs which files still have markers at the git
-            // layer; log here as well so the orchestrator's issue-level log captures
-            // the full context (including which files are still conflicted).
-            this.logger.error(
-              `Rebase --continue failed for PR #${pr.number}: ${continueResult.error ?? 'unknown error'}`,
-              { issueNumber, data: { conflictedFiles: continueResult.conflictedFiles } },
-            );
-            await this.worktreeManager.rebaseAbort(issueNumber);
-            throw new Error(
-              `Rebase --continue failed after conflict resolution for PR #${pr.number}: ${continueResult.error ?? 'unknown error'}`,
-            );
-          }
-        }
+        // 6b. Rebase onto the latest base branch and resolve any conflicts.
+        await this.rebaseService.rebaseAndResolveConflicts(
+          issueNumber,
+          pr.number,
+          worktree.path,
+          progressDir,
+        );
 
         // Rebase succeeded — count this issue as actively processed.
         result.processed++;
@@ -254,82 +123,7 @@ export class ReviewResponseOrchestrator {
         await writeFile(join(progressDir, 'review-response.md'), reviewContext, 'utf-8');
 
         // 7b. Synthesise an implementation plan from review threads AND regular PR comments.
-        const threadTasks = activeThreads.map((thread, idx) => {
-          const files = [...new Set(thread.comments.map((c) => c.path).filter(Boolean))];
-          const description = thread.comments.map((c) => c.body).join('\n\n');
-          const sessionId = `session-${String(idx + 1).padStart(3, '0')}`;
-          return {
-            id: sessionId,
-            name: `Address review comment${files.length ? ` in ${files[0]}` : ''}`,
-            rationale: 'Address code review thread',
-            dependencies: [] as string[],
-            steps: [{
-              id: `${sessionId}-step-001`,
-              name: `Address review comment${files.length ? ` in ${files[0]}` : ''}`,
-              description,
-              files: files.length ? files : [],
-              complexity: 'simple' as const,
-              acceptanceCriteria: [
-                'Review comment addressed as described',
-                'Existing tests continue to pass',
-              ],
-            }],
-          };
-        });
-
-        const commentTasks = actionableComments.map((comment, idx) => {
-          const sessionIdx = activeThreads.length + idx + 1;
-          const sessionId = `session-${String(sessionIdx).padStart(3, '0')}`;
-          return {
-            id: sessionId,
-            name: `Address PR comment from ${comment.author}`,
-            rationale: 'Address PR comment',
-            dependencies: [] as string[],
-            steps: [{
-              id: `${sessionId}-step-001`,
-              name: `Address PR comment from ${comment.author}`,
-              description: comment.body,
-              files: [] as string[],
-              complexity: 'simple' as const,
-              acceptanceCriteria: [
-                'PR comment addressed as described',
-                'Existing tests continue to pass',
-              ],
-            }],
-          };
-        });
-
-        const reviewBodyTasks = actionableReviews.map((review, idx) => {
-          const sessionIdx = activeThreads.length + actionableComments.length + idx + 1;
-          const sessionId = `session-${String(sessionIdx).padStart(3, '0')}`;
-          return {
-            id: sessionId,
-            name: `Address PR review from ${review.author}`,
-            rationale: 'Address PR review feedback',
-            dependencies: [] as string[],
-            steps: [{
-              id: `${sessionId}-step-001`,
-              name: `Address PR review from ${review.author}`,
-              description: review.body,
-              files: [] as string[],
-              complexity: 'simple' as const,
-              acceptanceCriteria: [
-                'PR review feedback addressed as described',
-                'Existing tests continue to pass',
-              ],
-            }],
-          };
-        });
-
-        const planTasks = [...threadTasks, ...commentTasks, ...reviewBodyTasks];
-        const planContent = [
-          '# Review-Response Implementation Plan',
-          '',
-          '```cadre-json',
-          JSON.stringify(planTasks, null, 2),
-          '```',
-        ].join('\n');
-        await writeFile(join(progressDir, 'implementation-plan.md'), planContent, 'utf-8');
+        await this.planBuilder.writePlan(progressDir, activeThreads, actionableComments, actionableReviews);
 
         // 8. Set up per-issue checkpoint and run the reduced pipeline (phases 3–5)
         const checkpoint = new CheckpointManager(progressDir, this.logger);
@@ -436,37 +230,5 @@ export class ReviewResponseOrchestrator {
     }
 
     return result;
-  }
-
-  /**
-   * Build a map of issue number → PullRequestInfo by extracting the issue
-   * number from each PR's head branch using the configured branch template.
-   */
-  private mapIssuesToPRs(prs: PullRequestInfo[]): Map<number, PullRequestInfo> {
-    const map = new Map<number, PullRequestInfo>();
-
-    // Convert the branch template into a regex, preserving {issue}/{title} as capture groups.
-    const ISSUE_TOKEN = '\x00ISSUE\x00';
-    const TITLE_TOKEN = '\x00TITLE\x00';
-    const regexStr = this.config.branchTemplate
-      .replace(/\{issue\}/g, ISSUE_TOKEN)
-      .replace(/\{title\}/g, TITLE_TOKEN)
-      .replace(/[-[\]^$.*+?(){}|\\]/g, '\\$&') // escape remaining regex metacharacters
-      .replace(ISSUE_TOKEN, '(\\d+)')
-      .replace(TITLE_TOKEN, '[^/]+');
-    const branchRegex = new RegExp(`^${regexStr}$`);
-
-    for (const pr of prs) {
-      const match = pr.headBranch.match(branchRegex);
-      if (match) {
-        const issueNumber = parseInt(match[1], 10);
-        // Keep the first PR found per issue number (most recently active)
-        if (!map.has(issueNumber)) {
-          map.set(issueNumber, pr);
-        }
-      }
-    }
-
-    return map;
   }
 }

@@ -1,18 +1,15 @@
 import { join } from 'node:path';
-import pLimit from 'p-limit';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager, RemoteBranchMissingError, type WorktreeInfo } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
-import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from './progress.js';
+import { FleetProgressWriter } from './progress.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
 import { TokenTracker, type TokenSummary } from '../budget/token-tracker.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
-import { getPhaseCount } from './phase-registry.js';
-import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { ReviewResponseOrchestrator } from './review-response-orchestrator.js';
 import { IssueDag } from './issue-dag.js';
@@ -20,6 +17,9 @@ import { DependencyMergeConflictError } from '../errors.js';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ensureDir } from '../util/fs.js';
 import type { DependencyMergeConflictContext } from '../git/dependency-branch-merger.js';
+import { FleetEventBus } from './fleet-event-bus.js';
+import { FleetReporter } from './fleet-reporter.js';
+import { FleetScheduler } from './fleet-scheduler.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -49,6 +49,8 @@ export class FleetOrchestrator {
   private readonly costEstimator: CostEstimator;
   private readonly contextBuilder: ContextBuilder;
   private fleetBudgetExceeded = false;
+  private eventBus!: FleetEventBus;
+  private reporter!: FleetReporter;
 
   constructor(
     private readonly config: RuntimeConfig,
@@ -79,15 +81,19 @@ export class FleetOrchestrator {
     // Load fleet checkpoint
     await this.fleetCheckpoint.load();
 
-    this.logger.info(`Fleet starting: ${this.issues.length} issues, max ${this.config.options.maxParallelIssues} parallel`);
-    await this.fleetProgress.appendEvent(
-      `Fleet started: ${this.issues.length} issues`,
+    const eventBus = new FleetEventBus(this.notifications, this.fleetProgress);
+    const reporter = new FleetReporter(
+      this.config, this.issues, this.fleetCheckpoint, this.fleetProgress, this.tokenTracker, this.logger,
     );
-    await this.notifications.dispatch({
-      type: 'fleet-started',
-      issueCount: this.issues.length,
-      maxParallel: this.config.options.maxParallelIssues,
-    });
+    const scheduler = new FleetScheduler(
+      this.config, this.issues, this.fleetCheckpoint, this.platform, this.logger, this.dagDepMap,
+    );
+    this.eventBus = eventBus;
+    this.reporter = reporter;
+
+    this.logger.info(`Fleet starting: ${this.issues.length} issues, max ${this.config.options.maxParallelIssues} parallel`);
+    await eventBus.appendFleetStarted(this.issues.length);
+    await eventBus.dispatchFleetStarted(this.issues.length, this.config.options.maxParallelIssues);
 
     // Filter out already completed issues on resume
     const issuesToProcess = this.config.options.resume
@@ -102,45 +108,29 @@ export class FleetOrchestrator {
     // Pre-fetch remote refs once before any per-issue pipeline starts
     await this.worktreeManager.prefetch();
 
-    let results: PromiseSettledResult<IssueResult>[];
-    if (this.dag) {
-      results = await this.runWithDag(this.dag);
-    } else {
-      // Run with bounded parallelism
-      const limit = pLimit(this.config.options.maxParallelIssues);
-      results = await Promise.allSettled(
-        issuesToProcess.map((issue) =>
-          limit(() => this.processIssue(issue)),
-        ),
-      );
-    }
+    const results = await scheduler.schedule(
+      issuesToProcess,
+      (issue, dag) => this.processIssue(issue, dag),
+      (issue) => this.markIssueDepBlocked(issue),
+      this.dag,
+    );
 
     // Aggregate results
-    const fleetResult = this.aggregateResults(results, startTime);
+    const fleetResult = reporter.aggregateResults(results, startTime);
 
     // Write run report
-    try {
-      const reportWriter = new ReportWriter(this.config, new CostEstimator(this.config.copilot));
-      const report = reportWriter.buildReport(fleetResult, this.issues, startTime);
-      const reportPath = await reportWriter.write(report);
-      this.logger.info(`Run report written: ${reportPath}`);
-    } catch (err) {
-      this.logger.warn(`Failed to write run report: ${err}`);
-    }
+    await reporter.writeReport(fleetResult, startTime);
 
     // Write final progress
-    await this.writeFleetProgress(fleetResult);
-    await this.fleetProgress.appendEvent(
-      `Fleet completed: ${fleetResult.prsCreated.length} PRs, ${fleetResult.failedIssues.length} failures`,
+    await reporter.writeFleetProgress(fleetResult);
+    await eventBus.appendFleetCompleted(fleetResult.prsCreated.length, fleetResult.failedIssues.length);
+    await eventBus.dispatchFleetCompleted(
+      fleetResult.success,
+      fleetResult.prsCreated.length,
+      fleetResult.failedIssues.length,
+      fleetResult.totalDuration,
+      fleetResult.tokenUsage.total,
     );
-    await this.notifications.dispatch({
-      type: 'fleet-completed',
-      success: fleetResult.success,
-      prsCreated: fleetResult.prsCreated.length,
-      failedIssues: fleetResult.failedIssues.length,
-      totalDuration: fleetResult.totalDuration,
-      totalTokens: fleetResult.tokenUsage.total,
-    });
 
     return fleetResult;
   }
@@ -394,26 +384,22 @@ export class FleetOrchestrator {
             budget: this.config.options.tokenBudget,
           },
         });
-        await this.notifications.dispatch({
-          type: 'budget-exceeded',
-          scope: 'fleet',
-          currentUsage: this.tokenTracker.getTotal(),
-          budget: this.config.options.tokenBudget ?? 0,
-        });
+        await this.eventBus.dispatchBudgetExceeded(
+          this.tokenTracker.getTotal(),
+          this.config.options.tokenBudget ?? 0,
+        );
       } else if (budgetStatus === 'warning') {
         const current = this.tokenTracker.getTotal();
         const budget = this.config.options.tokenBudget ?? 0;
-        await this.notifications.dispatch({
-          type: 'budget-warning',
-          scope: 'fleet',
-          currentUsage: current,
+        await this.eventBus.dispatchBudgetWarning(
+          current,
           budget,
-          percentUsed: budget > 0 ? Math.round((current / budget) * 100) : 0,
-        });
+          budget > 0 ? Math.round((current / budget) * 100) : 0,
+        );
       }
 
       // Update progress
-      await this.writeFleetProgressIncremental();
+      await this.reporter.writeFleetProgressIncremental();
 
       return result;
     } catch (err) {
@@ -523,156 +509,6 @@ export class FleetOrchestrator {
   }
 
   /**
-   * Execute all issues wave-by-wave when a DAG is present.
-   */
-  private async runWithDag(dag: IssueDag): Promise<PromiseSettledResult<IssueResult>[]> {
-    const waves = dag.getWaves();
-    const waveNumbers = waves.map((w) => w.map((i) => i.number));
-    this.logger.info(
-      `DAG plan: ${waveNumbers.map((w, i) => `Wave ${i} → [${w.map((n) => `#${n}`).join(', ')}]`).join(' | ')}`,
-    );
-    await this.fleetCheckpoint.setDag(this.dagDepMap ?? {}, waveNumbers);
-
-    // --- Per-dependency scheduling ---
-    // Each issue launches as soon as ALL its direct deps have completed (not wave-gated).
-    const allIssues = new Map(this.issues.map((i) => [i.number, i]));
-    const completed = new Set<number>();          // successfully finished (or skipped-existing-PR)
-    const failed = new Set<number>();             // failed / dep-blocked / dep-merge-conflict
-    const inFlight = new Set<number>();           // currently running
-    const blocked = new Set<number>();            // dep-blocked — will never run
-
-    const allResults: PromiseSettledResult<IssueResult>[] = [];
-    const limit = pLimit(this.config.options.maxParallelIssues);
-
-    // On resume, treat already-completed issues as done
-    if (this.config.options.resume) {
-      for (const issue of this.issues) {
-        if (this.fleetCheckpoint.isIssueCompleted(issue.number)) {
-          completed.add(issue.number);
-          this.logger.info(`Resume: issue #${issue.number} already completed`, { issueNumber: issue.number });
-        }
-      }
-    }
-
-    /** Check whether all direct deps of `issueNumber` are satisfied (completed). */
-    const depsReady = (issueNumber: number): boolean => {
-      const deps = dag.getDirectDeps(issueNumber);
-      return deps.every((d) => completed.has(d));
-    };
-
-    /** Check whether any direct dep of `issueNumber` has failed/blocked. */
-    const depsFailed = (issueNumber: number): boolean => {
-      const deps = dag.getDirectDeps(issueNumber);
-      return deps.some((d) => failed.has(d) || blocked.has(d));
-    };
-
-    /**
-     * After an issue finishes (success or failure), scan remaining pending issues
-     * and launch any whose deps are now all satisfied.
-     */
-    const scheduleReady = (): void => {
-      for (const [num, issue] of allIssues) {
-        if (completed.has(num) || failed.has(num) || blocked.has(num) || inFlight.has(num)) continue;
-
-        // If any dep failed → mark dep-blocked immediately
-        if (depsFailed(num)) {
-          blocked.add(num);
-          // Fire-and-forget the checkpoint write + push a fulfilled result
-          const blockPromise = this.markIssueDepBlocked(issue).then((result) => {
-            allResults.push({ status: 'fulfilled', value: result });
-            // Recursively check whether blocking this issue unblocks/blocks others
-            scheduleReady();
-          });
-          blockPromise.catch(() => {}); // swallow — markIssueDepBlocked already logs
-          continue;
-        }
-
-        // If all deps done → launch
-        if (depsReady(num)) {
-          inFlight.add(num);
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          limit(() => this.runDagIssue(num, issue, dag, completed, failed, blocked, allResults, limit, scheduleReady));
-        }
-      }
-    };
-
-    // Kick off the initial set of issues with no deps
-    scheduleReady();
-
-    // Wait until every issue has settled (completed / failed / blocked)
-    await new Promise<void>((resolve) => {
-      const check = (): void => {
-        const settled = completed.size + failed.size + blocked.size;
-        if (settled >= allIssues.size) {
-          resolve();
-        } else {
-          setTimeout(check, 200);
-        }
-      };
-      check();
-    });
-
-    return allResults;
-  }
-
-  /**
-   * Run a single DAG issue, then autoMerge if applicable, then notify the scheduler.
-   */
-  private async runDagIssue(
-    num: number,
-    issue: IssueDetail,
-    dag: IssueDag,
-    completed: Set<number>,
-    failed: Set<number>,
-    blocked: Set<number>,
-    allResults: PromiseSettledResult<IssueResult>[],
-    _limit: ReturnType<typeof pLimit>,
-    scheduleReady: () => void,
-  ): Promise<void> {
-    try {
-      const result = await this.processIssue(issue, dag);
-      allResults.push({ status: 'fulfilled', value: result });
-
-      const depFailureStatuses = new Set(['dep-failed', 'dep-merge-conflict', 'dep-build-broken']);
-      const cpStatus = this.fleetCheckpoint.getIssueStatus(num);
-      const isFailure = !result.success || (cpStatus && depFailureStatuses.has(cpStatus.status));
-
-      if (isFailure) {
-        failed.add(num);
-      } else {
-        // autoMerge: merge the PR before releasing dependents
-        if (this.config.dag?.autoMerge && result.success && result.pr) {
-          try {
-            await this.platform.mergePullRequest(result.pr.number, this.config.baseBranch);
-          } catch (err) {
-            this.logger.warn(
-              `Failed to merge PR #${result.pr.number} for issue #${num}: ${err}`,
-              { issueNumber: num },
-            );
-            await this.fleetCheckpoint.setIssueStatus(
-              num,
-              'dep-merge-conflict',
-              '',
-              '',
-              0,
-              issue.title,
-              String(err),
-            );
-            failed.add(num);
-            scheduleReady();
-            return;
-          }
-        }
-        completed.add(num);
-      }
-    } catch (err) {
-      allResults.push({ status: 'rejected', reason: err });
-      failed.add(num);
-    }
-    scheduleReady();
-  }
-
-  /**
    * Mark a single issue as dep-blocked in the fleet checkpoint and return a failed IssueResult.
    */
   private async markIssueDepBlocked(issue: IssueDetail): Promise<IssueResult> {
@@ -696,116 +532,5 @@ export class FleetOrchestrator {
       tokenUsage: 0,
       error: 'dep-blocked',
     };
-  }
-
-  /**
-   * Aggregate results from all issue pipelines.
-   */
-  private aggregateResults(
-    results: PromiseSettledResult<IssueResult>[],
-    startTime: number,
-  ): FleetResult {
-    const issueResults: IssueResult[] = [];
-    const prsCreated: PullRequestInfo[] = [];
-    const failedIssues: Array<{ issueNumber: number; error: string }> = [];
-    const codeDoneNoPR: Array<{ issueNumber: number; branch: string }> = [];
-
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        issueResults.push(result.value);
-
-        if (result.value.pr) {
-          prsCreated.push(result.value.pr);
-        }
-
-        if (!result.value.success) {
-          failedIssues.push({
-            issueNumber: result.value.issueNumber,
-            error: result.value.error ?? 'Unknown error',
-          });
-        }
-
-        if (result.value.codeComplete && !result.value.success) {
-          const checkpointStatus = this.fleetCheckpoint.getIssueStatus(result.value.issueNumber);
-          codeDoneNoPR.push({
-            issueNumber: result.value.issueNumber,
-            branch: checkpointStatus?.branchName ?? '',
-          });
-        }
-      } else {
-        // Shouldn't happen since we catch errors in processIssue, but just in case
-        failedIssues.push({
-          issueNumber: 0,
-          error: String(result.reason),
-        });
-      }
-    }
-
-    const success = failedIssues.length === 0;
-
-    return {
-      success,
-      issues: issueResults,
-      prsCreated,
-      failedIssues,
-      codeDoneNoPR,
-      totalDuration: Date.now() - startTime,
-      tokenUsage: this.tokenTracker.getSummary(),
-    };
-  }
-
-  /**
-   * Write fleet progress markdown.
-   */
-  private async writeFleetProgress(result: FleetResult): Promise<void> {
-    const issueInfos: IssueProgressInfo[] = this.issues.map((issue) => {
-      const ir = result.issues.find((r) => r.issueNumber === issue.number);
-      const status = this.fleetCheckpoint.getIssueStatus(issue.number);
-      return {
-        issueNumber: issue.number,
-        issueTitle: issue.title,
-        status: status?.status ?? 'not-started',
-        currentPhase: status?.lastPhase ?? 0,
-        totalPhases: getPhaseCount(),
-        prNumber: ir?.pr?.number,
-        branch: status?.branchName,
-        error: ir?.error,
-      };
-    });
-
-    const prRefs: PullRequestRef[] = result.issues
-      .filter((ir) => ir.pr != null)
-      .map((ir) => ({
-        issueNumber: ir.issueNumber,
-        prNumber: ir.pr!.number,
-        url: ir.pr!.url,
-      }));
-
-    await this.fleetProgress.write(issueInfos, prRefs, {
-      current: this.tokenTracker.getTotal(),
-      budget: this.config.options.tokenBudget,
-    });
-  }
-
-  /**
-   * Write incremental progress update (during processing).
-   */
-  private async writeFleetProgressIncremental(): Promise<void> {
-    const issueInfos: IssueProgressInfo[] = this.issues.map((issue) => {
-      const status = this.fleetCheckpoint.getIssueStatus(issue.number);
-      return {
-        issueNumber: issue.number,
-        issueTitle: issue.title,
-        status: status?.status ?? 'not-started',
-        currentPhase: status?.lastPhase ?? 0,
-        totalPhases: getPhaseCount(),
-        branch: status?.branchName,
-      };
-    });
-
-    await this.fleetProgress.write(issueInfos, [], {
-      current: this.tokenTracker.getTotal(),
-      budget: this.config.options.tokenBudget,
-    });
   }
 }
