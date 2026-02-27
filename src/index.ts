@@ -13,6 +13,13 @@ import { CadreRuntime } from './core/runtime.js';
 import { AgentLauncher } from './core/agent-launcher.js';
 import { StaleStateError, RuntimeInterruptedError } from './errors.js';
 import { registerAgentsCommand, scaffoldMissingAgents, refreshAgentsFromTemplates } from './cli/agents.js';
+import { StatusService } from './core/status-service.js';
+import { ResetService } from './core/reset-service.js';
+import { ReportService } from './core/report-service.js';
+import { WorktreeLifecycleService } from './core/worktree-lifecycle-service.js';
+import { PreRunValidationSuite, gitValidator, agentBackendValidator, platformValidator, commandValidator, diskValidator } from './validation/index.js';
+import { Logger } from './logging/logger.js';
+import { createPlatformProvider } from './platform/factory.js';
 
 const program = new Command();
 
@@ -130,8 +137,9 @@ program
   .action(async (opts) => {
     try {
       const config = await loadConfig(opts.config);
-      const runtime = new CadreRuntime(config);
-      await runtime.status(opts.issue);
+      const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+      const service = new StatusService(config, logger);
+      await service.status(opts.issue);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));
@@ -149,8 +157,9 @@ program
   .action(async (opts) => {
     try {
       const config = await loadConfig(opts.config);
-      const runtime = new CadreRuntime(config);
-      await runtime.reset(opts.issue, opts.phase);
+      const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+      const service = new ResetService(config, logger);
+      await service.reset(opts.issue, opts.phase);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));
@@ -168,8 +177,9 @@ program
   .action(async (opts) => {
     try {
       const config = await loadConfig(opts.config);
-      const runtime = new CadreRuntime(config);
-      await runtime.report({ format: opts.format, history: opts.history });
+      const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+      const service = new ReportService(config, logger);
+      await service.report({ format: opts.format, history: opts.history });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`Error: ${msg}`));
@@ -186,11 +196,13 @@ program
   .action(async (opts) => {
     try {
       const config = await loadConfig(opts.config);
-      const runtime = new CadreRuntime(config);
+      const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+      const provider = createPlatformProvider(config, logger);
+      const service = new WorktreeLifecycleService(config, logger, provider);
       if (opts.prune) {
-        await runtime.pruneWorktrees();
+        await service.pruneWorktrees();
       } else {
-        await runtime.listWorktrees();
+        await service.listWorktrees();
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -226,8 +238,14 @@ program
   .action(async (opts) => {
     try {
       const config = await loadConfig(opts.config);
-      const runtime = new CadreRuntime(config);
-      const passed = await runtime.validate();
+      const suite = new PreRunValidationSuite([
+        gitValidator,
+        agentBackendValidator,
+        platformValidator,
+        commandValidator,
+        diskValidator,
+      ]);
+      const passed = await suite.run(config);
       process.exit(passed ? 0 : 1);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
