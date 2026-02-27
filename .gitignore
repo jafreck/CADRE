@@ -3,4 +3,5 @@ dist/
 .cadre/
 *.log
 .DS_Store
+*.tsbuildinfo
 
