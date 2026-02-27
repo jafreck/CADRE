@@ -18,7 +18,7 @@ const { sharedExecShell } = vi.hoisted(() => ({
   sharedExecShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
 }));
 
-vi.mock('../packages/command-diagnostics/dist/exec.js', () => ({
+vi.mock('../packages/command-diagnostics/src/exec.js', () => ({
   execShell: sharedExecShell,
   stripVSCodeEnv: vi.fn((env: Record<string, string>) => env),
   spawnProcess: vi.fn(),
