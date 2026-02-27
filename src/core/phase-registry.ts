@@ -5,10 +5,10 @@
  * this module re-exports them alongside Cadre-specific constants.
  */
 
-export type { PhaseDefinition, PhaseManifestEntry } from '@cadre/pipeline-engine';
-export { PhaseRegistry } from '@cadre/pipeline-engine';
+export type { PhaseDefinition, PhaseManifestEntry } from '../../packages/pipeline-engine/src/index.js';
+export { PhaseRegistry } from '../../packages/pipeline-engine/src/index.js';
 
-import type { PhaseDefinition, PhaseManifestEntry } from '@cadre/pipeline-engine';
+import type { PhaseDefinition, PhaseManifestEntry } from '../../packages/pipeline-engine/src/index.js';
 import {
   PhaseRegistry,
   getPhaseSubset as _getPhaseSubset,
@@ -17,7 +17,7 @@ import {
   isLastPhase as _isLastPhase,
   buildRegistry as _buildRegistry,
   buildGateMap as _buildGateMap,
-} from '@cadre/pipeline-engine';
+} from '../../packages/pipeline-engine/src/index.js';
 
 import type { PhaseGate } from './phase-gate.js';
 import {

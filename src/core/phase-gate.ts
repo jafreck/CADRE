@@ -11,7 +11,7 @@ import { SessionQueue } from '../execution/task-queue.js';
 import { extractCadreJson } from '../util/cadre-json.js';
 
 // Re-export generic interfaces from engine
-import type { PhaseGate, GateContext } from '@cadre/pipeline-engine';
+import type { PhaseGate, GateContext } from '../../packages/pipeline-engine/src/index.js';
 export type { PhaseGate, GateContext };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

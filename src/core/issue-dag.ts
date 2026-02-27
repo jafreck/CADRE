@@ -5,4 +5,4 @@
  * This module re-exports it for backward compatibility.
  */
 
-export { IssueDag } from '@cadre/pipeline-engine';
+export { IssueDag } from '../../packages/pipeline-engine/src/index.js';
