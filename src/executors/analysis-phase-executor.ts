@@ -3,8 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
-import { execShell } from '../util/process.js';
-import { extractFailures } from '../util/failure-parser.js';
+import { runWithRetry } from '../util/command-verifier.js';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 1;
@@ -24,12 +23,12 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
     await writeFile(fileTreePath, fileTree, 'utf-8');
 
     // Build context for issue-analyst
-    const analystContextPath = await ctx.services.contextBuilder.buildForIssueAnalyst(
-      ctx.issue.number,
-      ctx.worktree.path,
+    const analystContextPath = await ctx.services.contextBuilder.build('issue-analyst', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
       issueJsonPath,
-      ctx.io.progressDir,
-    );
+      progressDir: ctx.io.progressDir,
+    });
 
     // Launch issue-analyst
     const analystResult = await launchWithRetry(ctx, 'issue-analyst', {
@@ -45,13 +44,13 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
     }
 
     // Build context for codebase-scout (needs analysis.md)
-    const scoutContextPath = await ctx.services.contextBuilder.buildForCodebaseScout(
-      ctx.issue.number,
-      ctx.worktree.path,
-      join(ctx.io.progressDir, 'analysis.md'),
+    const scoutContextPath = await ctx.services.contextBuilder.build('codebase-scout', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
+      analysisPath: join(ctx.io.progressDir, 'analysis.md'),
       fileTreePath,
-      ctx.io.progressDir,
-    );
+      progressDir: ctx.io.progressDir,
+    });
 
     // Launch codebase-scout
     const scoutResult = await launchWithRetry(ctx, 'codebase-scout', {
@@ -82,24 +81,30 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
 
     try {
       if (ctx.config.commands.build) {
-        const result = await execShell(ctx.config.commands.build, {
+        const result = await runWithRetry({
+          command: ctx.config.commands.build,
           cwd: ctx.worktree.path,
           timeout: 300_000,
+          maxFixRounds: 0,
+          onFixNeeded: async () => {},
         });
         buildExitCode = result.exitCode ?? 1;
         if (buildExitCode !== 0) {
-          buildFailures = extractFailures(result.stdout + '\n' + result.stderr);
+          buildFailures = result.failures;
         }
       }
 
       if (ctx.config.commands.test) {
-        const result = await execShell(ctx.config.commands.test, {
+        const result = await runWithRetry({
+          command: ctx.config.commands.test,
           cwd: ctx.worktree.path,
           timeout: 300_000,
+          maxFixRounds: 0,
+          onFixNeeded: async () => {},
         });
         testExitCode = result.exitCode ?? 1;
         if (testExitCode !== 0) {
-          testFailures = extractFailures(result.stdout + '\n' + result.stderr);
+          testFailures = result.failures;
         }
       }
     } catch (err) {

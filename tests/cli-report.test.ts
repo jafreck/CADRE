@@ -3,21 +3,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ─── Module mocks (hoisted) ───────────────────────────────────────────────────
 
 const mockReport = vi.fn().mockResolvedValue(undefined);
-const mockRuntimeInstance = {
-  run: vi.fn(),
-  status: vi.fn(),
-  reset: vi.fn(),
+const mockReportServiceInstance = {
   report: mockReport,
-  listWorktrees: vi.fn(),
-  pruneWorktrees: vi.fn(),
 };
-const MockCadreRuntime = vi.fn().mockReturnValue(mockRuntimeInstance);
+const MockReportService = vi.fn().mockReturnValue(mockReportServiceInstance);
 
 const mockConfig = {
   projectName: 'test-project',
   repoPath: '/repo',
   repository: 'owner/repo',
   baseBranch: 'main',
+  stateDir: '/tmp/cadre-state',
   copilot: { model: 'gpt-4o', cliCommand: 'copilot', agentDir: '.agents', timeout: 300000 },
   options: { maxParallelIssues: 1, tokenBudget: 100000, resume: false },
   issues: { ids: [] },
@@ -27,13 +23,23 @@ const mockConfig = {
 const mockLoadConfig = vi.fn().mockResolvedValue(mockConfig);
 const mockApplyOverrides = vi.fn((c: unknown) => c);
 
-vi.mock('../src/config/loader.js', () => ({
-  loadConfig: mockLoadConfig,
-  applyOverrides: mockApplyOverrides,
-}));
+vi.mock('../src/config/loader.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/config/loader.js')>();
+  return {
+    ...actual,
+    loadConfig: mockLoadConfig,
+    applyOverrides: mockApplyOverrides,
+  };
+});
 
 vi.mock('../src/core/runtime.js', () => ({
-  CadreRuntime: MockCadreRuntime,
+  CadreRuntime: vi.fn().mockImplementation(() => ({
+    run: vi.fn().mockResolvedValue({ success: true }),
+  })),
+}));
+
+vi.mock('../src/core/report-service.js', () => ({
+  ReportService: MockReportService,
 }));
 
 vi.mock('../src/logging/logger.js', () => ({
@@ -82,7 +88,7 @@ describe('cadre report CLI command', () => {
     mockLoadConfig.mockResolvedValue(mockConfig);
     mockApplyOverrides.mockImplementation((c: unknown) => c);
     mockReport.mockResolvedValue(undefined);
-    MockCadreRuntime.mockReturnValue(mockRuntimeInstance);
+    MockReportService.mockReturnValue(mockReportServiceInstance);
 
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -161,9 +167,9 @@ describe('cadre report CLI command', () => {
       expect(mockLoadConfig).toHaveBeenCalledWith('custom.config.json');
     });
 
-    it('should construct CadreRuntime with the loaded config', async () => {
+    it('should construct ReportService with the loaded config', async () => {
       await runCli(['report']);
-      expect(MockCadreRuntime).toHaveBeenCalledWith(mockConfig);
+      expect(MockReportService).toHaveBeenCalledWith(mockConfig, expect.anything());
     });
   });
 

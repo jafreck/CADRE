@@ -9,6 +9,7 @@ The following files may be provided as additional context. They are read-only â€
 
 - **`analysis.md`** (conditionally provided): Issue analysis describing the problem, requirements, and constraints. Read this to understand the intended behaviour when evaluating correctness.
 - **`scout-report.md`** (conditionally provided): A report of the codebase structure, relevant files, and patterns discovered during scouting. Read this to understand the broader context of the changes under review.
+- **`issueBody`** (conditionally provided in payload): The raw GitHub issue body â€” the original requirements as written by the issue author. When present, use it as the authoritative source of requirements to verify correctness of the changes. If `analysis.md` and `issueBody` disagree on scope, prefer `issueBody`.
 
 ## Input
 You will receive one or more of the following:
