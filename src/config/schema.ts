@@ -346,8 +346,10 @@ export const CadreConfigSchema = z.object({
       verifyDepsBuild: z.boolean().default(false),
       /** Automatically merge dependency branches when ready. */
       autoMerge: z.boolean().default(false),
+      /** Strategy when dependency-branch merge conflicts are encountered. */
+      onDependencyMergeConflict: z.enum(['fail', 'resolve']).default('fail'),
     })
-    .default({ enabled: false, verifyDepsBuild: false, autoMerge: false }),
+    .default({ enabled: false, verifyDepsBuild: false, autoMerge: false, onDependencyMergeConflict: 'fail' }),
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;

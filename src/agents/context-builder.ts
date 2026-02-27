@@ -450,6 +450,37 @@ export class ContextBuilder {
   }
 
   /**
+   * Build a context file for the dep-conflict-resolver agent used during
+   * DAG dependency branch composition.
+   */
+  async buildForDependencyConflictResolver(
+    issueNumber: number,
+    depsWorktreePath: string,
+    conflictedFiles: string[],
+    conflictingBranch: string,
+    depsBranch: string,
+    progressDir: string,
+  ): Promise<string> {
+    return this.writeContext(progressDir, 'dep-conflict-resolver', issueNumber, {
+      agent: 'dep-conflict-resolver',
+      issueNumber,
+      projectName: this.config.projectName,
+      repository: this.config.repository,
+      worktreePath: depsWorktreePath,
+      phase: 0,
+      config: { commands: this.config.commands },
+      inputFiles: conflictedFiles.map((f) => join(depsWorktreePath, f)),
+      outputPath: join(progressDir, 'dep-conflict-resolution-report.md'),
+      payload: {
+        conflictedFiles,
+        conflictingBranch,
+        depsBranch,
+        baseBranch: this.config.baseBranch,
+      },
+    });
+  }
+
+  /**
    * Write a context JSON file and return the path.
    */
   private async writeContext(

@@ -6,6 +6,14 @@ import { ensureDir } from '../util/fs.js';
 import { DependencyMergeConflictError } from '../errors.js';
 import type { IssueDetail } from '../platform/provider.js';
 
+export interface DependencyMergeConflictContext {
+  issueNumber: number;
+  conflictingBranch: string;
+  depsBranch: string;
+  depsWorktreePath: string;
+  conflictedFiles: string[];
+}
+
 /**
  * Handles creating the deps branch and merging dependency branches into it.
  */
@@ -33,6 +41,7 @@ export class DependencyBranchMerger {
     deps: IssueDetail[],
     baseCommit: string,
     worktreeRoot: string,
+    resolveMergeConflict?: (context: DependencyMergeConflictContext) => Promise<boolean>,
   ): Promise<string> {
     const depsBranch = `cadre/deps-${issueNumber}`;
 
@@ -56,6 +65,33 @@ export class DependencyBranchMerger {
           await depsGit.merge([depBranch, '--no-edit']);
         } catch {
           const conflictedFiles = await this.getConflictedFiles(depsWorktreePath);
+
+          if (resolveMergeConflict) {
+            const resolved = await resolveMergeConflict({
+              issueNumber,
+              conflictingBranch: depBranch,
+              depsBranch,
+              depsWorktreePath,
+              conflictedFiles,
+            }).catch(() => false);
+
+            if (resolved) {
+              try {
+                await depsGit.raw(['add', '-A']);
+                await depsGit.raw(['commit', '--no-edit']);
+                this.logger.info(
+                  `Resolved dependency merge conflict for issue #${issueNumber} while merging '${depBranch}'`,
+                  { issueNumber, data: { depBranch, depsBranch, conflictedFiles } },
+                );
+                continue;
+              } catch {
+                this.logger.warn(
+                  `Dependency conflict resolver completed but merge commit failed for issue #${issueNumber}; falling back to dep-merge-conflict`,
+                  { issueNumber, data: { depBranch } },
+                );
+              }
+            }
+          }
 
           const cadreDir = join(this.repoPath, '.cadre');
           await ensureDir(cadreDir);

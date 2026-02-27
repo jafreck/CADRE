@@ -223,6 +223,28 @@ describe('DependencyBranchMerger', () => {
 
       expect(mockGit.branch).toHaveBeenCalledWith(['-D', 'cadre/deps-42']);
     });
+
+    it('uses resolver callback and continues merge when callback resolves conflict', async () => {
+      const dep = makeDep(10, 'dep issue');
+      const resolver = vi.fn().mockResolvedValue(true);
+
+      await expect(
+        merger.mergeDependencies(42, [dep], 'basesha', '/tmp/worktrees', resolver),
+      ).resolves.toBe('depshead');
+
+      expect(resolver).toHaveBeenCalledOnce();
+      expect((mockGit.raw as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(['add', '-A']);
+      expect((mockGit.raw as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(['commit', '--no-edit']);
+    });
+
+    it('still throws when resolver callback returns false', async () => {
+      const dep = makeDep(10, 'dep issue');
+      const resolver = vi.fn().mockResolvedValue(false);
+
+      await expect(
+        merger.mergeDependencies(42, [dep], 'basesha', '/tmp/worktrees', resolver),
+      ).rejects.toThrow(DependencyMergeConflictError);
+    });
   });
 
   describe('conflict on second dep', () => {

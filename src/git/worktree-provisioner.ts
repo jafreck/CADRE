@@ -6,7 +6,7 @@ import { exists, ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
 import { AgentFileSync } from './agent-file-sync.js';
 import { WorktreeCleaner } from './worktree-cleaner.js';
-import { DependencyBranchMerger } from './dependency-branch-merger.js';
+import { DependencyBranchMerger, type DependencyMergeConflictContext } from './dependency-branch-merger.js';
 
 export class RemoteBranchMissingError extends Error {
   constructor(branch: string) {
@@ -177,6 +177,7 @@ export class WorktreeProvisioner {
     issueTitle: string,
     deps: IssueDetail[],
     resume?: boolean,
+    resolveMergeConflict?: (context: DependencyMergeConflictContext) => Promise<boolean>,
   ): Promise<WorktreeInfo> {
     const depsBranch = `cadre/deps-${issueNumber}`;
     const issueBranch = this.resolveBranchName(issueNumber, issueTitle);
@@ -204,6 +205,7 @@ export class WorktreeProvisioner {
       deps,
       baseCommit,
       this.worktreeRoot,
+      resolveMergeConflict,
     );
 
     // Create the issue branch from the HEAD of the deps branch
