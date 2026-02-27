@@ -46,15 +46,7 @@ export class SchemaValidationError extends Error {
   }
 }
 
-export class CyclicDependencyError extends Error {
-  issueNumbers: number[];
-
-  constructor(message: string, issueNumbers: number[]) {
-    super(message);
-    this.name = 'CyclicDependencyError';
-    this.issueNumbers = issueNumbers;
-  }
-}
+export { CyclicDependencyError } from '@cadre/pipeline-engine';
 
 export class DependencyResolutionError extends Error {
   constructor(message: string) {
