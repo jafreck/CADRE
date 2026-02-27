@@ -5,7 +5,7 @@ import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { AgentSession, SessionReviewSummary } from '../agents/types.js';
 import { SessionQueue } from '../execution/task-queue.js';
 import { exists } from '../util/fs.js';
-import { execShell } from '../util/process.js';
+import { runWithRetry } from '../util/command-verifier.js';
 
 export class ImplementationPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 3;
@@ -126,51 +126,44 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         if (ctx.config.commands.build && ctx.config.options.perTaskBuildCheck) {
           if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:build-check`)) {
             await ctx.io.checkpoint.startSubTask(`${session.id}:build-check`);
-            let buildResult = await execShell(ctx.config.commands.build, {
+
+            const buildRetry = await runWithRetry({
+              command: ctx.config.commands.build,
               cwd: ctx.worktree.path,
               timeout: 300_000,
+              maxFixRounds: ctx.config.options.maxBuildFixRounds,
+              onFixNeeded: async (output, round) => {
+                const buildFailurePath = join(ctx.io.progressDir, `build-failure-${session.id}-${round}.txt`);
+                await writeFile(buildFailurePath, output, 'utf-8');
+                const buildFixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
+                  ctx.issue.number,
+                  ctx.worktree.path,
+                  session.id,
+                  buildFailurePath,
+                  sessionFileList.map((f) => join(ctx.worktree.path, f)),
+                  ctx.io.progressDir,
+                  'build',
+                  3,
+                );
+
+                const buildFixResult = await ctx.services.launcher.launchAgent(
+                  {
+                    agent: 'fix-surgeon',
+                    issueNumber: ctx.issue.number,
+                    phase: 3,
+                    sessionId: session.id,
+                    contextPath: buildFixContextPath,
+                    outputPath: ctx.worktree.path,
+                  },
+                  ctx.worktree.path,
+                );
+
+                ctx.callbacks.recordTokens('fix-surgeon', buildFixResult.tokenUsage);
+                ctx.callbacks.checkBudget();
+              },
             });
 
-            for (
-              let round = 0;
-              round < ctx.config.options.maxBuildFixRounds && buildResult.exitCode !== 0;
-              round++
-            ) {
-              const buildFailurePath = join(ctx.io.progressDir, `build-failure-${session.id}-${round}.txt`);
-              await writeFile(buildFailurePath, buildResult.stderr + buildResult.stdout, 'utf-8');
-              const buildFixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
-                ctx.issue.number,
-                ctx.worktree.path,
-                session.id,
-                buildFailurePath,
-                sessionFileList.map((f) => join(ctx.worktree.path, f)),
-                ctx.io.progressDir,
-                'build',
-                3,
-              );
-
-              const buildFixResult = await ctx.services.launcher.launchAgent(
-                {
-                  agent: 'fix-surgeon',
-                  issueNumber: ctx.issue.number,
-                  phase: 3,
-                  sessionId: session.id,
-                  contextPath: buildFixContextPath,
-                  outputPath: ctx.worktree.path,
-                },
-                ctx.worktree.path,
-              );
-
-              ctx.callbacks.recordTokens('fix-surgeon', buildFixResult.tokenUsage);
-              ctx.callbacks.checkBudget();
-
-              buildResult = await execShell(ctx.config.commands.build, {
-                cwd: ctx.worktree.path,
-                timeout: 300_000,
-              });
-            }
-
-            if (buildResult.exitCode !== 0) {
+            if (buildRetry.exitCode !== 0) {
               throw new Error(`Build failed after ${ctx.config.options.maxBuildFixRounds} fix rounds`);
             }
             await ctx.io.checkpoint.completeSubTask(`${session.id}:build-check`);
