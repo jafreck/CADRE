@@ -154,6 +154,9 @@ export interface PlatformProvider {
   /** Add a comment to an issue/work item. */
   addIssueComment(issueNumber: number, body: string): Promise<void>;
 
+  /** Create a new issue. Returns the issue number and URL. */
+  createIssue(params: { title: string; body: string; labels?: string[] }): Promise<{ number: number; url: string }>;
+
   // ── Pull Requests ──
 
   /** Create a pull request. Returns the raw platform response. */

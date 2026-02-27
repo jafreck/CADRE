@@ -41,6 +41,7 @@ vi.mock('../src/github/api.js', () => ({
     ensureLabel: vi.fn(),
     applyLabels: vi.fn(),
     addIssueComment: vi.fn(),
+    createIssue: vi.fn(),
     checkAuth: vi.fn().mockResolvedValue(true),
   })),
 }));
@@ -68,6 +69,7 @@ function getGitHubApiMock() {
     ensureLabel: ReturnType<typeof vi.fn>;
     applyLabels: ReturnType<typeof vi.fn>;
     addIssueComment: ReturnType<typeof vi.fn>;
+    createIssue: ReturnType<typeof vi.fn>;
     checkAuth: ReturnType<typeof vi.fn>;
   };
 }
@@ -841,6 +843,91 @@ describe('Contract: listPRReviewComments returns ReviewThread[] with required fi
 
       expect(Array.isArray(threads)).toBe(true);
       expect(threads).toHaveLength(0);
+    });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// CONTRACT SUITE: createIssue returns { number, url }
+// ══════════════════════════════════════════════════════════════════
+
+describe('Contract: createIssue returns { number, url }', () => {
+  describe('GitHubProvider', () => {
+    let provider: GitHubProvider;
+
+    beforeEach(async () => {
+      vi.clearAllMocks();
+      provider = new GitHubProvider('owner/repo', mockLogger);
+      await provider.connect();
+    });
+
+    it('should delegate to GitHubAPI.createIssue and return number and url', async () => {
+      getGitHubApiMock().createIssue.mockResolvedValue({
+        number: 99,
+        url: 'https://github.com/owner/repo/issues/99',
+      });
+
+      const result = await provider.createIssue({
+        title: 'New issue',
+        body: 'Issue body',
+        labels: ['bug'],
+      });
+
+      expect(result.number).toBe(99);
+      expect(result.url).toBe('https://github.com/owner/repo/issues/99');
+      expect(getGitHubApiMock().createIssue).toHaveBeenCalledWith({
+        title: 'New issue',
+        body: 'Issue body',
+        labels: ['bug'],
+      });
+    });
+
+    it('should pass through when labels are omitted', async () => {
+      getGitHubApiMock().createIssue.mockResolvedValue({
+        number: 100,
+        url: 'https://github.com/owner/repo/issues/100',
+      });
+
+      const result = await provider.createIssue({
+        title: 'No labels issue',
+        body: 'Body',
+      });
+
+      expect(result.number).toBe(100);
+      expect(getGitHubApiMock().createIssue).toHaveBeenCalledWith({
+        title: 'No labels issue',
+        body: 'Body',
+      });
+    });
+
+    it('should throw when not connected', async () => {
+      await provider.disconnect();
+
+      await expect(
+        provider.createIssue({ title: 'T', body: 'B' }),
+      ).rejects.toThrow('not connected');
+    });
+  });
+
+  describe('AzureDevOpsProvider', () => {
+    let fetchStub: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      fetchStub = vi.fn();
+      vi.stubGlobal('fetch', fetchStub);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('should throw "not yet implemented" error', async () => {
+      const provider = await makeConnectedAdoProvider(fetchStub);
+
+      await expect(
+        provider.createIssue({ title: 'T', body: 'B' }),
+      ).rejects.toThrow('not yet implemented');
     });
   });
 });

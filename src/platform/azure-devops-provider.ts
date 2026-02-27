@@ -208,6 +208,10 @@ export class AzureDevOpsProvider implements PlatformProvider {
     });
   }
 
+  async createIssue(_params: { title: string; body: string; labels?: string[] }): Promise<{ number: number; url: string }> {
+    throw new Error('createIssue is not yet implemented for Azure DevOps');
+  }
+
   // ── Pull Requests ──
 
   async createPullRequest(params: CreatePullRequestParams): Promise<PullRequestInfo> {

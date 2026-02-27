@@ -912,6 +912,59 @@ describe('CadreConfigSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('dogfood', () => {
+    it('should default dogfood to disabled when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.dogfood.enabled).toBe(false);
+      expect(result.dogfood.maxIssuesPerRun).toBe(5);
+      expect(result.dogfood.labels).toEqual(['cadre-dogfood']);
+      expect(result.dogfood.titlePrefix).toBe('[CADRE Dogfood]');
+    });
+
+    it('should accept dogfood with enabled set to true', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: { enabled: true },
+      });
+      expect(result.dogfood.enabled).toBe(true);
+      expect(result.dogfood.maxIssuesPerRun).toBe(5);
+      expect(result.dogfood.labels).toEqual(['cadre-dogfood']);
+      expect(result.dogfood.titlePrefix).toBe('[CADRE Dogfood]');
+    });
+
+    it('should accept custom maxIssuesPerRun', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: { enabled: true, maxIssuesPerRun: 10 },
+      });
+      expect(result.dogfood.maxIssuesPerRun).toBe(10);
+    });
+
+    it('should accept custom labels', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: { labels: ['custom-label'] },
+      });
+      expect(result.dogfood.labels).toEqual(['custom-label']);
+    });
+
+    it('should accept custom titlePrefix', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: { titlePrefix: '[Custom]' },
+      });
+      expect(result.dogfood.titlePrefix).toBe('[Custom]');
+    });
+
+    it('should be optional and default to disabled', () => {
+      const result = CadreConfigSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.dogfood.enabled).toBe(false);
+      }
+    });
+  });
 });
 
 describe('AgentConfigSchema', () => {

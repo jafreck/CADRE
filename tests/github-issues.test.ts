@@ -23,6 +23,7 @@ describe('GitHubAPI', () => {
           get: vi.fn(),
           listComments: vi.fn(),
           createComment: vi.fn(),
+          create: vi.fn(),
           update: vi.fn(),
           createLabel: vi.fn(),
           addLabels: vi.fn(),
@@ -286,6 +287,46 @@ describe('GitHubAPI', () => {
         repo: 'repo',
         issue_number: 42,
         body: 'Hello world',
+      });
+    });
+  });
+
+  describe('createIssue', () => {
+    it('should call issues.create with the correct params and return number and url', async () => {
+      vi.mocked(mockOctokit.rest.issues.create).mockResolvedValue({
+        data: { number: 99, html_url: 'https://github.com/owner/repo/issues/99' },
+      } as never);
+
+      const result = await api.createIssue({
+        title: 'New bug',
+        body: 'Bug description',
+        labels: ['bug', 'cadre-dogfood'],
+      });
+
+      expect(result).toEqual({ number: 99, url: 'https://github.com/owner/repo/issues/99' });
+      expect(mockOctokit.rest.issues.create).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        title: 'New bug',
+        body: 'Bug description',
+        labels: ['bug', 'cadre-dogfood'],
+      });
+    });
+
+    it('should call issues.create without labels when not provided', async () => {
+      vi.mocked(mockOctokit.rest.issues.create).mockResolvedValue({
+        data: { number: 100, html_url: 'https://github.com/owner/repo/issues/100' },
+      } as never);
+
+      const result = await api.createIssue({ title: 'No labels', body: 'Body' });
+
+      expect(result).toEqual({ number: 100, url: 'https://github.com/owner/repo/issues/100' });
+      expect(mockOctokit.rest.issues.create).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        title: 'No labels',
+        body: 'Body',
+        labels: undefined,
       });
     });
   });
