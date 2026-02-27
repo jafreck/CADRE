@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ContextBuilder } from '../src/agents/context-builder.js';
+import { ContextBuilder, AGENT_CONTEXT_REGISTRY } from '../src/agents/context-builder.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
 import type { ReviewThread } from '../src/platform/provider.js';
-import type { AgentSession } from '../src/agents/types.js';
+import type { AgentSession, AgentName } from '../src/agents/types.js';
 import { Logger } from '../src/logging/logger.js';
 import { readFile, writeFile, mkdir, rename, access } from 'node:fs/promises';
 
@@ -605,6 +605,554 @@ describe('ContextBuilder', () => {
         expect(ctx.agent).toBe('whole-pr-reviewer');
         expect(ctx.phase).toBe(3);
       });
+    });
+  });
+
+  describe('AGENT_CONTEXT_REGISTRY', () => {
+    const EXPECTED_AGENTS: AgentName[] = [
+      'issue-analyst',
+      'codebase-scout',
+      'implementation-planner',
+      'adjudicator',
+      'code-writer',
+      'test-writer',
+      'code-reviewer',
+      'whole-pr-reviewer',
+      'fix-surgeon',
+      'integration-checker',
+      'pr-composer',
+      'conflict-resolver',
+      'dep-conflict-resolver',
+    ];
+
+    it('should contain descriptors for all 13 agents', () => {
+      for (const agent of EXPECTED_AGENTS) {
+        expect(AGENT_CONTEXT_REGISTRY[agent]).toBeDefined();
+      }
+      expect(Object.keys(AGENT_CONTEXT_REGISTRY)).toHaveLength(EXPECTED_AGENTS.length);
+    });
+
+    it('should have required fields on every descriptor', () => {
+      for (const [name, desc] of Object.entries(AGENT_CONTEXT_REGISTRY)) {
+        expect(typeof desc.phase === 'number' || typeof desc.phase === 'function').toBe(true);
+        expect(typeof desc.outputFile).toBe('function');
+        expect(typeof desc.inputFiles).toBe('function');
+      }
+    });
+  });
+
+  describe('build() error handling', () => {
+    it('should throw for an unknown agent name', async () => {
+      await expect(
+        builder.build('nonexistent-agent' as AgentName, {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          progressDir: '/tmp/progress',
+        }),
+      ).rejects.toThrow('No context descriptor registered for agent: nonexistent-agent');
+    });
+  });
+
+  describe('build() common fields', () => {
+    it('should set agent, issueNumber, projectName, repository, worktreePath, and config.commands', async () => {
+      await builder.build('issue-analyst', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        issueJsonPath: '/tmp/issue.json',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.agent).toBe('issue-analyst');
+      expect(ctx.issueNumber).toBe(42);
+      expect(ctx.projectName).toBe('test-project');
+      expect(ctx.repository).toBe('owner/repo');
+      expect(ctx.worktreePath).toBe('/tmp/worktree');
+      expect(ctx.config).toEqual({ commands: mockConfig.commands });
+    });
+
+    it('should set the correct phase from a static descriptor', async () => {
+      await builder.build('implementation-planner', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        analysisPath: '/tmp/analysis.md',
+        scoutReportPath: '/tmp/scout-report.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.phase).toBe(2);
+    });
+
+    it('should set the correct phase from a dynamic descriptor (fix-surgeon)', async () => {
+      await builder.build('fix-surgeon', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        sessionId: 'session-001',
+        feedbackPath: '/tmp/feedback.md',
+        changedFiles: [],
+        progressDir: '/tmp/progress',
+        issueType: 'review',
+        phase: 4,
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.phase).toBe(4);
+    });
+
+    it('should default fix-surgeon phase to 3 when not provided', async () => {
+      await builder.build('fix-surgeon', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        sessionId: 'session-001',
+        feedbackPath: '/tmp/feedback.md',
+        changedFiles: [],
+        progressDir: '/tmp/progress',
+        issueType: 'review',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.phase).toBe(3);
+    });
+  });
+
+  describe('build() sessionId', () => {
+    const session: AgentSession = {
+      id: 'session-001',
+      name: 'Fix login',
+      rationale: 'Fix the login handler',
+      dependencies: [],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
+    };
+
+    it('should include sessionId for code-writer from session.id', async () => {
+      await builder.build('code-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        sessionPlanPath: '/tmp/task-plan.md',
+        relevantFiles: [],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.sessionId).toBe('session-001');
+    });
+
+    it('should include sessionId for test-writer from session.id', async () => {
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.sessionId).toBe('session-001');
+    });
+
+    it('should include sessionId for code-reviewer from session.id', async () => {
+      await builder.build('code-reviewer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        diffPath: '/tmp/diff.patch',
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.sessionId).toBe('session-001');
+    });
+
+    it('should include sessionId for fix-surgeon from args.sessionId', async () => {
+      await builder.build('fix-surgeon', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        sessionId: 'session-002',
+        feedbackPath: '/tmp/feedback.md',
+        changedFiles: [],
+        progressDir: '/tmp/progress',
+        issueType: 'review',
+        phase: 3,
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.sessionId).toBe('session-002');
+    });
+
+    it('should not include sessionId for agents without session support', async () => {
+      await builder.build('issue-analyst', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        issueJsonPath: '/tmp/issue.json',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.sessionId).toBeUndefined();
+    });
+  });
+
+  describe('build adjudicator', () => {
+    it('should use planPaths as inputFiles', async () => {
+      await builder.build('adjudicator', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        planPaths: ['/tmp/plan1.md', '/tmp/plan2.md'],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.inputFiles).toEqual(['/tmp/plan1.md', '/tmp/plan2.md']);
+    });
+
+    it('should set payload.decisionType to implementation-strategy', async () => {
+      await builder.build('adjudicator', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        planPaths: ['/tmp/plan1.md'],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.decisionType).toBe('implementation-strategy');
+    });
+
+    it('should set outputPath to adjudication.md', async () => {
+      await builder.build('adjudicator', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        planPaths: ['/tmp/plan1.md'],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.outputPath).toBe('/tmp/progress/adjudication.md');
+    });
+  });
+
+  describe('build test-writer', () => {
+    const session: AgentSession = {
+      id: 'session-001',
+      name: 'Fix login',
+      rationale: 'Fix the login handler',
+      dependencies: [],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Fix login handler',
+        description: 'Fix the login handler',
+        files: ['src/auth/login.ts'],
+        complexity: 'simple' as const,
+        acceptanceCriteria: ['Login works'],
+      }],
+    };
+
+    it('should include changedFiles and sessionPlanPath in inputFiles', async () => {
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: ['src/auth/login.ts', 'src/auth/utils.ts'],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.inputFiles).toEqual(['src/auth/login.ts', 'src/auth/utils.ts', '/tmp/task-plan.md']);
+    });
+
+    it('should set payload with sessionId and testFramework', async () => {
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.sessionId).toBe('session-001');
+      expect(payload.testFramework).toBeDefined();
+    });
+
+    it('should set outputPath to .cadre/tasks', async () => {
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.outputPath).toBe('/tmp/worktree/.cadre/tasks');
+    });
+  });
+
+  describe('build conflict-resolver', () => {
+    it('should map conflictedFiles to absolute paths in inputFiles', async () => {
+      await builder.build('conflict-resolver', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        conflictedFiles: ['src/a.ts', 'src/b.ts'],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.inputFiles).toEqual(['/tmp/worktree/src/a.ts', '/tmp/worktree/src/b.ts']);
+    });
+
+    it('should set payload with conflictedFiles and baseBranch', async () => {
+      await builder.build('conflict-resolver', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        conflictedFiles: ['src/a.ts'],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.conflictedFiles).toEqual(['src/a.ts']);
+      expect(payload.baseBranch).toBe('main');
+    });
+
+    it('should set outputPath to conflict-resolution-report.md', async () => {
+      await builder.build('conflict-resolver', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        conflictedFiles: [],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.outputPath).toBe('/tmp/progress/conflict-resolution-report.md');
+    });
+
+    it('should set phase to 0', async () => {
+      await builder.build('conflict-resolver', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        conflictedFiles: [],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.phase).toBe(0);
+    });
+  });
+
+  describe('build fix-surgeon payload', () => {
+    it('should include sessionId and issueType in payload', async () => {
+      await builder.build('fix-surgeon', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        sessionId: 'session-001',
+        feedbackPath: '/tmp/feedback.md',
+        changedFiles: ['src/a.ts'],
+        progressDir: '/tmp/progress',
+        issueType: 'test-failure',
+        phase: 3,
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.sessionId).toBe('session-001');
+      expect(payload.issueType).toBe('test-failure');
+    });
+
+    it('should include feedbackPath and changedFiles in inputFiles', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
+      await builder.build('fix-surgeon', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        sessionId: 'session-001',
+        feedbackPath: '/tmp/feedback.md',
+        changedFiles: ['src/a.ts', 'src/b.ts'],
+        progressDir: '/tmp/progress',
+        issueType: 'build',
+        phase: 3,
+      });
+      const ctx = captureWrittenContext();
+      const inputFiles = ctx.inputFiles as string[];
+      expect(inputFiles[0]).toBe('/tmp/feedback.md');
+      expect(inputFiles).toContain('src/a.ts');
+      expect(inputFiles).toContain('src/b.ts');
+    });
+  });
+
+  describe('detectTestFramework via test-writer payload', () => {
+    const session: AgentSession = {
+      id: 'session-001',
+      name: 'Fix login',
+      rationale: 'Fix the login handler',
+      dependencies: [],
+      steps: [{
+        id: 'session-001-step-001',
+        name: 'Step',
+        description: 'Step',
+        files: [],
+        complexity: 'simple' as const,
+        acceptanceCriteria: [],
+      }],
+    };
+
+    it('should detect vitest', async () => {
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      // Default mockConfig uses 'npm test' which doesn't match vitest
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.testFramework).toBe('unknown');
+    });
+
+    it('should detect vitest when command includes vitest', async () => {
+      mockConfig.commands.test = 'npx vitest run';
+      builder = new ContextBuilder(mockConfig, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger);
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.testFramework).toBe('vitest');
+    });
+
+    it('should detect jest when command includes jest', async () => {
+      mockConfig.commands.test = 'npx jest';
+      builder = new ContextBuilder(mockConfig, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger);
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.testFramework).toBe('jest');
+    });
+
+    it('should detect mocha when command includes mocha', async () => {
+      mockConfig.commands.test = 'npx mocha';
+      builder = new ContextBuilder(mockConfig, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger);
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.testFramework).toBe('mocha');
+    });
+
+    it('should detect pytest when command includes pytest', async () => {
+      mockConfig.commands.test = 'python -m pytest';
+      builder = new ContextBuilder(mockConfig, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger);
+      await builder.build('test-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        changedFiles: [],
+        sessionPlanPath: '/tmp/task-plan.md',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.testFramework).toBe('pytest');
+    });
+  });
+
+  describe('build pr-composer', () => {
+    it('should include previousParseError in payload when provided', async () => {
+      await builder.build('pr-composer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        issue: mockIssue,
+        analysisPath: '/tmp/analysis.md',
+        planPath: '/tmp/plan.md',
+        integrationReportPath: '/tmp/integration.md',
+        diffPath: '/tmp/diff.patch',
+        progressDir: '/tmp/progress',
+        previousParseError: 'JSON parse failed at line 5',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.previousParseError).toBe('JSON parse failed at line 5');
+    });
+
+    it('should not include previousParseError in payload when not provided', async () => {
+      await builder.build('pr-composer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        issue: mockIssue,
+        analysisPath: '/tmp/analysis.md',
+        planPath: '/tmp/plan.md',
+        integrationReportPath: '/tmp/integration.md',
+        diffPath: '/tmp/diff.patch',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.previousParseError).toBeUndefined();
+    });
+
+    it('should include issueTitle and issueBody in payload', async () => {
+      await builder.build('pr-composer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        issue: mockIssue,
+        analysisPath: '/tmp/analysis.md',
+        planPath: '/tmp/plan.md',
+        integrationReportPath: '/tmp/integration.md',
+        diffPath: '/tmp/diff.patch',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.issueTitle).toBe('Fix login');
+      expect(payload.issueBody).toBe('Fix the login handler');
+    });
+  });
+
+  describe('build integration-checker payload', () => {
+    it('should include commands in payload from config', async () => {
+      await builder.build('integration-checker', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      const commands = payload.commands as Record<string, unknown>;
+      expect(commands.build).toBe('npm run build');
+      expect(commands.test).toBe('npm test');
+    });
+  });
+
+  describe('build dep-conflict-resolver payload', () => {
+    it('should include all dependency metadata in payload', async () => {
+      await builder.build('dep-conflict-resolver', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        conflictedFiles: ['src/x.ts'],
+        conflictingBranch: 'cadre/issue-99',
+        depsBranch: 'cadre/deps-42',
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.conflictedFiles).toEqual(['src/x.ts']);
+      expect(payload.conflictingBranch).toBe('cadre/issue-99');
+      expect(payload.depsBranch).toBe('cadre/deps-42');
+      expect(payload.baseBranch).toBe('main');
     });
   });
 
