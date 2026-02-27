@@ -2,9 +2,9 @@ import { join } from 'node:path';
 import { writeFile, readFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { execShell } from '../util/process.js';
-import { extractFailures } from '../util/failure-parser.js';
 import { baselineResultsSchema } from '../agents/schemas/index.js';
 import type { BaselineResults } from '../agents/schemas/index.js';
+import { runWithRetry } from '../util/command-verifier.js';
 
 export class IntegrationPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 4;
@@ -51,87 +51,59 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
 
     // Run build command
     if (ctx.config.commands.build && ctx.config.options.buildVerification) {
-      let buildResult = await execShell(ctx.config.commands.build, {
-        cwd: ctx.worktree.path,
-        timeout: 300_000,
-      });
       report += `## Build\n\n**Command:** \`${ctx.config.commands.build}\`\n`;
 
-      let buildOutput = buildResult.stderr + buildResult.stdout;
-      let buildFailures = extractFailures(buildOutput);
-      if (buildResult.exitCode !== 0 && buildFailures.length === 0) {
-        buildFailures = ['<build-failed-unrecognised-output>'];
-      }
-      let buildRegressions = this.computeRegressions(buildFailures, baselineBuildFailures);
-      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && buildRegressions.length > 0; round++) {
-        await this.tryFixIntegration(ctx, buildOutput, 'build');
-        buildResult = await execShell(ctx.config.commands.build, {
-          cwd: ctx.worktree.path,
-          timeout: 300_000,
-        });
-        buildOutput = buildResult.stderr + buildResult.stdout;
-        buildFailures = extractFailures(buildOutput);
-        if (buildResult.exitCode !== 0 && buildFailures.length === 0) {
-          buildFailures = ['<build-failed-unrecognised-output>'];
-        }
-        buildRegressions = this.computeRegressions(buildFailures, baselineBuildFailures);
-      }
+      const buildRetry = await runWithRetry({
+        command: ctx.config.commands.build,
+        cwd: ctx.worktree.path,
+        timeout: 300_000,
+        maxFixRounds: ctx.config.options.maxIntegrationFixRounds,
+        baseline: baselineBuildFailures,
+        sentinelValue: '<build-failed-unrecognised-output>',
+        onFixNeeded: (output) => this.tryFixIntegration(ctx, output, 'build'),
+      });
 
-      allRegressionFailures.push(...buildRegressions);
-      allCurrentFailures.push(...buildFailures);
-      report += `**Exit Code:** ${buildResult.exitCode}\n`;
-      report += `**Status:** ${buildResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
-      if (buildResult.exitCode !== 0) {
-        report += `\`\`\`\n${buildResult.stderr}\n${buildResult.stdout}\n\`\`\`\n\n`;
+      allRegressionFailures.push(...buildRetry.regressions);
+      allCurrentFailures.push(...buildRetry.failures);
+      report += `**Exit Code:** ${buildRetry.exitCode}\n`;
+      report += `**Status:** ${buildRetry.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
+      if (buildRetry.exitCode !== 0) {
+        report += `\`\`\`\n${buildRetry.output}\n\`\`\`\n\n`;
       }
       structuredBuildResult = {
         command: ctx.config.commands.build ?? '',
-        exitCode: buildResult.exitCode,
-        signal: buildResult.signal ?? null,
-        output: (buildResult.stdout + buildResult.stderr).slice(0, 500),
-        pass: buildResult.exitCode === 0,
+        exitCode: buildRetry.exitCode,
+        signal: null,
+        output: buildRetry.output.slice(0, 500),
+        pass: buildRetry.exitCode === 0,
       };
     }
     if (ctx.config.commands.test && ctx.config.options.testVerification) {
-      let testResult = await execShell(ctx.config.commands.test, {
-        cwd: ctx.worktree.path,
-        timeout: 300_000,
-      });
       report += `## Test\n\n**Command:** \`${ctx.config.commands.test}\`\n`;
 
-      let testOutput = testResult.stderr + testResult.stdout;
-      let testFailures = extractFailures(testOutput);
-      if (testResult.exitCode !== 0 && testFailures.length === 0) {
-        testFailures = ['<test-failed-unrecognised-output>'];
-      }
-      let testRegressions = this.computeRegressions(testFailures, baselineTestFailures);
-      for (let round = 0; round < ctx.config.options.maxIntegrationFixRounds && testRegressions.length > 0; round++) {
-        await this.tryFixIntegration(ctx, testOutput, 'test');
-        testResult = await execShell(ctx.config.commands.test, {
-          cwd: ctx.worktree.path,
-          timeout: 300_000,
-        });
-        testOutput = testResult.stderr + testResult.stdout;
-        testFailures = extractFailures(testOutput);
-        if (testResult.exitCode !== 0 && testFailures.length === 0) {
-          testFailures = ['<test-failed-unrecognised-output>'];
-        }
-        testRegressions = this.computeRegressions(testFailures, baselineTestFailures);
-      }
+      const testRetry = await runWithRetry({
+        command: ctx.config.commands.test,
+        cwd: ctx.worktree.path,
+        timeout: 300_000,
+        maxFixRounds: ctx.config.options.maxIntegrationFixRounds,
+        baseline: baselineTestFailures,
+        sentinelValue: '<test-failed-unrecognised-output>',
+        onFixNeeded: (output) => this.tryFixIntegration(ctx, output, 'test'),
+      });
 
-      allRegressionFailures.push(...testRegressions);
-      allCurrentFailures.push(...testFailures);
-      report += `**Exit Code:** ${testResult.exitCode}\n`;
-      report += `**Status:** ${testResult.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
-      if (testResult.exitCode !== 0) {
-        report += `\`\`\`\n${testResult.stderr}\n${testResult.stdout}\n\`\`\`\n\n`;
+      allRegressionFailures.push(...testRetry.regressions);
+      allCurrentFailures.push(...testRetry.failures);
+      report += `**Exit Code:** ${testRetry.exitCode}\n`;
+      report += `**Status:** ${testRetry.exitCode === 0 ? 'pass' : 'fail'}\n\n`;
+      if (testRetry.exitCode !== 0) {
+        report += `\`\`\`\n${testRetry.output}\n\`\`\`\n\n`;
       }
       structuredTestResult = {
         command: ctx.config.commands.test ?? '',
-        exitCode: testResult.exitCode,
-        signal: testResult.signal ?? null,
-        output: (testResult.stdout + testResult.stderr).slice(0, 500),
-        pass: testResult.exitCode === 0,
+        exitCode: testRetry.exitCode,
+        signal: null,
+        output: testRetry.output.slice(0, 500),
+        pass: testRetry.exitCode === 0,
       };
     }
     if (ctx.config.commands.lint) {
@@ -199,10 +171,6 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
 
 
 
-  private computeRegressions(currentFailures: string[], baselineFailures: Set<string>): string[] {
-    return currentFailures.filter((f) => !baselineFailures.has(f));
-  }
-
   private async tryFixIntegration(ctx: PhaseContext, failureOutput: string, type: string): Promise<void> {
     // Write failure output to a file for fix-surgeon
     const failurePath = join(ctx.io.progressDir, `${type}-failure.txt`);
@@ -211,16 +179,16 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     const changedFiles = await ctx.io.commitManager.getChangedFiles();
 
     const issueType = type === 'build' ? 'build' : 'test-failure' as const;
-    const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
-      ctx.issue.number,
-      ctx.worktree.path,
-      `integration-fix-${issueType}`,
-      failurePath,
-      changedFiles.map((f) => join(ctx.worktree.path, f)),
-      ctx.io.progressDir,
+    const fixContextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
+      sessionId: `integration-fix-${issueType}`,
+      feedbackPath: failurePath,
+      changedFiles: changedFiles.map((f) => join(ctx.worktree.path, f)),
+      progressDir: ctx.io.progressDir,
       issueType,
-      4,
-    );
+      phase: 4,
+    });
 
     const fixResult = await ctx.services.launcher.launchAgent(
       {

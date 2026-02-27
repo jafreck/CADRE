@@ -40,7 +40,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const contextBuilder = {
-    buildForFixSurgeon: vi.fn().mockResolvedValue('/progress/fix-ctx.json'),
+    build: vi.fn().mockResolvedValue('/progress/fix-ctx.json'),
   };
 
   const commitManager = {
@@ -380,8 +380,8 @@ describe('IntegrationPhaseExecutor', () => {
     });
   });
 
-  describe('tryFixIntegration - null task passed to buildForFixSurgeon', () => {
-    it('should build fix-surgeon context using buildForFixSurgeon with null task', async () => {
+  describe('tryFixIntegration - null task passed to build fix-surgeon', () => {
+    it('should build fix-surgeon context using build with correct args', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
         .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false }) // build (fail)
@@ -393,20 +393,23 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        42,
-        '/tmp/worktree',
-        'integration-fix-build',
-        join('/tmp/progress', 'build-failure.txt'),
-        expect.any(Array),
-        '/tmp/progress',
-        'build',
-        4,
+        'fix-surgeon',
+        expect.objectContaining({
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          sessionId: 'integration-fix-build',
+          feedbackPath: join('/tmp/progress', 'build-failure.txt'),
+          changedFiles: expect.any(Array),
+          progressDir: '/tmp/progress',
+          issueType: 'build',
+          phase: 4,
+        }),
       );
     });
 
-    it('should pass changed files from commitManager to buildForFixSurgeon', async () => {
+    it('should pass changed files from commitManager to build fix-surgeon', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false })
         .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false })
@@ -423,16 +426,14 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.stringContaining('integration-fix-'),
-        expect.anything(),
-        [join('/tmp/worktree', 'src/changed.ts'), join('/tmp/worktree', 'src/other.ts')],
-        expect.anything(),
-        expect.anything(),
-        4,
+        'fix-surgeon',
+        expect.objectContaining({
+          sessionId: expect.stringContaining('integration-fix-'),
+          changedFiles: [join('/tmp/worktree', 'src/changed.ts'), join('/tmp/worktree', 'src/other.ts')],
+          phase: 4,
+        }),
       );
     });
   });
@@ -876,6 +877,82 @@ describe('IntegrationPhaseExecutor', () => {
       const content = reportCall?.[1] as string;
       expect(content).toContain('## New Regressions');
       expect(content).toContain('_None_');
+    });
+  });
+
+  describe('structured result from runWithRetry', () => {
+    it('should set signal to null in structured build result', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: 'SIGKILL', timedOut: false }) // build (signal present in execShell result)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      expect(cadreJsonMatch).toBeTruthy();
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.buildResult.signal).toBeNull();
+    });
+
+    it('should set signal to null in structured test result', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: 'SIGTERM', timedOut: false }) // test (signal present)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      expect(cadreJsonMatch).toBeTruthy();
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.testResult.signal).toBeNull();
+    });
+
+    it('should include combined stderr+stdout as output in cadre-json build result', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: 'build-stdout', stderr: 'build-stderr', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.buildResult.output).toContain('build-stderr');
+      expect(cadreJson.buildResult.output).toContain('build-stdout');
+    });
+
+    it('should set overallPass to true when no regressions exist', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.overallPass).toBe(true);
+      expect(cadreJson.regressionFailures).toEqual([]);
     });
   });
 });

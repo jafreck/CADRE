@@ -62,8 +62,9 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const contextBuilder = {
-    buildForIssueAnalyst: vi.fn().mockResolvedValue('/progress/analyst-ctx.json'),
-    buildForCodebaseScout: vi.fn().mockResolvedValue('/progress/scout-ctx.json'),
+    build: vi.fn()
+      .mockResolvedValueOnce('/progress/analyst-ctx.json')
+      .mockResolvedValue('/progress/scout-ctx.json'),
   };
 
   const services = {
@@ -194,12 +195,15 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for issue-analyst with correct args', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.services.contextBuilder as never as { buildForIssueAnalyst: ReturnType<typeof vi.fn> }).buildForIssueAnalyst)
+      expect((ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build)
         .toHaveBeenCalledWith(
-          42,
-          '/tmp/worktree',
-          join('/tmp/progress', 'issue.json'),
-          '/tmp/progress',
+          'issue-analyst',
+          expect.objectContaining({
+            issueNumber: 42,
+            worktreePath: '/tmp/worktree',
+            issueJsonPath: join('/tmp/progress', 'issue.json'),
+            progressDir: '/tmp/progress',
+          }),
         );
     });
 
@@ -222,13 +226,16 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for codebase-scout after analyst succeeds', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.services.contextBuilder as never as { buildForCodebaseScout: ReturnType<typeof vi.fn> }).buildForCodebaseScout)
+      expect((ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build)
         .toHaveBeenCalledWith(
-          42,
-          '/tmp/worktree',
-          join('/tmp/progress', 'analysis.md'),
-          join('/tmp/progress', 'repo-file-tree.txt'),
-          '/tmp/progress',
+          'codebase-scout',
+          expect.objectContaining({
+            issueNumber: 42,
+            worktreePath: '/tmp/worktree',
+            analysisPath: join('/tmp/progress', 'analysis.md'),
+            fileTreePath: join('/tmp/progress', 'repo-file-tree.txt'),
+            progressDir: '/tmp/progress',
+          }),
         );
     });
 
@@ -547,6 +554,38 @@ describe('AnalysisPhaseExecutor', () => {
       expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({
         buildFailures: expect.arrayContaining([expect.stringContaining('error: Cannot find module foo')]),
       }));
+    });
+  });
+
+  describe('captureBaseline() with runWithRetry', () => {
+    const baselinePath = '/tmp/worktree/.cadre/baseline-results.json';
+
+    it('should treat null exit code from build as buildExitCode 1', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: null as unknown as number, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ buildExitCode: 1 }));
+    });
+
+    it('should treat null exit code from test as testExitCode 1', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: null as unknown as number, stdout: '', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { test: 'npm test' } } as never,
+      });
+      await executor.execute(ctx);
+      expect(atomicWriteJSON).toHaveBeenCalledWith(baselinePath, expect.objectContaining({ testExitCode: 1 }));
+    });
+
+    it('should not attempt retries during baseline capture (maxFixRounds=0)', async () => {
+      vi.mocked(execShell).mockResolvedValueOnce({ exitCode: 1, stdout: 'FAIL src/a.ts', stderr: '' });
+      const ctx = makeCtx({
+        config: { options: { maxRetriesPerTask: 3 }, commands: { build: 'npm run build' } } as never,
+      });
+      await executor.execute(ctx);
+      // Only one call to execShell for the build command — no retry
+      expect(execShell).toHaveBeenCalledTimes(1);
     });
   });
 });
