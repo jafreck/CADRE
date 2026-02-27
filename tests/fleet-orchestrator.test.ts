@@ -1356,15 +1356,21 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
   });
 });
 
-describe('FleetOrchestrator — DAG wave-based execution', () => {
+describe('FleetOrchestrator — DAG per-dependency execution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  function makeMockDag(waves: IssueDetail[][], transitiveDepsMap: Record<number, IssueDetail[]> = {}) {
+  function makeMockDag(
+    waves: IssueDetail[][],
+    transitiveDepsMap: Record<number, IssueDetail[]> = {},
+    directDepsMap: Record<number, number[]> = {},
+  ) {
     return {
       getWaves: vi.fn().mockReturnValue(waves),
       getTransitiveDepsOrdered: vi.fn().mockImplementation((num: number) => transitiveDepsMap[num] ?? []),
+      getDirectDeps: vi.fn().mockImplementation((num: number) => directDepsMap[num] ?? []),
+      getAllIssues: vi.fn().mockReturnValue(waves.flat()),
     };
   }
 
@@ -1412,7 +1418,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     expect(mockCheckpoint.setDag).toHaveBeenCalledWith(depMap, [[1]]);
   });
 
-  it('logs the DAG wave plan before executing', async () => {
+  it('logs the DAG plan before executing', async () => {
     const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
     const mockCheckpoint = makeMockFleetCheckpoint();
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
@@ -1431,7 +1437,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     }));
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1, issue2], [issue3]]);
+    const dag = makeMockDag([[issue1, issue2], [issue3]], {}, { 3: [1, 2] });
 
     const fleet = new FleetOrchestrator(
       config,
@@ -1446,51 +1452,14 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
 
     await fleet.run();
 
-    const wavePlanCall = logger.info.mock.calls.find(
-      (call: any[]) => typeof call[0] === 'string' && call[0].includes('DAG wave plan'),
+    const dagPlanCall = logger.info.mock.calls.find(
+      (call: any[]) => typeof call[0] === 'string' && call[0].includes('DAG plan'),
     );
-    expect(wavePlanCall).toBeDefined();
-    expect(wavePlanCall![0]).toBe('DAG wave plan: Wave 0 → [#1, #2] | Wave 1 → [#3]');
+    expect(dagPlanCall).toBeDefined();
+    expect(dagPlanCall![0]).toBe('DAG plan: Wave 0 → [#1, #2] | Wave 1 → [#3]');
   });
 
-  it('calls markWaveComplete() after each wave', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
-    const mockCheckpoint = makeMockFleetCheckpoint();
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
-
-    const config = makeConfig();
-    const issue1 = makeIssue(1);
-    const issue2 = makeIssue(2);
-    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
-    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
-
-    worktreeManager.provision.mockImplementation(async (num: number) => ({
-      path: `/tmp/worktree/${num}`,
-      branch: `cadre/issue-${num}`,
-      baseCommit: 'abc123',
-    }));
-    worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
-
-    const dag = makeMockDag([[issue1], [issue2]]);
-
-    const fleet = new FleetOrchestrator(
-      config,
-      [issue1, issue2],
-      worktreeManager as any,
-      launcher as any,
-      platform as any,
-      logger as any,
-      notifications,
-      dag as any,
-    );
-
-    await fleet.run();
-
-    expect(mockCheckpoint.markWaveComplete).toHaveBeenCalledWith(0);
-    expect(mockCheckpoint.markWaveComplete).toHaveBeenCalledWith(1);
-  });
-
-  it('issues in wave 0 are dispatched before issues in wave 1', async () => {
+  it('issues with no deps are dispatched before their dependents', async () => {
     const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
@@ -1509,7 +1478,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     });
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1], [issue2]]);
+    const dag = makeMockDag([[issue1], [issue2]], {}, { 2: [1] });
 
     const fleet = new FleetOrchestrator(
       config,
@@ -1547,7 +1516,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
     // issue2 transitively depends on issue1
-    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] });
+    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] }, { 2: [1] });
 
     const fleet = new FleetOrchestrator(
       config,
@@ -1594,7 +1563,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
     // issue1 in wave 0 fails with merge conflict; issue2 in wave 1 depends on issue1
-    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] });
+    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] }, { 2: [1] });
 
     // issue1 has no transitive deps; issue2 transitively includes issue1
     dag.getTransitiveDepsOrdered = vi.fn().mockImplementation((num: number) => {
@@ -1621,10 +1590,11 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     expect(depBlockedCall).toBeDefined();
   });
 
-  it('skips completed waves on resume', async () => {
+  it('skips already-completed issues on resume', async () => {
     const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
     const mockCheckpoint = makeMockFleetCheckpoint({
-      getState: vi.fn().mockReturnValue({ completedWaves: [0] }),
+      getState: vi.fn().mockReturnValue({ completedWaves: [] }),
+      isIssueCompleted: vi.fn().mockImplementation((num: number) => num === 1),
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -1636,7 +1606,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
 
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1], [issue2]]);
+    const dag = makeMockDag([[issue1], [issue2]], {}, { 2: [1] });
 
     const fleet = new FleetOrchestrator(
       config,
@@ -1651,7 +1621,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
 
     await fleet.run();
 
-    // issue1 is in wave 0 (completed wave), so provision should only be called for issue2
+    // issue1 is already completed, so provision should only be called for issue2
     const provisionCalls = worktreeManager.provision.mock.calls.map(([num]: [number]) => num);
     expect(provisionCalls).not.toContain(1);
     expect(provisionCalls).toContain(2);
@@ -1747,7 +1717,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     }));
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1], [issue2]]);
+    const dag = makeMockDag([[issue1], [issue2]], {}, { 2: [1] });
 
     const fleet = new FleetOrchestrator(
       config,
@@ -1799,7 +1769,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     (platform as any).mergePullRequest = vi.fn().mockRejectedValue(new Error('PR checks not passing'));
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] });
+    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] }, { 2: [1] });
 
     const fleet = new FleetOrchestrator(
       config,
@@ -1860,7 +1830,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] });
+    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] }, { 2: [1] });
     dag.getTransitiveDepsOrdered = vi.fn().mockImplementation((num: number) => {
       if (num === 2) return [issue1];
       return [];
@@ -1918,7 +1888,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] });
+    const dag = makeMockDag([[issue1], [issue2]], { 2: [issue1] }, { 2: [1] });
     dag.getTransitiveDepsOrdered = vi.fn().mockImplementation((num: number) => {
       if (num === 2) return [issue1];
       return [];
@@ -1955,7 +1925,7 @@ describe('FleetOrchestrator — DAG wave-based execution', () => {
     const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
     worktreeManager.resolveBranchName.mockImplementation((num: number) => `cadre/issue-${num}`);
 
-    const dag = makeMockDag([[issue1, issue2]]);
+    const dag = makeMockDag([[issue1, issue2]], {}, {});
     const depMap = { 2: [1] };
 
     const fleet = new FleetOrchestrator(

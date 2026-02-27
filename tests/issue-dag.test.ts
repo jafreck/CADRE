@@ -153,4 +153,30 @@ describe('IssueDag', () => {
       expect(waves[0][0].number).toBe(1);
     });
   });
+
+  describe('getDirectDeps', () => {
+    it('returns direct dep numbers filtered to the issue set', () => {
+      const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+      const depMap = { 1: [2, 999], 2: [3] }; // 999 not in set
+      const dag = new IssueDag(issues, depMap);
+      expect(dag.getDirectDeps(1)).toEqual([2]);
+      expect(dag.getDirectDeps(2)).toEqual([3]);
+      expect(dag.getDirectDeps(3)).toEqual([]);
+    });
+
+    it('returns empty array for issue with no deps', () => {
+      const issues = [makeIssue(5)];
+      const dag = new IssueDag(issues, {});
+      expect(dag.getDirectDeps(5)).toEqual([]);
+    });
+  });
+
+  describe('getAllIssues', () => {
+    it('returns all issues in the DAG', () => {
+      const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+      const dag = new IssueDag(issues, {});
+      const all = dag.getAllIssues();
+      expect(all.map((i) => i.number).sort()).toEqual([1, 2, 3]);
+    });
+  });
 });

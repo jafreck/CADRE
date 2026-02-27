@@ -467,122 +467,147 @@ export class FleetOrchestrator {
     const waves = dag.getWaves();
     const waveNumbers = waves.map((w) => w.map((i) => i.number));
     this.logger.info(
-      `DAG wave plan: ${waveNumbers.map((w, i) => `Wave ${i} → [${w.map((n) => `#${n}`).join(', ')}]`).join(' | ')}`,
+      `DAG plan: ${waveNumbers.map((w, i) => `Wave ${i} → [${w.map((n) => `#${n}`).join(', ')}]`).join(' | ')}`,
     );
     await this.fleetCheckpoint.setDag(this.dagDepMap ?? {}, waveNumbers);
 
-    const checkpoint = this.fleetCheckpoint.getState();
-    const completedWaves = checkpoint.completedWaves ?? [];
+    // --- Per-dependency scheduling ---
+    // Each issue launches as soon as ALL its direct deps have completed (not wave-gated).
+    const allIssues = new Map(this.issues.map((i) => [i.number, i]));
+    const completed = new Set<number>();          // successfully finished (or skipped-existing-PR)
+    const failed = new Set<number>();             // failed / dep-blocked / dep-merge-conflict
+    const inFlight = new Set<number>();           // currently running
+    const blocked = new Set<number>();            // dep-blocked — will never run
 
     const allResults: PromiseSettledResult<IssueResult>[] = [];
-    // Track issue numbers that are blocked due to dep failures in prior waves
-    const blockedIssueNumbers = new Set<number>();
+    const limit = pLimit(this.config.options.maxParallelIssues);
 
-    for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
-      const wave = waves[waveIdx];
-
-      // Skip completed waves on resume
-      if (completedWaves.includes(waveIdx)) {
-        this.logger.info(`Resume: skipping completed wave ${waveIdx}`);
-        continue;
-      }
-
-      const waveResults: PromiseSettledResult<IssueResult>[] = [];
-
-      // Mark issues already determined to be dep-blocked
-      for (const issue of wave) {
-        if (blockedIssueNumbers.has(issue.number)) {
-          waveResults.push({
-            status: 'fulfilled',
-            value: await this.markIssueDepBlocked(issue),
-          });
+    // On resume, treat already-completed issues as done
+    if (this.config.options.resume) {
+      for (const issue of this.issues) {
+        if (this.fleetCheckpoint.isIssueCompleted(issue.number)) {
+          completed.add(issue.number);
+          this.logger.info(`Resume: issue #${issue.number} already completed`, { issueNumber: issue.number });
         }
       }
-
-      // Determine processable issues for this wave
-      const issuesToRun = wave.filter(
-        (issue) =>
-          !blockedIssueNumbers.has(issue.number) &&
-          !(this.config.options.resume && this.fleetCheckpoint.isIssueCompleted(issue.number)),
-      );
-
-      if (issuesToRun.length < wave.filter((i) => !blockedIssueNumbers.has(i.number)).length) {
-        const skipped = wave.filter((i) => !blockedIssueNumbers.has(i.number)).length - issuesToRun.length;
-        this.logger.info(`Resume: skipping ${skipped} already-completed issues in wave ${waveIdx}`);
-      }
-
-      // Run wave issues in parallel with bounded concurrency
-      const limit = pLimit(this.config.options.maxParallelIssues);
-      const runResults = await Promise.allSettled(
-        issuesToRun.map((issue) => limit(() => this.processIssue(issue, dag))),
-      );
-      waveResults.push(...runResults);
-
-      // Propagate dep-blocked for any dep-failure statuses
-      const depFailureStatuses = new Set(['dep-failed', 'dep-merge-conflict', 'dep-build-broken']);
-      for (const result of runResults) {
-        if (result.status === 'fulfilled') {
-          const cpStatus = this.fleetCheckpoint.getIssueStatus(result.value.issueNumber);
-          if (cpStatus && depFailureStatuses.has(cpStatus.status)) {
-            this.propagateDepBlocked(result.value.issueNumber, waveIdx, waves, dag, blockedIssueNumbers);
-          }
-        }
-      }
-
-      // autoMerge: merge successful PRs into base branch before next wave
-      if (this.config.dag?.autoMerge && waveIdx < waves.length - 1) {
-        for (const result of runResults) {
-          if (result.status === 'fulfilled' && result.value.success && result.value.pr) {
-            const issueNumber = result.value.issueNumber;
-            const pr = result.value.pr;
-            try {
-              await this.platform.mergePullRequest(pr.number, this.config.baseBranch);
-            } catch (err) {
-              this.logger.warn(
-                `Failed to merge PR #${pr.number} for issue #${issueNumber}: ${err}`,
-                { issueNumber },
-              );
-              const issue = wave.find((i) => i.number === issueNumber)!;
-              await this.fleetCheckpoint.setIssueStatus(
-                issueNumber,
-                'dep-merge-conflict',
-                '',
-                '',
-                0,
-                issue.title,
-                String(err),
-              );
-              this.propagateDepBlocked(issueNumber, waveIdx, waves, dag, blockedIssueNumbers);
-            }
-          }
-        }
-      }
-
-      await this.fleetCheckpoint.markWaveComplete(waveIdx);
-      allResults.push(...waveResults);
     }
+
+    /** Check whether all direct deps of `issueNumber` are satisfied (completed). */
+    const depsReady = (issueNumber: number): boolean => {
+      const deps = dag.getDirectDeps(issueNumber);
+      return deps.every((d) => completed.has(d));
+    };
+
+    /** Check whether any direct dep of `issueNumber` has failed/blocked. */
+    const depsFailed = (issueNumber: number): boolean => {
+      const deps = dag.getDirectDeps(issueNumber);
+      return deps.some((d) => failed.has(d) || blocked.has(d));
+    };
+
+    /**
+     * After an issue finishes (success or failure), scan remaining pending issues
+     * and launch any whose deps are now all satisfied.
+     */
+    const scheduleReady = (): void => {
+      for (const [num, issue] of allIssues) {
+        if (completed.has(num) || failed.has(num) || blocked.has(num) || inFlight.has(num)) continue;
+
+        // If any dep failed → mark dep-blocked immediately
+        if (depsFailed(num)) {
+          blocked.add(num);
+          // Fire-and-forget the checkpoint write + push a fulfilled result
+          const blockPromise = this.markIssueDepBlocked(issue).then((result) => {
+            allResults.push({ status: 'fulfilled', value: result });
+            // Recursively check whether blocking this issue unblocks/blocks others
+            scheduleReady();
+          });
+          blockPromise.catch(() => {}); // swallow — markIssueDepBlocked already logs
+          continue;
+        }
+
+        // If all deps done → launch
+        if (depsReady(num)) {
+          inFlight.add(num);
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          limit(() => this.runDagIssue(num, issue, dag, completed, failed, blocked, allResults, limit, scheduleReady));
+        }
+      }
+    };
+
+    // Kick off the initial set of issues with no deps
+    scheduleReady();
+
+    // Wait until every issue has settled (completed / failed / blocked)
+    await new Promise<void>((resolve) => {
+      const check = (): void => {
+        const settled = completed.size + failed.size + blocked.size;
+        if (settled >= allIssues.size) {
+          resolve();
+        } else {
+          setTimeout(check, 200);
+        }
+      };
+      check();
+    });
 
     return allResults;
   }
 
   /**
-   * Mark transitive dependents of a failed issue as dep-blocked in the blocked set.
+   * Run a single DAG issue, then autoMerge if applicable, then notify the scheduler.
    */
-  private propagateDepBlocked(
-    failedIssueNumber: number,
-    failedWaveIdx: number,
-    waves: IssueDetail[][],
+  private async runDagIssue(
+    num: number,
+    issue: IssueDetail,
     dag: IssueDag,
-    blockedSet: Set<number>,
-  ): void {
-    for (const futureWave of waves.slice(failedWaveIdx + 1)) {
-      for (const futureIssue of futureWave) {
-        const transitiveDeps = dag.getTransitiveDepsOrdered(futureIssue.number);
-        if (transitiveDeps.some((d) => d.number === failedIssueNumber)) {
-          blockedSet.add(futureIssue.number);
+    completed: Set<number>,
+    failed: Set<number>,
+    blocked: Set<number>,
+    allResults: PromiseSettledResult<IssueResult>[],
+    _limit: ReturnType<typeof pLimit>,
+    scheduleReady: () => void,
+  ): Promise<void> {
+    try {
+      const result = await this.processIssue(issue, dag);
+      allResults.push({ status: 'fulfilled', value: result });
+
+      const depFailureStatuses = new Set(['dep-failed', 'dep-merge-conflict', 'dep-build-broken']);
+      const cpStatus = this.fleetCheckpoint.getIssueStatus(num);
+      const isFailure = !result.success || (cpStatus && depFailureStatuses.has(cpStatus.status));
+
+      if (isFailure) {
+        failed.add(num);
+      } else {
+        // autoMerge: merge the PR before releasing dependents
+        if (this.config.dag?.autoMerge && result.success && result.pr) {
+          try {
+            await this.platform.mergePullRequest(result.pr.number, this.config.baseBranch);
+          } catch (err) {
+            this.logger.warn(
+              `Failed to merge PR #${result.pr.number} for issue #${num}: ${err}`,
+              { issueNumber: num },
+            );
+            await this.fleetCheckpoint.setIssueStatus(
+              num,
+              'dep-merge-conflict',
+              '',
+              '',
+              0,
+              issue.title,
+              String(err),
+            );
+            failed.add(num);
+            scheduleReady();
+            return;
+          }
         }
+        completed.add(num);
       }
+    } catch (err) {
+      allResults.push({ status: 'rejected', reason: err });
+      failed.add(num);
     }
+    scheduleReady();
   }
 
   /**
