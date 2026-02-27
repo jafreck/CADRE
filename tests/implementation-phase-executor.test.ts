@@ -1340,7 +1340,7 @@ describe('ImplementationPhaseExecutor', () => {
       expect(written).not.toContain('[Diff truncated');
     });
 
-    it('should pass collected sessionSummaries to buildForWholePrCodeReviewer', async () => {
+    it('should pass collected sessionSummaries to build whole-pr-reviewer context', async () => {
       vi.mocked(exists).mockResolvedValue(true);
 
       const summaryData: SessionReviewSummary = {

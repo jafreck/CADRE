@@ -1156,6 +1156,118 @@ describe('ContextBuilder', () => {
     });
   });
 
+  describe('payload omission for agents without payload descriptor', () => {
+    it('should not include payload for issue-analyst', async () => {
+      await builder.build('issue-analyst', { issueNumber: 42, worktreePath: '/tmp/worktree', issueJsonPath: '/tmp/issue.json', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      expect(ctx.payload).toBeUndefined();
+    });
+
+    it('should not include payload for codebase-scout', async () => {
+      await builder.build('codebase-scout', { issueNumber: 42, worktreePath: '/tmp/worktree', analysisPath: '/tmp/analysis.md', fileTreePath: '/tmp/tree.txt', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      expect(ctx.payload).toBeUndefined();
+    });
+
+    it('should not include payload for implementation-planner', async () => {
+      await builder.build('implementation-planner', { issueNumber: 42, worktreePath: '/tmp/worktree', analysisPath: '/tmp/analysis.md', scoutReportPath: '/tmp/scout.md', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      expect(ctx.payload).toBeUndefined();
+    });
+  });
+
+  describe('build code-reviewer payload and output', () => {
+    it('should flatten acceptanceCriteria from multiple steps', async () => {
+      const session: AgentSession = {
+        id: 'session-001',
+        name: 'Multi-step',
+        rationale: 'Multiple steps',
+        dependencies: [],
+        steps: [
+          { id: 's1', name: 'Step 1', description: 'First', files: [], complexity: 'simple' as const, acceptanceCriteria: ['AC-1', 'AC-2'] },
+          { id: 's2', name: 'Step 2', description: 'Second', files: [], complexity: 'simple' as const, acceptanceCriteria: ['AC-3'] },
+        ],
+      };
+      await builder.build('code-reviewer', { issueNumber: 42, worktreePath: '/tmp/worktree', session, diffPath: '/tmp/diff.patch', sessionPlanPath: '/tmp/plan.md', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      const payload = ctx.payload as Record<string, unknown>;
+      expect(payload.acceptanceCriteria).toEqual(['AC-1', 'AC-2', 'AC-3']);
+    });
+
+    it('should set outputPath to review-{sessionId}.md', async () => {
+      const session: AgentSession = {
+        id: 'session-007',
+        name: 'Review',
+        rationale: 'Review',
+        dependencies: [],
+        steps: [{ id: 's1', name: 'S', description: 'S', files: [], complexity: 'simple' as const, acceptanceCriteria: [] }],
+      };
+      await builder.build('code-reviewer', { issueNumber: 42, worktreePath: '/tmp/worktree', session, diffPath: '/tmp/diff.patch', sessionPlanPath: '/tmp/plan.md', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      expect(ctx.outputPath).toBe('/tmp/progress/review-session-007.md');
+    });
+  });
+
+  describe('build code-writer inputFiles and outputPath', () => {
+    const session: AgentSession = {
+      id: 'session-001',
+      name: 'Writer',
+      rationale: 'Writer',
+      dependencies: [],
+      steps: [{ id: 's1', name: 'S', description: 'S', files: [], complexity: 'simple' as const, acceptanceCriteria: [] }],
+    };
+
+    it('should include relevantFiles in inputFiles', async () => {
+      await builder.build('code-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        sessionPlanPath: '/tmp/plan.md',
+        relevantFiles: ['/tmp/worktree/src/a.ts', '/tmp/worktree/src/b.ts'],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      const inputFiles = ctx.inputFiles as string[];
+      expect(inputFiles).toContain('/tmp/worktree/src/a.ts');
+      expect(inputFiles).toContain('/tmp/worktree/src/b.ts');
+      expect(inputFiles).toContain('/tmp/plan.md');
+    });
+
+    it('should set outputPath to worktreePath/.cadre/tasks', async () => {
+      await builder.build('code-writer', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        session,
+        sessionPlanPath: '/tmp/plan.md',
+        relevantFiles: [],
+        progressDir: '/tmp/progress',
+      });
+      const ctx = captureWrittenContext();
+      expect(ctx.outputPath).toBe('/tmp/worktree/.cadre/tasks');
+    });
+  });
+
+  describe('build integration-checker output and phase', () => {
+    it('should set outputPath to integration-report.md', async () => {
+      await builder.build('integration-checker', { issueNumber: 42, worktreePath: '/tmp/worktree', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      expect(ctx.outputPath).toBe('/tmp/progress/integration-report.md');
+    });
+
+    it('should set phase to 4', async () => {
+      await builder.build('integration-checker', { issueNumber: 42, worktreePath: '/tmp/worktree', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      expect(ctx.phase).toBe(4);
+    });
+
+    it('should include worktreePath in inputFiles', async () => {
+      await builder.build('integration-checker', { issueNumber: 42, worktreePath: '/tmp/worktree', progressDir: '/tmp/progress' });
+      const ctx = captureWrittenContext();
+      const inputFiles = ctx.inputFiles as string[];
+      expect(inputFiles).toContain('/tmp/worktree');
+    });
+  });
+
   describe('buildForReviewResponse', () => {
     const makeThread = (overrides: Partial<ReviewThread> = {}): ReviewThread => ({
       id: 'thread-1',
