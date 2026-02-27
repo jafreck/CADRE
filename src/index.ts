@@ -12,6 +12,13 @@ import { loadConfig, applyOverrides } from './config/loader.js';
 import { CadreRuntime } from './core/runtime.js';
 import { AgentLauncher } from './core/agent-launcher.js';
 import { registerAgentsCommand, scaffoldMissingAgents, refreshAgentsFromTemplates } from './cli/agents.js';
+import { StatusService } from './core/status-service.js';
+import { ResetService } from './core/reset-service.js';
+import { ReportService } from './core/report-service.js';
+import { WorktreeLifecycleService } from './core/worktree-lifecycle-service.js';
+import { PreRunValidationSuite, gitValidator, agentBackendValidator, platformValidator, commandValidator, diskValidator } from './validation/index.js';
+import { Logger } from './logging/logger.js';
+import { createPlatformProvider } from './platform/factory.js';
 import { withCommandHandler } from './cli/command-error-handler.js';
 
 const program = new Command();
@@ -109,8 +116,9 @@ program
   .option('-i, --issue <number>', 'Show status for specific issue', parseInt)
   .action(withCommandHandler(async (opts) => {
     const config = await loadConfig(opts.config);
-    const runtime = new CadreRuntime(config);
-    await runtime.status(opts.issue);
+    const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+    const service = new StatusService(config, logger);
+    await service.status(opts.issue);
   }));
 
 // ─── reset ────────────────────────────────────────────
@@ -122,8 +130,9 @@ program
   .option('-p, --phase <number>', 'Reset from specific phase', parseInt)
   .action(withCommandHandler(async (opts) => {
     const config = await loadConfig(opts.config);
-    const runtime = new CadreRuntime(config);
-    await runtime.reset(opts.issue, opts.phase);
+    const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+    const service = new ResetService(config, logger);
+    await service.reset(opts.issue, opts.phase);
   }));
 
 // ─── report ───────────────────────────────────────────
@@ -135,8 +144,9 @@ program
   .option('--history', 'List all historical run reports')
   .action(withCommandHandler(async (opts) => {
     const config = await loadConfig(opts.config);
-    const runtime = new CadreRuntime(config);
-    await runtime.report({ format: opts.format, history: opts.history });
+    const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+    const service = new ReportService(config, logger);
+    await service.report({ format: opts.format, history: opts.history });
   }));
 
 // ─── worktrees ────────────────────────────────────────
@@ -147,11 +157,13 @@ program
   .option('--prune', 'Remove worktrees for completed issues')
   .action(withCommandHandler(async (opts) => {
     const config = await loadConfig(opts.config);
-    const runtime = new CadreRuntime(config);
+    const logger = new Logger({ source: 'fleet', logDir: `${config.stateDir}/logs`, level: 'info', console: true });
+    const provider = createPlatformProvider(config, logger);
+    const service = new WorktreeLifecycleService(config, logger, provider);
     if (opts.prune) {
-      await runtime.pruneWorktrees();
+      await service.pruneWorktrees();
     } else {
-      await runtime.listWorktrees();
+      await service.listWorktrees();
     }
   }));
 
@@ -175,8 +187,14 @@ program
   .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
   .action(withCommandHandler(async (opts) => {
     const config = await loadConfig(opts.config);
-    const runtime = new CadreRuntime(config);
-    const passed = await runtime.validate();
+    const suite = new PreRunValidationSuite([
+      gitValidator,
+      agentBackendValidator,
+      platformValidator,
+      commandValidator,
+      diskValidator,
+    ]);
+    const passed = await suite.run(config);
     process.exit(passed ? 0 : 1);
   }));
 
