@@ -2,17 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import { registerAgentsCommand } from '../src/cli/agents.js';
 
-vi.mock('../src/config/loader.js', () => ({
-  loadConfig: vi.fn().mockResolvedValue({
-    agent: {
-      backend: 'copilot',
+vi.mock('../src/config/loader.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/config/loader.js')>();
+  return {
+    ...actual,
+    loadConfig: vi.fn().mockResolvedValue({
+      agent: {
+        backend: 'copilot',
+        copilot: { agentDir: '/fake/agents' },
+        claude: { agentDir: '/fake/agents' },
+      },
       copilot: { agentDir: '/fake/agents' },
-      claude: { agentDir: '/fake/agents' },
-    },
-    copilot: { agentDir: '/fake/agents' },
-  }),
-  applyOverrides: vi.fn((c: unknown) => c),
-}));
+    }),
+    applyOverrides: vi.fn((c: unknown) => c),
+  };
+});
 
 vi.mock('../src/core/agent-launcher.js', () => ({
   AgentLauncher: {
@@ -303,17 +307,21 @@ describe('cadre run autoscaffold behavior', () => {
   async function loadRunWith(args: string[]) {
     process.argv = ['node', 'index.js', 'run', ...args];
     vi.resetModules();
-    vi.doMock('../src/config/loader.js', () => ({
-      loadConfig: vi.fn().mockResolvedValue({
-        copilot: { agentDir: '/agent-dir' },
-        agent: {
-          backend: 'copilot',
+    vi.doMock('../src/config/loader.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/config/loader.js')>();
+      return {
+        ...actual,
+        loadConfig: vi.fn().mockResolvedValue({
           copilot: { agentDir: '/agent-dir' },
-          claude: { agentDir: '/agent-dir' },
-        },
-      }),
-      applyOverrides: vi.fn((c: unknown) => c),
-    }));
+          agent: {
+            backend: 'copilot',
+            copilot: { agentDir: '/agent-dir' },
+            claude: { agentDir: '/agent-dir' },
+          },
+        }),
+        applyOverrides: vi.fn((c: unknown) => c),
+      };
+    });
     vi.doMock('../src/core/runtime.js', () => ({
       CadreRuntime: vi.fn().mockImplementation(() => ({
         run: vi.fn().mockResolvedValue({ success: true }),
@@ -387,10 +395,14 @@ describe('cadre run --dag flag runtime behavior', () => {
       dag: { enabled: false },
     };
 
-    vi.doMock('../src/config/loader.js', () => ({
-      loadConfig: vi.fn().mockResolvedValue({ ...baseConfig }),
-      applyOverrides: vi.fn((c: unknown) => c),
-    }));
+    vi.doMock('../src/config/loader.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/config/loader.js')>();
+      return {
+        ...actual,
+        loadConfig: vi.fn().mockResolvedValue({ ...baseConfig }),
+        applyOverrides: vi.fn((c: unknown) => c),
+      };
+    });
     vi.doMock('../src/core/runtime.js', () => ({
       CadreRuntime: vi.fn().mockImplementation((cfg: Record<string, unknown>) => {
         capturedConfig = cfg;
@@ -444,16 +456,20 @@ describe('cadre run typed error handling', () => {
   async function loadRunWithErrorFactory(errorFactory: () => Promise<unknown>) {
     process.argv = ['node', 'index.js', 'run'];
     vi.resetModules();
-    vi.doMock('../src/config/loader.js', () => ({
-      loadConfig: vi.fn().mockResolvedValue({
-        agent: {
-          backend: 'copilot',
-          copilot: { agentDir: '/agent-dir' },
-          claude: { agentDir: '/agent-dir' },
-        },
-      }),
-      applyOverrides: vi.fn((c: unknown) => c),
-    }));
+    vi.doMock('../src/config/loader.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/config/loader.js')>();
+      return {
+        ...actual,
+        loadConfig: vi.fn().mockResolvedValue({
+          agent: {
+            backend: 'copilot',
+            copilot: { agentDir: '/agent-dir' },
+            claude: { agentDir: '/agent-dir' },
+          },
+        }),
+        applyOverrides: vi.fn((c: unknown) => c),
+      };
+    });
     vi.doMock('../src/core/runtime.js', () => ({
       CadreRuntime: vi.fn().mockImplementation(() => ({
         run: vi.fn().mockImplementation(async () => { throw await errorFactory(); }),
