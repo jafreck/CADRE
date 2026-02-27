@@ -254,6 +254,28 @@ Out-of-band notifications sent independently of issue comments.
 
 ---
 
+## `dogfood`
+
+Self-reporting mode — when enabled, CADRE automatically creates GitHub issues in its own repository when it encounters runtime problems.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `boolean` | `false` | Enable dogfood mode. When `true`, runtime events create issues in the configured repository. |
+| `maxIssuesPerRun` | `number` (≥ 1) | `5` | Maximum number of issues to create per run to prevent spam. |
+| `labels` | `string[]` | `["cadre-dogfood"]` | Labels applied to every dogfood issue. |
+| `titlePrefix` | `string` | `"[CADRE Dogfood]"` | Prefix prepended to dogfood issue titles. |
+
+```json
+"dogfood": {
+  "enabled": true,
+  "maxIssuesPerRun": 3,
+  "labels": ["cadre-dogfood", "bug"],
+  "titlePrefix": "[CADRE Dogfood]"
+}
+```
+
+---
+
 ## Minimal example
 
 ```json
