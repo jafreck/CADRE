@@ -4,6 +4,7 @@ import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
 import { runWithRetry } from '../util/command-verifier.js';
+import type { BaselineResults } from '@cadre/command-diagnostics';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 1;
@@ -111,11 +112,7 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
       ctx.services.logger.warn(`Baseline capture encountered an error: ${String(err)}`);
     }
 
-    await atomicWriteJSON(baselinePath, {
-      buildExitCode,
-      testExitCode,
-      buildFailures,
-      testFailures,
-    });
+    const baseline: BaselineResults = { buildExitCode, testExitCode, buildFailures, testFailures };
+    await atomicWriteJSON(baselinePath, baseline);
   }
 }

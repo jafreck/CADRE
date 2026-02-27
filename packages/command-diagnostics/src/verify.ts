@@ -1,10 +1,8 @@
-import { execShell } from './process.js';
-import { extractFailures } from './failure-parser.js';
-import { computeRegressions } from '@cadre/command-diagnostics';
+import { execShell } from './exec.js';
+import { extractFailures } from './parse-failures.js';
+import { computeRegressions } from './regression.js';
 
-export type { VerifyCommandConfig, VerifyCommandResult } from '@cadre/command-diagnostics';
-
-export interface RunWithRetryConfig {
+export interface VerifyCommandConfig {
   command: string;
   cwd: string;
   timeout: number;
@@ -17,12 +15,16 @@ export interface RunWithRetryConfig {
   onFixNeeded: (output: string, round: number) => Promise<void>;
 }
 
-export interface RunWithRetryResult {
+export interface VerifyCommandResult {
   exitCode: number | null;
   failures: string[];
   regressions: string[];
   output: string;
 }
+
+/** Backward-compatible aliases */
+export type RunWithRetryConfig = VerifyCommandConfig;
+export type RunWithRetryResult = VerifyCommandResult;
 
 /**
  * Run a shell command with an extract-failures / diff-baseline / fix / retry loop.
@@ -31,7 +33,7 @@ export interface RunWithRetryResult {
  * - **Regression mode** (baseline provided): regressions = failures not in baseline. Retries while regressions exist.
  * - **Exit-code mode** (no baseline): any non-zero exit triggers the fix callback. Retries while exit code ≠ 0.
  */
-export async function runWithRetry(config: RunWithRetryConfig): Promise<RunWithRetryResult> {
+export async function verifyCommand(config: VerifyCommandConfig): Promise<VerifyCommandResult> {
   const { command, cwd, timeout, maxFixRounds, baseline, sentinelValue, onFixNeeded } = config;
 
   let result = await execShell(command, { cwd, timeout });
