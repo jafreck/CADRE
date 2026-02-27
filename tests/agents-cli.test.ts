@@ -51,8 +51,8 @@ function makeProgram(): Command {
 }
 
 describe('AGENT_DEFINITIONS registry', () => {
-  it('should contain exactly 13 entries', () => {
-    expect(AGENT_DEFINITIONS).toHaveLength(13);
+  it('should contain exactly 14 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(14);
   });
 
   it('should have all required fields for every entry', () => {

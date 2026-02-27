@@ -6,6 +6,7 @@ const ALL_AGENT_NAMES: AgentName[] = [
   'issue-analyst',
   'codebase-scout',
   'dependency-analyst',
+  'dep-conflict-resolver',
   'implementation-planner',
   'adjudicator',
   'code-writer',
@@ -17,8 +18,8 @@ const ALL_AGENT_NAMES: AgentName[] = [
 ];
 
 describe('AGENT_DEFINITIONS', () => {
-  it('should contain exactly 13 entries', () => {
-    expect(AGENT_DEFINITIONS).toHaveLength(13);
+  it('should contain exactly 14 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(14);
   });
 
   it('should have one entry for each AgentName', () => {
@@ -75,6 +76,7 @@ describe('AGENT_DEFINITIONS', () => {
     expect(unstructured).toContain('test-writer');
     expect(unstructured).toContain('fix-surgeon');
     expect(unstructured).toContain('conflict-resolver');
+    expect(unstructured).toContain('dep-conflict-resolver');
   });
 
   it('should group analysis agents in phase 1', () => {
@@ -125,5 +127,14 @@ describe('AGENT_DEFINITIONS', () => {
     expect(def?.phaseName).toBe('Analysis & Scouting');
     expect(def?.hasStructuredOutput).toBe(true);
     expect(def?.templateFile).toBe('dependency-analyst.md');
+  });
+
+  it('should have dep-conflict-resolver with correct metadata', () => {
+    const def = AGENT_DEFINITIONS.find((d) => d.name === 'dep-conflict-resolver');
+    expect(def).toBeDefined();
+    expect(def?.phase).toBe(0);
+    expect(def?.phaseName).toBe('Orchestration');
+    expect(def?.hasStructuredOutput).toBe(false);
+    expect(def?.templateFile).toBe('dep-conflict-resolver.md');
   });
 });

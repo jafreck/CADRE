@@ -223,6 +223,52 @@ describe('DependencyBranchMerger', () => {
 
       expect(mockGit.branch).toHaveBeenCalledWith(['-D', 'cadre/deps-42']);
     });
+
+    it('uses resolver callback and continues merge when callback resolves conflict', async () => {
+      const dep = makeDep(10, 'dep issue');
+      const resolver = vi.fn().mockResolvedValue(true);
+
+      await expect(
+        merger.mergeDependencies(42, [dep], 'basesha', '/tmp/worktrees', resolver),
+      ).resolves.toBe('depshead');
+
+      expect(resolver).toHaveBeenCalledOnce();
+      expect((mockGit.raw as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(['add', '-A']);
+      expect((mockGit.raw as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(['commit', '--no-edit']);
+    });
+
+    it('still throws when resolver callback returns false', async () => {
+      const dep = makeDep(10, 'dep issue');
+      const resolver = vi.fn().mockResolvedValue(false);
+
+      await expect(
+        merger.mergeDependencies(42, [dep], 'basesha', '/tmp/worktrees', resolver),
+      ).rejects.toThrow(DependencyMergeConflictError);
+    });
+
+    it('falls back to dep-merge-conflict when resolver succeeds but commit fails', async () => {
+      const dep = makeDep(10, 'dep issue');
+      const resolver = vi.fn().mockResolvedValue(true);
+
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\n');
+        if (Array.isArray(args) && args[0] === 'commit') return Promise.reject(new Error('commit failed'));
+        return Promise.resolve('');
+      });
+
+      await expect(
+        merger.mergeDependencies(42, [dep], 'basesha', '/tmp/worktrees', resolver),
+      ).rejects.toThrow(DependencyMergeConflictError);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('merge commit failed'),
+        expect.objectContaining({ issueNumber: 42 }),
+      );
+    });
   });
 
   describe('conflict on second dep', () => {

@@ -187,6 +187,31 @@ describe('ContextBuilder', () => {
     expect(typeof ctx).toBe('string');
   });
 
+  it('should build context for dep-conflict-resolver with dependency metadata', async () => {
+    const ctx = await builder.buildForDependencyConflictResolver(
+      42,
+      '/tmp/deps-worktree',
+      ['src/a.ts', 'src/b.ts'],
+      'cadre/issue-1',
+      'cadre/deps-42',
+      '/tmp/progress',
+    );
+
+    expect(ctx).toBeDefined();
+    expect(typeof ctx).toBe('string');
+
+    const written = captureWrittenContext();
+    expect(written.agent).toBe('dep-conflict-resolver');
+    expect(written.outputPath).toBe('/tmp/progress/dep-conflict-resolution-report.md');
+    expect(written.inputFiles).toEqual(['/tmp/deps-worktree/src/a.ts', '/tmp/deps-worktree/src/b.ts']);
+
+    const payload = written.payload as Record<string, unknown>;
+    expect(payload.conflictedFiles).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(payload.conflictingBranch).toBe('cadre/issue-1');
+    expect(payload.depsBranch).toBe('cadre/deps-42');
+    expect(payload.baseBranch).toBe('main');
+  });
+
   describe('outputSchema inclusion', () => {
     const task: AgentSession = {
       id: 'session-001',

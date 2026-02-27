@@ -17,6 +17,9 @@ import { NotificationManager } from '../notifications/manager.js';
 import { ReviewResponseOrchestrator } from './review-response-orchestrator.js';
 import { IssueDag } from './issue-dag.js';
 import { DependencyMergeConflictError } from '../errors.js';
+import { ContextBuilder } from '../agents/context-builder.js';
+import { ensureDir } from '../util/fs.js';
+import type { DependencyMergeConflictContext } from '../git/dependency-branch-merger.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -44,6 +47,7 @@ export class FleetOrchestrator {
   private readonly fleetProgress: FleetProgressWriter;
   private readonly tokenTracker: TokenTracker;
   private readonly costEstimator: CostEstimator;
+  private readonly contextBuilder: ContextBuilder;
   private fleetBudgetExceeded = false;
 
   constructor(
@@ -62,6 +66,7 @@ export class FleetOrchestrator {
     this.fleetProgress = new FleetProgressWriter(this.cadreDir, logger);
     this.tokenTracker = new TokenTracker();
     this.costEstimator = new CostEstimator(config.copilot);
+    this.contextBuilder = new ContextBuilder(config, logger);
   }
 
   /**
@@ -263,6 +268,9 @@ export class FleetOrchestrator {
               issue.title,
               transitiveDeps,
               this.config.options.resume,
+              this.config.dag?.onDependencyMergeConflict === 'resolve'
+                ? (ctx: DependencyMergeConflictContext) => this.resolveDagDependencyMergeConflict(issue, ctx)
+                : undefined,
             );
           } catch (err) {
             if (err instanceof DependencyMergeConflictError) {
@@ -458,6 +466,60 @@ export class FleetOrchestrator {
         error,
       };
     }
+  }
+
+  private async resolveDagDependencyMergeConflict(
+    issue: IssueDetail,
+    context: DependencyMergeConflictContext,
+  ): Promise<boolean> {
+    const progressDir = join(this.cadreDir, 'issues', String(issue.number));
+    await ensureDir(progressDir);
+
+    this.logger.info(
+      `DAG dependency merge conflict detected for issue #${issue.number}; launching dep-conflict-resolver`,
+      { issueNumber: issue.number, data: { conflictedFiles: context.conflictedFiles, conflictingBranch: context.conflictingBranch } },
+    );
+
+    const conflictContextPath = await this.contextBuilder.buildForDependencyConflictResolver(
+      issue.number,
+      context.depsWorktreePath,
+      context.conflictedFiles,
+      context.conflictingBranch,
+      context.depsBranch,
+      progressDir,
+    );
+
+    const resolverResult = await this.launcher.launchAgent(
+      {
+        agent: 'dep-conflict-resolver',
+        issueNumber: issue.number,
+        phase: 0,
+        contextPath: conflictContextPath,
+        outputPath: join(progressDir, 'dep-conflict-resolution-report.md'),
+      },
+      context.depsWorktreePath,
+    );
+
+    if (!resolverResult.success || !resolverResult.outputExists) {
+      this.logger.warn(
+        `dep-conflict-resolver failed for issue #${issue.number}; proceeding with dep-merge-conflict fallback`,
+        {
+          issueNumber: issue.number,
+          data: {
+            timedOut: resolverResult.timedOut,
+            exitCode: resolverResult.exitCode,
+            outputExists: resolverResult.outputExists,
+          },
+        },
+      );
+      return false;
+    }
+
+    this.logger.info(`dep-conflict-resolver completed for issue #${issue.number}`, {
+      issueNumber: issue.number,
+      data: { outputPath: resolverResult.outputPath },
+    });
+    return true;
   }
 
   /**

@@ -858,21 +858,27 @@ describe('CadreConfigSchema', () => {
   });
 
   describe('dag', () => {
-    it('should default dag to { enabled: false, verifyDepsBuild: false, autoMerge: false } when omitted', () => {
+    it('should default dag to { enabled: false, verifyDepsBuild: false, autoMerge: false, onDependencyMergeConflict: "fail" } when omitted', () => {
       const result = CadreConfigSchema.parse(validConfig);
-      expect(result.dag).toEqual({ enabled: false, verifyDepsBuild: false, autoMerge: false });
+      expect(result.dag).toEqual({
+        enabled: false,
+        verifyDepsBuild: false,
+        autoMerge: false,
+        onDependencyMergeConflict: 'fail',
+      });
     });
 
     it('should accept dag with all fields set to true', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
-        dag: { enabled: true, verifyDepsBuild: true, autoMerge: true },
+        dag: { enabled: true, verifyDepsBuild: true, autoMerge: true, onDependencyMergeConflict: 'resolve' },
       });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.dag.enabled).toBe(true);
         expect(result.data.dag.verifyDepsBuild).toBe(true);
         expect(result.data.dag.autoMerge).toBe(true);
+        expect(result.data.dag.onDependencyMergeConflict).toBe('resolve');
       }
     });
 
@@ -886,7 +892,16 @@ describe('CadreConfigSchema', () => {
         expect(result.data.dag.enabled).toBe(true);
         expect(result.data.dag.verifyDepsBuild).toBe(false);
         expect(result.data.dag.autoMerge).toBe(false);
+        expect(result.data.dag.onDependencyMergeConflict).toBe('fail');
       }
+    });
+
+    it('should reject invalid onDependencyMergeConflict value', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dag: { enabled: true, onDependencyMergeConflict: 'ask' },
+      });
+      expect(result.success).toBe(false);
     });
 
     it('should reject non-boolean dag.enabled', () => {

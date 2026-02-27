@@ -7,6 +7,7 @@ export type AgentName =
   | 'issue-analyst'
   | 'codebase-scout'
   | 'dependency-analyst'
+  | 'dep-conflict-resolver'
   | 'implementation-planner'
   | 'adjudicator'
   | 'code-writer'
@@ -53,6 +54,14 @@ export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
     description: 'Analyzes a list of issues and infers their dependency relationships, producing a DAG with no cycles.',
     hasStructuredOutput: true,
     templateFile: 'dependency-analyst.md',
+  },
+  {
+    name: 'dep-conflict-resolver',
+    phase: 0,
+    phaseName: 'Orchestration',
+    description: 'Resolves merge conflicts while composing DAG dependency branches before issue implementation starts.',
+    hasStructuredOutput: false,
+    templateFile: 'dep-conflict-resolver.md',
   },
   {
     name: 'implementation-planner',

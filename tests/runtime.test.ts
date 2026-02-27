@@ -1046,7 +1046,7 @@ describe('CadreRuntime — DAG wiring', () => {
   it('instantiates DependencyResolver and calls resolve() when dag.enabled is true', async () => {
     const config = makeRuntimeConfig({
       ...makeConfig([1]),
-      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false },
+      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false, onDependencyMergeConflict: 'fail' },
     });
     const runtime = new CadreRuntime(config);
     await runtime.run();
@@ -1059,7 +1059,7 @@ describe('CadreRuntime — DAG wiring', () => {
   it('passes the resolved dag to FleetOrchestrator when dag.enabled is true', async () => {
     const config = makeRuntimeConfig({
       ...makeConfig([1]),
-      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false },
+      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false, onDependencyMergeConflict: 'fail' },
     });
     const runtime = new CadreRuntime(config);
     await runtime.run();
@@ -1089,7 +1089,7 @@ describe('CadreRuntime — DAG wiring', () => {
 
     const config = makeRuntimeConfig({
       ...makeConfig([1]),
-      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false },
+      dag: { enabled: true, verifyDepsBuild: false, autoMerge: false, onDependencyMergeConflict: 'fail' },
     });
     const runtime = new CadreRuntime(config);
 
