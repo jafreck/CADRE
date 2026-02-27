@@ -99,6 +99,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
     payload: (args) => ({
       sessionId: args.session!.id,
       acceptanceCriteria: args.session!.steps.flatMap((s) => s.acceptanceCriteria),
+      ...(args.issueBody ? { issueBody: args.issueBody } : {}),
     }),
     outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
   },
@@ -123,6 +124,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       baseBranch: helpers.baseBranch,
       fullDiffPath: args.diffPath!,
       sessionSummaries: args.sessionSummaries ?? [],
+      ...(args.issueBody ? { issueBody: args.issueBody } : {}),
     }),
     outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
   },

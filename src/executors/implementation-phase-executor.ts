@@ -233,6 +233,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             diffPath,
             sessionPlanPath,
             progressDir: ctx.io.progressDir,
+            issueBody: ctx.issue.body,
           });
 
           const reviewResult = await ctx.services.launcher.launchAgent(
@@ -398,6 +399,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         sessionPlanPaths,
         progressDir: ctx.io.progressDir,
         sessionSummaries,
+        issueBody: ctx.issue.body,
       });
 
       const reviewResult = await ctx.services.launcher.launchAgent(

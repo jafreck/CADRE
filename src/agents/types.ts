@@ -314,6 +314,7 @@ export interface ContextBuildArgs {
   issueNumber: number;
   worktreePath: string;
   progressDir: string;
+  issueBody?: string;
   issueJsonPath?: string;
   analysisPath?: string;
   fileTreePath?: string;
