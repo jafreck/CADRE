@@ -5,6 +5,8 @@ import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
 import { Logger } from '../logging/logger.js';
 import { createNotificationManager } from '../notifications/manager.js';
+import { DogfoodProvider } from '../notifications/dogfood-provider.js';
+import { GitHubAPI } from '../github/api.js';
 import { StatusService } from './status-service.js';
 import { ResetService } from './reset-service.js';
 import { ReportService } from './report-service.js';
@@ -34,6 +36,16 @@ export class CadreRuntime {
     this.provider = createPlatformProvider(config, this.logger);
 
     const notifications = createNotificationManager(config);
+
+    if (config.dogfood?.enabled) {
+      const dogfoodApi = new GitHubAPI(config.repository, this.logger);
+      const dogfoodProvider = new DogfoodProvider(dogfoodApi, {
+        maxIssuesPerRun: config.dogfood.maxIssuesPerRun,
+        labels: config.dogfood.labels,
+        titlePrefix: config.dogfood.titlePrefix,
+      });
+      notifications.addProvider(dogfoodProvider);
+    }
 
     this.statusService = new StatusService(config, this.logger);
     this.resetService = new ResetService(config, this.logger);

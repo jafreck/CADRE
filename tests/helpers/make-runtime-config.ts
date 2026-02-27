@@ -67,6 +67,7 @@ export function makeRuntimeConfig(overrides: Partial<RuntimeConfig> = {}): Runti
     },
     notifications: { enabled: false, providers: [] },
     reviewResponse: { autoReplyOnResolved: false },
+    dogfood: { enabled: false, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]' },
     ...overrides,
   } as RuntimeConfig;
 }
