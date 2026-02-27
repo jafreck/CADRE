@@ -351,6 +351,20 @@ export const CadreConfigSchema = z.object({
     })
     .default({}),
 
+  /** Dogfood configuration — enables CADRE to create issues against itself. */
+  dogfood: z
+    .object({
+      /** Enable dogfood mode. */
+      enabled: z.boolean().default(false),
+      /** Maximum number of issues to create per run. */
+      maxIssuesPerRun: z.number().int().min(1).default(5),
+      /** Labels to apply to dogfood issues. */
+      labels: z.array(z.string()).default(['cadre-dogfood']),
+      /** Prefix for dogfood issue titles. */
+      titlePrefix: z.string().default('[CADRE Dogfood]'),
+    })
+    .default({ enabled: false, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]' }),
+
   /** DAG (dependency graph) configuration for ordering issues by dependency. */
   dag: z
     .object({

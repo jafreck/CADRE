@@ -103,6 +103,24 @@ export class GitHubAPI {
     });
   }
 
+  /**
+   * Create a new issue. Returns the issue number and URL.
+   */
+  async createIssue(params: {
+    title: string;
+    body: string;
+    labels?: string[];
+  }): Promise<{ number: number; url: string }> {
+    const { data } = await this.octokit.rest.issues.create({
+      owner: this.owner,
+      repo: this.repo,
+      title: params.title,
+      body: params.body,
+      labels: params.labels,
+    });
+    return { number: data.number, url: data.html_url };
+  }
+
   // ── Pull Requests ──
 
   /**
