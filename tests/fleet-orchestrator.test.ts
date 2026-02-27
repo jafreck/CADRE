@@ -1514,6 +1514,85 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     expect(withDepsCall[4]).toBeUndefined();
   });
 
+  it('resolves DAG dependency merge conflict when dep-conflict-resolver succeeds', async () => {
+    const config = makeConfig();
+    const issue = makeIssue(2);
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    const fleet = new FleetOrchestrator(
+      config,
+      [issue],
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const resolved = await (fleet as any).resolveDagDependencyMergeConflict(issue, {
+      issueNumber: issue.number,
+      conflictingBranch: 'cadre/issue-1',
+      depsBranch: 'cadre/deps-2',
+      depsWorktreePath: '/tmp/worktrees/deps-2',
+      conflictedFiles: ['src/conflicted.ts'],
+    });
+
+    expect(resolved).toBe(true);
+    expect(launcher.launchAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: 'dep-conflict-resolver',
+        issueNumber: issue.number,
+        phase: 0,
+      }),
+      '/tmp/worktrees/deps-2',
+    );
+  });
+
+  it('falls back when dep-conflict-resolver fails or output is missing', async () => {
+    const config = makeConfig();
+    const issue = makeIssue(3);
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    launcher.launchAgent = vi.fn().mockResolvedValue({
+      success: false,
+      timedOut: true,
+      exitCode: 124,
+      duration: 100,
+      outputExists: false,
+      outputPath: '/tmp/missing.md',
+      stdout: '',
+      stderr: 'timeout',
+      tokenUsage: null,
+      agent: 'dep-conflict-resolver',
+    });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      [issue],
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const resolved = await (fleet as any).resolveDagDependencyMergeConflict(issue, {
+      issueNumber: issue.number,
+      conflictingBranch: 'cadre/issue-1',
+      depsBranch: 'cadre/deps-3',
+      depsWorktreePath: '/tmp/worktrees/deps-3',
+      conflictedFiles: ['src/conflicted.ts'],
+    });
+
+    expect(resolved).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('dep-conflict-resolver failed'),
+      expect.objectContaining({ issueNumber: issue.number }),
+    );
+  });
+
   it('logs the DAG plan before executing', async () => {
     const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
     const mockCheckpoint = makeMockFleetCheckpoint();

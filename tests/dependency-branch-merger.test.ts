@@ -245,6 +245,30 @@ describe('DependencyBranchMerger', () => {
         merger.mergeDependencies(42, [dep], 'basesha', '/tmp/worktrees', resolver),
       ).rejects.toThrow(DependencyMergeConflictError);
     });
+
+    it('falls back to dep-merge-conflict when resolver succeeds but commit fails', async () => {
+      const dep = makeDep(10, 'dep issue');
+      const resolver = vi.fn().mockResolvedValue(true);
+
+      (mockGit as Record<string, ReturnType<typeof vi.fn>>)['merge'] = vi
+        .fn()
+        .mockRejectedValue(new Error('CONFLICTS'));
+
+      (mockGit.raw as ReturnType<typeof vi.fn>).mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args[0] === 'diff') return Promise.resolve('src/foo.ts\n');
+        if (Array.isArray(args) && args[0] === 'commit') return Promise.reject(new Error('commit failed'));
+        return Promise.resolve('');
+      });
+
+      await expect(
+        merger.mergeDependencies(42, [dep], 'basesha', '/tmp/worktrees', resolver),
+      ).rejects.toThrow(DependencyMergeConflictError);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('merge commit failed'),
+        expect.objectContaining({ issueNumber: 42 }),
+      );
+    });
   });
 
   describe('conflict on second dep', () => {
