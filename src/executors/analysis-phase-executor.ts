@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
-import { runWithRetry } from '../util/command-verifier.js';
+import { captureBaseline as captureBaselineCmd } from '@cadre/command-diagnostics';
 import type { BaselineResults } from '@cadre/command-diagnostics';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
@@ -75,44 +75,19 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
   private async captureBaseline(ctx: PhaseContext): Promise<void> {
     const baselinePath = join(ctx.worktree.path, '.cadre', 'baseline-results.json');
 
-    let buildExitCode = 0;
-    let testExitCode = 0;
-    let buildFailures: string[] = [];
-    let testFailures: string[] = [];
-
+    let baseline: BaselineResults;
     try {
-      if (ctx.config.commands.build) {
-        const result = await runWithRetry({
-          command: ctx.config.commands.build,
-          cwd: ctx.worktree.path,
-          timeout: 300_000,
-          maxFixRounds: 0,
-          onFixNeeded: async () => {},
-        });
-        buildExitCode = result.exitCode ?? 1;
-        if (buildExitCode !== 0) {
-          buildFailures = result.failures;
-        }
-      }
-
-      if (ctx.config.commands.test) {
-        const result = await runWithRetry({
-          command: ctx.config.commands.test,
-          cwd: ctx.worktree.path,
-          timeout: 300_000,
-          maxFixRounds: 0,
-          onFixNeeded: async () => {},
-        });
-        testExitCode = result.exitCode ?? 1;
-        if (testExitCode !== 0) {
-          testFailures = result.failures;
-        }
-      }
+      baseline = await captureBaselineCmd({
+        cwd: ctx.worktree.path,
+        buildCommand: ctx.config.commands.build,
+        testCommand: ctx.config.commands.test,
+        timeout: 300_000,
+      });
     } catch (err) {
       ctx.services.logger.warn(`Baseline capture encountered an error: ${String(err)}`);
+      baseline = { buildExitCode: 0, testExitCode: 0, buildFailures: [], testFailures: [] };
     }
 
-    const baseline: BaselineResults = { buildExitCode, testExitCode, buildFailures, testFailures };
     await atomicWriteJSON(baselinePath, baseline);
   }
 }

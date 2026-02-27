@@ -14,13 +14,24 @@ vi.mock('node:fs/promises', () => ({
   readFile: vi.fn().mockRejectedValue(Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })),
 }));
 
-vi.mock('../src/util/process.js', () => ({
-  execShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+const { sharedExecShell } = vi.hoisted(() => ({
+  sharedExecShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+}));
+
+vi.mock('../packages/command-diagnostics/dist/exec.js', () => ({
+  execShell: sharedExecShell,
+  stripVSCodeEnv: vi.fn((env: Record<string, string>) => env),
+  spawnProcess: vi.fn(),
+  exec: vi.fn(),
+  trackProcess: vi.fn(),
+  killAllTrackedProcesses: vi.fn(),
+  getTrackedProcessCount: vi.fn(() => 0),
 }));
 
 import { exists } from '../src/util/fs.js';
 import { writeFile, readFile } from 'node:fs/promises';
-import { execShell } from '../src/util/process.js';
+
+const execShell = sharedExecShell;
 
 function makeSession(id: string, deps: string[] = [], files: string[] = []): AgentSession {
   return {
