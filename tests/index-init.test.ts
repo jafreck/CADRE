@@ -4,10 +4,14 @@ vi.mock('../src/cli/init.js', () => ({
   runInit: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../src/config/loader.js', () => ({
-  loadConfig: vi.fn().mockResolvedValue({}),
-  applyOverrides: vi.fn((c: unknown) => c),
-}));
+vi.mock('../src/config/loader.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/config/loader.js')>();
+  return {
+    ...actual,
+    loadConfig: vi.fn().mockResolvedValue({}),
+    applyOverrides: vi.fn((c: unknown) => c),
+  };
+});
 
 vi.mock('../src/core/runtime.js', () => ({
   CadreRuntime: vi.fn().mockImplementation(() => ({

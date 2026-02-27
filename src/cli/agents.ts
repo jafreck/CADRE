@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig } from '../config/loader.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
+import { withCommandHandler } from './command-error-handler.js';
 import { exists, statOrNull } from '../util/fs.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -108,75 +109,63 @@ export function registerAgentsCommand(program: Command): void {
     .command('list')
     .description('List all CADRE agents and their file status')
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
-    .action(async (opts: { config: string }) => {
-      try {
-        const config = await loadConfig(opts.config);
-        const agentDir = resolve(resolveAgentDir(config));
+    .action(withCommandHandler(async (opts: { config: string }) => {
+      const config = await loadConfig(opts.config);
+      const agentDir = resolve(resolveAgentDir(config));
 
-        // Header row
-        const col1 = 'Agent'.padEnd(30);
-        const col2 = 'Ph'.padEnd(4);
-        const col3 = 'Phase Name'.padEnd(28);
-        const col4 = 'File';
-        console.log(chalk.bold(`${col1}${col2}${col3}${col4}`));
-        console.log('─'.repeat(72));
+      // Header row
+      const col1 = 'Agent'.padEnd(30);
+      const col2 = 'Ph'.padEnd(4);
+      const col3 = 'Phase Name'.padEnd(28);
+      const col4 = 'File';
+      console.log(chalk.bold(`${col1}${col2}${col3}${col4}`));
+      console.log('─'.repeat(72));
 
-        for (const agent of AGENT_DEFINITIONS) {
-          const filePath = join(agentDir, agentFileName(agent.name));
-          const fileExists = await exists(filePath);
-          const status = fileExists ? chalk.green('✅') : chalk.red('❌');
-          const name = agent.name.padEnd(30);
-          const phase = String(agent.phase).padEnd(4);
-          const phaseName = agent.phaseName.padEnd(28);
-          console.log(`${name}${phase}${phaseName}${status}`);
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(chalk.red(`Error: ${msg}`));
-        process.exit(1);
+      for (const agent of AGENT_DEFINITIONS) {
+        const filePath = join(agentDir, agentFileName(agent.name));
+        const fileExists = await exists(filePath);
+        const status = fileExists ? chalk.green('✅') : chalk.red('❌');
+        const name = agent.name.padEnd(30);
+        const phase = String(agent.phase).padEnd(4);
+        const phaseName = agent.phaseName.padEnd(28);
+        console.log(`${name}${phase}${phaseName}${status}`);
       }
-    });
+    }));
 
   // ─── agents validate ──────────────────────────────────
   agents
     .command('validate')
     .description('Validate that all agent instruction files exist and are non-empty')
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
-    .action(async (opts: { config: string }) => {
-      try {
-        const config = await loadConfig(opts.config);
-        const agentDir = resolve(resolveAgentDir(config));
-        const issues: string[] = [];
+    .action(withCommandHandler(async (opts: { config: string }) => {
+      const config = await loadConfig(opts.config);
+      const agentDir = resolve(resolveAgentDir(config));
+      const issues: string[] = [];
 
-        for (const agent of AGENT_DEFINITIONS) {
-          const filePath = join(agentDir, agentFileName(agent.name));
-          const fileStat = await statOrNull(filePath);
-          if (fileStat === null) {
-            issues.push(`  ❌ Missing: ${filePath}`);
-          } else if (fileStat.size === 0) {
-            issues.push(`  ❌ Empty:   ${filePath}`);
-          }
+      for (const agent of AGENT_DEFINITIONS) {
+        const filePath = join(agentDir, agentFileName(agent.name));
+        const fileStat = await statOrNull(filePath);
+        if (fileStat === null) {
+          issues.push(`  ❌ Missing: ${filePath}`);
+        } else if (fileStat.size === 0) {
+          issues.push(`  ❌ Empty:   ${filePath}`);
         }
+      }
 
-        if (issues.length === 0) {
-          console.log(chalk.green(`✅ All ${AGENT_DEFINITIONS.length} agent files are valid.`));
-          process.exit(0);
-        } else {
-          console.error(
-            chalk.red(`❌ Validation failed — ${issues.length} issue(s) found:\n`) +
-              issues.join('\n'),
-          );
-          console.error(
-            chalk.yellow(
-              `\nAgents are auto-scaffolded on 'cadre run'. Re-run to restore missing files.`,
-            ),
-          );
-          process.exit(1);
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(chalk.red(`Error: ${msg}`));
+      if (issues.length === 0) {
+        console.log(chalk.green(`✅ All ${AGENT_DEFINITIONS.length} agent files are valid.`));
+        process.exit(0);
+      } else {
+        console.error(
+          chalk.red(`❌ Validation failed — ${issues.length} issue(s) found:\n`) +
+            issues.join('\n'),
+        );
+        console.error(
+          chalk.yellow(
+            `\nAgents are auto-scaffolded on 'cadre run'. Re-run to restore missing files.`,
+          ),
+        );
         process.exit(1);
       }
-    });
+    }));
 }

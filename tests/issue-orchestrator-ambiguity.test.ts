@@ -60,14 +60,7 @@ vi.mock('../src/core/progress.js', () => ({
 
 vi.mock('../src/agents/context-builder.js', () => ({
   ContextBuilder: vi.fn(() => ({
-    buildForIssueAnalyst: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-    buildForCodebaseScout: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-    buildForImplementationPlanner: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-    buildForCodeWriter: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-    buildForTestWriter: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-    buildForCodeReviewer: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-    buildForFixSurgeon: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-    buildForPRComposer: vi.fn().mockResolvedValue('/tmp/ctx.json'),
+    build: vi.fn().mockResolvedValue('/tmp/ctx.json'),
   })),
 }));
 
