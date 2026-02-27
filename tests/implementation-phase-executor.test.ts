@@ -78,11 +78,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const contextBuilder = {
-    buildForCodeWriter: vi.fn().mockResolvedValue('/progress/writer-ctx.json'),
-    buildForTestWriter: vi.fn().mockResolvedValue('/progress/test-writer-ctx.json'),
-    buildForCodeReviewer: vi.fn().mockResolvedValue('/progress/reviewer-ctx.json'),
-    buildForWholePrCodeReviewer: vi.fn().mockResolvedValue('/progress/whole-pr-reviewer-ctx.json'),
-    buildForFixSurgeon: vi.fn().mockResolvedValue('/progress/fix-ctx.json'),
+    build: vi.fn().mockResolvedValue('/progress/writer-ctx.json'),
   };
 
   const resultParser = {
@@ -988,16 +984,13 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.any(String),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        'build',
-        3,
+        'fix-surgeon',
+        expect.objectContaining({
+          issueType: 'build',
+          phase: 3,
+        }),
       );
     });
 
@@ -1375,14 +1368,12 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.services.contextBuilder as never as { buildForWholePrCodeReviewer: ReturnType<typeof vi.fn> }).buildForWholePrCodeReviewer,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.arrayContaining([expect.objectContaining({ sessionId: 'session-001', verdict: 'pass' })]),
+        'whole-pr-reviewer',
+        expect.objectContaining({
+          sessionSummaries: expect.arrayContaining([expect.objectContaining({ sessionId: 'session-001', verdict: 'pass' })]),
+        }),
       );
     });
 
@@ -1408,14 +1399,12 @@ describe('ImplementationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.services.contextBuilder as never as { buildForWholePrCodeReviewer: ReturnType<typeof vi.fn> }).buildForWholePrCodeReviewer,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        [],
+        'whole-pr-reviewer',
+        expect.objectContaining({
+          sessionSummaries: [],
+        }),
       );
     });
 

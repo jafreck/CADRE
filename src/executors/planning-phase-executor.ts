@@ -11,13 +11,13 @@ export class PlanningPhaseExecutor implements PhaseExecutor {
     const analysisPath = join(ctx.io.progressDir, 'analysis.md');
     const scoutReportPath = join(ctx.io.progressDir, 'scout-report.md');
 
-    const plannerContextPath = await ctx.services.contextBuilder.buildForImplementationPlanner(
-      ctx.issue.number,
-      ctx.worktree.path,
+    const plannerContextPath = await ctx.services.contextBuilder.build('implementation-planner', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
       analysisPath,
       scoutReportPath,
-      ctx.io.progressDir,
-    );
+      progressDir: ctx.io.progressDir,
+    });
 
     const plannerResult = await launchWithRetry(ctx, 'implementation-planner', {
       agent: 'implementation-planner',

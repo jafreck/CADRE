@@ -5,8 +5,9 @@ import type { CadreConfig } from '../config/schema.js';
 import type {
   AgentName,
   AgentContext,
-  AgentSession,
-  SessionReviewSummary,
+  ContextBuildArgs,
+  AgentContextDescriptor,
+  DescriptorHelpers,
 } from './types.js';
 import type { IssueDetail, ReviewThread } from '../platform/provider.js';
 import { Logger } from '../logging/logger.js';
@@ -19,6 +20,191 @@ import {
   prContentSchema,
 } from './schemas/index.js';
 
+/** Registry mapping each agent to its context descriptor. */
+export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
+  'issue-analyst': {
+    phase: 1,
+    outputFile: (args) => join(args.progressDir, 'analysis.md'),
+    inputFiles: async (args) => [args.issueJsonPath!],
+    outputSchema: zodToJsonSchema(analysisSchema) as Record<string, unknown>,
+  },
+  'codebase-scout': {
+    phase: 1,
+    outputFile: (args) => join(args.progressDir, 'scout-report.md'),
+    inputFiles: async (args) => [args.analysisPath!, args.fileTreePath!],
+    outputSchema: zodToJsonSchema(scoutReportSchema) as Record<string, unknown>,
+  },
+  'implementation-planner': {
+    phase: 2,
+    outputFile: (args) => join(args.progressDir, 'implementation-plan.md'),
+    inputFiles: async (args) => [args.analysisPath!, args.scoutReportPath!],
+    outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
+  },
+  'adjudicator': {
+    phase: 2,
+    outputFile: (args) => join(args.progressDir, 'adjudication.md'),
+    inputFiles: async (args) => [...args.planPaths!],
+    payload: () => ({ decisionType: 'implementation-strategy' }),
+    outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
+  },
+  'code-writer': {
+    phase: 3,
+    sessionId: (args) => args.session?.id ?? args.sessionId,
+    outputFile: (args) => join(args.worktreePath, '.cadre', 'tasks'),
+    inputFiles: async (args, fileExists) => {
+      const files = [args.sessionPlanPath!, ...(args.relevantFiles ?? [])];
+      if (await fileExists(join(args.progressDir, 'analysis.md'))) {
+        files.push(join(args.progressDir, 'analysis.md'));
+      }
+      if (await fileExists(join(args.progressDir, 'scout-report.md'))) {
+        files.push(join(args.progressDir, 'scout-report.md'));
+      }
+      return files;
+    },
+    payload: (args) => {
+      const payload: Record<string, unknown> = {
+        sessionId: args.session!.id,
+        steps: args.session!.steps,
+      };
+      if (args.siblingFiles && args.siblingFiles.length > 0) {
+        payload.siblingFiles = args.siblingFiles;
+      }
+      return payload;
+    },
+  },
+  'test-writer': {
+    phase: 3,
+    sessionId: (args) => args.session?.id ?? args.sessionId,
+    outputFile: (args) => join(args.worktreePath, '.cadre', 'tasks'),
+    inputFiles: async (args) => [...(args.changedFiles ?? []), args.sessionPlanPath!],
+    payload: (args, helpers) => ({
+      sessionId: args.session!.id,
+      testFramework: helpers.detectTestFramework(),
+    }),
+  },
+  'code-reviewer': {
+    phase: 3,
+    sessionId: (args) => args.session?.id ?? args.sessionId,
+    outputFile: (args) => join(args.progressDir, `review-${args.session!.id}.md`),
+    inputFiles: async (args, fileExists) => {
+      const files = [args.diffPath!, args.sessionPlanPath!];
+      if (await fileExists(join(args.progressDir, 'analysis.md'))) {
+        files.push(join(args.progressDir, 'analysis.md'));
+      }
+      if (await fileExists(join(args.progressDir, 'scout-report.md'))) {
+        files.push(join(args.progressDir, 'scout-report.md'));
+      }
+      return files;
+    },
+    payload: (args) => ({
+      sessionId: args.session!.id,
+      acceptanceCriteria: args.session!.steps.flatMap((s) => s.acceptanceCriteria),
+    }),
+    outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
+  },
+  'whole-pr-reviewer': {
+    phase: 3,
+    outputFile: (args) => join(args.progressDir, 'whole-pr-review.md'),
+    inputFiles: async (args, fileExists) => {
+      const files = [...(args.sessionPlanPaths ?? [])];
+      if (await fileExists(join(args.progressDir, 'analysis.md'))) {
+        files.push(join(args.progressDir, 'analysis.md'));
+      }
+      if (await fileExists(join(args.progressDir, 'scout-report.md'))) {
+        files.push(join(args.progressDir, 'scout-report.md'));
+      }
+      if (await fileExists(join(args.progressDir, 'implementation-plan.md'))) {
+        files.push(join(args.progressDir, 'implementation-plan.md'));
+      }
+      return files;
+    },
+    payload: (args, helpers) => ({
+      scope: 'whole-pr',
+      baseBranch: helpers.baseBranch,
+      fullDiffPath: args.diffPath!,
+      sessionSummaries: args.sessionSummaries ?? [],
+    }),
+    outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
+  },
+  'fix-surgeon': {
+    phase: (args) => args.phase ?? 3,
+    sessionId: (args) => args.sessionId,
+    outputFile: (args) => join(args.worktreePath, '.cadre', 'tasks'),
+    inputFiles: async (args, fileExists) => {
+      const files = [args.feedbackPath!, ...(args.changedFiles ?? [])];
+      const phase = args.phase ?? 3;
+      const planFile = phase === 3
+        ? join(args.progressDir, `session-${args.sessionId}.md`)
+        : join(args.progressDir, 'implementation-plan.md');
+      if (await fileExists(planFile)) {
+        files.push(planFile);
+      }
+      if (await fileExists(join(args.progressDir, 'analysis.md'))) {
+        files.push(join(args.progressDir, 'analysis.md'));
+      }
+      if (await fileExists(join(args.progressDir, 'scout-report.md'))) {
+        files.push(join(args.progressDir, 'scout-report.md'));
+      }
+      return files;
+    },
+    payload: (args) => ({
+      sessionId: args.sessionId!,
+      issueType: args.issueType!,
+    }),
+  },
+  'integration-checker': {
+    phase: 4,
+    outputFile: (args) => join(args.progressDir, 'integration-report.md'),
+    inputFiles: async (args, fileExists) => {
+      const files = [args.worktreePath];
+      const baselinePath = join(args.worktreePath, '.cadre', 'baseline-results.json');
+      if (await fileExists(baselinePath)) {
+        files.push(baselinePath);
+      }
+      return files;
+    },
+    payload: (_args, helpers) => ({
+      commands: {
+        build: helpers.commands.build,
+        test: helpers.commands.test,
+        lint: helpers.commands.lint,
+      },
+    }),
+    outputSchema: zodToJsonSchema(integrationReportSchema) as Record<string, unknown>,
+  },
+  'pr-composer': {
+    phase: 5,
+    outputFile: (args) => join(args.progressDir, 'pr-content.md'),
+    inputFiles: async (args) => [args.analysisPath!, args.planPath!, args.integrationReportPath!, args.diffPath!],
+    payload: (args) => ({
+      issueTitle: args.issue!.title,
+      issueBody: args.issue!.body,
+      ...(args.previousParseError ? { previousParseError: args.previousParseError } : {}),
+    }),
+    outputSchema: zodToJsonSchema(prContentSchema) as Record<string, unknown>,
+  },
+  'conflict-resolver': {
+    phase: 0,
+    outputFile: (args) => join(args.progressDir, 'conflict-resolution-report.md'),
+    inputFiles: async (args) => args.conflictedFiles!.map((f) => join(args.worktreePath, f)),
+    payload: (args, helpers) => ({
+      conflictedFiles: args.conflictedFiles!,
+      baseBranch: helpers.baseBranch,
+    }),
+  },
+  'dep-conflict-resolver': {
+    phase: 0,
+    outputFile: (args) => join(args.progressDir, 'dep-conflict-resolution-report.md'),
+    inputFiles: async (args) => args.conflictedFiles!.map((f) => join(args.worktreePath, f)),
+    payload: (args, helpers) => ({
+      conflictedFiles: args.conflictedFiles!,
+      conflictingBranch: args.conflictingBranch!,
+      depsBranch: args.depsBranch!,
+      baseBranch: helpers.baseBranch,
+    }),
+  },
+};
+
 /**
  * Builds per-agent context files.
  * Context files are JSON that tell each agent what inputs to read and where to write outputs.
@@ -30,330 +216,48 @@ export class ContextBuilder {
   ) {}
 
   /**
-   * Build a context file for the issue-analyst agent.
+   * Build a context file for any agent using the registry.
    */
-  async buildForIssueAnalyst(
-    issueNumber: number,
-    worktreePath: string,
-    issueJsonPath: string,
-    progressDir: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'issue-analyst', issueNumber, {
-      agent: 'issue-analyst',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 1,
-      config: { commands: this.config.commands },
-      inputFiles: [issueJsonPath],
-      outputPath: join(progressDir, 'analysis.md'),
-      outputSchema: zodToJsonSchema(analysisSchema) as Record<string, unknown>,
-    });
-  }
+  async build(agent: AgentName, args: ContextBuildArgs): Promise<string> {
+    const descriptor = AGENT_CONTEXT_REGISTRY[agent];
+    if (!descriptor) {
+      throw new Error(`No context descriptor registered for agent: ${agent}`);
+    }
 
-  /**
-   * Build a context file for the codebase-scout agent.
-   */
-  async buildForCodebaseScout(
-    issueNumber: number,
-    worktreePath: string,
-    analysisPath: string,
-    fileTreePath: string,
-    progressDir: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'codebase-scout', issueNumber, {
-      agent: 'codebase-scout',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 1,
-      config: { commands: this.config.commands },
-      inputFiles: [analysisPath, fileTreePath],
-      outputPath: join(progressDir, 'scout-report.md'),
-      outputSchema: zodToJsonSchema(scoutReportSchema) as Record<string, unknown>,
-    });
-  }
+    const phase = typeof descriptor.phase === 'function'
+      ? descriptor.phase(args)
+      : descriptor.phase;
 
-  /**
-   * Build a context file for the implementation-planner agent.
-   */
-  async buildForImplementationPlanner(
-    issueNumber: number,
-    worktreePath: string,
-    analysisPath: string,
-    scoutReportPath: string,
-    progressDir: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'implementation-planner', issueNumber, {
-      agent: 'implementation-planner',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 2,
-      config: { commands: this.config.commands },
-      inputFiles: [analysisPath, scoutReportPath],
-      outputPath: join(progressDir, 'implementation-plan.md'),
-      outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
-    });
-  }
+    const sessionId = descriptor.sessionId?.(args);
+    const outputPath = descriptor.outputFile(args);
+    const inputFiles = await descriptor.inputFiles(args, exists);
 
-  /**
-   * Build a context file for the adjudicator agent.
-   */
-  async buildForAdjudicator(
-    issueNumber: number,
-    worktreePath: string,
-    planPaths: string[],
-    progressDir: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'adjudicator', issueNumber, {
-      agent: 'adjudicator',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 2,
-      config: { commands: this.config.commands },
-      inputFiles: planPaths,
-      outputPath: join(progressDir, 'adjudication.md'),
-      payload: { decisionType: 'implementation-strategy' },
-      outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
-    });
-  }
-
-  /**
-   * Build a context file for the code-writer agent.
-   */
-  async buildForCodeWriter(
-    issueNumber: number,
-    worktreePath: string,
-    session: AgentSession,
-    sessionPlanPath: string,
-    relevantFiles: string[],
-    progressDir: string,
-    siblingFiles?: string[],
-  ): Promise<string> {
-    const payload: Record<string, unknown> = {
-      sessionId: session.id,
-      steps: session.steps,
+    const helpers: DescriptorHelpers = {
+      baseBranch: this.config.baseBranch,
+      commands: this.config.commands,
+      detectTestFramework: () => this.detectTestFramework(),
     };
-    if (siblingFiles && siblingFiles.length > 0) {
-      payload.siblingFiles = siblingFiles;
-    }
-    const inputFiles = [sessionPlanPath, ...relevantFiles];
-    if (await exists(join(progressDir, 'analysis.md'))) {
-      inputFiles.push(join(progressDir, 'analysis.md'));
-    }
-    if (await exists(join(progressDir, 'scout-report.md'))) {
-      inputFiles.push(join(progressDir, 'scout-report.md'));
-    }
-    return this.writeContext(progressDir, 'code-writer', issueNumber, {
-      agent: 'code-writer',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 3,
-      sessionId: session.id,
-      config: { commands: this.config.commands },
-      inputFiles,
-      outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
-      payload,
-    });
-  }
 
-  /**
-   * Build a context file for the test-writer agent.
-   */
-  async buildForTestWriter(
-    issueNumber: number,
-    worktreePath: string,
-    session: AgentSession,
-    changedFiles: string[],
-    sessionPlanPath: string,
-    progressDir: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'test-writer', issueNumber, {
-      agent: 'test-writer',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 3,
-      sessionId: session.id,
-      config: { commands: this.config.commands },
-      inputFiles: [...changedFiles, sessionPlanPath],
-      outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
-      payload: {
-        sessionId: session.id,
-        testFramework: this.detectTestFramework(),
-      },
-    });
-  }
+    const payload = descriptor.payload
+      ? await descriptor.payload(args, helpers)
+      : undefined;
 
-  /**
-   * Build a context file for the code-reviewer agent.
-   */
-  async buildForCodeReviewer(
-    issueNumber: number,
-    worktreePath: string,
-    session: AgentSession,
-    diffPath: string,
-    sessionPlanPath: string,
-    progressDir: string,
-  ): Promise<string> {
-    // Aggregate acceptance criteria from all steps in the session
-    const acceptanceCriteria = session.steps.flatMap((s) => s.acceptanceCriteria);
-    const inputFiles = [diffPath, sessionPlanPath];
-    if (await exists(join(progressDir, 'analysis.md'))) {
-      inputFiles.push(join(progressDir, 'analysis.md'));
-    }
-    if (await exists(join(progressDir, 'scout-report.md'))) {
-      inputFiles.push(join(progressDir, 'scout-report.md'));
-    }
-    return this.writeContext(progressDir, 'code-reviewer', issueNumber, {
-      agent: 'code-reviewer',
-      issueNumber,
+    const context: AgentContext = {
+      agent,
+      issueNumber: args.issueNumber,
       projectName: this.config.projectName,
       repository: this.config.repository,
-      worktreePath,
-      phase: 3,
-      sessionId: session.id,
-      config: { commands: this.config.commands },
-      inputFiles,
-      outputPath: join(progressDir, `review-${session.id}.md`),
-      payload: {
-        sessionId: session.id,
-        acceptanceCriteria,
-      },
-      outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
-    });
-  }
-
-  /**
-   * Build a context file for the whole-PR code-reviewer agent.
-   * Receives the path to the full diff on disk, all session plan files, and the
-   * standard analysis/scout context — giving it cross-session visibility.
-   * The diff is referenced by path in the payload (`fullDiffPath`) rather than
-   * being inlined as an input file; the agent uses file-read tools to access it.
-   */
-  async buildForWholePrCodeReviewer(
-    issueNumber: number,
-    worktreePath: string,
-    diffPath: string,
-    sessionPlanPaths: string[],
-    progressDir: string,
-    sessionSummaries: SessionReviewSummary[] = [],
-  ): Promise<string> {
-    const inputFiles = [...sessionPlanPaths];
-    if (await exists(join(progressDir, 'analysis.md'))) {
-      inputFiles.push(join(progressDir, 'analysis.md'));
-    }
-    if (await exists(join(progressDir, 'scout-report.md'))) {
-      inputFiles.push(join(progressDir, 'scout-report.md'));
-    }
-    if (await exists(join(progressDir, 'implementation-plan.md'))) {
-      inputFiles.push(join(progressDir, 'implementation-plan.md'));
-    }
-    return this.writeContext(progressDir, 'whole-pr-reviewer', issueNumber, {
-      agent: 'whole-pr-reviewer',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 3,
-      config: { commands: this.config.commands },
-      inputFiles,
-      outputPath: join(progressDir, 'whole-pr-review.md'),
-      payload: {
-        scope: 'whole-pr',
-        baseBranch: this.config.baseBranch,
-        fullDiffPath: diffPath,
-        sessionSummaries,
-      },
-      outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
-    });
-  }
-
-  /**
-   * Build a context file for the fix-surgeon agent.
-   */
-  async buildForFixSurgeon(
-    issueNumber: number,
-    worktreePath: string,
-    sessionId: string,
-    feedbackPath: string,
-    changedFiles: string[],
-    progressDir: string,
-    issueType: 'review' | 'test-failure' | 'build',
-    phase: 3 | 4,
-  ): Promise<string> {
-    const inputFiles = [feedbackPath, ...changedFiles];
-    const planFile = phase === 3
-      ? join(progressDir, `session-${sessionId}.md`)
-      : join(progressDir, 'implementation-plan.md');
-    if (await exists(planFile)) {
-      inputFiles.push(planFile);
-    }
-    if (await exists(join(progressDir, 'analysis.md'))) {
-      inputFiles.push(join(progressDir, 'analysis.md'));
-    }
-    if (await exists(join(progressDir, 'scout-report.md'))) {
-      inputFiles.push(join(progressDir, 'scout-report.md'));
-    }
-    return this.writeContext(progressDir, 'fix-surgeon', issueNumber, {
-      agent: 'fix-surgeon',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
+      worktreePath: args.worktreePath,
       phase,
-      sessionId,
+      ...(sessionId !== undefined ? { sessionId } : {}),
       config: { commands: this.config.commands },
       inputFiles,
-      outputPath: join(worktreePath, '.cadre', 'tasks'), // scratch artifacts stay in .cadre/
-      payload: {
-        sessionId,
-        issueType,
-      },
-    });
-  }
+      outputPath,
+      ...(payload !== undefined ? { payload } : {}),
+      ...(descriptor.outputSchema !== undefined ? { outputSchema: descriptor.outputSchema } : {}),
+    };
 
-  /**
-   * Build a context file for the integration-checker agent.
-   */
-  async buildForIntegrationChecker(
-    issueNumber: number,
-    worktreePath: string,
-    progressDir: string,
-  ): Promise<string> {
-    const inputFiles = [worktreePath];
-    const baselinePath = join(worktreePath, '.cadre', 'baseline-results.json');
-    if (await exists(baselinePath)) {
-      inputFiles.push(baselinePath);
-    }
-    return this.writeContext(progressDir, 'integration-checker', issueNumber, {
-      agent: 'integration-checker',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 4,
-      config: { commands: this.config.commands },
-      inputFiles,
-      outputPath: join(progressDir, 'integration-report.md'),
-      payload: {
-        commands: {
-          build: this.config.commands.build,
-          test: this.config.commands.test,
-          lint: this.config.commands.lint,
-        },
-      },
-      outputSchema: zodToJsonSchema(integrationReportSchema) as Record<string, unknown>,
-    });
+    return this.writeContext(args.progressDir, agent, args.issueNumber, context);
   }
 
   /**
@@ -384,100 +288,6 @@ export class ContextBuilder {
     }
 
     return lines.join('\n');
-  }
-
-  /**
-   * Build a context file for the pr-composer agent.
-   */
-  async buildForPRComposer(
-    issueNumber: number,
-    worktreePath: string,
-    issue: IssueDetail,
-    analysisPath: string,
-    planPath: string,
-    integrationReportPath: string,
-    diffPath: string,
-    progressDir: string,
-    previousParseError?: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'pr-composer', issueNumber, {
-      agent: 'pr-composer',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 5,
-      config: { commands: this.config.commands },
-      inputFiles: [analysisPath, planPath, integrationReportPath, diffPath],
-      outputPath: join(progressDir, 'pr-content.md'),
-      payload: {
-        issueTitle: issue.title,
-        issueBody: issue.body,
-        ...(previousParseError ? { previousParseError } : {}),
-      },
-      outputSchema: zodToJsonSchema(prContentSchema) as Record<string, unknown>,
-    });
-  }
-
-  /**
-   * Build a context file for the conflict-resolver agent.
-   * @param issueNumber   Issue associated with this worktree.
-   * @param worktreePath  Absolute path to the worktree root.
-   * @param conflictedFiles  Paths (relative to worktreePath) of files with conflict markers.
-   * @param progressDir   Directory where context and output files are written.
-   */
-  async buildForConflictResolver(
-    issueNumber: number,
-    worktreePath: string,
-    conflictedFiles: string[],
-    progressDir: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'conflict-resolver', issueNumber, {
-      agent: 'conflict-resolver',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath,
-      phase: 0,
-      config: { commands: this.config.commands },
-      inputFiles: conflictedFiles.map((f) => join(worktreePath, f)),
-      outputPath: join(progressDir, 'conflict-resolution-report.md'),
-      payload: {
-        conflictedFiles,
-        baseBranch: this.config.baseBranch,
-      },
-    });
-  }
-
-  /**
-   * Build a context file for the dep-conflict-resolver agent used during
-   * DAG dependency branch composition.
-   */
-  async buildForDependencyConflictResolver(
-    issueNumber: number,
-    depsWorktreePath: string,
-    conflictedFiles: string[],
-    conflictingBranch: string,
-    depsBranch: string,
-    progressDir: string,
-  ): Promise<string> {
-    return this.writeContext(progressDir, 'dep-conflict-resolver', issueNumber, {
-      agent: 'dep-conflict-resolver',
-      issueNumber,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
-      worktreePath: depsWorktreePath,
-      phase: 0,
-      config: { commands: this.config.commands },
-      inputFiles: conflictedFiles.map((f) => join(depsWorktreePath, f)),
-      outputPath: join(progressDir, 'dep-conflict-resolution-report.md'),
-      payload: {
-        conflictedFiles,
-        conflictingBranch,
-        depsBranch,
-        baseBranch: this.config.baseBranch,
-      },
-    });
   }
 
   /**

@@ -167,12 +167,12 @@ export class ReviewResponseOrchestrator {
             );
 
             // Build context for the conflict-resolver agent.
-            const conflictContextPath = await this.contextBuilder.buildForConflictResolver(
+            const conflictContextPath = await this.contextBuilder.build('conflict-resolver', {
               issueNumber,
-              worktree.path,
-              rebaseStartResult.conflictedFiles,
+              worktreePath: worktree.path,
+              conflictedFiles: rebaseStartResult.conflictedFiles,
               progressDir,
-            );
+            });
 
             // Launch the agent; it writes resolved file content directly to disk.
             const resolverResult = await this.launcher.launchAgent(

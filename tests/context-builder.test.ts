@@ -76,38 +76,38 @@ describe('ContextBuilder', () => {
   }
 
   it('should build context for issue-analyst', async () => {
-    const ctx = await builder.buildForIssueAnalyst(
-      42,
-      '/tmp/worktree',
-      '/tmp/issue.json',
-      '/tmp/progress',
-    );
+    const ctx = await builder.build('issue-analyst', {
+      issueNumber: 42,
+      worktreePath: '/tmp/worktree',
+      issueJsonPath: '/tmp/issue.json',
+      progressDir: '/tmp/progress',
+    });
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
   });
 
   it('should build context for codebase-scout', async () => {
-    const ctx = await builder.buildForCodebaseScout(
-      42,
-      '/tmp/worktree',
-      '/tmp/analysis.md',
-      '/tmp/file-tree.txt',
-      '/tmp/progress',
-    );
+    const ctx = await builder.build('codebase-scout', {
+      issueNumber: 42,
+      worktreePath: '/tmp/worktree',
+      analysisPath: '/tmp/analysis.md',
+      fileTreePath: '/tmp/file-tree.txt',
+      progressDir: '/tmp/progress',
+    });
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
   });
 
   it('should build context for implementation-planner', async () => {
-    const ctx = await builder.buildForImplementationPlanner(
-      42,
-      '/tmp/worktree',
-      '/tmp/analysis.md',
-      '/tmp/scout-report.md',
-      '/tmp/progress',
-    );
+    const ctx = await builder.build('implementation-planner', {
+      issueNumber: 42,
+      worktreePath: '/tmp/worktree',
+      analysisPath: '/tmp/analysis.md',
+      scoutReportPath: '/tmp/scout-report.md',
+      progressDir: '/tmp/progress',
+    });
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
@@ -129,14 +129,14 @@ describe('ContextBuilder', () => {
       }],
     };
 
-    const ctx = await builder.buildForCodeWriter(
-      42,
-      '/tmp/worktree',
+    const ctx = await builder.build('code-writer', {
+      issueNumber: 42,
+      worktreePath: '/tmp/worktree',
       session,
-      '/tmp/task-plan.md',
-      ['src/auth/login.ts'],
-      '/tmp/progress',
-    );
+      sessionPlanPath: '/tmp/task-plan.md',
+      relevantFiles: ['src/auth/login.ts'],
+      progressDir: '/tmp/progress',
+    });
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
@@ -158,44 +158,44 @@ describe('ContextBuilder', () => {
       }],
     };
 
-    const ctx = await builder.buildForCodeReviewer(
-      42,
-      '/tmp/worktree',
+    const ctx = await builder.build('code-reviewer', {
+      issueNumber: 42,
+      worktreePath: '/tmp/worktree',
       session,
-      '/tmp/diff.patch',
-      '/tmp/task-plan.md',
-      '/tmp/progress',
-    );
+      diffPath: '/tmp/diff.patch',
+      sessionPlanPath: '/tmp/task-plan.md',
+      progressDir: '/tmp/progress',
+    });
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
   });
 
   it('should build context for pr-composer', async () => {
-    const ctx = await builder.buildForPRComposer(
-      42,
-      '/tmp/worktree',
-      mockIssue,
-      '/tmp/analysis.md',
-      '/tmp/plan.md',
-      '/tmp/integration.md',
-      '/tmp/diff.patch',
-      '/tmp/progress',
-    );
+    const ctx = await builder.build('pr-composer', {
+      issueNumber: 42,
+      worktreePath: '/tmp/worktree',
+      issue: mockIssue,
+      analysisPath: '/tmp/analysis.md',
+      planPath: '/tmp/plan.md',
+      integrationReportPath: '/tmp/integration.md',
+      diffPath: '/tmp/diff.patch',
+      progressDir: '/tmp/progress',
+    });
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
   });
 
   it('should build context for dep-conflict-resolver with dependency metadata', async () => {
-    const ctx = await builder.buildForDependencyConflictResolver(
-      42,
-      '/tmp/deps-worktree',
-      ['src/a.ts', 'src/b.ts'],
-      'cadre/issue-1',
-      'cadre/deps-42',
-      '/tmp/progress',
-    );
+    const ctx = await builder.build('dep-conflict-resolver', {
+      issueNumber: 42,
+      worktreePath: '/tmp/deps-worktree',
+      conflictedFiles: ['src/a.ts', 'src/b.ts'],
+      conflictingBranch: 'cadre/issue-1',
+      depsBranch: 'cadre/deps-42',
+      progressDir: '/tmp/progress',
+    });
 
     expect(ctx).toBeDefined();
     expect(typeof ctx).toBe('string');
@@ -229,62 +229,62 @@ describe('ContextBuilder', () => {
     };
 
     it('should include outputSchema for issue-analyst', async () => {
-      await builder.buildForIssueAnalyst(42, '/tmp/worktree', '/tmp/issue.json', '/tmp/progress');
+      await builder.build('issue-analyst', { issueNumber: 42, worktreePath: '/tmp/worktree', issueJsonPath: '/tmp/issue.json', progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeDefined();
       expect(typeof ctx.outputSchema).toBe('object');
     });
 
     it('should include outputSchema for codebase-scout', async () => {
-      await builder.buildForCodebaseScout(42, '/tmp/worktree', '/tmp/analysis.md', '/tmp/file-tree.txt', '/tmp/progress');
+      await builder.build('codebase-scout', { issueNumber: 42, worktreePath: '/tmp/worktree', analysisPath: '/tmp/analysis.md', fileTreePath: '/tmp/file-tree.txt', progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeDefined();
       expect(typeof ctx.outputSchema).toBe('object');
     });
 
     it('should include outputSchema for implementation-planner', async () => {
-      await builder.buildForImplementationPlanner(42, '/tmp/worktree', '/tmp/analysis.md', '/tmp/scout.md', '/tmp/progress');
+      await builder.build('implementation-planner', { issueNumber: 42, worktreePath: '/tmp/worktree', analysisPath: '/tmp/analysis.md', scoutReportPath: '/tmp/scout.md', progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeDefined();
       expect(typeof ctx.outputSchema).toBe('object');
     });
 
     it('should include outputSchema for adjudicator', async () => {
-      await builder.buildForAdjudicator(42, '/tmp/worktree', ['/tmp/plan1.md'], '/tmp/progress');
+      await builder.build('adjudicator', { issueNumber: 42, worktreePath: '/tmp/worktree', planPaths: ['/tmp/plan1.md'], progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeDefined();
       expect(typeof ctx.outputSchema).toBe('object');
     });
 
     it('should include outputSchema for code-reviewer', async () => {
-      await builder.buildForCodeReviewer(42, '/tmp/worktree', task, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress');
+      await builder.build('code-reviewer', { issueNumber: 42, worktreePath: '/tmp/worktree', session: task, diffPath: '/tmp/diff.patch', sessionPlanPath: '/tmp/task-plan.md', progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeDefined();
       expect(typeof ctx.outputSchema).toBe('object');
     });
 
     it('should include outputSchema for integration-checker', async () => {
-      await builder.buildForIntegrationChecker(42, '/tmp/worktree', '/tmp/progress');
+      await builder.build('integration-checker', { issueNumber: 42, worktreePath: '/tmp/worktree', progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeDefined();
       expect(typeof ctx.outputSchema).toBe('object');
     });
 
     it('should include outputSchema for pr-composer', async () => {
-      await builder.buildForPRComposer(42, '/tmp/worktree', mockIssue, '/tmp/analysis.md', '/tmp/plan.md', '/tmp/integration.md', '/tmp/diff.patch', '/tmp/progress');
+      await builder.build('pr-composer', { issueNumber: 42, worktreePath: '/tmp/worktree', issue: mockIssue, analysisPath: '/tmp/analysis.md', planPath: '/tmp/plan.md', integrationReportPath: '/tmp/integration.md', diffPath: '/tmp/diff.patch', progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeDefined();
       expect(typeof ctx.outputSchema).toBe('object');
     });
 
     it('should NOT include outputSchema for code-writer', async () => {
-      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress');
+      await builder.build('code-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session: task, sessionPlanPath: '/tmp/task-plan.md', relevantFiles: [], progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
     });
   });
 
-  describe('buildForCodeWriter siblingFiles', () => {
+  describe('build code-writer siblingFiles', () => {
     const task: AgentSession = {
       id: 'session-001',
       name: 'Fix login',
@@ -302,28 +302,28 @@ describe('ContextBuilder', () => {
 
     it('should include siblingFiles in payload when provided and non-empty', async () => {
       const siblingFiles = ['src/auth/utils.ts', 'src/config.ts'];
-      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress', siblingFiles);
+      await builder.build('code-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session: task, sessionPlanPath: '/tmp/task-plan.md', relevantFiles: [], progressDir: '/tmp/progress', siblingFiles });
       const ctx = captureWrittenContext();
       const payload = ctx.payload as Record<string, unknown>;
       expect(payload.siblingFiles).toEqual(siblingFiles);
     });
 
     it('should not include siblingFiles in payload when omitted', async () => {
-      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress');
+      await builder.build('code-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session: task, sessionPlanPath: '/tmp/task-plan.md', relevantFiles: [], progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       const payload = ctx.payload as Record<string, unknown>;
       expect(payload.siblingFiles).toBeUndefined();
     });
 
     it('should not include siblingFiles in payload when passed as empty array', async () => {
-      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress', []);
+      await builder.build('code-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session: task, sessionPlanPath: '/tmp/task-plan.md', relevantFiles: [], progressDir: '/tmp/progress', siblingFiles: [] });
       const ctx = captureWrittenContext();
       const payload = ctx.payload as Record<string, unknown>;
       expect(payload.siblingFiles).toBeUndefined();
     });
 
     it('should always include sessionId and steps in payload regardless of siblingFiles', async () => {
-      await builder.buildForCodeWriter(42, '/tmp/worktree', task, '/tmp/task-plan.md', [], '/tmp/progress', ['src/other.ts']);
+      await builder.build('code-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session: task, sessionPlanPath: '/tmp/task-plan.md', relevantFiles: [], progressDir: '/tmp/progress', siblingFiles: ['src/other.ts'] });
       const ctx = captureWrittenContext();
       const payload = ctx.payload as Record<string, unknown>;
       expect(payload.sessionId).toBe(task.id);
@@ -348,13 +348,13 @@ describe('ContextBuilder', () => {
     };
 
     it('should NOT include outputSchema for test-writer', async () => {
-      await builder.buildForTestWriter(42, '/tmp/worktree', task, [], '/tmp/task-plan.md', '/tmp/progress');
+      await builder.build('test-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session: task, changedFiles: [], sessionPlanPath: '/tmp/task-plan.md', progressDir: '/tmp/progress' });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
     });
 
     it('should NOT include outputSchema for fix-surgeon', async () => {
-      await builder.buildForFixSurgeon(42, '/tmp/worktree', task.id, '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+      await builder.build('fix-surgeon', { issueNumber: 42, worktreePath: '/tmp/worktree', sessionId: task.id, feedbackPath: '/tmp/feedback.md', changedFiles: [], progressDir: '/tmp/progress', issueType: 'review', phase: 3 });
       const ctx = captureWrittenContext();
       expect(ctx.outputSchema).toBeUndefined();
     });
@@ -376,10 +376,10 @@ describe('ContextBuilder', () => {
       }],
     };
 
-    describe('buildForCodeWriter', () => {
+    describe('build code-writer', () => {
       it('includes analysis.md and scout-report.md in inputFiles when they exist', async () => {
         vi.mocked(access).mockResolvedValue(undefined);
-        await builder.buildForCodeWriter(42, '/tmp/worktree', session, '/tmp/task-plan.md', [], '/tmp/progress');
+        await builder.build('code-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session, sessionPlanPath: '/tmp/task-plan.md', relevantFiles: [], progressDir: '/tmp/progress' });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).toContain('/tmp/progress/analysis.md');
@@ -388,7 +388,7 @@ describe('ContextBuilder', () => {
 
       it('excludes analysis.md and scout-report.md from inputFiles when they do not exist', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForCodeWriter(42, '/tmp/worktree', session, '/tmp/task-plan.md', [], '/tmp/progress');
+        await builder.build('code-writer', { issueNumber: 42, worktreePath: '/tmp/worktree', session, sessionPlanPath: '/tmp/task-plan.md', relevantFiles: [], progressDir: '/tmp/progress' });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
@@ -396,10 +396,10 @@ describe('ContextBuilder', () => {
       });
     });
 
-    describe('buildForCodeReviewer', () => {
+    describe('build code-reviewer', () => {
       it('includes analysis.md and scout-report.md in inputFiles when they exist', async () => {
         vi.mocked(access).mockResolvedValue(undefined);
-        await builder.buildForCodeReviewer(42, '/tmp/worktree', session, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress');
+        await builder.build('code-reviewer', { issueNumber: 42, worktreePath: '/tmp/worktree', session, diffPath: '/tmp/diff.patch', sessionPlanPath: '/tmp/task-plan.md', progressDir: '/tmp/progress' });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).toContain('/tmp/progress/analysis.md');
@@ -408,7 +408,7 @@ describe('ContextBuilder', () => {
 
       it('excludes analysis.md and scout-report.md from inputFiles when they do not exist', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForCodeReviewer(42, '/tmp/worktree', session, '/tmp/diff.patch', '/tmp/task-plan.md', '/tmp/progress');
+        await builder.build('code-reviewer', { issueNumber: 42, worktreePath: '/tmp/worktree', session, diffPath: '/tmp/diff.patch', sessionPlanPath: '/tmp/task-plan.md', progressDir: '/tmp/progress' });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
@@ -416,10 +416,10 @@ describe('ContextBuilder', () => {
       });
     });
 
-    describe('buildForFixSurgeon', () => {
+    describe('build fix-surgeon', () => {
       it('includes phase-3 session plan when phase===3 and file exists', async () => {
         vi.mocked(access).mockResolvedValue(undefined);
-        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        await builder.build('fix-surgeon', { issueNumber: 42, worktreePath: '/tmp/worktree', sessionId: 'session-001', feedbackPath: '/tmp/feedback.md', changedFiles: [], progressDir: '/tmp/progress', issueType: 'review', phase: 3 });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).toContain('/tmp/progress/session-session-001.md');
@@ -428,7 +428,7 @@ describe('ContextBuilder', () => {
 
       it('includes implementation-plan.md when phase===4 and file exists', async () => {
         vi.mocked(access).mockResolvedValue(undefined);
-        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 4);
+        await builder.build('fix-surgeon', { issueNumber: 42, worktreePath: '/tmp/worktree', sessionId: 'session-001', feedbackPath: '/tmp/feedback.md', changedFiles: [], progressDir: '/tmp/progress', issueType: 'review', phase: 4 });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).toContain('/tmp/progress/implementation-plan.md');
@@ -437,7 +437,7 @@ describe('ContextBuilder', () => {
 
       it('excludes plan file from inputFiles when it does not exist', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        await builder.build('fix-surgeon', { issueNumber: 42, worktreePath: '/tmp/worktree', sessionId: 'session-001', feedbackPath: '/tmp/feedback.md', changedFiles: [], progressDir: '/tmp/progress', issueType: 'review', phase: 3 });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).not.toContain('/tmp/progress/session-session-001.md');
@@ -445,7 +445,7 @@ describe('ContextBuilder', () => {
 
       it('includes analysis.md and scout-report.md when they exist', async () => {
         vi.mocked(access).mockResolvedValue(undefined);
-        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        await builder.build('fix-surgeon', { issueNumber: 42, worktreePath: '/tmp/worktree', sessionId: 'session-001', feedbackPath: '/tmp/feedback.md', changedFiles: [], progressDir: '/tmp/progress', issueType: 'review', phase: 3 });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).toContain('/tmp/progress/analysis.md');
@@ -454,7 +454,7 @@ describe('ContextBuilder', () => {
 
       it('excludes analysis.md and scout-report.md when they do not exist', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForFixSurgeon(42, '/tmp/worktree', 'session-001', '/tmp/feedback.md', [], '/tmp/progress', 'review', 3);
+        await builder.build('fix-surgeon', { issueNumber: 42, worktreePath: '/tmp/worktree', sessionId: 'session-001', feedbackPath: '/tmp/feedback.md', changedFiles: [], progressDir: '/tmp/progress', issueType: 'review', phase: 3 });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
@@ -462,10 +462,10 @@ describe('ContextBuilder', () => {
       });
     });
 
-    describe('buildForIntegrationChecker', () => {
+    describe('build integration-checker', () => {
       it('includes baseline-results.json in inputFiles when it exists', async () => {
         vi.mocked(access).mockResolvedValue(undefined);
-        await builder.buildForIntegrationChecker(42, '/tmp/worktree', '/tmp/progress');
+        await builder.build('integration-checker', { issueNumber: 42, worktreePath: '/tmp/worktree', progressDir: '/tmp/progress' });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).toContain('/tmp/worktree/.cadre/baseline-results.json');
@@ -473,35 +473,35 @@ describe('ContextBuilder', () => {
 
       it('excludes baseline-results.json from inputFiles when it does not exist', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForIntegrationChecker(42, '/tmp/worktree', '/tmp/progress');
+        await builder.build('integration-checker', { issueNumber: 42, worktreePath: '/tmp/worktree', progressDir: '/tmp/progress' });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).not.toContain('/tmp/worktree/.cadre/baseline-results.json');
       });
     });
 
-    describe('buildForWholePrCodeReviewer', () => {
+    describe('build whole-pr-reviewer', () => {
       it('returns a string path', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        const result = await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          [],
-          '/tmp/progress',
-        );
+        const result = await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: [],
+          progressDir: '/tmp/progress',
+        });
         expect(typeof result).toBe('string');
       });
 
       it('does NOT include diffPath in inputFiles; sets fullDiffPath in payload', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          ['/tmp/progress/session-001.md', '/tmp/progress/session-002.md'],
-          '/tmp/progress',
-        );
+        await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: ['/tmp/progress/session-001.md', '/tmp/progress/session-002.md'],
+          progressDir: '/tmp/progress',
+        });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).not.toContain('/tmp/whole-pr-diff.patch');
@@ -513,13 +513,13 @@ describe('ContextBuilder', () => {
 
       it('conditionally includes analysis.md, scout-report.md, and implementation-plan.md when they exist', async () => {
         vi.mocked(access).mockResolvedValue(undefined);
-        await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          [],
-          '/tmp/progress',
-        );
+        await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: [],
+          progressDir: '/tmp/progress',
+        });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).toContain('/tmp/progress/analysis.md');
@@ -529,13 +529,13 @@ describe('ContextBuilder', () => {
 
       it('excludes analysis.md, scout-report.md, and implementation-plan.md when they do not exist', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          [],
-          '/tmp/progress',
-        );
+        await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: [],
+          progressDir: '/tmp/progress',
+        });
         const ctx = captureWrittenContext();
         const inputFiles = ctx.inputFiles as string[];
         expect(inputFiles).not.toContain('/tmp/progress/analysis.md');
@@ -545,13 +545,13 @@ describe('ContextBuilder', () => {
 
       it('includes outputSchema in context', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          [],
-          '/tmp/progress',
-        );
+        await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: [],
+          progressDir: '/tmp/progress',
+        });
         const ctx = captureWrittenContext();
         expect(ctx.outputSchema).toBeDefined();
         expect(typeof ctx.outputSchema).toBe('object');
@@ -562,14 +562,14 @@ describe('ContextBuilder', () => {
         const sessionSummaries = [
           { sessionId: 'session-001', verdict: 'pass' as const, summary: 'All good', keyFindings: [] },
         ];
-        await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          [],
-          '/tmp/progress',
+        await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: [],
+          progressDir: '/tmp/progress',
           sessionSummaries,
-        );
+        });
         const ctx = captureWrittenContext();
         const payload = ctx.payload as Record<string, unknown>;
         expect(payload.scope).toBe('whole-pr');
@@ -579,13 +579,13 @@ describe('ContextBuilder', () => {
 
       it('defaults sessionSummaries to empty array when not provided', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          [],
-          '/tmp/progress',
-        );
+        await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: [],
+          progressDir: '/tmp/progress',
+        });
         const ctx = captureWrittenContext();
         const payload = ctx.payload as Record<string, unknown>;
         expect(Array.isArray(payload.sessionSummaries)).toBe(true);
@@ -594,13 +594,13 @@ describe('ContextBuilder', () => {
 
       it('sets agent to "whole-pr-reviewer" and phase to 3', async () => {
         vi.mocked(access).mockRejectedValue(new Error('ENOENT'));
-        await builder.buildForWholePrCodeReviewer(
-          42,
-          '/tmp/worktree',
-          '/tmp/whole-pr-diff.patch',
-          [],
-          '/tmp/progress',
-        );
+        await builder.build('whole-pr-reviewer', {
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          diffPath: '/tmp/whole-pr-diff.patch',
+          sessionPlanPaths: [],
+          progressDir: '/tmp/progress',
+        });
         const ctx = captureWrittenContext();
         expect(ctx.agent).toBe('whole-pr-reviewer');
         expect(ctx.phase).toBe(3);

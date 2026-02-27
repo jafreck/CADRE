@@ -480,14 +480,14 @@ export class FleetOrchestrator {
       { issueNumber: issue.number, data: { conflictedFiles: context.conflictedFiles, conflictingBranch: context.conflictingBranch } },
     );
 
-    const conflictContextPath = await this.contextBuilder.buildForDependencyConflictResolver(
-      issue.number,
-      context.depsWorktreePath,
-      context.conflictedFiles,
-      context.conflictingBranch,
-      context.depsBranch,
+    const conflictContextPath = await this.contextBuilder.build('dep-conflict-resolver', {
+      issueNumber: issue.number,
+      worktreePath: context.depsWorktreePath,
+      conflictedFiles: context.conflictedFiles,
+      conflictingBranch: context.conflictingBranch,
+      depsBranch: context.depsBranch,
       progressDir,
-    );
+    });
 
     const resolverResult = await this.launcher.launchAgent(
       {
