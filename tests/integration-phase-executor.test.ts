@@ -4,8 +4,22 @@ import { IntegrationPhaseExecutor } from '../src/executors/integration-phase-exe
 import type { PhaseContext } from '../src/core/phase-executor.js';
 import type { AgentResult } from '../src/agents/types.js';
 
+const { sharedExecShell } = vi.hoisted(() => ({
+  sharedExecShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }),
+}));
+
 vi.mock('../src/util/process.js', () => ({
-  execShell: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }),
+  execShell: sharedExecShell,
+}));
+
+vi.mock('../packages/command-diagnostics/src/exec.js', () => ({
+  execShell: sharedExecShell,
+  stripVSCodeEnv: vi.fn((env: Record<string, string>) => env),
+  spawnProcess: vi.fn(),
+  exec: vi.fn(),
+  trackProcess: vi.fn(),
+  killAllTrackedProcesses: vi.fn(),
+  getTrackedProcessCount: vi.fn(() => 0),
 }));
 
 vi.mock('node:fs/promises', () => ({

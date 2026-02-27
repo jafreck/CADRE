@@ -5,6 +5,9 @@
   "license": "MIT",
   "author": "Jacob Freck",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "files": [
     "dist/",
     "src/agents/templates/"
@@ -20,6 +23,7 @@
     "test:e2e": "CADRE_E2E=1 vitest run tests/e2e-*.test.ts"
   },
   "dependencies": {
+    "@cadre/command-diagnostics": "workspace:*",
     "@inquirer/prompts": "^7",
     "@modelcontextprotocol/sdk": "^1.12",
     "@octokit/rest": "^21",
