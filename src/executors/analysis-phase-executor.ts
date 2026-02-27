@@ -3,8 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
-import { execShell } from '../util/process.js';
-import { extractFailures } from '../util/failure-parser.js';
+import { runWithRetry } from '../util/command-verifier.js';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 1;
@@ -82,24 +81,30 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
 
     try {
       if (ctx.config.commands.build) {
-        const result = await execShell(ctx.config.commands.build, {
+        const result = await runWithRetry({
+          command: ctx.config.commands.build,
           cwd: ctx.worktree.path,
           timeout: 300_000,
+          maxFixRounds: 0,
+          onFixNeeded: async () => {},
         });
         buildExitCode = result.exitCode ?? 1;
         if (buildExitCode !== 0) {
-          buildFailures = extractFailures(result.stdout + '\n' + result.stderr);
+          buildFailures = result.failures;
         }
       }
 
       if (ctx.config.commands.test) {
-        const result = await execShell(ctx.config.commands.test, {
+        const result = await runWithRetry({
+          command: ctx.config.commands.test,
           cwd: ctx.worktree.path,
           timeout: 300_000,
+          maxFixRounds: 0,
+          onFixNeeded: async () => {},
         });
         testExitCode = result.exitCode ?? 1;
         if (testExitCode !== 0) {
-          testFailures = extractFailures(result.stdout + '\n' + result.stderr);
+          testFailures = result.failures;
         }
       }
     } catch (err) {

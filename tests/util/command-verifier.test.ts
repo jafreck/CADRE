@@ -367,4 +367,82 @@ describe('runWithRetry', () => {
     expect(result.regressions).toEqual([]);
     expect(result.failures).toEqual(['old-fail-1']);
   });
+
+  it('should propagate errors thrown by onFixNeeded', async () => {
+    mockExecShell.mockResolvedValue(makeProcessResult({ exitCode: 1, stderr: 'fail' }));
+    mockExtractFailures.mockReturnValue(['err']);
+
+    const onFixNeeded = vi.fn().mockRejectedValue(new Error('budget exceeded'));
+    await expect(
+      runWithRetry({
+        command: 'npm test',
+        cwd: '/tmp',
+        timeout: 5000,
+        maxFixRounds: 3,
+        onFixNeeded,
+      }),
+    ).rejects.toThrow('budget exceeded');
+
+    expect(onFixNeeded).toHaveBeenCalledTimes(1);
+    expect(mockExecShell).toHaveBeenCalledTimes(1);
+  });
+
+  it('should treat null exit code as non-zero in exit-code mode and retry', async () => {
+    mockExecShell
+      .mockResolvedValueOnce(makeProcessResult({ exitCode: null as unknown as number, stderr: 'killed' }))
+      .mockResolvedValueOnce(makeProcessResult({ exitCode: 0, stdout: 'ok' }));
+    mockExtractFailures
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([]);
+
+    const onFixNeeded = vi.fn().mockResolvedValue(undefined);
+    const result = await runWithRetry({
+      command: 'npm test',
+      cwd: '/tmp',
+      timeout: 5000,
+      maxFixRounds: 3,
+      onFixNeeded,
+    });
+
+    expect(onFixNeeded).toHaveBeenCalledTimes(1);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should treat all failures as regressions when baseline is an empty set', async () => {
+    const baseline = new Set<string>();
+    mockExecShell.mockResolvedValueOnce(makeProcessResult({ exitCode: 1, stderr: 'err' }));
+    mockExtractFailures.mockReturnValueOnce(['new-fail-1', 'new-fail-2']);
+
+    mockExecShell.mockResolvedValueOnce(makeProcessResult({ exitCode: 0, stdout: 'ok' }));
+    mockExtractFailures.mockReturnValueOnce([]);
+
+    const onFixNeeded = vi.fn().mockResolvedValue(undefined);
+    const result = await runWithRetry({
+      command: 'npm test',
+      cwd: '/tmp',
+      timeout: 5000,
+      maxFixRounds: 3,
+      baseline,
+      onFixNeeded,
+    });
+
+    expect(onFixNeeded).toHaveBeenCalledTimes(1);
+    expect(result.exitCode).toBe(0);
+    expect(result.regressions).toEqual([]);
+  });
+
+  it('should return null exitCode in result when process is killed', async () => {
+    mockExecShell.mockResolvedValueOnce(makeProcessResult({ exitCode: null as unknown as number, stderr: 'killed' }));
+    mockExtractFailures.mockReturnValueOnce([]);
+
+    const result = await runWithRetry({
+      command: 'npm test',
+      cwd: '/tmp',
+      timeout: 5000,
+      maxFixRounds: 0,
+      onFixNeeded: vi.fn(),
+    });
+
+    expect(result.exitCode).toBeNull();
+  });
 });

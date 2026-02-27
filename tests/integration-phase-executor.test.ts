@@ -878,4 +878,80 @@ describe('IntegrationPhaseExecutor', () => {
       expect(content).toContain('_None_');
     });
   });
+
+  describe('structured result from runWithRetry', () => {
+    it('should set signal to null in structured build result', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: 'SIGKILL', timedOut: false }) // build (signal present in execShell result)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      expect(cadreJsonMatch).toBeTruthy();
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.buildResult.signal).toBeNull();
+    });
+
+    it('should set signal to null in structured test result', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: 'SIGTERM', timedOut: false }) // test (signal present)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      expect(cadreJsonMatch).toBeTruthy();
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.testResult.signal).toBeNull();
+    });
+
+    it('should include combined stderr+stdout as output in cadre-json build result', async () => {
+      vi.mocked(execShell)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
+        .mockResolvedValueOnce({ exitCode: 0, stdout: 'build-stdout', stderr: 'build-stderr', signal: null, timedOut: false }) // build
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // test
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }); // lint
+
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.buildResult.output).toContain('build-stderr');
+      expect(cadreJson.buildResult.output).toContain('build-stdout');
+    });
+
+    it('should set overallPass to true when no regressions exist', async () => {
+      const ctx = makeCtx();
+      await executor.execute(ctx);
+
+      const reportCall = vi.mocked(writeFile).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('integration-report.md'),
+      );
+      const content = reportCall?.[1] as string;
+      const cadreJsonMatch = content.match(/```cadre-json\n(.*?)\n```/s);
+      const cadreJson = JSON.parse(cadreJsonMatch![1]);
+      expect(cadreJson.overallPass).toBe(true);
+      expect(cadreJson.regressionFailures).toEqual([]);
+    });
+  });
 });
