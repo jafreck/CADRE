@@ -45,7 +45,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const contextBuilder = {
-    buildForPRComposer: vi.fn().mockResolvedValue('/progress/composer-ctx.json'),
+    build: vi.fn().mockResolvedValue('/progress/composer-ctx.json'),
   };
 
   const resultParser = {
@@ -172,16 +172,19 @@ describe('PRCompositionPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.services.contextBuilder as never as { buildForPRComposer: ReturnType<typeof vi.fn> }).buildForPRComposer,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        42,
-        '/tmp/worktree',
-        ctx.issue,
-        join('/tmp/progress', 'analysis.md'),
-        join('/tmp/progress', 'implementation-plan.md'),
-        join('/tmp/progress', 'integration-report.md'),
-        join('/tmp/progress', 'full-diff.patch'),
-        '/tmp/progress',
+        'pr-composer',
+        expect.objectContaining({
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          issue: ctx.issue,
+          analysisPath: join('/tmp/progress', 'analysis.md'),
+          planPath: join('/tmp/progress', 'implementation-plan.md'),
+          integrationReportPath: join('/tmp/progress', 'integration-report.md'),
+          diffPath: join('/tmp/progress', 'full-diff.patch'),
+          progressDir: '/tmp/progress',
+        }),
       );
     });
 

@@ -41,12 +41,12 @@ export class RebaseRecoveryService {
           { issueNumber, data: { conflictedFiles: rebaseStartResult.conflictedFiles } },
         );
 
-        const conflictContextPath = await this.contextBuilder.buildForConflictResolver(
+        const conflictContextPath = await this.contextBuilder.build('conflict-resolver', {
           issueNumber,
           worktreePath,
-          rebaseStartResult.conflictedFiles,
+          conflictedFiles: rebaseStartResult.conflictedFiles,
           progressDir,
-        );
+        });
 
         const resolverResult = await this.launcher.launchAgent(
           {

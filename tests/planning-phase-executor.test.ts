@@ -41,7 +41,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const contextBuilder = {
-    buildForImplementationPlanner: vi.fn().mockResolvedValue('/progress/planner-ctx.json'),
+    build: vi.fn().mockResolvedValue('/progress/planner-ctx.json'),
   };
 
   const resultParser = {
@@ -133,14 +133,17 @@ describe('PlanningPhaseExecutor', () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
       expect(
-        (ctx.services.contextBuilder as never as { buildForImplementationPlanner: ReturnType<typeof vi.fn> })
-          .buildForImplementationPlanner,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> })
+          .build,
       ).toHaveBeenCalledWith(
-        42,
-        '/tmp/worktree',
-        join('/tmp/progress', 'analysis.md'),
-        join('/tmp/progress', 'scout-report.md'),
-        '/tmp/progress',
+        'implementation-planner',
+        expect.objectContaining({
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          analysisPath: join('/tmp/progress', 'analysis.md'),
+          scoutReportPath: join('/tmp/progress', 'scout-report.md'),
+          progressDir: '/tmp/progress',
+        }),
       );
     });
 

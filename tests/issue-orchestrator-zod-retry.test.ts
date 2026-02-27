@@ -100,14 +100,7 @@ vi.mock('../src/core/progress.js', () => ({
 
 vi.mock('../src/agents/context-builder.js', () => ({
   ContextBuilder: vi.fn(() => ({
-    buildForIssueAnalyst: mockContextBuildForIssueAnalyst,
-    buildForCodebaseScout: mockContextBuildForCodebaseScout,
-    buildForImplementationPlanner: mockContextBuildForImplementationPlanner,
-    buildForCodeWriter: mockContextBuildForCodeWriter,
-    buildForTestWriter: mockContextBuildForTestWriter,
-    buildForCodeReviewer: mockContextBuildForCodeReviewer,
-    buildForFixSurgeon: mockContextBuildForFixSurgeon,
-    buildForPRComposer: mockContextBuildForPRComposer,
+    build: mockContextBuildForIssueAnalyst,
   })),
 }));
 

@@ -54,17 +54,17 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     prContentPath: string,
     parseError?: string,
   ): Promise<void> {
-    const contextPath = await ctx.services.contextBuilder.buildForPRComposer(
-      ctx.issue.number,
-      ctx.worktree.path,
-      ctx.issue,
+    const contextPath = await ctx.services.contextBuilder.build('pr-composer', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
+      issue: ctx.issue,
       analysisPath,
       planPath,
       integrationReportPath,
       diffPath,
-      ctx.io.progressDir,
-      ...(parseError !== undefined ? [parseError] : []),
-    );
+      progressDir: ctx.io.progressDir,
+      ...(parseError !== undefined ? { previousParseError: parseError } : {}),
+    });
 
     const result = await launchWithRetry(ctx, 'pr-composer', {
       agent: 'pr-composer',

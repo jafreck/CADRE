@@ -48,7 +48,7 @@ vi.mock('../src/core/issue-orchestrator.js', () => ({
 vi.mock('../src/agents/context-builder.js', () => ({
   ContextBuilder: vi.fn().mockImplementation(() => ({
     buildForReviewResponse: vi.fn().mockReturnValue('# Review context'),
-    buildForConflictResolver: vi.fn().mockResolvedValue('/tmp/worktree/1/.cadre/issues/1/contexts/conflict-resolver-123.json'),
+    build: vi.fn().mockResolvedValue('/tmp/worktree/1/.cadre/issues/1/contexts/conflict-resolver-123.json'),
   })),
 }));
 

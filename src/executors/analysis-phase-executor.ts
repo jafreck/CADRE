@@ -23,12 +23,12 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
     await writeFile(fileTreePath, fileTree, 'utf-8');
 
     // Build context for issue-analyst
-    const analystContextPath = await ctx.services.contextBuilder.buildForIssueAnalyst(
-      ctx.issue.number,
-      ctx.worktree.path,
+    const analystContextPath = await ctx.services.contextBuilder.build('issue-analyst', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
       issueJsonPath,
-      ctx.io.progressDir,
-    );
+      progressDir: ctx.io.progressDir,
+    });
 
     // Launch issue-analyst
     const analystResult = await launchWithRetry(ctx, 'issue-analyst', {
@@ -44,13 +44,13 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
     }
 
     // Build context for codebase-scout (needs analysis.md)
-    const scoutContextPath = await ctx.services.contextBuilder.buildForCodebaseScout(
-      ctx.issue.number,
-      ctx.worktree.path,
-      join(ctx.io.progressDir, 'analysis.md'),
+    const scoutContextPath = await ctx.services.contextBuilder.build('codebase-scout', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
+      analysisPath: join(ctx.io.progressDir, 'analysis.md'),
       fileTreePath,
-      ctx.io.progressDir,
-    );
+      progressDir: ctx.io.progressDir,
+    });
 
     // Launch codebase-scout
     const scoutResult = await launchWithRetry(ctx, 'codebase-scout', {

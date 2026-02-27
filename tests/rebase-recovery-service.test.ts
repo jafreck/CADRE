@@ -31,7 +31,7 @@ function makeLauncher() {
 
 function makeContextBuilder() {
   return {
-    buildForConflictResolver: vi.fn().mockResolvedValue('/tmp/contexts/conflict.json'),
+    build: vi.fn().mockResolvedValue('/tmp/contexts/conflict.json'),
   };
 }
 
@@ -78,11 +78,14 @@ describe('RebaseRecoveryService', () => {
 
       await service.rebaseAndResolveConflicts(1, 10, '/tmp/worktree/1', '/tmp/progress');
 
-      expect(ctx.buildForConflictResolver).toHaveBeenCalledWith(
-        1,
-        '/tmp/worktree/1',
-        ['src/foo.ts'],
-        '/tmp/progress',
+      expect(ctx.build).toHaveBeenCalledWith(
+        'conflict-resolver',
+        {
+          issueNumber: 1,
+          worktreePath: '/tmp/worktree/1',
+          conflictedFiles: ['src/foo.ts'],
+          progressDir: '/tmp/progress',
+        },
       );
       expect(launcher.launchAgent).toHaveBeenCalledWith(
         expect.objectContaining({

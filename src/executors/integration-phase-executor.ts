@@ -179,16 +179,16 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     const changedFiles = await ctx.io.commitManager.getChangedFiles();
 
     const issueType = type === 'build' ? 'build' : 'test-failure' as const;
-    const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
-      ctx.issue.number,
-      ctx.worktree.path,
-      `integration-fix-${issueType}`,
-      failurePath,
-      changedFiles.map((f) => join(ctx.worktree.path, f)),
-      ctx.io.progressDir,
+    const fixContextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
+      sessionId: `integration-fix-${issueType}`,
+      feedbackPath: failurePath,
+      changedFiles: changedFiles.map((f) => join(ctx.worktree.path, f)),
+      progressDir: ctx.io.progressDir,
       issueType,
-      4,
-    );
+      phase: 4,
+    });
 
     const fixResult = await ctx.services.launcher.launchAgent(
       {
