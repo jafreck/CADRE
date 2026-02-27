@@ -3,9 +3,13 @@ import { Command } from 'commander';
 import { registerAgentsCommand } from '../src/cli/agents.js';
 import { AGENT_DEFINITIONS } from '../src/agents/types.js';
 
-vi.mock('../src/config/loader.js', () => ({
-  loadConfig: vi.fn(),
-}));
+vi.mock('../src/config/loader.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/config/loader.js')>();
+  return {
+    ...actual,
+    loadConfig: vi.fn(),
+  };
+});
 
 vi.mock('../src/util/fs.js', () => ({
   exists: vi.fn(),
