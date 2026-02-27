@@ -1,3 +1,12 @@
+/**
+ * Phase executor types for CADRE's per-issue pipeline.
+ *
+ * The generic PhaseExecutor interface is provided by @cadre/pipeline-engine.
+ * Cadre-specific context types are defined here for full type safety.
+ */
+
+export type { PhaseExecutor } from '../../packages/pipeline-engine/src/index.js';
+
 import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PlatformProvider, PullRequestInfo } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
@@ -50,15 +59,3 @@ export type PhaseContext = {
   io: PhaseIO;
   callbacks: PhaseCallbacks;
 };
-
-/**
- * Contract for a single phase in the CADRE per-issue pipeline.
- */
-export interface PhaseExecutor {
-  /** Pipeline phase number (1-based). */
-  phaseId: number;
-  /** Human-readable phase name. */
-  name: string;
-  /** Execute the phase and return the path to the primary output file. */
-  execute(ctx: PhaseContext): Promise<string>;
-}

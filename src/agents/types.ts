@@ -2,6 +2,8 @@
  * Agent type definitions for CADRE.
  */
 
+import type { SessionReviewSummary } from './schemas/session-review-summary.schema.js';
+
 /** All known agent names. */
 export type AgentName =
   | 'issue-analyst'
@@ -305,6 +307,55 @@ export interface PhaseResult {
   outputPath?: string;
   error?: string;
   gateResult?: GateResult;
+}
+
+/** Arguments passed to the unified build() method for context construction. */
+export interface ContextBuildArgs {
+  issueNumber: number;
+  worktreePath: string;
+  progressDir: string;
+  issueBody?: string;
+  issueJsonPath?: string;
+  analysisPath?: string;
+  fileTreePath?: string;
+  scoutReportPath?: string;
+  session?: AgentSession;
+  sessionId?: string;
+  sessionPlanPath?: string;
+  relevantFiles?: string[];
+  siblingFiles?: string[];
+  changedFiles?: string[];
+  diffPath?: string;
+  planPaths?: string[];
+  sessionPlanPaths?: string[];
+  sessionSummaries?: SessionReviewSummary[];
+  feedbackPath?: string;
+  issueType?: 'review' | 'test-failure' | 'build';
+  phase?: number;
+  planPath?: string;
+  integrationReportPath?: string;
+  issue?: { title: string; body: string };
+  previousParseError?: string;
+  conflictedFiles?: string[];
+  conflictingBranch?: string;
+  depsBranch?: string;
+}
+
+/** Helpers available to descriptor functions during context building. */
+export interface DescriptorHelpers {
+  baseBranch: string;
+  commands: { install?: string; build?: string; test?: string; lint?: string };
+  detectTestFramework: () => string;
+}
+
+/** Declarative descriptor for building an agent's context. */
+export interface AgentContextDescriptor {
+  phase: number | ((args: ContextBuildArgs) => number);
+  outputFile: (args: ContextBuildArgs) => string;
+  inputFiles: (args: ContextBuildArgs, exists: (path: string) => Promise<boolean>) => Promise<string[]>;
+  sessionId?: (args: ContextBuildArgs) => string | undefined;
+  payload?: (args: ContextBuildArgs, helpers: DescriptorHelpers) => Record<string, unknown> | Promise<Record<string, unknown>>;
+  outputSchema?: Record<string, unknown>;
 }
 
 /** Agent context file structure written before launching an agent. */

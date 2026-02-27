@@ -92,14 +92,14 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
         // 2. Launch code-writer (receives entire session with all steps)
         if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:code-writer`)) {
           await ctx.io.checkpoint.startSubTask(`${session.id}:code-writer`);
-          const writerContextPath = await ctx.services.contextBuilder.buildForCodeWriter(
-            ctx.issue.number,
-            ctx.worktree.path,
+          const writerContextPath = await ctx.services.contextBuilder.build('code-writer', {
+            issueNumber: ctx.issue.number,
+            worktreePath: ctx.worktree.path,
             session,
             sessionPlanPath,
-            sessionFileList.map((f) => join(ctx.worktree.path, f)),
-            ctx.io.progressDir,
-          );
+            relevantFiles: sessionFileList.map((f) => join(ctx.worktree.path, f)),
+            progressDir: ctx.io.progressDir,
+          });
 
           const writerResult = await ctx.services.launcher.launchAgent(
             {
@@ -135,16 +135,16 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               onFixNeeded: async (output, round) => {
                 const buildFailurePath = join(ctx.io.progressDir, `build-failure-${session.id}-${round}.txt`);
                 await writeFile(buildFailurePath, output, 'utf-8');
-                const buildFixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
-                  ctx.issue.number,
-                  ctx.worktree.path,
-                  session.id,
-                  buildFailurePath,
-                  sessionFileList.map((f) => join(ctx.worktree.path, f)),
-                  ctx.io.progressDir,
-                  'build',
-                  3,
-                );
+                const buildFixContextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
+                  issueNumber: ctx.issue.number,
+                  worktreePath: ctx.worktree.path,
+                  sessionId: session.id,
+                  feedbackPath: buildFailurePath,
+                  changedFiles: sessionFileList.map((f) => join(ctx.worktree.path, f)),
+                  progressDir: ctx.io.progressDir,
+                  issueType: 'build',
+                  phase: 3,
+                });
 
                 const buildFixResult = await ctx.services.launcher.launchAgent(
                   {
@@ -180,14 +180,14 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               { issueNumber: ctx.issue.number, sessionId: session.id },
             );
           } else {
-            const testWriterContextPath = await ctx.services.contextBuilder.buildForTestWriter(
-              ctx.issue.number,
-              ctx.worktree.path,
+            const testWriterContextPath = await ctx.services.contextBuilder.build('test-writer', {
+              issueNumber: ctx.issue.number,
+              worktreePath: ctx.worktree.path,
               session,
-              changedFiles.map((f) => join(ctx.worktree.path, f)),
+              changedFiles: changedFiles.map((f) => join(ctx.worktree.path, f)),
               sessionPlanPath,
-              ctx.io.progressDir,
-            );
+              progressDir: ctx.io.progressDir,
+            });
 
             const testResult = await ctx.services.launcher.launchAgent(
               {
@@ -226,14 +226,15 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           const diff = truncateDiff(rawDiff, 200_000);
           await writeFile(diffPath, diff, 'utf-8');
 
-          const reviewerContextPath = await ctx.services.contextBuilder.buildForCodeReviewer(
-            ctx.issue.number,
-            ctx.worktree.path,
+          const reviewerContextPath = await ctx.services.contextBuilder.build('code-reviewer', {
+            issueNumber: ctx.issue.number,
+            worktreePath: ctx.worktree.path,
             session,
             diffPath,
             sessionPlanPath,
-            ctx.io.progressDir,
-          );
+            progressDir: ctx.io.progressDir,
+            issueBody: ctx.issue.body,
+          });
 
           const reviewResult = await ctx.services.launcher.launchAgent(
             {
@@ -293,16 +294,16 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               if (review.verdict === 'needs-fixes') {
                 // Launch fix-surgeon
                 await ctx.io.checkpoint.startSubTask(`${session.id}:fix-surgeon`);
-                const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
-                  ctx.issue.number,
-                  ctx.worktree.path,
-                  session.id,
-                  reviewPath,
-                  changedFiles.map((f) => join(ctx.worktree.path, f)),
-                  ctx.io.progressDir,
-                  'review',
-                  3,
-                );
+                const fixContextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
+                  issueNumber: ctx.issue.number,
+                  worktreePath: ctx.worktree.path,
+                  sessionId: session.id,
+                  feedbackPath: reviewPath,
+                  changedFiles: changedFiles.map((f) => join(ctx.worktree.path, f)),
+                  progressDir: ctx.io.progressDir,
+                  issueType: 'review',
+                  phase: 3,
+                });
 
                 const fixResult = await ctx.services.launcher.launchAgent(
                   {
@@ -391,14 +392,15 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       ctx.callbacks.checkBudget();
 
-      const reviewerContextPath = await ctx.services.contextBuilder.buildForWholePrCodeReviewer(
-        ctx.issue.number,
-        ctx.worktree.path,
+      const reviewerContextPath = await ctx.services.contextBuilder.build('whole-pr-reviewer', {
+        issueNumber: ctx.issue.number,
+        worktreePath: ctx.worktree.path,
         diffPath,
         sessionPlanPaths,
-        ctx.io.progressDir,
+        progressDir: ctx.io.progressDir,
         sessionSummaries,
-      );
+        issueBody: ctx.issue.body,
+      });
 
       const reviewResult = await ctx.services.launcher.launchAgent(
         {
@@ -465,16 +467,16 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
       // Launch fix-surgeon to address findings.
       const changedFiles = await ctx.io.commitManager.getChangedFiles();
-      const fixContextPath = await ctx.services.contextBuilder.buildForFixSurgeon(
-        ctx.issue.number,
-        ctx.worktree.path,
-        'whole-pr',
-        reviewPath,
-        changedFiles.map((f) => join(ctx.worktree.path, f)),
-        ctx.io.progressDir,
-        'review',
-        3,
-      );
+      const fixContextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
+        issueNumber: ctx.issue.number,
+        worktreePath: ctx.worktree.path,
+        sessionId: 'whole-pr',
+        feedbackPath: reviewPath,
+        changedFiles: changedFiles.map((f) => join(ctx.worktree.path, f)),
+        progressDir: ctx.io.progressDir,
+        issueType: 'review',
+        phase: 3,
+      });
 
       const fixResult = await ctx.services.launcher.launchAgent(
         {

@@ -71,8 +71,9 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const contextBuilder = {
-    buildForIssueAnalyst: vi.fn().mockResolvedValue('/progress/analyst-ctx.json'),
-    buildForCodebaseScout: vi.fn().mockResolvedValue('/progress/scout-ctx.json'),
+    build: vi.fn()
+      .mockResolvedValueOnce('/progress/analyst-ctx.json')
+      .mockResolvedValue('/progress/scout-ctx.json'),
   };
 
   const services = {
@@ -203,12 +204,15 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for issue-analyst with correct args', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.services.contextBuilder as never as { buildForIssueAnalyst: ReturnType<typeof vi.fn> }).buildForIssueAnalyst)
+      expect((ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build)
         .toHaveBeenCalledWith(
-          42,
-          '/tmp/worktree',
-          join('/tmp/progress', 'issue.json'),
-          '/tmp/progress',
+          'issue-analyst',
+          expect.objectContaining({
+            issueNumber: 42,
+            worktreePath: '/tmp/worktree',
+            issueJsonPath: join('/tmp/progress', 'issue.json'),
+            progressDir: '/tmp/progress',
+          }),
         );
     });
 
@@ -231,13 +235,16 @@ describe('AnalysisPhaseExecutor', () => {
     it('should build context for codebase-scout after analyst succeeds', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
-      expect((ctx.services.contextBuilder as never as { buildForCodebaseScout: ReturnType<typeof vi.fn> }).buildForCodebaseScout)
+      expect((ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build)
         .toHaveBeenCalledWith(
-          42,
-          '/tmp/worktree',
-          join('/tmp/progress', 'analysis.md'),
-          join('/tmp/progress', 'repo-file-tree.txt'),
-          '/tmp/progress',
+          'codebase-scout',
+          expect.objectContaining({
+            issueNumber: 42,
+            worktreePath: '/tmp/worktree',
+            analysisPath: join('/tmp/progress', 'analysis.md'),
+            fileTreePath: join('/tmp/progress', 'repo-file-tree.txt'),
+            progressDir: '/tmp/progress',
+          }),
         );
     });
 

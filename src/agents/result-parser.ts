@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { extractCadreJson, extractCadreJsonWithError } from '../util/cadre-json.js';
+import type { ZodType } from 'zod';
+import { extractCadreJsonWithError } from '../util/cadre-json.js';
 import type {
   AgentSession,
   AnalysisResult,
@@ -39,121 +40,84 @@ export class ResultParser {
   }
 
   /**
+   * Generic helper that reads a file, extracts the cadre-json block,
+   * validates it against a Zod schema, and optionally applies a transform.
+   * Throws a descriptive error with parse error details if the block is
+   * missing or malformed.
+   */
+  private async parseArtifact<T>(
+    filePath: string,
+    schema: ZodType<T>,
+    agentDescription: string,
+    transform?: (result: T) => T,
+  ): Promise<T> {
+    const content = await readFile(filePath, 'utf-8');
+    const { parsed, parseError } = extractCadreJsonWithError(content);
+    if (parsed !== null) {
+      const result = schema.parse(parsed);
+      return transform ? transform(result) : result;
+    }
+    throw new Error(
+      `Agent output in ${filePath} is missing a \`cadre-json\` block. ` +
+      `The ${agentDescription} agent must emit a \`\`\`cadre-json\`\`\` fenced block.` +
+      (parseError ? ` Parse error: ${parseError}` : ''),
+    );
+  }
+
+  /**
    * Parse an implementation plan markdown into a list of AgentSessions.
    */
   async parseImplementationPlan(planPath: string): Promise<AgentSession[]> {
-    const content = await readFile(planPath, 'utf-8');
-
-    const parsed = extractCadreJson(content);
-    if (parsed !== null) {
-      return implementationPlanSchema.parse(parsed);
-    }
-
-    throw new Error(
-      `Agent output in ${planPath} is missing a \`cadre-json\` block. ` +
-      'The implementation-planner agent must emit a ```cadre-json``` fenced block ' +
-      'containing a JSON array of task objects. See the agent template for the required schema.',
-    );
+    return this.parseArtifact(planPath, implementationPlanSchema, 'implementation-planner');
   }
 
   /**
    * Parse a code review result from review.md.
    */
   async parseReview(reviewPath: string): Promise<ReviewResult> {
-    const content = await readFile(reviewPath, 'utf-8');
-
-    const parsed = extractCadreJson(content);
-    if (parsed !== null) {
-      const result = reviewSchema.parse(parsed);
-      return {
-        ...result,
-        summary: this.unescapeText(result.summary),
-        issues: result.issues.map((issue) => ({
-          ...issue,
-          description: this.unescapeText(issue.description),
-        })),
-      };
-    }
-
-    throw new Error(
-      `Agent output in ${reviewPath} is missing a \`cadre-json\` block. ` +
-      'The code-reviewer agent must emit a ```cadre-json``` fenced block containing a valid review object.',
-    );
+    return this.parseArtifact(reviewPath, reviewSchema, 'code-reviewer', (result) => ({
+      ...result,
+      summary: this.unescapeText(result.summary),
+      issues: result.issues.map((issue) => ({
+        ...issue,
+        description: this.unescapeText(issue.description),
+      })),
+    }));
   }
 
   /**
    * Parse integration report from integration-report.md.
    */
   async parseIntegrationReport(reportPath: string): Promise<IntegrationReport> {
-    const content = await readFile(reportPath, 'utf-8');
-
-    const parsed = extractCadreJson(content);
-    if (parsed !== null) {
-      return integrationReportSchema.parse(parsed);
-    }
-
-    throw new Error(
-      `Agent output in ${reportPath} is missing a \`cadre-json\` block. ` +
-      'The integration-checker agent must emit a ```cadre-json``` fenced block containing a valid integration report.',
-    );
+    return this.parseArtifact(reportPath, integrationReportSchema, 'integration-checker');
   }
 
   /**
    * Parse PR content from pr-content.md.
    */
   async parsePRContent(contentPath: string): Promise<PRContent> {
-    const content = await readFile(contentPath, 'utf-8');
-
-    const { parsed, parseError } = extractCadreJsonWithError(content);
-    if (parsed !== null) {
-      const result = prContentSchema.parse(parsed);
-      return { ...result, body: this.unescapeText(result.body) };
-    }
-
-    throw new Error(
-      `Agent output in ${contentPath} is missing a \`cadre-json\` block. ` +
-      'The PR-content agent must emit a ```cadre-json``` fenced block containing title, body, and labels.' +
-      (parseError ? ` Parse error: ${parseError}` : ''),
-    );
+    return this.parseArtifact(contentPath, prContentSchema, 'PR-content', (result) => ({
+      ...result,
+      body: this.unescapeText(result.body),
+    }));
   }
 
   /**
    * Parse a scout report from scout-report.md.
    */
   async parseScoutReport(reportPath: string): Promise<ScoutReport> {
-    const content = await readFile(reportPath, 'utf-8');
-
-    const parsed = extractCadreJson(content);
-    if (parsed !== null) {
-      return scoutReportSchema.parse(parsed);
-    }
-
-    throw new Error(
-      `Agent output in ${reportPath} is missing a \`cadre-json\` block. ` +
-      'The codebase-scout agent must emit a ```cadre-json``` fenced block containing a valid scout report.',
-    );
+    return this.parseArtifact(reportPath, scoutReportSchema, 'codebase-scout');
   }
 
   /**
    * Parse an analysis result from analysis.md.
    */
   async parseAnalysis(analysisPath: string): Promise<AnalysisResult> {
-    const content = await readFile(analysisPath, 'utf-8');
-
-    const parsed = extractCadreJson(content);
-    if (parsed !== null) {
-      const result = analysisSchema.parse(parsed);
-      return {
-        ...result,
-        requirements: result.requirements.map((s) => this.unescapeText(s)),
-        affectedAreas: result.affectedAreas.map((s) => this.unescapeText(s)),
-        ambiguities: result.ambiguities.map((s) => this.unescapeText(s)),
-      };
-    }
-
-    throw new Error(
-      `Agent output in ${analysisPath} is missing a \`cadre-json\` block. ` +
-      'The issue-analyst agent must emit a ```cadre-json``` fenced block containing a valid analysis object.',
-    );
+    return this.parseArtifact(analysisPath, analysisSchema, 'issue-analyst', (result) => ({
+      ...result,
+      requirements: result.requirements.map((s) => this.unescapeText(s)),
+      affectedAreas: result.affectedAreas.map((s) => this.unescapeText(s)),
+      ambiguities: result.ambiguities.map((s) => this.unescapeText(s)),
+    }));
   }
 }

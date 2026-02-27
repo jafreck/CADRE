@@ -20,6 +20,7 @@ Your context payload contains:
 - **`sessionSummaries`**: A structured list of per-session review verdicts and key findings. Each entry has: `sessionId`, `verdict` (`"pass"` | `"needs-fixes"`), `summary`, and `keyFindings` (array of strings).
 - **`baseBranch`**: The base branch name.
 - **`scope`**: Always `"whole-pr"`.
+- **`issueBody`** (conditionally provided): The raw GitHub issue body — the original requirements as written by the issue author. This is the **ground-truth specification** for the feature or fix. Use it to validate that the implementation is complete.
 
 You will also receive:
 - All session plan files that describe what was changed in each session
@@ -34,6 +35,16 @@ This review specifically targets issues that emerge from **interactions between 
 2. **Duplicate or conflicting changes** — two sessions modify the same symbol in incompatible ways (e.g. both rename a function but to different names, or one adds an overload that the other removes).
 3. **Broken cross-file contracts** — a type, interface, or schema is updated in one session file but not propagated to all files that implement or consume it.
 4. **API misuse visible only at the PR level** — a library call's semantics become clear (or clearly wrong) only when the full context of the rewritten file is visible, not just the session's diff.
+
+## Completeness Validation (against original issue)
+When `issueBody` is provided in the payload, you **must** cross-check the PR diff against the original issue requirements:
+
+1. **Extract all requirements and acceptance criteria** from `issueBody`.
+2. **For each requirement**, verify that the diff contains a meaningful implementation — not just tests, comments, or trivial changes.
+3. If the diff is **disproportionately small** relative to the issue scope (e.g. a feature issue with multiple acceptance criteria produces only a handful of trivial cleanup lines), flag this as `"error"` severity with a description listing the unimplemented requirements.
+4. If `analysis.md` claims the feature is "already implemented" but the diff only contains cleanup or unrelated changes, independently verify that claim by inspecting the codebase. Do **not** trust `analysis.md` as ground truth — the issue body is the authoritative specification.
+
+Flag missing or unimplemented requirements as `"error"` severity. This **does** trigger `needs-fixes`.
 
 ## Review Criteria
 Only flag an issue as `needs-fixes` if it falls into one of these categories:

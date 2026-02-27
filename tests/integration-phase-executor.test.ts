@@ -54,7 +54,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const contextBuilder = {
-    buildForFixSurgeon: vi.fn().mockResolvedValue('/progress/fix-ctx.json'),
+    build: vi.fn().mockResolvedValue('/progress/fix-ctx.json'),
   };
 
   const commitManager = {
@@ -394,8 +394,8 @@ describe('IntegrationPhaseExecutor', () => {
     });
   });
 
-  describe('tryFixIntegration - null task passed to buildForFixSurgeon', () => {
-    it('should build fix-surgeon context using buildForFixSurgeon with null task', async () => {
+  describe('tryFixIntegration - null task passed to build fix-surgeon', () => {
+    it('should build fix-surgeon context using build with correct args', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
         .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false }) // build (fail)
@@ -407,20 +407,23 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        42,
-        '/tmp/worktree',
-        'integration-fix-build',
-        join('/tmp/progress', 'build-failure.txt'),
-        expect.any(Array),
-        '/tmp/progress',
-        'build',
-        4,
+        'fix-surgeon',
+        expect.objectContaining({
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          sessionId: 'integration-fix-build',
+          feedbackPath: join('/tmp/progress', 'build-failure.txt'),
+          changedFiles: expect.any(Array),
+          progressDir: '/tmp/progress',
+          issueType: 'build',
+          phase: 4,
+        }),
       );
     });
 
-    it('should pass changed files from commitManager to buildForFixSurgeon', async () => {
+    it('should pass changed files from commitManager to build fix-surgeon', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false })
         .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2345: err', signal: null, timedOut: false })
@@ -437,16 +440,14 @@ describe('IntegrationPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(
-        (ctx.services.contextBuilder as never as { buildForFixSurgeon: ReturnType<typeof vi.fn> }).buildForFixSurgeon,
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
       ).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.stringContaining('integration-fix-'),
-        expect.anything(),
-        [join('/tmp/worktree', 'src/changed.ts'), join('/tmp/worktree', 'src/other.ts')],
-        expect.anything(),
-        expect.anything(),
-        4,
+        'fix-surgeon',
+        expect.objectContaining({
+          sessionId: expect.stringContaining('integration-fix-'),
+          changedFiles: [join('/tmp/worktree', 'src/changed.ts'), join('/tmp/worktree', 'src/other.ts')],
+          phase: 4,
+        }),
       );
     });
   });
