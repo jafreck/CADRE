@@ -4,9 +4,7 @@ import type { RuntimeConfig } from '../config/loader.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
-import { FleetCheckpointManager, CheckpointManager } from './checkpoint.js';
-import { exists, ensureDir } from '../util/fs.js';
-import { renderFleetStatus, renderIssueDetail } from '../cli/status-renderer.js';
+import { ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
@@ -23,11 +21,14 @@ import {
   diskValidator,
   checkStaleState,
 } from '../validation/index.js';
-import { ReportWriter } from '../reporting/report-writer.js';
 import { NotificationManager, createNotificationManager } from '../notifications/manager.js';
 import { DependencyResolver } from './dependency-resolver.js';
 import type { IssueDag } from './issue-dag.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../errors.js';
+import { StatusService } from './status-service.js';
+import { ResetService } from './reset-service.js';
+import { ReportService } from './report-service.js';
+import { WorktreeLifecycleService } from './worktree-lifecycle-service.js';
 
 /**
  * Top-level CadreRuntime — the main entry point for running CADRE.
@@ -37,6 +38,10 @@ export class CadreRuntime {
   private readonly cadreDir: string;
   private readonly provider: PlatformProvider;
   private readonly notifications: NotificationManager;
+  private readonly statusService: StatusService;
+  private readonly resetService: ResetService;
+  private readonly reportService: ReportService;
+  private readonly worktreeLifecycleService: WorktreeLifecycleService;
   private isShuttingDown = false;
   private activeIssueNumbers: number[] = [];
   private interruptReject: ((err: RuntimeInterruptedError) => void) | null = null;
@@ -62,6 +67,11 @@ export class CadreRuntime {
     this.provider = createPlatformProvider(config, this.logger);
 
     this.notifications = createNotificationManager(config);
+
+    this.statusService = new StatusService(config, this.logger);
+    this.resetService = new ResetService(config, this.logger);
+    this.reportService = new ReportService(config, this.logger);
+    this.worktreeLifecycleService = new WorktreeLifecycleService(config, this.logger, this.provider);
   }
 
   /**
@@ -216,152 +226,28 @@ export class CadreRuntime {
    * Show current progress status.
    */
   async status(issueNumber?: number): Promise<void> {
-    const fleetCheckpointPath = join(this.cadreDir, 'fleet-checkpoint.json');
-
-    if (!(await exists(fleetCheckpointPath))) {
-      console.log('No fleet checkpoint found.');
-      return;
-    }
-
-    const checkpointManager = new FleetCheckpointManager(
-      this.cadreDir,
-      this.config.projectName,
-      this.logger,
-    );
-
-    const state = await checkpointManager.load();
-
-    if (issueNumber !== undefined) {
-      const issueStatus = state.issues[issueNumber];
-      if (!issueStatus) {
-        console.log(`Issue #${issueNumber} not found in fleet checkpoint.`);
-        return;
-      }
-
-      const issueProgressDir = join(this.cadreDir, 'issues', String(issueNumber));
-      const issueCheckpointPath = join(issueProgressDir, 'checkpoint.json');
-
-      if (!(await exists(issueCheckpointPath))) {
-        console.log(`No per-issue checkpoint found for issue #${issueNumber}`);
-        return;
-      }
-
-      const issueCpManager = new CheckpointManager(issueProgressDir, this.logger);
-      try {
-        const issueCheckpoint = await issueCpManager.load(String(issueNumber));
-        console.log(renderIssueDetail(issueNumber, issueStatus, issueCheckpoint));
-      } catch {
-        console.log(`No per-issue checkpoint found for issue #${issueNumber}`);
-      }
-    } else {
-      console.log(renderFleetStatus(state, this.config.copilot.model, this.config.copilot));
-    }
+    return this.statusService.status(issueNumber);
   }
 
   /**
    * Reset fleet or issue state.
    */
   async reset(issueNumber?: number, fromPhase?: number): Promise<void> {
-    const checkpointManager = new FleetCheckpointManager(
-      this.cadreDir,
-      this.config.projectName,
-      this.logger,
-    );
-
-    const state = await checkpointManager.load();
-
-    if (issueNumber) {
-      this.logger.info(`Resetting issue #${issueNumber}`, {
-        issueNumber,
-        data: { fromPhase },
-      });
-      await checkpointManager.setIssueStatus(issueNumber, 'not-started', '', '', 0, state.issues[issueNumber]?.issueTitle ?? '');
-      console.log(`Reset issue #${issueNumber}`);
-    } else {
-      this.logger.info('Resetting entire fleet');
-      // Clear all issue statuses
-      for (const num of Object.keys(state.issues)) {
-        await checkpointManager.setIssueStatus(Number(num), 'not-started', '', '', 0, state.issues[Number(num)]?.issueTitle ?? '');
-      }
-      console.log('Reset all issues');
-    }
+    return this.resetService.reset(issueNumber, fromPhase);
   }
 
   /**
    * Print a report of the most recent run, all run history, or raw JSON.
    */
   async report(options: { format?: 'json'; history?: boolean } = {}): Promise<void> {
-    const paths = await ReportWriter.listReports(this.cadreDir);
-
-    if (options.history) {
-      if (paths.length === 0) {
-        console.log('No reports found.');
-        return;
-      }
-      for (const p of paths) {
-        console.log(p);
-      }
-      return;
-    }
-
-    if (paths.length === 0) {
-      console.log('No reports found.');
-      return;
-    }
-
-    const mostRecent = paths[paths.length - 1];
-    const run = await ReportWriter.readReport(mostRecent);
-
-    if (options.format === 'json') {
-      console.log(JSON.stringify(run));
-      return;
-    }
-
-    const duration = (run.duration / 1000).toFixed(1);
-    const estimator = new CostEstimator(this.config.copilot);
-    const costStr = estimator.format(estimator.estimate(run.totalTokens, this.config.copilot.model));
-
-    console.log('\n=== CADRE Run Report ===\n');
-    console.log(`  Run ID:   ${run.runId}`);
-    console.log(`  Project:  ${run.project}`);
-    console.log(`  Duration: ${duration}s`);
-    console.log(`  Issues:   ${run.totals.issues}`);
-    console.log(`  PRs:      ${run.totals.prsCreated}`);
-    console.log(`  Failures: ${run.totals.failures}`);
-    console.log(`  Tokens:   ${run.totalTokens.toLocaleString()}`);
-    console.log(`  Cost:     ${costStr}`);
-    console.log('');
+    return this.reportService.report(options);
   }
 
   /**
    * List active worktrees.
    */
   async listWorktrees(): Promise<void> {
-    const worktreeManager = new WorktreeManager(
-      this.config.repoPath,
-      this.config.worktreeRoot,
-      this.config.baseBranch,
-      this.config.branchTemplate,
-      this.logger,
-      this.agentDir,
-      this.backend,
-    );
-
-    const worktrees = await worktreeManager.listActive();
-
-    console.log('\n=== Active CADRE Worktrees ===\n');
-
-    if (worktrees.length === 0) {
-      console.log('  No active worktrees');
-    } else {
-      for (const wt of worktrees) {
-        console.log(`  Issue #${wt.issueNumber}`);
-        console.log(`    Path: ${wt.path}`);
-        console.log(`    Branch: ${wt.branch}`);
-        console.log(`    Base: ${wt.baseCommit.slice(0, 8)}`);
-        console.log('');
-      }
-    }
+    return this.worktreeLifecycleService.listWorktrees();
   }
 
   /**
@@ -373,63 +259,7 @@ export class CadreRuntime {
    *      (i.e. the work is done even if the checkpoint was never updated).
    */
   async pruneWorktrees(): Promise<void> {
-    const worktreeManager = new WorktreeManager(
-      this.config.repoPath,
-      this.config.worktreeRoot,
-      this.config.baseBranch,
-      this.config.branchTemplate,
-      this.logger,
-      this.agentDir,
-      this.backend,
-    );
-
-    const checkpointManager = new FleetCheckpointManager(
-      this.cadreDir,
-      this.config.projectName,
-      this.logger,
-    );
-    const state = await checkpointManager.load();
-    const worktrees = await worktreeManager.listActive();
-    let pruned = 0;
-
-    // Connect to platform provider so we can query live PR state
-    await this.provider.connect();
-    try {
-      for (const wt of worktrees) {
-        const locallyCompleted = state.issues[wt.issueNumber]?.status === 'completed';
-
-        // Check whether the branch's PR is closed or merged on the platform
-        let prDone = false;
-        try {
-          const prs = await this.provider.listPullRequests({ head: wt.branch, state: 'all' });
-          const matching = prs.find((pr) => pr.headBranch === wt.branch);
-          if (matching) {
-            prDone = matching.state === 'closed' || matching.state === 'merged';
-          }
-        } catch (err) {
-          this.logger.warn(
-            `Could not fetch PR state for issue #${wt.issueNumber} (branch ${wt.branch}): ${err}`,
-            { issueNumber: wt.issueNumber },
-          );
-        }
-
-        if (locallyCompleted || prDone) {
-          const reasons = [
-            locallyCompleted ? 'locally completed' : '',
-            prDone ? 'PR closed/merged on platform' : '',
-          ].filter(Boolean).join(', ');
-          await worktreeManager.remove(wt.issueNumber);
-          pruned++;
-          console.log(`  Pruned: issue #${wt.issueNumber} (${reasons})`);
-        } else {
-          console.log(`  Skipped: issue #${wt.issueNumber} (PR still open or no PR found)`);
-        }
-      }
-    } finally {
-      await this.provider.disconnect();
-    }
-
-    console.log(`\nPruned ${pruned} worktrees`);
+    return this.worktreeLifecycleService.pruneWorktrees();
   }
 
   /**
