@@ -54,7 +54,7 @@ export class StatusService {
         console.log(`No per-issue checkpoint found for issue #${issueNumber}`);
       }
     } else {
-      console.log(renderFleetStatus(state, this.config.copilot.model, this.config.copilot));
+      console.log(renderFleetStatus(state, this.config.agent.model, this.config.agent.copilot));
     }
   }
 }

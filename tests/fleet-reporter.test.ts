@@ -37,7 +37,13 @@ function makeIssue(number: number): IssueDetail {
 function makeConfig() {
   return {
     options: { tokenBudget: 100000 },
-    copilot: { cliCommand: 'copilot', model: 'gpt-4', agentDir: '/tmp', timeout: 300000 },
+    agent: {
+      backend: 'copilot',
+      model: 'gpt-4',
+      timeout: 300000,
+      copilot: { cliCommand: 'copilot', agentDir: '/tmp' },
+      claude: { cliCommand: 'claude', agentDir: '/tmp' },
+    },
   } as any;
 }
 

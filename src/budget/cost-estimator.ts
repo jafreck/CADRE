@@ -18,7 +18,7 @@ const DEFAULT_COSTS: Record<string, { input: number; output: number }> = {
 export class CostEstimator {
   private readonly costs: Record<string, { input: number; output: number }>;
 
-  constructor(config: CadreConfig['copilot']) {
+  constructor(config: NonNullable<CadreConfig['agent']>['copilot']) {
     this.costs = { ...DEFAULT_COSTS };
 
     // Apply config overrides

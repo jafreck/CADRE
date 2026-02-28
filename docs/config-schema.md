@@ -116,29 +116,15 @@ Shell commands executed inside the issue worktree.
 
 ---
 
-## `copilot`
-
-Controls the GitHub Copilot CLI backend.
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `cliCommand` | `string` | `"copilot"` | Executable name for the Copilot CLI. |
-| `model` | `string` | `"claude-sonnet-4.6"` | Model identifier passed to the Copilot CLI. |
-| `agentDir` | `string` | `".github/agents"` | Directory containing `.md` agent files. |
-| `timeout` | `number` | `300000` | Timeout in milliseconds for a single agent invocation. |
-| `costOverrides` | `Record<string, { input: number, output: number }>` | — | Per-model cost overrides ($/1K tokens) for token budget accounting. Keys are model names. |
-
----
-
 ## `agent`
 
-Advanced agent backend configuration. When omitted cadre uses the `copilot` backend with defaults.
+Advanced agent backend configuration.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `backend` | `"copilot" \| "claude"` | `"copilot"` | AI backend for agent invocations. |
-| `model` | `string` | — | Model identifier override (takes precedence over backend-specific default). |
-| `timeout` | `number` | — | Timeout in ms override for all agents. |
+| `model` | `string` | `"claude-sonnet-4.6"` | Model identifier override (takes precedence over backend-specific default). |
+| `timeout` | `number` | `300000` | Timeout in ms override for all agents. |
 | `copilot.cliCommand` | `string` | `"copilot"` | Copilot CLI executable. |
 | `copilot.agentDir` | `string` | `".github/agents"` | Agent file directory. |
 | `copilot.costOverrides` | `Record<string, { input, output }>` | — | Per-model cost overrides. |

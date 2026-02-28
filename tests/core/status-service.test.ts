@@ -58,7 +58,13 @@ function makeConfig(): RuntimeConfig {
   return {
     stateDir: '/tmp/cadre-state',
     projectName: 'test-project',
-    copilot: { model: 'claude-sonnet-4.6', cliCommand: 'copilot', agentDir: '.agents', timeout: 300000 },
+    agent: {
+      backend: 'copilot',
+      model: 'claude-sonnet-4.6',
+      timeout: 300000,
+      copilot: { cliCommand: 'copilot', agentDir: '.agents' },
+      claude: { cliCommand: 'claude', agentDir: '.agents' },
+    },
   } as unknown as RuntimeConfig;
 }
 
@@ -137,12 +143,16 @@ describe('StatusService', () => {
       }));
     });
 
-    it('should call renderFleetStatus with fleet state and copilot config', async () => {
+    it('should call renderFleetStatus with fleet state and agent copilot config', async () => {
       const config = makeConfig();
       const service = new StatusService(config, makeLogger());
       await service.status();
 
-      expect(mockRenderFleetStatus).toHaveBeenCalledWith(fleetState, config.copilot.model, config.copilot);
+      expect(mockRenderFleetStatus).toHaveBeenCalledWith(
+        fleetState,
+        config.agent.model,
+        config.agent.copilot,
+      );
     });
 
     it('should print the rendered fleet status', async () => {

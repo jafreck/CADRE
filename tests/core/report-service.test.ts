@@ -27,7 +27,13 @@ function makeConfig(): RuntimeConfig {
   return {
     stateDir: '/tmp/cadre-state',
     projectName: 'test-project',
-    copilot: { model: 'claude-sonnet-4.6', cliCommand: 'copilot', agentDir: '.agents', timeout: 300000 },
+    agent: {
+      backend: 'copilot',
+      model: 'claude-sonnet-4.6',
+      timeout: 300000,
+      copilot: { cliCommand: 'copilot', agentDir: '.agents' },
+      claude: { cliCommand: 'claude', agentDir: '.agents' },
+    },
   } as unknown as RuntimeConfig;
 }
 

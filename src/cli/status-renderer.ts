@@ -39,14 +39,14 @@ export function formatElapsed(isoDate?: string): string {
 export function renderFleetStatus(
   state: FleetCheckpointState,
   model?: string,
-  copilotConfig?: CadreConfig['copilot'],
+  copilotConfig?: NonNullable<CadreConfig['agent']>['copilot'],
 ): string {
   const estimator = new CostEstimator(
-    copilotConfig ?? { cliCommand: 'copilot', model: 'claude-sonnet-4.6', agentDir: '.github/agents', timeout: 300_000 },
+    copilotConfig ?? { cliCommand: 'copilot', agentDir: '.github/agents' },
   );
 
   const totalTokens = state.tokenUsage.total;
-  const totalCostEst = estimator.estimate(totalTokens, model ?? copilotConfig?.model);
+  const totalCostEst = estimator.estimate(totalTokens, model);
   const totalCostStr = totalTokens > 0 ? `$${totalCostEst.totalCost.toFixed(4)}` : '$0.0000';
   const header = [
     `Project: ${state.projectName}`,
@@ -59,7 +59,7 @@ export function renderFleetStatus(
   for (const [issueNumStr, issue] of Object.entries(state.issues)) {
     const issueNum = Number(issueNumStr);
     const tokens = state.tokenUsage.byIssue[issueNum] ?? 0;
-    const costEst = estimator.estimate(tokens, model ?? copilotConfig?.model);
+    const costEst = estimator.estimate(tokens, model);
     const costStr = tokens > 0 ? `$${costEst.totalCost.toFixed(4)}` : '—';
     const phaseIdx = Math.max(0, issue.lastPhase - 1);
     const phaseName = phaseIdx >= 0 && phaseIdx < phaseNames.length ? phaseNames[phaseIdx] : `Phase ${issue.lastPhase}`;

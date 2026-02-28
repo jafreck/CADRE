@@ -30,9 +30,9 @@ export const AgentConfigSchema = z.object({
   /** Which AI backend to use for agent invocations. */
   backend: z.enum(['copilot', 'claude']).default('copilot'),
   /** Model identifier to pass to the backend (overrides backend-specific default). */
-  model: z.string().optional(),
+  model: z.string().default('claude-sonnet-4.6'),
   /** Timeout in milliseconds for agent invocations. */
-  timeout: z.number().int().optional(),
+  timeout: z.number().int().default(300_000),
   /** Copilot-backend-specific options. */
   copilot: z
     .object({
@@ -212,24 +212,6 @@ export const CadreConfigSchema = z.object({
     })
     .default({}),
 
-  copilot: z
-    .object({
-      cliCommand: z.string().default('copilot'),
-      model: z.string().default('claude-sonnet-4.6'),
-      agentDir: z.string().default('agents'),
-      timeout: z.number().int().default(300_000),
-      costOverrides: z
-        .record(
-          z.string(),
-          z.object({
-            input: z.number().min(0),
-            output: z.number().min(0),
-          }),
-        )
-        .optional(),
-    })
-    .default({}),
-
   environment: z
     .object({
       inheritShellPath: z.boolean().default(true),
@@ -340,8 +322,8 @@ export const CadreConfigSchema = z.object({
   /** Notification provider configuration. Optional; defaults to disabled. */
   notifications: NotificationsConfigSchema,
 
-  /** Agent backend configuration. Optional; uses copilot defaults when omitted. */
-  agent: AgentConfigSchema.optional(),
+  /** Agent backend configuration. */
+  agent: AgentConfigSchema.default({}),
 
   /** Review response configuration. */
   reviewResponse: z

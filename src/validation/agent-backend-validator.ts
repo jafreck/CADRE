@@ -10,7 +10,7 @@ export const agentBackendValidator: PreRunValidator = {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    // loadConfig always synthesizes config.agent before returning
+    // loadConfig always returns config.agent with defaults applied
     const agent = config.agent;
     const isClaudeBackend = agent.backend === 'claude';
 

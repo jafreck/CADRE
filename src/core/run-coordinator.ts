@@ -304,8 +304,8 @@ export class RunCoordinator {
     console.log('');
 
     // Cost estimate
-    const estimator = new CostEstimator(this.config.copilot);
-    const estimate = estimator.estimate(result.tokenUsage.total, this.config.copilot.model);
+    const estimator = new CostEstimator(this.config.agent.copilot);
+    const estimate = estimator.estimate(result.tokenUsage.total, this.config.agent.model);
     console.log(`  Estimated cost: ${estimator.format(estimate)}`);
     console.log('');
   }

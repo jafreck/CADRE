@@ -54,7 +54,7 @@ export class ReportWriter {
     const byPhase = result.tokenUsage.byPhase;
     const phases: RunPhaseSummary[] = ISSUE_PHASES.map((phase) => {
       const tokens = byPhase[phase.id] ?? 0;
-      const costEstimate = this.costEstimator.estimate(tokens, this.config.copilot.model);
+      const costEstimate = this.costEstimator.estimate(tokens, this.config.agent.model);
       return {
         id: String(phase.id),
         name: phase.name,
@@ -66,7 +66,7 @@ export class ReportWriter {
 
     const totalCostEstimate = this.costEstimator.estimate(
       result.tokenUsage.total,
-      this.config.copilot.model,
+      this.config.agent.model,
     );
 
     const prsCreated = result.prsCreated.length;

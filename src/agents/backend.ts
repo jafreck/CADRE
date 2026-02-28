@@ -226,10 +226,9 @@ export class CopilotBackend implements AgentBackend {
     private readonly config: RuntimeConfig,
     private readonly logger: Logger,
   ) {
-    // Prefer config.agent.copilot settings, fall back to legacy config.copilot
     this.cliCommand = config.agent.copilot.cliCommand;
     this.agentDir = config.agent.copilot.agentDir;
-    this.defaultTimeout = config.agent.timeout ?? config.copilot.timeout;
+    this.defaultTimeout = config.agent.timeout;
     this.defaultModel = config.agent.model;
   }
 
@@ -292,7 +291,7 @@ export class ClaudeBackend implements AgentBackend {
     private readonly logger: Logger,
   ) {
     this.cliCommand = config.agent.claude.cliCommand || 'claude';
-    this.defaultTimeout = config.agent.timeout ?? config.copilot.timeout;
+    this.defaultTimeout = config.agent.timeout;
     this.defaultModel = config.agent.model;
   }
 

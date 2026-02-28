@@ -39,15 +39,11 @@ export function makeRuntimeConfig(overrides: Partial<RuntimeConfig> = {}): Runti
       postCostComment: false,
     },
     commands: {},
-    copilot: {
-      cliCommand: 'copilot',
-      model: 'claude-sonnet-4.6',
-      agentDir: '/tmp/.cadre/test-project/agents',
-      timeout: 300_000,
-    },
     environment: { inheritShellPath: true, extraPath: [] },
     agent: {
       backend: 'copilot',
+      model: 'claude-sonnet-4.6',
+      timeout: 300_000,
       copilot: {
         cliCommand: 'copilot',
         agentDir: '/tmp/.cadre/test-project/agents',

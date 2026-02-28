@@ -219,12 +219,16 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
     consoleSpy.mockRestore();
   });
 
-  it('calls renderFleetStatus with the loaded fleet state and copilot config', async () => {
+  it('calls renderFleetStatus with the loaded fleet state and agent copilot config', async () => {
     const config = makeConfig();
     const runtime = new CadreRuntime(config);
     await runtime.status();
 
-    expect(mockRenderFleetStatus).toHaveBeenCalledWith(fleetState, config.copilot.model, config.copilot);
+    expect(mockRenderFleetStatus).toHaveBeenCalledWith(
+      fleetState,
+      config.agent.model,
+      config.agent.copilot,
+    );
   });
 
   it('prints the rendered fleet status table', async () => {
