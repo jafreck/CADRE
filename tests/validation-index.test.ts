@@ -6,6 +6,7 @@ import {
   platformValidator,
   commandValidator,
   diskValidator,
+  registryCompletenessValidator,
   checkStaleState,
   resolveStaleState,
 } from '../src/validation/index.js';
@@ -66,16 +67,22 @@ describe('src/validation/index.ts re-exports', () => {
       expect(typeof diskValidator.validate).toBe('function');
     });
 
-    it('should export all five validators with distinct names', () => {
+    it('should export registryCompletenessValidator with a name and validate function', () => {
+      expect(typeof registryCompletenessValidator.name).toBe('string');
+      expect(typeof registryCompletenessValidator.validate).toBe('function');
+    });
+
+    it('should export all six validators with distinct names', () => {
       const names = [
         gitValidator.name,
         agentBackendValidator.name,
         platformValidator.name,
         commandValidator.name,
         diskValidator.name,
+        registryCompletenessValidator.name,
       ];
       const uniqueNames = new Set(names);
-      expect(uniqueNames.size).toBe(5);
+      expect(uniqueNames.size).toBe(6);
     });
   });
 
