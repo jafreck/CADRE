@@ -10,15 +10,14 @@ vi.mock('node:fs/promises', () => ({
   readdir: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('simple-git', () => {
-  const mockGit = {
-    raw: vi.fn().mockResolvedValue('/tmp/repo/.git/worktrees/issue-1'),
-  };
-  return {
-    simpleGit: vi.fn(() => mockGit),
-    default: vi.fn(() => mockGit),
-  };
-});
+const { mockRaw } = vi.hoisted(() => ({
+  mockRaw: vi.fn().mockResolvedValue('/tmp/repo/.git/worktrees/issue-1'),
+}));
+
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => ({ raw: mockRaw })),
+  default: vi.fn(() => ({ raw: mockRaw })),
+}));
 
 vi.mock('../src/util/fs.js', () => ({
   exists: vi.fn().mockResolvedValue(true),
@@ -73,6 +72,8 @@ describe('AgentFileSync', () => {
       vi.mocked(fsUtils.exists).mockResolvedValue(true);
       vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
       vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
+      // Simulate untracked: git ls-files returns empty string
+      mockRaw.mockResolvedValueOnce('');
 
       const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
       const result = await sync.syncAgentFiles('/tmp/worktree', 1);
@@ -88,6 +89,8 @@ describe('AgentFileSync', () => {
       vi.mocked(fsUtils.exists).mockResolvedValue(true);
       vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
       vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
+      // Simulate untracked: git ls-files returns empty string
+      mockRaw.mockResolvedValueOnce('');
 
       const sync = new AgentFileSync('/tmp/agents', 'claude', mockLogger);
       const result = await sync.syncAgentFiles('/tmp/worktree', 1);
@@ -98,6 +101,34 @@ describe('AgentFileSync', () => {
       expect(writeCall[0]).toContain('.claude/agents/code-writer.md');
       // Claude frontmatter should NOT include tools line
       expect(writeCall[1]).not.toContain('tools:');
+    });
+
+    it('excludes already-tracked destination paths from syncedRelPaths', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
+      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
+      // Simulate tracked: git ls-files returns the file path (non-empty)
+      mockRaw.mockResolvedValueOnce('.github/agents/code-writer.agent.md');
+
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
+      const result = await sync.syncAgentFiles('/tmp/worktree', 1);
+
+      // Already-tracked file must not be in the returned paths
+      expect(result).toHaveLength(0);
+    });
+
+    it('includes untracked destination paths in syncedRelPaths', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
+      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
+      // Simulate untracked: git ls-files returns empty string
+      mockRaw.mockResolvedValueOnce('');
+
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
+      const result = await sync.syncAgentFiles('/tmp/worktree', 1);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toContain('.github/agents/code-writer.agent.md');
     });
   });
 

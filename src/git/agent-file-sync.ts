@@ -99,8 +99,11 @@ export class AgentFileSync {
 
     const entries = await readdir(this.agentDir);
     const sourceFiles = entries.filter((f) => f.endsWith('.md') && !f.endsWith('.agent.md'));
-    // Track the exact paths written so CommitManager can precisely unstage them.
+    // Track only untracked (ephemeral) paths written so CommitManager can precisely unstage them.
     const syncedRelPaths: string[] = [];
+
+    const { simpleGit: makeGit } = await import('simple-git');
+    const git = makeGit(worktreePath);
 
     for (const file of sourceFiles) {
       const agentName = file.replace(/\.md$/, '');
@@ -139,7 +142,14 @@ export class AgentFileSync {
         destAbsPath = join(destDir, `${agentName}.agent.md`);
         await writeFile(destAbsPath, frontmatter + body, 'utf-8');
       }
-      syncedRelPaths.push(relative(worktreePath, destAbsPath));
+
+      const destRelPath = relative(worktreePath, destAbsPath);
+      // Only include the path when it is not already tracked in git.
+      // `git ls-files <path>` returns the path when tracked, empty string when untracked.
+      const lsOutput = await git.raw(['ls-files', destRelPath]);
+      if (lsOutput.trim() === '') {
+        syncedRelPaths.push(destRelPath);
+      }
     }
 
     if (syncedRelPaths.length > 0) {

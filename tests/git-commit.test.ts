@@ -274,6 +274,64 @@ describe('CommitManager', () => {
       expect(allPatterns).toContain('.github/agents/code-writer.agent.md');
     });
 
+    it('should not strip .github/agents changes absent from syncedAgentFiles', async () => {
+      // Manager has no syncedAgentFiles — tracked agent files should not be touched
+      mockGit.raw
+        .mockResolvedValueOnce('deadbeef\n') // git log
+        .mockResolvedValue('');              // all subsequent raw calls
+
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['.github/agents/some.agent.md'],
+        files: [{ path: '.github/agents/some.agent.md' }],
+      });
+
+      await manager.stripCadreFiles('base123');
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
+      const allPatterns: string[] = rawCalls
+        .filter(([args]) => args.includes('restore') && args.includes('--staged'))
+        .flatMap(([args]) => args.slice(args.indexOf('--') + 1));
+
+      // The tracked agent file path is not in syncedAgentFiles — must not be restored
+      expect(allPatterns).not.toContain('.github/agents/some.agent.md');
+      // Commit -C should have been called because stages remain
+      const commitCall = rawCalls.find(([args]) => args[0] === 'commit' && args.includes('-C'));
+      expect(commitCall).toBeDefined();
+    });
+
+    it('should strip only paths listed in syncedAgentFiles', async () => {
+      const agentFiles = ['.github/agents/synced.agent.md'];
+      const managerWithAgents = new CommitManager(
+        '/tmp/worktree',
+        { conventional: false, sign: false, commitPerPhase: false, squashBeforePR: false } as CadreConfig['commits'],
+        mockLogger,
+        agentFiles,
+      );
+
+      mockGit.raw
+        .mockResolvedValueOnce('deadbeef\n')
+        .mockResolvedValue('');
+
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['src/index.ts'],
+        files: [{ path: 'src/index.ts' }],
+      });
+
+      await managerWithAgents.stripCadreFiles('base123');
+
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
+      const allPatterns: string[] = rawCalls
+        .filter(([args]) => args.includes('restore') && args.includes('--staged'))
+        .flatMap(([args]) => args.slice(args.indexOf('--') + 1));
+
+      // Only the explicitly listed path should be restored
+      expect(allPatterns).toContain('.github/agents/synced.agent.md');
+      // An unrelated tracked agent file must NOT be included
+      expect(allPatterns).not.toContain('.github/agents/other.agent.md');
+    });
+
     it('should drop a cadre-only commit and not call commit -C for it', async () => {
       mockGit.raw
         .mockResolvedValueOnce('deadbeef\n')

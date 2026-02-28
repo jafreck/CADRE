@@ -17,6 +17,8 @@ export class CommitManager {
      * Worktree-relative paths of agent instruction files written by
      * `WorktreeManager.syncAgentFiles`.  Only these exact files are unstaged
      * before every commit — the target repo's own agent files are untouched.
+     * Already-tracked paths are excluded by `syncAgentFiles` before being passed here,
+     * so only truly ephemeral (untracked) cadre-injected files are listed.
      */
     private readonly syncedAgentFiles: string[] = [],
   ) {
