@@ -24,11 +24,18 @@ describe('issue-analyst.md template', () => {
 
   describe('input contract', () => {
     it('should describe the issue number as input', () => {
-      expect(content).toMatch(/issue number/i);
+      expect(content).toMatch(/issueNumber/i);
     });
 
     it('should describe repository context as input', () => {
-      expect(content).toMatch(/repo(sitory)? context/i);
+      expect(content).toMatch(/repository/i);
+    });
+
+    it('should document context schema fields used by runtime', () => {
+      expect(content).toMatch(/inputFiles/i);
+      expect(content).toMatch(/outputPath/i);
+      expect(content).toMatch(/outputSchema/i);
+      expect(content).toMatch(/worktreePath/i);
     });
   });
 
@@ -51,6 +58,24 @@ describe('issue-analyst.md template', () => {
 
     it('should describe an Ambiguities output section', () => {
       expect(content).toMatch(/Ambiguit/i);
+    });
+
+    it('should instruct writing output to outputPath', () => {
+      expect(content).toMatch(/outputPath/i);
+      expect(content).toMatch(/write/i);
+    });
+
+    it('should use schema-aligned changeType values', () => {
+      expect(content).toMatch(/`bug-fix`/);
+      expect(content).not.toMatch(/- `bug`\s+–/);
+    });
+
+    it('should use schema-aligned scope values', () => {
+      expect(content).toMatch(/`small`/);
+      expect(content).toMatch(/`medium`/);
+      expect(content).toMatch(/`large`/);
+      expect(content).not.toMatch(/`trivial`/);
+      expect(content).not.toMatch(/`moderate`/);
     });
   });
 

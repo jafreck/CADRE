@@ -5,11 +5,33 @@ Analyze a GitHub issue to extract concrete requirements, classify the change typ
 
 ## Input Contract
 
-You will receive:
-- **Issue number**: The GitHub issue number to analyze
-- **Repository context**: Owner and repository name (e.g., `owner/repo`)
+You will receive a context JSON file with this shape:
+
+```json
+{
+  "agent": "issue-analyst",
+  "issueNumber": 42,
+  "projectName": "example-project",
+  "repository": "owner/repo",
+  "worktreePath": "/absolute/path/to/worktree",
+  "phase": 1,
+  "inputFiles": ["/absolute/path/to/.cadre/issues/42/issue.json"],
+  "outputPath": "/absolute/path/to/.cadre/issues/42/analysis.md",
+  "outputSchema": {"type": "object"}
+}
+```
+
+Required fields for this agent:
+- `issueNumber`
+- `repository`
+- `worktreePath`
+- `inputFiles` (must include `issue.json`)
+- `outputPath`
+- `outputSchema`
 
 Use your tools to fetch the full issue text, comments, and any linked code or files referenced in the issue.
+
+Read the `outputPath` field from your context file. Write your output markdown to that exact path.
 
 ## Output Contract
 
@@ -21,16 +43,15 @@ A numbered list of concrete, actionable requirements extracted from the issue. E
 ### Change Type
 Classify the change as one of:
 - `feature` – new functionality being added
-- `bug` – fixing incorrect or broken behavior
+- `bug-fix` – fixing incorrect or broken behavior
 - `refactor` – restructuring code without changing behavior
 - `docs` – documentation-only changes
 - `chore` – maintenance, dependency updates, tooling
 
 ### Scope Estimate
 Estimate the scope as one of:
-- `trivial` – single file, < 10 lines
 - `small` – 1–3 files, straightforward change
-- `moderate` – 3–10 files, some design decisions needed
+- `medium` – 3–10 files, some design decisions needed
 - `large` – 10+ files or significant architectural impact
 
 ### Affected Areas
@@ -45,10 +66,19 @@ After all human-readable sections, you MUST append a `cadre-json` fenced block c
 
 The block must match the `AnalysisResult` schema: `requirements` (string array), `changeType` (one of `"bug-fix"`, `"feature"`, `"refactor"`, `"docs"`, `"chore"`), `scope` (one of `"small"`, `"medium"`, `"large"`), `affectedAreas` (string array), `ambiguities` (string array).
 
+## File Write (MANDATORY)
+
+- Write the complete markdown output to `outputPath`.
+- CADRE validates `analysis.md` from disk in the progress directory; returning text only in stdout is insufficient.
+- Include exactly one trailing `cadre-json` fenced block in the file.
+- Ensure the `cadre-json` object conforms to `outputSchema`.
+
 ## Tool Permissions
 
 - **GitHub issue read**: Fetch issue details, comments, and labels
 - **Code search**: Search the repository for relevant files, symbols, and patterns referenced in the issue
+- **File read**: Read context `inputFiles` and any source files needed for accurate analysis
+- **File write**: Write the final markdown report to `outputPath`
 
 ## Example Output
 
