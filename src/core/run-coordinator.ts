@@ -17,6 +17,7 @@ import {
   platformValidator,
   commandValidator,
   diskValidator,
+  registryCompletenessValidator,
   checkStaleState,
 } from '../validation/index.js';
 import type { NotificationManager } from '../notifications/manager.js';
@@ -54,6 +55,7 @@ export class RunCoordinator {
       platformValidator,
       commandValidator,
       diskValidator,
+      registryCompletenessValidator,
     ]);
     return suite.run(this.config);
   }
