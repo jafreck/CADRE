@@ -1,3 +1,4 @@
+import { isAbsolute, join } from 'node:path';
 import type { CadreEvent } from '../logging/events.js';
 import type { NotificationsConfig } from '../config/schema.js';
 import type { RuntimeConfig } from '../config/loader.js';
@@ -6,11 +7,24 @@ import { WebhookProvider } from './webhook-provider.js';
 import { SlackProvider } from './slack-provider.js';
 import { LogProvider } from './log-provider.js';
 
+function resolveLogFilePath(logFile: string | undefined, stateDir: string | undefined): string | undefined {
+  if (!logFile) {
+    return stateDir ? join(stateDir, 'notifications.jsonl') : undefined;
+  }
+  if (isAbsolute(logFile) || !stateDir) {
+    return logFile;
+  }
+  if (logFile.startsWith('.cadre/')) {
+    return join(stateDir, logFile.slice('.cadre/'.length));
+  }
+  return join(stateDir, logFile);
+}
+
 export class NotificationManager {
   private readonly providers: NotificationProvider[];
   private enabled: boolean;
 
-  constructor(config?: NotificationsConfig) {
+  constructor(config?: NotificationsConfig, stateDir?: string) {
     if (!config || !config.enabled) {
       this.enabled = false;
       this.providers = [];
@@ -25,7 +39,10 @@ export class NotificationManager {
         case 'slack':
           return new SlackProvider({ webhookUrl: p.webhookUrl ?? p.url ?? '', channel: p.channel, events: p.events });
         case 'log':
-          return new LogProvider({ logFile: p.logFile, events: p.events });
+          return new LogProvider({
+            logFile: resolveLogFilePath(p.logFile, stateDir),
+            events: p.events,
+          });
       }
     });
   }
@@ -49,5 +66,5 @@ export class NotificationManager {
 }
 
 export function createNotificationManager(config: RuntimeConfig): NotificationManager {
-  return new NotificationManager(config.notifications);
+  return new NotificationManager(config.notifications, config.stateDir);
 }
