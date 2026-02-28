@@ -256,19 +256,28 @@ Out-of-band notifications sent independently of issue comments.
 
 ## `dogfood`
 
-Self-reporting mode — when enabled, CADRE automatically creates GitHub issues in its own repository when it encounters runtime problems.
+Self-reporting mode — when enabled, CADRE collects runtime signals (errors, warnings, anomalies) during the run and triages them at the end. Signals are **not** filed as GitHub issues immediately; instead, a dedicated triage step performs topic clustering, severity classification, and threshold filtering before creating issues in the configured repository.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | `boolean` | `false` | Enable dogfood mode. When `true`, runtime events create issues in the configured repository. |
-| `maxIssuesPerRun` | `number` (≥ 1) | `5` | Maximum number of issues to create per run to prevent spam. |
+| `enabled` | `boolean` | `false` | Enable dogfood mode. When `true`, runtime signals are collected and triaged at the end of the run. When `false`, signals are still logged but no triage runs and no issues are filed. |
+| `maxIssuesPerRun` | `number` (≥ 1) | `5` | Maximum number of issues to create per run. Enforced **after** triage aggregation and severity filtering, not as a per-event counter. |
+| `minimumIssueLevel` | `"critical" \| "severe" \| "high" \| "medium" \| "low"` | `"low"` | Minimum severity threshold for filing issues. Only topic candidates classified at or above this level are filed. Candidates below the threshold are logged with skip reasons. |
 | `labels` | `string[]` | `["cadre-dogfood"]` | Labels applied to every dogfood issue. |
 | `titlePrefix` | `string` | `"[CADRE Dogfood]"` | Prefix prepended to dogfood issue titles. |
+
+### Triage behavior
+
+1. **Signal collection** — During the run, dogfood-relevant events (errors, failures, anomalies) are collected in memory. Lifecycle/info-only events (e.g., fleet-started, phase-completed) are recorded as supporting evidence but are never filed on their own.
+2. **Topic clustering** — Collected signals are grouped into topics by subsystem, failure mode, and remediation path. At most one issue is filed per topic per run.
+3. **Severity classification** — Each topic is assigned a severity level (`critical`, `severe`, `high`, `medium`, or `low`) based on impact scope, frequency, and recoverability.
+4. **Threshold filtering** — Topics below `minimumIssueLevel` are skipped (logged with reasons). Remaining topics are ranked by severity and capped at `maxIssuesPerRun` (over-cap candidates are logged with their rank).
 
 ```json
 "dogfood": {
   "enabled": true,
   "maxIssuesPerRun": 3,
+  "minimumIssueLevel": "medium",
   "labels": ["cadre-dogfood", "bug"],
   "titlePrefix": "[CADRE Dogfood]"
 }
