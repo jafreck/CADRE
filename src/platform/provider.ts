@@ -111,6 +111,8 @@ export interface ListPullRequestsParams {
   state?: string;
 }
 
+export type PullRequestMergeMethod = 'merge' | 'squash' | 'rebase';
+
 /**
  * Parameters for listing/searching issues.
  */
@@ -187,7 +189,7 @@ export interface PlatformProvider {
   applyLabels(prNumber: number, labels: string[]): Promise<void>;
 
   /** Merge a pull request into the given base branch. */
-  mergePullRequest(prNumber: number, baseBranch: string): Promise<void>;
+  mergePullRequest(prNumber: number, baseBranch: string, mergeMethod?: PullRequestMergeMethod): Promise<void>;
 
   // ── Issue Linking ──
 

@@ -5,6 +5,7 @@ import { launchWithRetry } from './helpers.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import type { AgentResult, PRContent } from '../agents/types.js';
 import { extractCadreJson } from '../util/cadre-json.js';
+import type { PullRequestMergeMethod } from '../platform/provider.js';
 
 /** Maximum total invocations (initial + retries) when pr-content.md fails to parse. */
 const MAX_ATTEMPTS = 2;
@@ -148,6 +149,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     if (existingPR !== null) {
       await ctx.platform.updatePullRequest(existingPR.number, { title: prTitle, body: prBody });
       ctx.callbacks.setPR?.(existingPR);
+      await this.autoCompleteIfEnabled(ctx, existingPR.number);
       return;
     }
 
@@ -161,6 +163,38 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       reviewers: ctx.config.pullRequest.reviewers,
     });
     ctx.callbacks.setPR?.(pr);
+    if (pr?.number != null) {
+      await this.autoCompleteIfEnabled(ctx, pr.number);
+    }
+  }
+
+  private async autoCompleteIfEnabled(ctx: PhaseContext, prNumber: number): Promise<void> {
+    const autoComplete = ctx.config.pullRequest.autoComplete;
+    if (autoComplete == null) return;
+
+    const isEnabled =
+      typeof autoComplete === 'boolean'
+        ? autoComplete
+        : (autoComplete.enabled ?? false);
+    if (!isEnabled) return;
+
+    const mergeMethod: PullRequestMergeMethod =
+      typeof autoComplete === 'boolean'
+        ? 'squash'
+        : (autoComplete.merge_method ?? 'squash');
+
+    try {
+      await ctx.platform.mergePullRequest(prNumber, ctx.config.baseBranch, mergeMethod);
+      ctx.services.logger.info(
+        `Auto-completed PR #${prNumber} into ${ctx.config.baseBranch} using ${mergeMethod} merge`,
+        { issueNumber: ctx.issue.number },
+      );
+    } catch (err) {
+      ctx.services.logger.warn(
+        `Auto-complete failed for PR #${prNumber}: ${String(err)}`,
+        { issueNumber: ctx.issue.number },
+      );
+    }
   }
 
   /** Compute final label set, adding 'cadre-generated' for self-runs. */

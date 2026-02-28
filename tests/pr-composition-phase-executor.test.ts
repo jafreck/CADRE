@@ -67,6 +67,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     createPullRequest: vi.fn().mockResolvedValue(undefined),
     updatePullRequest: vi.fn().mockResolvedValue(undefined),
     findOpenPR: vi.fn().mockResolvedValue(null),
+    mergePullRequest: vi.fn().mockResolvedValue(undefined),
   };
 
   const logger = {
@@ -368,6 +369,116 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(
         (ctx.platform as never as { issueLinkSuffix: ReturnType<typeof vi.fn> }).issueLinkSuffix,
       ).not.toHaveBeenCalled();
+    });
+
+    it('should auto-complete PR with squash merge when pullRequest.autoComplete is true', async () => {
+      const prInfo = { number: 101, url: 'https://github.com/owner/repo/pull/101', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+        mergePullRequest: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, autoComplete: true, linkIssue: false, draft: false, labels: [], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect(platform.mergePullRequest).toHaveBeenCalledWith(101, 'main', 'squash');
+    });
+
+    it('should not auto-complete PR when pullRequest.autoComplete is false', async () => {
+      const prInfo = { number: 102, url: 'https://github.com/owner/repo/pull/102', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+        mergePullRequest: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, autoComplete: false, linkIssue: false, draft: false, labels: [], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect(platform.mergePullRequest).not.toHaveBeenCalled();
+    });
+
+    it('should use configured autoComplete.merge_method when autoComplete is an object', async () => {
+      const prInfo = { number: 103, url: 'https://github.com/owner/repo/pull/103', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+        mergePullRequest: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: {
+            autoCreate: true,
+            autoComplete: { enabled: true, merge_method: 'rebase' },
+            linkIssue: false,
+            draft: false,
+            labels: [],
+            reviewers: [],
+          },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect(platform.mergePullRequest).toHaveBeenCalledWith(103, 'main', 'rebase');
+    });
+
+    it('should not auto-complete when autoComplete object omits enabled', async () => {
+      const prInfo = { number: 104, url: 'https://github.com/owner/repo/pull/104', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+        mergePullRequest: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: {
+            autoCreate: true,
+            autoComplete: { merge_method: 'squash' },
+            linkIssue: false,
+            draft: false,
+            labels: [],
+            reviewers: [],
+          },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect(platform.mergePullRequest).not.toHaveBeenCalled();
     });
 
     it('should pass labels from config to createPullRequest', async () => {

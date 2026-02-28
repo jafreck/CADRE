@@ -110,6 +110,8 @@ export class MockPlatformProvider implements PlatformProvider {
     }
   }
 
+  async mergePullRequest(_prNumber: number, _baseBranch: string): Promise<void> {}
+
   issueLinkSuffix(issueNumber: number): string {
     return `Closes #${issueNumber}`;
   }

@@ -130,6 +130,20 @@ export const CadreConfigSchema = z.object({
     .object({
       /** Auto-create PR when issue pipeline completes. */
       autoCreate: z.boolean().default(true),
+      /** Auto-complete behavior for created/updated PRs. */
+      autoComplete: z
+        .union([
+          z.boolean(),
+          z
+            .object({
+              /** Enable PR auto-complete. */
+              enabled: z.boolean().default(false),
+              /** Merge strategy to use for PR auto-complete. */
+              merge_method: z.enum(['merge', 'squash', 'rebase']).default('squash'),
+            })
+            .default({}),
+        ])
+        .default(false),
       /** Draft PR instead of ready-for-review. */
       draft: z.boolean().default(true),
       /** Add labels to the PR. */

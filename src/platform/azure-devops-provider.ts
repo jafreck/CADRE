@@ -9,6 +9,7 @@ import type {
   ReviewThread,
   PRComment,
   PRReview,
+  PullRequestMergeMethod,
 } from './provider.js';
 import { Logger } from '../logging/logger.js';
 
@@ -395,7 +396,11 @@ export class AzureDevOpsProvider implements PlatformProvider {
     return prs.find((pr) => pr.headBranch === branch) ?? null;
   }
 
-  async mergePullRequest(prNumber: number, _baseBranch: string): Promise<void> {
+  async mergePullRequest(
+    prNumber: number,
+    _baseBranch: string,
+    mergeMethod: PullRequestMergeMethod = 'merge',
+  ): Promise<void> {
     this.ensureConnected();
 
     const repoName = this.adoConfig.repositoryName ?? this.adoConfig.project;
@@ -412,7 +417,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
         status: 'completed',
         lastMergeSourceCommit,
         completionOptions: {
-          mergeStrategy: 'noFastForward',
+          mergeStrategy: mergeMethod === 'squash' ? 'squash' : 'noFastForward',
         },
       }),
     });

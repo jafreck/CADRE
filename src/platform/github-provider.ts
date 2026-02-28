@@ -9,6 +9,7 @@ import type {
   ReviewThread,
   PRComment,
   PRReview,
+  PullRequestMergeMethod,
 } from './provider.js';
 import { GitHubAPI } from '../github/api.js';
 import { Logger } from '../logging/logger.js';
@@ -155,13 +156,17 @@ export class GitHubProvider implements PlatformProvider {
     return prs.find((pr) => pr.headBranch === branch) ?? null;
   }
 
-  async mergePullRequest(prNumber: number, _baseBranch: string): Promise<void> {
+  async mergePullRequest(
+    prNumber: number,
+    _baseBranch: string,
+    mergeMethod: PullRequestMergeMethod = 'merge',
+  ): Promise<void> {
     const oct = this.octokit ?? new Octokit({ auth: process.env.GITHUB_TOKEN });
     await oct.rest.pulls.merge({
       owner: this.owner,
       repo: this.repo,
       pull_number: prNumber,
-      merge_method: 'merge',
+      merge_method: mergeMethod,
     });
   }
 

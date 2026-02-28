@@ -31,6 +31,7 @@ describe('CadreConfigSchema', () => {
     expect(result.options.maxParallelAgents).toBe(3);
     expect(result.options.dryRun).toBe(false);
     expect(result.options.resume).toBe(false);
+    expect(result.pullRequest.autoComplete).toBe(false);
     expect(result.pullRequest.draft).toBe(true);
     expect(result.pullRequest.labels).toEqual(['cadre-generated']);
     expect(result.copilot.cliCommand).toBe('copilot');
@@ -43,6 +44,45 @@ describe('CadreConfigSchema', () => {
     expect(auth.appId).toBe('12345');
     expect(auth.installationId).toBe('67890');
     expect(auth.privateKeyFile).toBe('/path/to/key.pem');
+  });
+
+  it('should accept pullRequest.autoComplete object with merge_method', () => {
+    const result = CadreConfigSchema.safeParse({
+      ...validConfig,
+      pullRequest: {
+        autoComplete: {
+          enabled: true,
+          merge_method: 'squash',
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject invalid pullRequest.autoComplete.merge_method', () => {
+    const result = CadreConfigSchema.safeParse({
+      ...validConfig,
+      pullRequest: {
+        autoComplete: {
+          enabled: true,
+          merge_method: 'invalid-method',
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should default pullRequest.autoComplete.enabled to false in object form', () => {
+    const result = CadreConfigSchema.parse({
+      ...validConfig,
+      pullRequest: {
+        autoComplete: {
+          merge_method: 'squash',
+        },
+      },
+    });
+
+    expect(result.pullRequest.autoComplete).toEqual({ enabled: false, merge_method: 'squash' });
   });
 
   it('should reject invalid projectName', () => {
@@ -265,6 +305,7 @@ describe('CadreConfigSchema', () => {
       },
       pullRequest: {
         autoCreate: true,
+        autoComplete: true,
         draft: false,
         labels: ['auto', 'cadre'],
         reviewers: ['reviewer1'],

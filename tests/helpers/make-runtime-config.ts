@@ -14,6 +14,7 @@ export function makeRuntimeConfig(overrides: Partial<RuntimeConfig> = {}): Runti
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
     pullRequest: {
       autoCreate: true,
+      autoComplete: false,
       draft: true,
       labels: ['cadre-generated'],
       reviewers: [],
