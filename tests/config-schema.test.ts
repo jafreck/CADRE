@@ -1005,6 +1005,35 @@ describe('CadreConfigSchema', () => {
         expect(result.data.dogfood.enabled).toBe(false);
       }
     });
+
+    it('should default minimumIssueLevel to low when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.dogfood.minimumIssueLevel).toBe('low');
+    });
+
+    it('should default minimumIssueLevel to low when dogfood is empty', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: {},
+      });
+      expect(result.dogfood.minimumIssueLevel).toBe('low');
+    });
+
+    it('should accept a valid minimumIssueLevel', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: { minimumIssueLevel: 'high' },
+      });
+      expect(result.dogfood.minimumIssueLevel).toBe('high');
+    });
+
+    it('should reject an invalid minimumIssueLevel', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dogfood: { minimumIssueLevel: 'invalid' },
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });
 

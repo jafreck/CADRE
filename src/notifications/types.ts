@@ -29,3 +29,29 @@ export type NotificationEvent =
 export interface NotificationProvider {
   notify(event: CadreEvent): Promise<void>;
 }
+
+// ── Dogfood triage types ──
+
+export type DogfoodSeverity = 'critical' | 'severe' | 'high' | 'medium' | 'low';
+
+export interface DogfoodSignal {
+  event: CadreEvent;
+  timestamp: string;
+}
+
+export interface DogfoodTopic {
+  key: string;
+  severity: DogfoodSeverity;
+  severityJustification: string;
+  summary: string;
+  signals: DogfoodSignal[];
+  subsystem: string;
+  failureMode: string;
+  impactScope: string;
+}
+
+export interface DogfoodTriageResult {
+  filed: DogfoodTopic[];
+  skippedBelowThreshold: DogfoodTopic[];
+  skippedOverCap: DogfoodTopic[];
+}

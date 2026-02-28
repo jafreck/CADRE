@@ -5,7 +5,8 @@ import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
 import { Logger } from '../logging/logger.js';
 import { createNotificationManager } from '../notifications/manager.js';
-import { DogfoodProvider } from '../notifications/dogfood-provider.js';
+import { DogfoodCollector } from '../notifications/dogfood-provider.js';
+import type { DogfoodCollectorConfig } from '../notifications/dogfood-provider.js';
 import { GitHubAPI } from '../github/api.js';
 import { StatusService } from './status-service.js';
 import { ResetService } from './reset-service.js';
@@ -24,6 +25,7 @@ export class CadreRuntime {
   private readonly reportService: ReportService;
   private readonly worktreeLifecycleService: WorktreeLifecycleService;
   private readonly runCoordinator: RunCoordinator;
+  private readonly dogfoodCollector?: DogfoodCollector;
 
   constructor(private readonly config: RuntimeConfig) {
     this.logger = new Logger({
@@ -39,12 +41,14 @@ export class CadreRuntime {
 
     if (config.dogfood?.enabled) {
       const dogfoodApi = new GitHubAPI(config.repository, this.logger);
-      const dogfoodProvider = new DogfoodProvider(dogfoodApi, {
+      const dogfoodCollector = new DogfoodCollector(dogfoodApi, {
         maxIssuesPerRun: config.dogfood.maxIssuesPerRun,
         labels: config.dogfood.labels,
         titlePrefix: config.dogfood.titlePrefix,
+        minimumIssueLevel: config.dogfood.minimumIssueLevel,
       });
-      notifications.addProvider(dogfoodProvider);
+      notifications.addProvider(dogfoodCollector);
+      this.dogfoodCollector = dogfoodCollector;
     }
 
     this.statusService = new StatusService(config, this.logger);
@@ -59,7 +63,17 @@ export class CadreRuntime {
   }
 
   async run(): Promise<FleetResult> {
-    return this.runCoordinator.run();
+    const result = await this.runCoordinator.run();
+
+    if (this.dogfoodCollector) {
+      try {
+        await this.dogfoodCollector.runTriage();
+      } catch (err) {
+        this.logger.error(`Dogfood triage failed: ${err}`);
+      }
+    }
+
+    return result;
   }
 
   async status(issueNumber?: number): Promise<void> {

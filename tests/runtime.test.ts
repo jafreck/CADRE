@@ -40,6 +40,7 @@ vi.mock('../src/notifications/manager.js', () => ({
   })),
   createNotificationManager: vi.fn().mockReturnValue({
     dispatch: vi.fn().mockResolvedValue(undefined),
+    addProvider: vi.fn(),
   }),
 }));
 
@@ -61,6 +62,22 @@ vi.mock('../src/core/fleet-orchestrator.js', () => ({
       totalDuration: 100,
       tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
     }),
+  })),
+}));
+
+const mockRunTriage = vi.fn().mockResolvedValue({ filed: [], skippedBelowThreshold: [], skippedOverCap: [] });
+const mockDogfoodNotify = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../src/notifications/dogfood-provider.js', () => ({
+  DogfoodCollector: vi.fn().mockImplementation(() => ({
+    notify: mockDogfoodNotify,
+    runTriage: mockRunTriage,
+  })),
+}));
+
+vi.mock('../src/github/api.js', () => ({
+  GitHubAPI: vi.fn().mockImplementation(() => ({
+    createIssue: vi.fn().mockResolvedValue({ number: 1, url: 'https://github.com/test' }),
   })),
 }));
 
@@ -182,6 +199,8 @@ vi.mock('../src/reporting/report-writer.js', () => ({
 
 import { CadreRuntime } from '../src/core/runtime.js';
 import { createNotificationManager } from '../src/notifications/manager.js';
+import { DogfoodCollector } from '../src/notifications/dogfood-provider.js';
+import { GitHubAPI } from '../src/github/api.js';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { FleetProgressWriter } from '../src/core/progress.js';
@@ -195,6 +214,8 @@ import { PreRunValidationSuite } from '../src/validation/index.js';
 import { WorktreeManager } from '../src/git/worktree.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
+const MockDogfoodCollector = DogfoodCollector as unknown as ReturnType<typeof vi.fn>;
+const MockGitHubAPI = GitHubAPI as unknown as ReturnType<typeof vi.fn>;
 const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
 const MockCreatePlatformProvider = createPlatformProvider as ReturnType<typeof vi.fn>;
 const MockFleetProgressWriter = FleetProgressWriter as unknown as ReturnType<typeof vi.fn>;
@@ -1533,5 +1554,93 @@ describe('CadreRuntime — resolveIssues() error handling', () => {
     expect(MockFleetOrchestrator).not.toHaveBeenCalled();
     expect(result.success).toBe(true);
     expect(result.issues).toHaveLength(0);
+  });
+});
+
+describe('CadreRuntime — DogfoodCollector wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    MockCreateNotificationManager.mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue(undefined),
+      addProvider: vi.fn(),
+    });
+    mockRunTriage.mockResolvedValue({ filed: [], skippedBelowThreshold: [], skippedOverCap: [] });
+  });
+
+  it('should not create DogfoodCollector when dogfood.enabled is false', () => {
+    const config = makeConfig();
+    config.dogfood = { enabled: false, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]', minimumIssueLevel: 'low' };
+    new CadreRuntime(config);
+
+    expect(MockDogfoodCollector).not.toHaveBeenCalled();
+  });
+
+  it('should create DogfoodCollector when dogfood.enabled is true', () => {
+    const config = makeConfig();
+    config.dogfood = { enabled: true, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]', minimumIssueLevel: 'low' };
+    new CadreRuntime(config);
+
+    expect(MockDogfoodCollector).toHaveBeenCalledOnce();
+    expect(MockDogfoodCollector).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        maxIssuesPerRun: 5,
+        labels: ['cadre-dogfood'],
+        titlePrefix: '[CADRE Dogfood]',
+        minimumIssueLevel: 'low',
+      }),
+    );
+  });
+
+  it('should register DogfoodCollector as a notification provider', () => {
+    const addProviderSpy = vi.fn();
+    MockCreateNotificationManager.mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue(undefined),
+      addProvider: addProviderSpy,
+    });
+    const config = makeConfig();
+    config.dogfood = { enabled: true, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]', minimumIssueLevel: 'low' };
+    new CadreRuntime(config);
+
+    expect(addProviderSpy).toHaveBeenCalledOnce();
+  });
+
+  it('should call runTriage after run() when dogfood is enabled', async () => {
+    const config = makeConfig();
+    config.dogfood = { enabled: true, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]', minimumIssueLevel: 'low' };
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    expect(mockRunTriage).toHaveBeenCalledOnce();
+  });
+
+  it('should not call runTriage when dogfood is disabled', async () => {
+    const config = makeConfig();
+    config.dogfood = { enabled: false, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]', minimumIssueLevel: 'low' };
+    const runtime = new CadreRuntime(config);
+    await runtime.run();
+
+    expect(mockRunTriage).not.toHaveBeenCalled();
+  });
+
+  it('should return FleetResult even if runTriage throws', async () => {
+    mockRunTriage.mockRejectedValueOnce(new Error('triage boom'));
+    const config = makeConfig();
+    config.dogfood = { enabled: true, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]', minimumIssueLevel: 'low' };
+    const runtime = new CadreRuntime(config);
+    const result = await runtime.run();
+
+    expect(result.success).toBe(true);
+  });
+
+  it('should pass minimumIssueLevel from config to DogfoodCollector', () => {
+    const config = makeConfig();
+    config.dogfood = { enabled: true, maxIssuesPerRun: 3, labels: ['custom'], titlePrefix: '[Custom]', minimumIssueLevel: 'high' };
+    new CadreRuntime(config);
+
+    expect(MockDogfoodCollector).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ minimumIssueLevel: 'high' }),
+    );
   });
 });

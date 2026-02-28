@@ -362,8 +362,10 @@ export const CadreConfigSchema = z.object({
       labels: z.array(z.string()).default(['cadre-dogfood']),
       /** Prefix for dogfood issue titles. */
       titlePrefix: z.string().default('[CADRE Dogfood]'),
+      /** Minimum severity level for filing dogfood issues. */
+      minimumIssueLevel: z.enum(['critical', 'severe', 'high', 'medium', 'low']).default('low'),
     })
-    .default({ enabled: false, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]' }),
+    .default({ enabled: false, maxIssuesPerRun: 5, labels: ['cadre-dogfood'], titlePrefix: '[CADRE Dogfood]', minimumIssueLevel: 'low' }),
 
   /** DAG (dependency graph) configuration for ordering issues by dependency. */
   dag: z

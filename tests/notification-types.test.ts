@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { NotificationProvider, NotificationEvent, CadreEvent } from '../src/notifications/types.js';
+import type {
+  NotificationProvider,
+  NotificationEvent,
+  CadreEvent,
+  DogfoodSeverity,
+  DogfoodSignal,
+  DogfoodTopic,
+  DogfoodTriageResult,
+} from '../src/notifications/types.js';
 
 describe('NotificationProvider interface', () => {
   it('should be implementable as a class', async () => {
@@ -107,5 +115,83 @@ describe('NotificationEvent type union', () => {
       'budget-exceeded',
     ];
     expect(notificationTypes).toHaveLength(8);
+  });
+});
+
+describe('DogfoodSeverity type', () => {
+  it('should accept all valid severity levels', () => {
+    const levels: DogfoodSeverity[] = ['critical', 'severe', 'high', 'medium', 'low'];
+    expect(levels).toHaveLength(5);
+    expect(levels).toContain('critical');
+    expect(levels).toContain('severe');
+    expect(levels).toContain('high');
+    expect(levels).toContain('medium');
+    expect(levels).toContain('low');
+  });
+});
+
+describe('DogfoodSignal interface', () => {
+  it('should hold a CadreEvent and a timestamp', () => {
+    const signal: DogfoodSignal = {
+      event: { type: 'fleet-started', issueCount: 1, maxParallel: 1 },
+      timestamp: '2026-01-01T00:00:00.000Z',
+    };
+    expect(signal.event.type).toBe('fleet-started');
+    expect(signal.timestamp).toBe('2026-01-01T00:00:00.000Z');
+  });
+});
+
+describe('DogfoodTopic interface', () => {
+  it('should contain key, severity, signals, and subsystem metadata', () => {
+    const topic: DogfoodTopic = {
+      key: 'issue-pipeline:issue-failure:issue-1',
+      severity: 'high',
+      severityJustification: 'Issue pipeline failure',
+      summary: 'issue-pipeline issue-failure in issue-1 (1 signal)',
+      signals: [{ event: { type: 'issue-failed', issueNumber: 1, issueTitle: 't', error: 'e', phase: 1 }, timestamp: '2026-01-01T00:00:00.000Z' }],
+      subsystem: 'issue-pipeline',
+      failureMode: 'issue-failure',
+      impactScope: 'issue-1',
+    };
+    expect(topic.key).toBe('issue-pipeline:issue-failure:issue-1');
+    expect(topic.severity).toBe('high');
+    expect(topic.severityJustification).toBe('Issue pipeline failure');
+    expect(topic.signals).toHaveLength(1);
+    expect(topic.subsystem).toBe('issue-pipeline');
+    expect(topic.failureMode).toBe('issue-failure');
+    expect(topic.impactScope).toBe('issue-1');
+  });
+});
+
+describe('DogfoodTriageResult interface', () => {
+  it('should contain filed, skippedBelowThreshold, and skippedOverCap arrays', () => {
+    const result: DogfoodTriageResult = {
+      filed: [],
+      skippedBelowThreshold: [],
+      skippedOverCap: [],
+    };
+    expect(result.filed).toEqual([]);
+    expect(result.skippedBelowThreshold).toEqual([]);
+    expect(result.skippedOverCap).toEqual([]);
+  });
+
+  it('should accept populated arrays', () => {
+    const topic: DogfoodTopic = {
+      key: 'fleet:fleet-interrupted:fleet',
+      severity: 'critical',
+      severityJustification: 'Fleet was interrupted',
+      summary: 'fleet fleet-interrupted in fleet (1 signal)',
+      signals: [{ event: { type: 'fleet-interrupted', signal: 'SIGTERM', issuesInProgress: [1] }, timestamp: '2026-01-01T00:00:00.000Z' }],
+      subsystem: 'fleet',
+      failureMode: 'fleet-interrupted',
+      impactScope: 'fleet',
+    };
+    const result: DogfoodTriageResult = {
+      filed: [topic],
+      skippedBelowThreshold: [],
+      skippedOverCap: [],
+    };
+    expect(result.filed).toHaveLength(1);
+    expect(result.filed[0].severity).toBe('critical');
   });
 });
