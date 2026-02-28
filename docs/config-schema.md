@@ -72,6 +72,7 @@ Selects which issues to work on. Provide **one** of the two forms below.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `autoCreate` | `boolean` | `true` | Automatically open a PR when the issue pipeline completes. |
+| `autoComplete` | `boolean \| { enabled?: boolean, merge_method?: "merge" \| "squash" \| "rebase" }` | `false` | Auto-complete issue PRs after creation/update. Boolean `true` defaults to squash; object form lets you choose `merge_method`. |
 | `draft` | `boolean` | `true` | Open the PR as a draft. |
 | `labels` | `string[]` | `["cadre-generated"]` | Labels to apply to the PR. |
 | `reviewers` | `string[]` | `[]` | GitHub/ADO usernames to request reviews from. |
