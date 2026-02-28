@@ -1,6 +1,7 @@
 import { GitHubAPI } from '../github/api.js';
 import type { CadreConfig } from '../config/schema.js';
 import { Logger } from '../logging/logger.js';
+import { formatPullRequestTitle } from '../util/title-format.js';
 
 export interface PullRequestInfo {
   number: number;
@@ -33,7 +34,7 @@ export class PullRequestCreator {
     const prConfig = this.config.pullRequest;
 
     // Build PR title
-    const title = `${issueTitle} (#${issueNumber})`;
+    const title = formatPullRequestTitle(issueTitle, issueTitle, issueNumber);
 
     // Add "Closes #N" to body if configured
     let fullBody = body;

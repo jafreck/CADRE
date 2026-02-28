@@ -15,6 +15,7 @@ import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { NotificationManager } from '../notifications/manager.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
+import { formatPullRequestTitle } from '../util/title-format.js';
 import { ReviewDiscoveryService, isSkipResult } from './review-discovery-service.js';
 import { RebaseRecoveryService } from './rebase-recovery-service.js';
 import { ReviewPlanBuilder } from './review-plan-builder.js';
@@ -178,7 +179,7 @@ export class ReviewResponseOrchestrator {
             const resultParser = new ResultParser();
             const prContent = await resultParser.parsePRContent(prContentPath);
             const newTitle = prContent.title
-              ? `${prContent.title} (#${issueNumber})`
+              ? formatPullRequestTitle(prContent.title, issue.title, issueNumber)
               : undefined;
             let newBody = prContent.body;
             if (this.config.pullRequest.linkIssue) {

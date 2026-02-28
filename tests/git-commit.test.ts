@@ -412,6 +412,24 @@ describe('CommitManager', () => {
     });
   });
 
+  describe('commit message formatting', () => {
+    it('should normalize to canonical conventional subject format', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['src/foo.ts'],
+        files: [{ path: 'src/foo.ts' }],
+      });
+
+      await manager.commit('wip: tighten retry handling', 42, 'feat');
+
+      expect(mockGit.commit).toHaveBeenCalledWith(
+        'feat(issue-42): wip: tighten retry handling (#42)',
+        undefined,
+        expect.objectContaining({ '--no-verify': null }),
+      );
+    });
+  });
+
   describe('push', () => {
     it('should push without force by default', async () => {
       await manager.push(false, 'feature/my-branch');
