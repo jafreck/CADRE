@@ -144,6 +144,7 @@ export class RunCoordinator {
       this.logger,
       this.agentDir,
       this.backend,
+      this.config.stateDir,
     );
 
     const launcher = new AgentLauncher(this.config, this.logger);

@@ -63,7 +63,7 @@ export class FleetOrchestrator {
     private readonly dag?: IssueDag,
     private readonly dagDepMap?: Record<number, number[]>,
   ) {
-    this.cadreDir = join(config.repoPath, '.cadre');
+    this.cadreDir = config.stateDir;
     this.fleetCheckpoint = new FleetCheckpointManager(this.cadreDir, config.projectName, logger);
     this.fleetProgress = new FleetProgressWriter(this.cadreDir, logger);
     this.tokenTracker = new TokenTracker();

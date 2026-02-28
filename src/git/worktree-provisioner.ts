@@ -53,6 +53,7 @@ export class WorktreeProvisioner {
     private readonly logger: Logger,
     private readonly agentDir?: string,
     private readonly backend: string = 'copilot',
+    private readonly stateDir: string = join(repoPath, '.cadre'),
   ) {
     this.git = simpleGit(repoPath);
     this.agentFileSync = new AgentFileSync(agentDir, backend, logger);
@@ -62,6 +63,7 @@ export class WorktreeProvisioner {
       repoPath,
       logger,
       this.resolveBranchName.bind(this),
+      this.stateDir,
     );
   }
 
