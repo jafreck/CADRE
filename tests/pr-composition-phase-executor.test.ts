@@ -971,6 +971,68 @@ describe('PRCompositionPhaseExecutor', () => {
     });
   });
 
+  describe('post-strip validation guard', () => {
+    function makeAutoCreateCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
+      return makeCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        ...overrides,
+      });
+    }
+
+    it('should throw before push() when post-strip diff is empty and original diff was non-empty', async () => {
+      // First call: original diff (non-empty), second call: post-strip diff (empty)
+      const getDiff = vi.fn()
+        .mockResolvedValueOnce('diff --git a/foo.ts b/foo.ts\n+added line')
+        .mockResolvedValueOnce('');
+      const push = vi.fn().mockResolvedValue(undefined);
+      const ctx = makeAutoCreateCtx({
+        io: {
+          progressDir: '/tmp/progress',
+          progressWriter: {} as never,
+          checkpoint: {} as never,
+          commitManager: {
+            getDiff,
+            squash: vi.fn().mockResolvedValue(undefined),
+            stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+            push,
+          } as never,
+        },
+      });
+
+      await expect(executor.execute(ctx)).rejects.toThrow(/stripCadreFiles\(\) removed all changes/);
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it('should proceed to push() when post-strip diff is non-empty', async () => {
+      const getDiff = vi.fn()
+        .mockResolvedValueOnce('diff --git a/foo.ts b/foo.ts\n+added line')
+        .mockResolvedValueOnce('diff --git a/foo.ts b/foo.ts\n+added line');
+      const push = vi.fn().mockResolvedValue(undefined);
+      const ctx = makeAutoCreateCtx({
+        io: {
+          progressDir: '/tmp/progress',
+          progressWriter: {} as never,
+          checkpoint: {} as never,
+          commitManager: {
+            getDiff,
+            squash: vi.fn().mockResolvedValue(undefined),
+            stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+            push,
+          } as never,
+        },
+      });
+
+      await executor.execute(ctx);
+
+      expect(push).toHaveBeenCalledWith(true, 'cadre/issue-42');
+    });
+  });
+
   describe('launchWithRetry uses correct retry configuration', () => {
     it('should pass maxRetriesPerTask from config to retryExecutor', async () => {
       const retryExecutor = {
