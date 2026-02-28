@@ -28,6 +28,7 @@ export class WorktreeLifecycleService {
       this.logger,
       this.agentDir,
       this.backend,
+      this.config.stateDir,
     );
 
     const worktrees = await worktreeManager.listActive();
@@ -56,6 +57,7 @@ export class WorktreeLifecycleService {
       this.logger,
       this.agentDir,
       this.backend,
+      this.config.stateDir,
     );
 
     const checkpointManager = new FleetCheckpointManager(

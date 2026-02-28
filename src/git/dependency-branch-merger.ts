@@ -23,6 +23,7 @@ export class DependencyBranchMerger {
     private readonly repoPath: string,
     private readonly logger: Logger,
     private readonly resolveBranchName: (issueNumber: number, title: string) => string,
+    private readonly stateDir: string = join(repoPath, '.cadre'),
   ) {}
 
   /**
@@ -30,8 +31,8 @@ export class DependencyBranchMerger {
    * already present), merges each dep branch in order into a temporary
    * worktree, and returns the HEAD SHA of the merged deps branch.
    *
-   * Throws `DependencyMergeConflictError` (and writes `.cadre/dep-conflict.json`
-   * into the main repo) when a merge conflict occurs.
+  * Throws `DependencyMergeConflictError` (and writes `stateDir/dep-conflict.json`)
+  * when a merge conflict occurs.
    *
    * The temporary deps worktree is always removed — even on failure — and the
    * deps branch is deleted on failure so retries can recreate it cleanly.
@@ -99,10 +100,9 @@ export class DependencyBranchMerger {
             }
           }
 
-          const cadreDir = join(this.repoPath, '.cadre');
-          await ensureDir(cadreDir);
+          await ensureDir(this.stateDir);
           await writeFile(
-            join(cadreDir, 'dep-conflict.json'),
+            join(this.stateDir, 'dep-conflict.json'),
             JSON.stringify(
               { issueNumber, conflictingBranch: depBranch, conflictedFiles, timestamp: new Date().toISOString() },
               null,

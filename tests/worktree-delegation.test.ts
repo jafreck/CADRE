@@ -59,6 +59,7 @@ describe('WorktreeManager — thin facade delegation', () => {
       mockLogger,
       undefined,
       'copilot',
+      undefined,
     );
   });
 

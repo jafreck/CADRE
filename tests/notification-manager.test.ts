@@ -270,4 +270,34 @@ describe('createNotificationManager', () => {
     expect(webhookNotify).toHaveBeenCalledOnce();
     expect(webhookNotify).toHaveBeenCalledWith(sampleEvent);
   });
+
+  it('should resolve relative logFile under stateDir', () => {
+    const config = makeRuntimeConfig({
+      stateDir: '/tmp/cadre-state',
+      notifications: makeConfig({
+        providers: [{ type: 'log', logFile: '.cadre/notifications.log' }],
+      }),
+    });
+
+    createNotificationManager(config);
+
+    expect(MockLogProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ logFile: '/tmp/cadre-state/notifications.log' }),
+    );
+  });
+
+  it('should default log provider path to stateDir when logFile is omitted', () => {
+    const config = makeRuntimeConfig({
+      stateDir: '/tmp/cadre-state',
+      notifications: makeConfig({
+        providers: [{ type: 'log' }],
+      }),
+    });
+
+    createNotificationManager(config);
+
+    expect(MockLogProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ logFile: '/tmp/cadre-state/notifications.jsonl' }),
+    );
+  });
 });

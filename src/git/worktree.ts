@@ -19,6 +19,7 @@ export class WorktreeManager {
     logger: Logger,
     agentDir?: string,
     backend: string = 'copilot',
+    stateDir?: string,
   ) {
     this.provisioner = new WorktreeProvisioner(
       repoPath,
@@ -28,6 +29,7 @@ export class WorktreeManager {
       logger,
       agentDir,
       backend,
+      stateDir,
     );
   }
 
