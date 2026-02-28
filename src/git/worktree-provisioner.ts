@@ -206,6 +206,10 @@ export class WorktreeProvisioner {
       baseCommit,
       this.worktreeRoot,
       resolveMergeConflict,
+      async (depsWorktreePath, depsIssueNumber) => {
+        await this.agentFileSync.initCadreDir(depsWorktreePath, depsIssueNumber);
+        await this.agentFileSync.syncAgentFiles(depsWorktreePath, depsIssueNumber);
+      },
     );
 
     // Create the issue branch from the HEAD of the deps branch
