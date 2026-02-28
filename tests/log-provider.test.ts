@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { LogProvider } from '../src/notifications/log-provider.js';
 
 vi.mock('fs/promises', () => ({
@@ -19,7 +21,7 @@ describe('LogProvider', () => {
     await provider.notify({ type: 'fleet-started', issueCount: 1, maxParallel: 1 });
     expect(mockAppendFile).toHaveBeenCalledOnce();
     const [filePath, content] = mockAppendFile.mock.calls[0];
-    expect(filePath).toContain('.cadre/notifications.jsonl');
+    expect(filePath).toBe(join(homedir(), '.cadre', 'notifications.jsonl'));
     expect(content).toMatch(/^\{.*\}\n$/);
   });
 

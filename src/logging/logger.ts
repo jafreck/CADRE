@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import { format } from 'date-fns';
 import type { LogLevel, LogEntry, CadreEvent } from './events.js';
 
@@ -28,7 +29,7 @@ export class Logger {
 
   constructor(opts: Partial<LoggerOptions> & { source: string }) {
     this.opts = {
-      logDir: opts.logDir ?? '.cadre/logs',
+      logDir: opts.logDir ?? join(homedir(), '.cadre', 'logs'),
       level: opts.level ?? 'info',
       console: opts.console ?? true,
       source: opts.source,

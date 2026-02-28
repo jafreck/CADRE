@@ -11,7 +11,10 @@ function resolveLogFilePath(logFile: string | undefined, stateDir: string | unde
   if (!logFile) {
     return stateDir ? join(stateDir, 'notifications.jsonl') : undefined;
   }
-  if (isAbsolute(logFile) || !stateDir) {
+  if (isAbsolute(logFile)) {
+    return logFile;
+  }
+  if (!stateDir) {
     return logFile;
   }
   if (logFile.startsWith('.cadre/')) {

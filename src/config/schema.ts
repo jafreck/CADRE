@@ -84,7 +84,7 @@ export const CadreConfigSchema = z.object({
 
   /**
    * Directory where all cadre state is stored (logs, checkpoints, reports, agents, worktrees).
-   * Defaults to `~/.cadre/{projectName}/` so cadre never writes inside the target repository.
+    * Defaults to `~/.cadre/` so cadre never writes inside the target repository.
    * Can be overridden to any absolute or relative path.
    */
   stateDir: z.string().optional(),

@@ -175,14 +175,14 @@ describe('loadConfig – stateDir resolution', () => {
     vi.clearAllMocks();
   });
 
-  it('defaults stateDir to ~/.cadre/<projectName> when absent from config', async () => {
+  it('defaults stateDir to ~/.cadre when absent from config', async () => {
     const cfg = makeConfig();
     // Remove stateDir
     delete (cfg as Record<string, unknown>).stateDir;
     setupFs(cfg);
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    const expected = join(homedir(), '.cadre', 'test-project');
+    const expected = join(homedir(), '.cadre');
     expect(config.stateDir).toBe(expected);
   });
 
@@ -193,11 +193,11 @@ describe('loadConfig – stateDir resolution', () => {
     expect(config.stateDir).toBe('/custom/absolute/state');
   });
 
-  it('resolves a relative stateDir against process.cwd()', async () => {
+  it('resolves a relative stateDir against the config file directory', async () => {
     setupFs(makeConfig({ stateDir: 'relative/state' }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    expect(config.stateDir).toBe(resolve(process.cwd(), 'relative/state'));
+    expect(config.stateDir).toBe(resolve('/tmp', 'relative/state'));
   });
 });
 
@@ -223,12 +223,11 @@ describe('loadConfig – worktreeRoot resolution', () => {
     expect(config.worktreeRoot).toBe('/custom/worktrees');
   });
 
-  it('resolves a relative worktreeRoot against repoPath', async () => {
+  it('resolves a relative worktreeRoot against stateDir', async () => {
     setupFs(makeConfig({ worktreeRoot: 'relative/worktrees' }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    // repoPath is /tmp/repo (absolute in fixture)
-    expect(config.worktreeRoot).toBe('/tmp/repo/relative/worktrees');
+    expect(config.worktreeRoot).toBe('/abs/state/relative/worktrees');
   });
 
   it('worktreeRoot defaults to stateDir/worktrees using the default stateDir when both are absent', async () => {
@@ -238,7 +237,7 @@ describe('loadConfig – worktreeRoot resolution', () => {
     setupFs(cfg);
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    const expectedStateDir = join(homedir(), '.cadre', 'test-project');
+    const expectedStateDir = join(homedir(), '.cadre');
     expect(config.worktreeRoot).toBe(join(expectedStateDir, 'worktrees'));
   });
 });
