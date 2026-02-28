@@ -14,7 +14,9 @@ function makeLogger(): Logger {
 }
 
 function makePlatform(): PlatformProvider {
-  return {} as PlatformProvider;
+  return {
+    createIssue: vi.fn().mockResolvedValue(1),
+  } as unknown as PlatformProvider;
 }
 
 function makeTopicKey(overrides: Partial<TopicKey> = {}): TopicKey {

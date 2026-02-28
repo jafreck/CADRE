@@ -31,6 +31,11 @@ export class DogfoodIssueFiler {
 
       try {
         const content = this.buildIssueContent(topic);
+        await this.platform.createIssue({
+          title: content.title,
+          body: content.body,
+          labels: content.labels,
+        });
         filed.push(content);
         this.logger.info(`[dogfood] Filed issue for topic: ${keyStr}`);
       } catch (err) {

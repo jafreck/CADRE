@@ -114,7 +114,6 @@ describe('SeverityClassifier', () => {
 
   describe('filterByMinimumLevel', () => {
     it('should keep topics at or above the minimum level', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const topics = [
         makeTopic({ severity: 'critical' }),
         makeTopic({ severity: 'high' }),
@@ -124,36 +123,27 @@ describe('SeverityClassifier', () => {
       expect(result).toHaveLength(2);
       expect(result[0].severity).toBe('critical');
       expect(result[1].severity).toBe('high');
-      consoleSpy.mockRestore();
     });
 
-    it('should log when skipping topics below threshold', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    it('should filter out topics below threshold', () => {
       const topics = [makeTopic({ severity: 'low' })];
-      classifier.filterByMinimumLevel(topics, 'high');
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('below threshold'),
-      );
-      consoleSpy.mockRestore();
+      const result = classifier.filterByMinimumLevel(topics, 'high');
+      expect(result).toHaveLength(0);
     });
 
     it('should return all topics when minimum level is low', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const topics = [
         makeTopic({ severity: 'low' }),
         makeTopic({ severity: 'critical' }),
       ];
       const result = classifier.filterByMinimumLevel(topics, 'low');
       expect(result).toHaveLength(2);
-      consoleSpy.mockRestore();
     });
 
     it('should return empty array when no topics meet the threshold', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const topics = [makeTopic({ severity: 'low' }), makeTopic({ severity: 'medium' })];
       const result = classifier.filterByMinimumLevel(topics, 'critical');
       expect(result).toEqual([]);
-      consoleSpy.mockRestore();
     });
   });
 
@@ -165,7 +155,6 @@ describe('SeverityClassifier', () => {
     });
 
     it('should cap to maxIssuesPerRun topics', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const topics = [
         makeTopic({ severity: 'critical', mergedCount: 5 }),
         makeTopic({ severity: 'high', mergedCount: 3 }),
@@ -175,11 +164,9 @@ describe('SeverityClassifier', () => {
       expect(result).toHaveLength(2);
       expect(result[0].severity).toBe('critical');
       expect(result[1].severity).toBe('high');
-      consoleSpy.mockRestore();
     });
 
     it('should rank by severity first, then frequency, then breadth', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const topics = [
         makeTopic({ severity: 'medium', mergedCount: 100, affectedIssues: [] }),
         makeTopic({ severity: 'high', mergedCount: 1, affectedIssues: [] }),
@@ -196,25 +183,18 @@ describe('SeverityClassifier', () => {
       expect(result[2].severity).toBe('high');
       expect(result[2].mergedCount).toBe(1);
       expect(result[3].severity).toBe('medium');
-      consoleSpy.mockRestore();
     });
 
-    it('should log skipped topics over the cap', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    it('should drop topics over the cap', () => {
       const topics = [makeTopic(), makeTopic()];
-      classifier.applyMaxCap(topics, 1);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Over cap'),
-      );
-      consoleSpy.mockRestore();
+      const result = classifier.applyMaxCap(topics, 1);
+      expect(result).toHaveLength(1);
     });
 
     it('should return empty array when cap is 0', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const topics = [makeTopic()];
       const result = classifier.applyMaxCap(topics, 0);
       expect(result).toEqual([]);
-      consoleSpy.mockRestore();
     });
   });
 });

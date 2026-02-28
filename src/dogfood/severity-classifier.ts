@@ -43,13 +43,7 @@ export class SeverityClassifier {
     const minRank = SEVERITY_ORDER[minimumLevel];
     return topics.filter((topic) => {
       const rank = SEVERITY_ORDER[topic.severity];
-      if (rank < minRank) {
-        console.log(
-          `[dogfood] Skipping topic ${topic.key.subsystem}::${topic.key.failureMode} — severity ${topic.severity} below threshold ${minimumLevel}`,
-        );
-        return false;
-      }
-      return true;
+      return rank >= minRank;
     });
   }
 
@@ -71,13 +65,6 @@ export class SeverityClassifier {
     });
 
     const kept = ranked.slice(0, maxIssuesPerRun);
-    const skipped = ranked.slice(maxIssuesPerRun);
-
-    for (const topic of skipped) {
-      console.log(
-        `[dogfood] Over cap: skipping topic ${topic.key.subsystem}::${topic.key.failureMode} — severity=${topic.severity}, count=${topic.mergedCount}, breadth=${topic.affectedIssues.length}`,
-      );
-    }
 
     return kept;
   }
