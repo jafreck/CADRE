@@ -292,6 +292,21 @@ describe('PRCompositionPhaseExecutor', () => {
       );
     });
 
+    it('should not duplicate issue suffix when PR title already contains it', async () => {
+      const resultParser = {
+        parsePRContent: vi.fn().mockResolvedValue({ title: 'Fix: resolve issue (#42)', body: 'Body text.' }),
+      };
+      const ctx = makeAutoCreateCtx({ services: { resultParser } as never });
+
+      await executor.execute(ctx);
+
+      expect(
+        (ctx.platform as never as { createPullRequest: ReturnType<typeof vi.fn> }).createPullRequest,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Fix: resolve issue (#42)' }),
+      );
+    });
+
     it('should use issue title as fallback when PR title is empty', async () => {
       const resultParser = {
         parsePRContent: vi.fn().mockResolvedValue({ title: '', body: 'Body text.' }),

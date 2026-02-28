@@ -714,7 +714,10 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
 
     expect(platform.updatePullRequest).toHaveBeenCalledWith(
       10,
-      expect.objectContaining({ body: expect.any(String) }),
+      expect.objectContaining({
+        title: 'Updated PR Title (#1)',
+        body: expect.any(String),
+      }),
     );
   });
 

@@ -6,6 +6,7 @@ import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import type { AgentResult, PRContent } from '../agents/types.js';
 import { extractCadreJson } from '../util/cadre-json.js';
 import type { PullRequestMergeMethod } from '../platform/provider.js';
+import { formatPullRequestTitle } from '../util/title-format.js';
 
 /** Maximum total invocations (initial + retries) when pr-content.md fails to parse. */
 const MAX_ATTEMPTS = 2;
@@ -137,7 +138,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     await ctx.io.commitManager.stripCadreFiles(ctx.worktree.baseCommit);
     await ctx.io.commitManager.push(true, ctx.worktree.branch);
 
-    const prTitle = `${prContent.title || ctx.issue.title} (#${ctx.issue.number})`;
+    const prTitle = formatPullRequestTitle(prContent.title, ctx.issue.title, ctx.issue.number);
     let prBody = prContent.body;
     if (ctx.config.pullRequest.linkIssue) {
       prBody += `\n\n${ctx.platform.issueLinkSuffix(ctx.issue.number)}`;

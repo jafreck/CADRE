@@ -1,6 +1,7 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type { CadreConfig } from '../config/schema.js';
 import { Logger } from '../logging/logger.js';
+import { formatCommitSubject } from '../util/title-format.js';
 
 /**
  * Manages git commit operations within a worktree.
@@ -261,18 +262,6 @@ export class CommitManager {
    * Format a commit message with conventional commit prefix and issue reference.
    */
   private formatMessage(message: string, issueNumber: number, type?: string): string {
-    let formatted = message;
-
-    // Add conventional commit prefix if configured and not already present
-    if (this.config.conventional && type && !message.match(/^(feat|fix|chore|docs|refactor|test|style|perf|ci|build)\(/)) {
-      formatted = `${type}(#${issueNumber}): ${message}`;
-    }
-
-    // Add issue reference if not already in the message
-    if (!formatted.includes(`#${issueNumber}`)) {
-      formatted += `\n\nRefs #${issueNumber}`;
-    }
-
-    return formatted;
+    return formatCommitSubject(message, issueNumber, type, this.config.conventional);
   }
 }
