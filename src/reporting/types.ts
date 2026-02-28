@@ -25,6 +25,21 @@ export interface RunTotals {
   failures: number;
 }
 
+export interface RunPrCompletionFailure {
+  issueNumber: number;
+  issueTitle: string;
+  prNumber: number;
+  prUrl: string;
+  branch: string;
+  error: string;
+}
+
+export interface RunPrCompletion {
+  queued: number;
+  failed: number;
+  failures: RunPrCompletionFailure[];
+}
+
 export interface CostReportAgentEntry {
   agent: string;
   tokens: number;
@@ -64,4 +79,5 @@ export interface RunReport {
   estimatedCost: number;
   prsCreated: number;
   totals: RunTotals;
+  prCompletion: RunPrCompletion;
 }

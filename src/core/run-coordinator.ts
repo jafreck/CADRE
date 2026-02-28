@@ -319,6 +319,11 @@ export class RunCoordinator {
       codeDoneNoPR: [],
       totalDuration: 0,
       tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      prCompletion: {
+        queued: 0,
+        failed: 0,
+        failures: [],
+      },
     };
   }
 }

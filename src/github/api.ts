@@ -84,11 +84,14 @@ export class GitHubAPI {
         results.push(...(response.data as unknown[]));
         if (results.length >= filters.limit) break;
       }
-      return results.slice(0, filters.limit) as Record<string, unknown>[];
+      return results
+        .filter((item) => !this.isPullRequestIssue(item))
+        .slice(0, filters.limit) as Record<string, unknown>[];
     }
 
     const issues = await this.octokit.paginate(this.octokit.rest.issues.listForRepo, params);
-    return issues as unknown as Record<string, unknown>[];
+    return (issues as unknown[])
+      .filter((item) => !this.isPullRequestIssue(item)) as Record<string, unknown>[];
   }
 
   /**
@@ -386,6 +389,13 @@ export class GitHubAPI {
       if (results.length >= limit) break;
     }
 
-    return results.slice(0, limit) as Record<string, unknown>[];
+    return results
+      .filter((item) => !this.isPullRequestIssue(item))
+      .slice(0, limit) as Record<string, unknown>[];
+  }
+
+  private isPullRequestIssue(item: unknown): boolean {
+    if (item === null || typeof item !== 'object') return false;
+    return 'pull_request' in (item as Record<string, unknown>);
   }
 }

@@ -57,6 +57,12 @@ const makeFleetResult = (
     byIssue: { 1: 1500 },
     byAgent: {},
     byPhase: { 1: 500, 2: 300, 3: 700 },
+    recordCount: 1,
+  },
+  prCompletion: {
+    queued: 0,
+    failed: 0,
+    failures: [],
   },
   ...overrides,
 });
@@ -91,6 +97,7 @@ describe('ReportWriter', () => {
       expect(typeof report.endTime).toBe('string');
       expect(report.duration).toBeGreaterThan(0);
       expect(report.totalTokens).toBe(result.tokenUsage.total);
+      expect(report.prCompletion).toEqual({ queued: 0, failed: 0, failures: [] });
     });
 
     it('should map FleetResult.issues to RunIssueSummary array', () => {
@@ -232,6 +239,41 @@ describe('ReportWriter', () => {
       const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
       expect(report.prsCreated).toBe(2);
     });
+
+    it('should include prCompletion details from FleetResult', () => {
+      const result = makeFleetResult({
+        prCompletion: {
+          queued: 3,
+          failed: 1,
+          failures: [
+            {
+              issueNumber: 12,
+              issueTitle: 'Issue 12',
+              prNumber: 112,
+              prUrl: 'https://github.com/owner/repo/pull/112',
+              branch: 'cadre/issue-12',
+              error: 'Blocked by unresolved dependency issue #11',
+            },
+          ],
+        },
+      });
+
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+
+      expect(report.prCompletion.queued).toBe(3);
+      expect(report.prCompletion.failed).toBe(1);
+      expect(report.prCompletion.failures).toHaveLength(1);
+      expect(report.prCompletion.failures[0].issueNumber).toBe(12);
+    });
+
+    it('should default prCompletion to zeros when FleetResult omits it', () => {
+      const result = makeFleetResult();
+      delete (result as Partial<FleetResult>).prCompletion;
+
+      const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
+
+      expect(report.prCompletion).toEqual({ queued: 0, failed: 0, failures: [] });
+    });
   });
 
   describe('write', () => {
@@ -248,6 +290,7 @@ describe('ReportWriter', () => {
         estimatedCost: 0,
         prsCreated: 0,
         totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
+        prCompletion: { queued: 0, failed: 0, failures: [] },
       };
 
       const filePath = await writer.write(report);
@@ -270,6 +313,7 @@ describe('ReportWriter', () => {
         estimatedCost: 0,
         prsCreated: 0,
         totals: { tokens: 0, estimatedCost: 0, issues: 0, prsCreated: 0, failures: 0 },
+        prCompletion: { queued: 0, failed: 0, failures: [] },
       };
 
       const filePath = await writer.write(report);

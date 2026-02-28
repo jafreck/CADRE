@@ -132,6 +132,35 @@ describe('GitHubAPI', () => {
         }),
       );
     });
+
+    it('should exclude pull requests from listForRepo results', async () => {
+      vi.mocked(mockOctokit.paginate).mockResolvedValue([
+        { number: 1, title: 'Issue 1' },
+        { number: 2, title: 'PR 2', pull_request: { url: 'https://api.github.com/pulls/2' } },
+      ] as never);
+
+      const issues = await api.listIssues({ state: 'open' });
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].number).toBe(1);
+    });
+
+    it('should exclude pull requests from search results', async () => {
+      const mockData = [
+        { number: 10, title: 'Issue 10' },
+        { number: 11, title: 'PR 11', pull_request: { url: 'https://api.github.com/pulls/11' } },
+      ];
+      (mockOctokit.paginate as unknown as { iterator: ReturnType<typeof vi.fn> }).iterator.mockReturnValue(
+        (async function* () {
+          yield { data: mockData };
+        })(),
+      );
+
+      const issues = await api.listIssues({ milestone: 'v1.0', assignee: 'dev1' });
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].number).toBe(10);
+    });
   });
 
   describe('checkAuth', () => {

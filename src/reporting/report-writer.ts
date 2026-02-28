@@ -80,6 +80,12 @@ export class ReportWriter {
       failures,
     };
 
+    const prCompletion = {
+      queued: result.prCompletion?.queued ?? 0,
+      failed: result.prCompletion?.failed ?? 0,
+      failures: result.prCompletion?.failures ?? [],
+    };
+
     return {
       runId: randomUUID(),
       project: this.config.projectName,
@@ -92,6 +98,7 @@ export class ReportWriter {
       estimatedCost: totalCostEstimate.totalCost,
       prsCreated,
       totals,
+      prCompletion,
     };
   }
 
