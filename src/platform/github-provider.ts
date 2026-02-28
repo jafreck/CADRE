@@ -98,11 +98,6 @@ export class GitHubProvider implements PlatformProvider {
     await this.getAPI().addIssueComment(issueNumber, body);
   }
 
-  async createIssue(params: { title: string; body: string; labels?: string[] }): Promise<number> {
-    const raw = await this.getAPI().createIssue(params);
-    return asNumber(raw.number);
-  }
-
   // ── Pull Requests ──
 
   async createPullRequest(params: CreatePullRequestParams): Promise<PullRequestInfo> {

@@ -217,36 +217,6 @@ Controls which lifecycle events post comments back to the GitHub/ADO issue.
 
 ---
 
-## `dogfood`
-
-Controls the self-hosted dogfooding subsystem. When enabled, cadre collects runtime signals (errors, warnings, anomalies) during pipeline execution, triages them at the end of the run, and files GitHub issues for actionable topics.
-
-When `enabled` is `false`, signals are still recorded in logs for debugging but no triage agent runs and no GitHub issues are filed.
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | `boolean` | `false` | Enable the dogfood triage pipeline. When `false`, signals are logged but no issues are filed. |
-| `minimumIssueLevel` | `"critical" \| "severe" \| "high" \| "medium" \| "low"` | `"medium"` | Minimum severity threshold for filing issues. Topics below this level are logged and skipped. |
-| `maxIssuesPerRun` | `number` | `5` | Maximum number of dogfood issues to file per run. Remaining candidates are logged with their rank and skip rationale. |
-
-### Example
-
-```json
-"dogfood": {
-  "enabled": true,
-  "minimumIssueLevel": "high",
-  "maxIssuesPerRun": 3
-}
-```
-
-With this configuration, cadre will:
-1. Collect all runtime signals during the run.
-2. Invoke the dogfood triage agent to cluster signals into topics and assign severity levels.
-3. Drop any topics below `high` severity.
-4. File at most 3 GitHub issues, ranked by severity, frequency, and breadth.
-
----
-
 ## `notifications`
 
 Out-of-band notifications sent independently of issue comments.
