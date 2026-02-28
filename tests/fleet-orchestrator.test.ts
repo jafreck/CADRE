@@ -2149,3 +2149,255 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     expect(worktreeManager.provision).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('FleetOrchestrator — dogfood signal recording', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('records a dogfood signal when issue processing throws a generic error', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockRejectedValue(new Error('unexpected failure'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    expect(result.failedIssues).toHaveLength(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Issue #1 failed'),
+      expect.anything(),
+    );
+  });
+
+  it('records a dogfood signal with severity low for RemoteBranchMissingError', async () => {
+    const config = makeConfig();
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockRejectedValue(new RemoteBranchMissingError('cadre/issue-1'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    const result = await fleet.run();
+
+    expect(result.failedIssues).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('remote branch is missing'),
+      expect.anything(),
+    );
+  });
+});
+
+describe('FleetOrchestrator — dogfood triage pipeline', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not run dogfood triage when dogfood.enabled is false', async () => {
+    const config = makeConfig();
+    // dogfood is not set → defaults to { enabled: false }
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockRejectedValue(new Error('some error'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    // dogfood triage should not be invoked — no '[dogfood]' log messages
+    const dogfoodInfoCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('[dogfood]'),
+    );
+    expect(dogfoodInfoCalls).toHaveLength(0);
+  });
+
+  it('runs dogfood triage when dogfood.enabled is true and signals exist', async () => {
+    const config = makeConfig();
+    (config as any).dogfood = { enabled: true, minimumIssueLevel: 'low', maxIssuesPerRun: 5 };
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    // Cause an error to generate a dogfood signal
+    worktreeManager.provision.mockRejectedValue(new Error('some failure'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    // Dogfood triage should have started
+    const triageStarted = (logger.info as ReturnType<typeof vi.fn>).mock.calls.some(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('[dogfood] Starting triage pipeline'),
+    );
+    expect(triageStarted).toBe(true);
+  });
+
+  it('skips dogfood triage when dogfood.enabled is true but no signals collected', async () => {
+    const config = makeConfig();
+    (config as any).dogfood = { enabled: true, minimumIssueLevel: 'low', maxIssuesPerRun: 5 };
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    // Success — no errors, so no signals
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    const noSignals = (logger.info as ReturnType<typeof vi.fn>).mock.calls.some(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('[dogfood] No signals collected'),
+    );
+    expect(noSignals).toBe(true);
+  });
+
+  it('dispatches dogfood-triage-completed notification after successful triage', async () => {
+    const config = makeConfig();
+    (config as any).dogfood = { enabled: true, minimumIssueLevel: 'low', maxIssuesPerRun: 5 };
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    // Cause error to produce a signal
+    worktreeManager.provision.mockRejectedValue(new Error('fail'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    const triageDispatch = (notifications.dispatch as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([event]: [any]) => event.type === 'dogfood-triage-completed',
+    );
+    expect(triageDispatch).toBeDefined();
+    expect(triageDispatch![0].type).toBe('dogfood-triage-completed');
+    expect(typeof triageDispatch![0].topicsFound).toBe('number');
+    expect(typeof triageDispatch![0].issuesFiled).toBe('number');
+    expect(typeof triageDispatch![0].issuesSkipped).toBe('number');
+  });
+
+  it('dogfood triage is non-fatal — errors are logged but do not crash the pipeline', async () => {
+    const config = makeConfig();
+    (config as any).dogfood = { enabled: true, minimumIssueLevel: 'low', maxIssuesPerRun: 5 };
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    // Make notifications.dispatch throw to simulate a failure within triage
+    const notifications = {
+      dispatch: vi.fn().mockImplementation(async (event: any) => {
+        if (event.type === 'dogfood-triage-completed') {
+          throw new Error('notification dispatch failed');
+        }
+      }),
+    } as any;
+
+    worktreeManager.provision.mockRejectedValue(new Error('issue error'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    // run() should not throw even though triage pipeline internally fails
+    const result = await fleet.run();
+
+    expect(result).toBeDefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('[dogfood] Triage pipeline failed (non-fatal)'),
+    );
+  });
+
+  it('filters signals by minimum severity level and caps by maxIssuesPerRun', async () => {
+    const config = makeConfig();
+    (config as any).dogfood = { enabled: true, minimumIssueLevel: 'high', maxIssuesPerRun: 1 };
+    // Use 3 issues that will all fail to generate multiple signals
+    const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    worktreeManager.provision.mockRejectedValue(new Error('fail'));
+    worktreeManager.resolveBranchName.mockImplementation((n: number) => `cadre/issue-${n}`);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    // Triage should have run
+    const triageStarted = (logger.info as ReturnType<typeof vi.fn>).mock.calls.some(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('[dogfood] Starting triage pipeline'),
+    );
+    expect(triageStarted).toBe(true);
+
+    // Triage completed log should exist
+    const triageComplete = (logger.info as ReturnType<typeof vi.fn>).mock.calls.some(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('[dogfood] Triage complete'),
+    );
+    expect(triageComplete).toBe(true);
+  });
+});

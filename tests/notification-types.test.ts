@@ -95,7 +95,17 @@ describe('NotificationEvent type union', () => {
     expect(event.type).toBe('budget-exceeded');
   });
 
-  it('should cover all 8 notification event types', () => {
+  it('should accept dogfood-triage-completed event', () => {
+    const event: NotificationEvent = {
+      type: 'dogfood-triage-completed',
+      topicsFound: 4,
+      issuesFiled: 2,
+      issuesSkipped: 2,
+    };
+    expect(event.type).toBe('dogfood-triage-completed');
+  });
+
+  it('should cover all 9 notification event types', () => {
     const notificationTypes: NotificationEvent['type'][] = [
       'fleet-started',
       'fleet-completed',
@@ -105,7 +115,8 @@ describe('NotificationEvent type union', () => {
       'issue-failed',
       'budget-warning',
       'budget-exceeded',
+      'dogfood-triage-completed',
     ];
-    expect(notificationTypes).toHaveLength(8);
+    expect(notificationTypes).toHaveLength(9);
   });
 });

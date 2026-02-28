@@ -201,6 +201,38 @@ export interface BudgetExceededEvent {
   budget: number;
 }
 
+// ── Dogfood events ──
+
+export interface DogfoodSignalEvent {
+  type: 'dogfood-signal';
+  subsystem: string;
+  failureMode: string;
+  message: string;
+  issueNumber?: number;
+  severity?: 'critical' | 'severe' | 'high' | 'medium' | 'low';
+  timestamp: string;
+}
+
+export interface DogfoodTriageCompletedEvent {
+  type: 'dogfood-triage-completed';
+  topicsFound: number;
+  issuesFiled: number;
+  issuesSkipped: number;
+}
+
+export interface DogfoodIssueFiledEvent {
+  type: 'dogfood-issue-filed';
+  topicKey: string;
+  issueNumber: number;
+  severity: 'critical' | 'severe' | 'high' | 'medium' | 'low';
+}
+
+export interface DogfoodIssueSkippedEvent {
+  type: 'dogfood-issue-skipped';
+  topicKey: string;
+  reason: string;
+}
+
 export type CadreEvent =
   | FleetStartedEvent
   | FleetCompletedEvent
@@ -223,4 +255,8 @@ export type CadreEvent =
   | PRCreatedEvent
   | AmbiguityDetectedEvent
   | BudgetWarningEvent
-  | BudgetExceededEvent;
+  | BudgetExceededEvent
+  | DogfoodSignalEvent
+  | DogfoodTriageCompletedEvent
+  | DogfoodIssueFiledEvent
+  | DogfoodIssueSkippedEvent;

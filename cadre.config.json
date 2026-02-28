@@ -50,6 +50,11 @@
     "inheritShellPath": true,
     "extraPath": []
   },
+  "dogfood": {
+    "enabled": false,
+    "minimumIssueLevel": "medium",
+    "maxIssuesPerRun": 5
+  },
   "notifications": {
     "enabled": false,
     "providers": [

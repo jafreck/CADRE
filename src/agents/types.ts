@@ -19,7 +19,8 @@ export type AgentName =
   | 'integration-checker'
   | 'pr-composer'
   | 'conflict-resolver'
-  | 'whole-pr-reviewer';
+  | 'whole-pr-reviewer'
+  | 'dogfood-triage';
 
 /** Metadata describing a single CADRE agent. */
 export interface AgentDefinition {
@@ -144,6 +145,14 @@ export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
     description: 'Reviews the full PR diff against main after all implementation sessions complete, catching cross-session bugs.',
     hasStructuredOutput: true,
     templateFile: 'whole-pr-reviewer.md',
+  },
+  {
+    name: 'dogfood-triage',
+    phase: 0,
+    phaseName: 'Dogfood',
+    description: 'Triages collected dogfood signals into clustered topics, classifies severity, and files GitHub issues for actionable self-improvement items.',
+    hasStructuredOutput: true,
+    templateFile: 'dogfood-triage.md',
   },
 ] as const;
 

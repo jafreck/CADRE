@@ -20,6 +20,8 @@ import type { DependencyMergeConflictContext } from '../git/dependency-branch-me
 import { FleetEventBus } from './fleet-event-bus.js';
 import { FleetReporter } from './fleet-reporter.js';
 import { FleetScheduler } from './fleet-scheduler.js';
+import { SignalCollector, TopicAggregator, SeverityClassifier, DogfoodIssueFiler } from '../dogfood/index.js';
+import type { DogfoodSignal } from '../dogfood/index.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -48,6 +50,7 @@ export class FleetOrchestrator {
   private readonly tokenTracker: TokenTracker;
   private readonly costEstimator: CostEstimator;
   private readonly contextBuilder: ContextBuilder;
+  private readonly signalCollector: SignalCollector;
   private fleetBudgetExceeded = false;
   private eventBus!: FleetEventBus;
   private reporter!: FleetReporter;
@@ -69,6 +72,7 @@ export class FleetOrchestrator {
     this.tokenTracker = new TokenTracker();
     this.costEstimator = new CostEstimator(config.copilot);
     this.contextBuilder = new ContextBuilder(config, logger);
+    this.signalCollector = new SignalCollector();
   }
 
   /**
@@ -131,6 +135,11 @@ export class FleetOrchestrator {
       fleetResult.totalDuration,
       fleetResult.tokenUsage.total,
     );
+
+    // Dogfood triage pipeline
+    if (this.config.dogfood?.enabled) {
+      await this.runDogfoodTriage();
+    }
 
     return fleetResult;
   }
@@ -406,6 +415,14 @@ export class FleetOrchestrator {
       if (err instanceof RemoteBranchMissingError) {
         const error = `Skipping issue #${issue.number}: remote branch is missing — ${err.message}`;
         this.logger.warn(error, { issueNumber: issue.number });
+        this.signalCollector.record({
+          subsystem: 'fleet-orchestrator',
+          failureMode: 'remote-branch-missing',
+          message: error,
+          issueNumber: issue.number,
+          severity: 'low',
+          timestamp: new Date().toISOString(),
+        });
         await this.fleetCheckpoint.setIssueStatus(
           issue.number,
           'failed',
@@ -429,6 +446,15 @@ export class FleetOrchestrator {
       const error = String(err);
       this.logger.error(`Issue #${issue.number} failed: ${error}`, {
         issueNumber: issue.number,
+      });
+
+      this.signalCollector.record({
+        subsystem: 'fleet-orchestrator',
+        failureMode: 'issue-processing-error',
+        message: error,
+        issueNumber: issue.number,
+        severity: 'high',
+        timestamp: new Date().toISOString(),
       });
 
       await this.fleetCheckpoint.setIssueStatus(
@@ -532,5 +558,74 @@ export class FleetOrchestrator {
       tokenUsage: 0,
       error: 'dep-blocked',
     };
+  }
+
+  /**
+   * Run the dogfood triage pipeline: aggregate, classify, filter, cap, file.
+   * Wrapped in try/catch so failures never crash the main pipeline.
+   */
+  private async runDogfoodTriage(): Promise<void> {
+    try {
+      this.logger.info('[dogfood] Starting triage pipeline');
+
+      const signals = this.signalCollector.getSignals();
+      if (signals.length === 0) {
+        this.logger.info('[dogfood] No signals collected — skipping triage');
+        return;
+      }
+
+      // 1. Aggregate signals into topics
+      const aggregator = new TopicAggregator();
+      const topics = aggregator.aggregate(signals);
+      this.logger.info(`[dogfood] Aggregated ${signals.length} signal(s) into ${topics.length} topic(s)`);
+
+      // 2. Classify severity for each topic
+      const classifier = new SeverityClassifier();
+      for (const topic of topics) {
+        topic.severity = classifier.classify(topic);
+      }
+
+      // 3. Filter by minimum severity level
+      const minimumLevel = this.config.dogfood.minimumIssueLevel;
+      const filtered = classifier.filterByMinimumLevel(topics, minimumLevel);
+      const skippedBelowThreshold = topics.filter((t) => !filtered.includes(t));
+      for (const topic of skippedBelowThreshold) {
+        this.logger.info(
+          `[dogfood] Skipped topic ${topic.key.subsystem}::${topic.key.failureMode} — severity ${topic.severity} below threshold ${minimumLevel}`,
+        );
+      }
+
+      // 4. Cap by maxIssuesPerRun
+      const maxIssuesPerRun = this.config.dogfood.maxIssuesPerRun;
+      const capped = classifier.applyMaxCap(filtered, maxIssuesPerRun);
+      const skippedOverCap = filtered.filter((t) => !capped.includes(t));
+      for (const topic of skippedOverCap) {
+        this.logger.info(
+          `[dogfood] Over cap: skipped topic ${topic.key.subsystem}::${topic.key.failureMode} — severity=${topic.severity}, count=${topic.mergedCount}, breadth=${topic.affectedIssues.length}`,
+        );
+      }
+
+      // 5. File issues for remaining topics
+      const filer = new DogfoodIssueFiler(this.platform, this.logger);
+      const filed = await filer.file(capped);
+      for (const issue of filed) {
+        this.logger.info(
+          `[dogfood] Filed issue: ${issue.title} (severity=${issue.severity})`,
+        );
+      }
+
+      this.logger.info(
+        `[dogfood] Triage complete: ${filed.length} filed, ${skippedBelowThreshold.length} below threshold, ${skippedOverCap.length} over cap`,
+      );
+
+      await this.notifications.dispatch({
+        type: 'dogfood-triage-completed',
+        topicsFound: topics.length,
+        issuesFiled: filed.length,
+        issuesSkipped: skippedBelowThreshold.length + skippedOverCap.length,
+      });
+    } catch (err) {
+      this.logger.error(`[dogfood] Triage pipeline failed (non-fatal): ${err}`);
+    }
   }
 }
