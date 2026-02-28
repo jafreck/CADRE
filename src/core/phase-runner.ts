@@ -1,8 +1,8 @@
-import type { PhaseResult } from '../agents/types.js';
+import type { PhaseResult } from '@cadre/agent-runtime';
+import type { TokenTracker } from '@cadre/agent-runtime';
 import type { PhaseExecutor, PhaseContext } from './phase-executor.js';
 import type { CheckpointManager } from './checkpoint.js';
 import type { IssueProgressWriter } from './progress.js';
-import type { TokenTracker } from '../budget/token-tracker.js';
 import type { Logger } from '../logging/logger.js';
 import type { GateCoordinator } from './gate-coordinator.js';
 import { BudgetExceededError } from './issue-budget-guard.js';

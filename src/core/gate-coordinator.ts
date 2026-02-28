@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { GateResult, PhaseResult } from '../agents/types.js';
+import type { GateResult, PhaseResult } from '@cadre/agent-runtime';
+import { extractCadreJson } from '@cadre/agent-runtime';
 import { AnalysisAmbiguityGate, type GateContext } from './phase-gate.js';
 import { buildGateMap } from './phase-registry.js';
 import type { CheckpointManager } from './checkpoint.js';
 import type { IssueProgressWriter } from './progress.js';
 import type { Logger } from '../logging/logger.js';
-import { extractCadreJson } from '../util/cadre-json.js';
 
 /** Stateless gates — constructed once and reused across all runGate() calls. */
 const GATE_MAP = buildGateMap();

@@ -1,4 +1,4 @@
-import type { AgentSession } from '../agents/types.js';
+import type { AgentSession } from '@cadre/agent-runtime';
 
 /**
  * Returns the union of all file paths covered by a session (across all its steps).

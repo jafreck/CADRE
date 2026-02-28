@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { RuntimeConfig } from '../config/loader.js';
-import type { PhaseResult } from '../agents/types.js';
+import type { PhaseResult } from '@cadre/agent-runtime';
 import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
 import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';

@@ -7,7 +7,7 @@ import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager } from './checkpoint.js';
 import { FleetProgressWriter } from './progress.js';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
-import { TokenTracker, type TokenSummary } from '../budget/token-tracker.js';
+import { TokenTracker, type TokenSummary } from '@cadre/agent-runtime';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { Logger } from '../logging/logger.js';
 import { NotificationManager } from '../notifications/manager.js';

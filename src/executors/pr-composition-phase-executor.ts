@@ -4,7 +4,7 @@ import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import type { AgentResult, PRContent } from '../agents/types.js';
-import { extractCadreJson } from '../util/cadre-json.js';
+import { extractCadreJson } from '@cadre/agent-runtime';
 import type { PullRequestMergeMethod } from '../platform/provider.js';
 
 /** Maximum total invocations (initial + retries) when pr-content.md fails to parse. */

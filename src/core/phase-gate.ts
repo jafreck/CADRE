@@ -1,14 +1,14 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
-import type { GateResult, AgentSession } from '../agents/types.js';
+import type { GateResult, AgentSession } from '@cadre/agent-runtime';
+import { extractCadreJson } from '@cadre/agent-runtime';
 import {
   analysisSchema,
   scoutReportSchema,
   integrationReportSchema,
 } from '../agents/schemas/index.js';
 import { SessionQueue } from '../execution/task-queue.js';
-import { extractCadreJson } from '../util/cadre-json.js';
 
 // Re-export generic interfaces from engine
 import type { PhaseGate, GateContext } from '../../packages/pipeline-engine/src/index.js';

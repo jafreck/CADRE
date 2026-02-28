@@ -10,7 +10,7 @@ import type { WorktreeManager } from '../git/worktree.js';
 import { IssueDag } from './issue-dag.js';
 import { CyclicDependencyError, DependencyResolutionError } from '../errors.js';
 import { Logger } from '../logging/logger.js';
-import { extractCadreJson } from '../util/cadre-json.js';
+import { extractCadreJson } from '@cadre/agent-runtime';
 
 /** Zod schema for the dependency-analyst agent output: maps issue number (string key) to list of dependency issue numbers. */
 export const depMapSchema = z.record(z.string(), z.array(z.number()));
