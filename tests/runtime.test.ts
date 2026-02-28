@@ -1558,13 +1558,22 @@ describe('CadreRuntime — resolveIssues() error handling', () => {
 });
 
 describe('CadreRuntime — DogfoodCollector wiring', () => {
+  let processOnSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+
     MockCreateNotificationManager.mockReturnValue({
       dispatch: vi.fn().mockResolvedValue(undefined),
       addProvider: vi.fn(),
     });
     mockRunTriage.mockResolvedValue({ filed: [], skippedBelowThreshold: [], skippedOverCap: [] });
+  });
+
+  afterEach(() => {
+    processOnSpy.mockRestore();
   });
 
   it('should not create DogfoodCollector when dogfood.enabled is false', () => {

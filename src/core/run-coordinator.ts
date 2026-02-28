@@ -28,6 +28,7 @@ export class RunCoordinator {
   private isShuttingDown = false;
   private activeIssueNumbers: number[] = [];
   private interruptReject: ((err: RuntimeInterruptedError) => void) | null = null;
+  private shutdownListeners: { signal: string; listener: () => void }[] = [];
 
   private get agentDir(): string {
     return this.config.agent.copilot.agentDir;
@@ -175,13 +176,18 @@ export class RunCoordinator {
       dag,
     );
 
-    const result = await Promise.race([
-      this.config.options.respondToReviews
-        ? fleet.runReviewResponse(this.activeIssueNumbers)
-        : fleet.run(),
-      interruptPromise,
-    ]);
-    this.interruptReject = null;
+    let result: FleetResult;
+    try {
+      result = await Promise.race([
+        this.config.options.respondToReviews
+          ? fleet.runReviewResponse(this.activeIssueNumbers)
+          : fleet.run(),
+        interruptPromise,
+      ]);
+    } finally {
+      this.interruptReject = null;
+      this.removeShutdownHandlers();
+    }
 
     // 5. Disconnect platform provider
     await this.provider.disconnect();
@@ -248,26 +254,47 @@ export class RunCoordinator {
         signal === 'SIGINT' ? 130 : 143,
       ));
 
-      // Kill all running agent processes
-      killAllTrackedProcesses();
+      try {
+        // Kill all running agent processes
+        killAllTrackedProcesses();
 
-      // Disconnect platform provider
-      await this.provider.disconnect();
+        // Disconnect platform provider
+        await this.provider.disconnect();
 
-      // Write interrupted status to progress
-      const progressWriter = new FleetProgressWriter(this.config.stateDir, this.logger);
-      await progressWriter.appendEvent(`Fleet interrupted by user (${signal})`);
+        // Write interrupted status to progress
+        const progressWriter = new FleetProgressWriter(this.config.stateDir, this.logger);
+        await progressWriter.appendEvent(`Fleet interrupted by user (${signal})`);
 
-      // Notify about interruption
-      await this.notifications.dispatch({
-        type: 'fleet-interrupted',
-        signal,
-        issuesInProgress: this.activeIssueNumbers,
-      });
+        // Notify about interruption
+        await this.notifications.dispatch({
+          type: 'fleet-interrupted',
+          signal,
+          issuesInProgress: this.activeIssueNumbers,
+        });
+      } catch (err) {
+        this.logger.error(`Error during shutdown cleanup: ${err}`);
+      }
     };
 
-    process.on('SIGINT', () => void handler('SIGINT'));
-    process.on('SIGTERM', () => void handler('SIGTERM'));
+    const sigintListener = (): void => void handler('SIGINT');
+    const sigtermListener = (): void => void handler('SIGTERM');
+
+    process.on('SIGINT', sigintListener);
+    process.on('SIGTERM', sigtermListener);
+    this.shutdownListeners = [
+      { signal: 'SIGINT', listener: sigintListener },
+      { signal: 'SIGTERM', listener: sigtermListener },
+    ];
+  }
+
+  /**
+   * Remove signal handlers registered by setupShutdownHandlers.
+   */
+  private removeShutdownHandlers(): void {
+    for (const { signal, listener } of this.shutdownListeners) {
+      process.removeListener(signal, listener);
+    }
+    this.shutdownListeners = [];
   }
 
   /**
