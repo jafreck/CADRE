@@ -395,7 +395,7 @@ export class GitHubProvider implements PlatformProvider {
         pending = true;
         continue;
       }
-      const conclusion = run.conclusion ?? 'neutral';
+      const conclusion = String(run.conclusion ?? 'neutral');
       if (
         conclusion === 'failure'
         || conclusion === 'timed_out'
