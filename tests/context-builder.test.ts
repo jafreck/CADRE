@@ -684,10 +684,9 @@ describe('ContextBuilder', () => {
       'pr-composer',
       'conflict-resolver',
       'dep-conflict-resolver',
-      'dogfood-triage',
     ];
 
-    it('should contain descriptors for all 14 agents', () => {
+    it('should contain descriptors for all 13 agents', () => {
       for (const agent of EXPECTED_AGENTS) {
         expect(AGENT_CONTEXT_REGISTRY[agent]).toBeDefined();
       }
@@ -1327,58 +1326,6 @@ describe('ContextBuilder', () => {
       const ctx = captureWrittenContext();
       const inputFiles = ctx.inputFiles as string[];
       expect(inputFiles).toContain('/tmp/worktree');
-    });
-  });
-
-  describe('build dogfood-triage', () => {
-    it('should set phase to 0', async () => {
-      await builder.build('dogfood-triage', {
-        issueNumber: 42,
-        worktreePath: '/tmp/worktree',
-        progressDir: '/tmp/progress',
-      });
-      const ctx = captureWrittenContext();
-      expect(ctx.phase).toBe(0);
-    });
-
-    it('should set outputPath to dogfood-triage-report.md', async () => {
-      await builder.build('dogfood-triage', {
-        issueNumber: 42,
-        worktreePath: '/tmp/worktree',
-        progressDir: '/tmp/progress',
-      });
-      const ctx = captureWrittenContext();
-      expect(ctx.outputPath).toBe('/tmp/progress/dogfood-triage-report.md');
-    });
-
-    it('should set inputFiles to dogfood-signals.json path', async () => {
-      await builder.build('dogfood-triage', {
-        issueNumber: 42,
-        worktreePath: '/tmp/worktree',
-        progressDir: '/tmp/progress',
-      });
-      const ctx = captureWrittenContext();
-      expect(ctx.inputFiles).toEqual(['/tmp/worktree/.cadre/dogfood-signals.json']);
-    });
-
-    it('should not include a payload', async () => {
-      await builder.build('dogfood-triage', {
-        issueNumber: 42,
-        worktreePath: '/tmp/worktree',
-        progressDir: '/tmp/progress',
-      });
-      const ctx = captureWrittenContext();
-      expect(ctx.payload).toBeUndefined();
-    });
-
-    it('should not include an outputSchema', async () => {
-      await builder.build('dogfood-triage', {
-        issueNumber: 42,
-        worktreePath: '/tmp/worktree',
-        progressDir: '/tmp/progress',
-      });
-      const ctx = captureWrittenContext();
-      expect(ctx.outputSchema).toBeUndefined();
     });
   });
 
