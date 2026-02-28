@@ -236,7 +236,7 @@ describe('DogfoodCollector', () => {
 
       const result = await collector.runTriage();
 
-      expect(result.filed).toHaveLength(1);
+      expect(result.filed).toHaveLength(0);
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('DogfoodCollector: failed to file issue'),
       );

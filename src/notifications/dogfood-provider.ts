@@ -189,9 +189,10 @@ export class DogfoodCollector implements NotificationProvider {
       }
 
       // 4. Max issues per run enforcement
+      const toFile: DogfoodTopic[] = [];
       for (let i = 0; i < aboveThreshold.length; i++) {
         if (i < this.config.maxIssuesPerRun) {
-          result.filed.push(aboveThreshold[i]);
+          toFile.push(aboveThreshold[i]);
         } else {
           result.skippedOverCap.push(aboveThreshold[i]);
           console.log(
@@ -201,7 +202,7 @@ export class DogfoodCollector implements NotificationProvider {
       }
 
       // 5. File GitHub issues for accepted topics
-      for (const topic of result.filed) {
+      for (const topic of toFile) {
         try {
           const title = `${this.config.titlePrefix} ${topic.summary}`;
           const body = this.buildIssueBody(topic);
@@ -210,6 +211,7 @@ export class DogfoodCollector implements NotificationProvider {
             body,
             labels: [...this.config.labels, ...this.suggestLabels(topic)],
           });
+          result.filed.push(topic);
         } catch (err) {
           console.error(`DogfoodCollector: failed to file issue for topic "${topic.key}": ${err}`);
         }

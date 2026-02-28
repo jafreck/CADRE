@@ -55,6 +55,12 @@ export class MockPlatformProvider implements PlatformProvider {
 
   async addIssueComment(_issueNumber: number, _body: string): Promise<void> {}
 
+  async createIssue(
+    _params: { title: string; body: string; labels?: string[] },
+  ): Promise<{ number: number; url: string }> {
+    return { number: 99, url: 'https://github.com/mock/repo/issues/99' };
+  }
+
   async createPullRequest(params: CreatePullRequestParams): Promise<PullRequestInfo> {
     return {
       number: 1,
