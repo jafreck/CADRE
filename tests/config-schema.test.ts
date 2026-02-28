@@ -72,6 +72,19 @@ describe('CadreConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('should default pullRequest.autoComplete.enabled to false in object form', () => {
+    const result = CadreConfigSchema.parse({
+      ...validConfig,
+      pullRequest: {
+        autoComplete: {
+          merge_method: 'squash',
+        },
+      },
+    });
+
+    expect(result.pullRequest.autoComplete).toEqual({ enabled: false, merge_method: 'squash' });
+  });
+
   it('should reject invalid projectName', () => {
     const result = CadreConfigSchema.safeParse({
       ...validConfig,

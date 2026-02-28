@@ -137,7 +137,7 @@ export const CadreConfigSchema = z.object({
           z
             .object({
               /** Enable PR auto-complete. */
-              enabled: z.boolean().default(true),
+              enabled: z.boolean().default(false),
               /** Merge strategy to use for PR auto-complete. */
               merge_method: z.enum(['merge', 'squash', 'rebase']).default('squash'),
             })

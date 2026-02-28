@@ -450,6 +450,37 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(platform.mergePullRequest).toHaveBeenCalledWith(103, 'main', 'rebase');
     });
 
+    it('should not auto-complete when autoComplete object omits enabled', async () => {
+      const prInfo = { number: 104, url: 'https://github.com/owner/repo/pull/104', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+        mergePullRequest: vi.fn().mockResolvedValue(undefined),
+      };
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: {
+            autoCreate: true,
+            autoComplete: { merge_method: 'squash' },
+            linkIssue: false,
+            draft: false,
+            labels: [],
+            reviewers: [],
+          },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect(platform.mergePullRequest).not.toHaveBeenCalled();
+    });
+
     it('should pass labels from config to createPullRequest', async () => {
       const ctx = makeAutoCreateCtx({
         config: {

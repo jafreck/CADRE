@@ -175,7 +175,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     const isEnabled =
       typeof autoComplete === 'boolean'
         ? autoComplete
-        : (autoComplete.enabled ?? true);
+        : (autoComplete.enabled ?? false);
     if (!isEnabled) return;
 
     const mergeMethod: PullRequestMergeMethod =
