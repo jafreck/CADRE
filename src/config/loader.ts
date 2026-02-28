@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { resolve, isAbsolute, join } from 'node:path';
+import { resolve, isAbsolute, join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { CadreConfigSchema, type CadreConfig } from './schema.js';
 import { exists } from '../util/fs.js';
@@ -33,6 +33,7 @@ export class ConfigLoadError extends Error {
  */
 export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
   const absPath = isAbsolute(configPath) ? configPath : resolve(process.cwd(), configPath);
+  const configDir = dirname(absPath);
 
   // Check file exists
   if (!(await exists(absPath))) {
@@ -68,13 +69,13 @@ export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
   const resolvedStateDir = config.stateDir
     ? isAbsolute(config.stateDir)
       ? config.stateDir
-      : resolve(process.cwd(), config.stateDir)
-    : join(homedir(), '.cadre', config.projectName);
+      : resolve(configDir, config.stateDir)
+    : join(homedir(), '.cadre');
 
   const resolvedWorktreeRoot = config.worktreeRoot
     ? isAbsolute(config.worktreeRoot)
       ? config.worktreeRoot
-      : resolve(resolvedRepoPath, config.worktreeRoot)
+      : resolve(resolvedStateDir, config.worktreeRoot)
     : join(resolvedStateDir, 'worktrees');
 
   /**

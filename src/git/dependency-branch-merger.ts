@@ -1,5 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { Logger } from '../logging/logger.js';
 import { ensureDir } from '../util/fs.js';
@@ -23,7 +24,7 @@ export class DependencyBranchMerger {
     private readonly repoPath: string,
     private readonly logger: Logger,
     private readonly resolveBranchName: (issueNumber: number, title: string) => string,
-    private readonly stateDir: string = join(repoPath, '.cadre'),
+    private readonly stateDir: string = join(homedir(), '.cadre'),
   ) {}
 
   /**

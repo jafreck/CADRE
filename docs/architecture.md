@@ -488,7 +488,7 @@ stateDiagram-v2
 
 ```mermaid
 graph TD
-    ROOT["~/.cadre/&lt;repo&gt;/"]
+    ROOT["~/.cadre/"]
 
     ROOT --> WT["worktrees/"]
     ROOT --> AG["agents/   (templates)"]

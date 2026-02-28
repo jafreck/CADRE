@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { Logger } from '../logging/logger.js';
 import { exists, ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
@@ -53,7 +53,7 @@ export class WorktreeProvisioner {
     private readonly logger: Logger,
     private readonly agentDir?: string,
     private readonly backend: string = 'copilot',
-    private readonly stateDir: string = join(repoPath, '.cadre'),
+    private readonly stateDir: string = join(homedir(), '.cadre'),
   ) {
     this.git = simpleGit(repoPath);
     this.agentFileSync = new AgentFileSync(agentDir, backend, logger);

@@ -1,5 +1,6 @@
 import { appendFile } from 'fs/promises';
 import path from 'path';
+import { homedir } from 'os';
 import type { NotificationProvider } from './types.js';
 import type { CadreEvent } from '../logging/events.js';
 
@@ -13,7 +14,7 @@ export class LogProvider implements NotificationProvider {
   private readonly events?: string[];
 
   constructor(config: LogProviderConfig = {}) {
-    this.logFile = config.logFile ?? path.join(process.cwd(), '.cadre', 'notifications.jsonl');
+    this.logFile = config.logFile ?? path.join(homedir(), '.cadre', 'notifications.jsonl');
     this.events = config.events;
   }
 
