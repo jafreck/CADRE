@@ -32,6 +32,7 @@ vi.mock('../src/validation/index.js', () => ({
   platformValidator: { name: 'platform', validate: vi.fn() },
   commandValidator: { name: 'command', validate: vi.fn() },
   diskValidator: { name: 'disk', validate: vi.fn() },
+  registryCompletenessValidator: { name: 'registry-completeness', validate: vi.fn() },
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
@@ -98,7 +99,7 @@ describe('CadreRuntime.validate()', () => {
     expect(PreRunValidationSuite).toHaveBeenCalledOnce();
     const [validators] = (PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [unknown[]];
     expect(Array.isArray(validators)).toBe(true);
-    expect((validators as unknown[]).length).toBe(5);
+    expect((validators as unknown[]).length).toBe(6);
   });
 
   it('should pass config to the suite run method', async () => {
