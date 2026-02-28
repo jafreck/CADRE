@@ -205,11 +205,6 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       baseBranch: helpers.baseBranch,
     }),
   },
-  'dogfood-triage': {
-    phase: 0,
-    outputFile: (args) => join(args.progressDir, 'dogfood-triage-report.md'),
-    inputFiles: async (args) => [join(args.worktreePath, '.cadre', 'dogfood-signals.json')],
-  },
 };
 
 /**

@@ -225,30 +225,6 @@ export class AzureDevOpsProvider implements PlatformProvider {
     });
   }
 
-  async createIssue(params: { title: string; body: string; labels?: string[] }): Promise<number> {
-    this.ensureConnected();
-
-    const url =
-      `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/wit/workitems/$Issue?api-version=${this.apiVersion}`;
-    const patchDoc = [
-      { op: 'add', path: '/fields/System.Title', value: params.title },
-      { op: 'add', path: '/fields/System.Description', value: params.body },
-    ];
-    if (params.labels && params.labels.length > 0) {
-      patchDoc.push({
-        op: 'add',
-        path: '/fields/System.Tags',
-        value: params.labels.join('; '),
-      });
-    }
-
-    const result = await this.fetch(url, {
-      method: 'POST',
-      body: JSON.stringify(patchDoc),
-    });
-    return result.id as number;
-  }
-
   // ── Pull Requests ──
 
   async createPullRequest(params: CreatePullRequestParams): Promise<PullRequestInfo> {

@@ -15,12 +15,11 @@ const ALL_AGENT_NAMES: AgentName[] = [
   'fix-surgeon',
   'integration-checker',
   'pr-composer',
-  'dogfood-triage',
 ];
 
 describe('AGENT_DEFINITIONS', () => {
-  it('should contain exactly 15 entries', () => {
-    expect(AGENT_DEFINITIONS).toHaveLength(15);
+  it('should contain exactly 14 entries', () => {
+    expect(AGENT_DEFINITIONS).toHaveLength(14);
   });
 
   it('should have one entry for each AgentName', () => {
@@ -137,24 +136,5 @@ describe('AGENT_DEFINITIONS', () => {
     expect(def?.phaseName).toBe('Orchestration');
     expect(def?.hasStructuredOutput).toBe(false);
     expect(def?.templateFile).toBe('dep-conflict-resolver.md');
-  });
-
-  it('should have dogfood-triage with correct metadata', () => {
-    const def = AGENT_DEFINITIONS.find((d) => d.name === 'dogfood-triage');
-    expect(def).toBeDefined();
-    expect(def?.phase).toBe(0);
-    expect(def?.phaseName).toBe('Dogfood');
-    expect(def?.hasStructuredOutput).toBe(true);
-    expect(def?.templateFile).toBe('dogfood-triage.md');
-  });
-
-  it('should include dogfood-triage as structured-output agent', () => {
-    const structured = AGENT_DEFINITIONS.filter((d) => d.hasStructuredOutput).map((d) => d.name);
-    expect(structured).toContain('dogfood-triage');
-  });
-
-  it('should have dogfood-triage in phase 0', () => {
-    const phase0 = AGENT_DEFINITIONS.filter((d) => d.phase === 0).map((d) => d.name);
-    expect(phase0).toContain('dogfood-triage');
   });
 });

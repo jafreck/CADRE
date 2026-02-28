@@ -10,7 +10,6 @@ import type {
   BudgetExceededEvent,
   PhaseCompletedEvent,
   AmbiguityDetectedEvent,
-  DogfoodTriageCompletedEvent,
 } from '../logging/events.js';
 
 export type { CadreEvent };
@@ -25,8 +24,7 @@ export type NotificationEvent =
   | PhaseCompletedEvent
   | AmbiguityDetectedEvent
   | BudgetWarningEvent
-  | BudgetExceededEvent
-  | DogfoodTriageCompletedEvent;
+  | BudgetExceededEvent;
 
 export interface NotificationProvider {
   notify(event: CadreEvent): Promise<void>;

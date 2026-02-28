@@ -23,10 +23,6 @@ import type {
   AmbiguityDetectedEvent,
   BudgetWarningEvent,
   BudgetExceededEvent,
-  DogfoodSignalEvent,
-  DogfoodTriageCompletedEvent,
-  DogfoodIssueFiledEvent,
-  DogfoodIssueSkippedEvent,
   LogEntry,
   LogLevel,
 } from '../src/logging/events.js';
@@ -315,98 +311,6 @@ describe('CadreEvent type definitions', () => {
     });
   });
 
-  describe('Dogfood events', () => {
-    it('DogfoodSignalEvent has required fields', () => {
-      const event: DogfoodSignalEvent = {
-        type: 'dogfood-signal',
-        subsystem: 'orchestrator',
-        failureMode: 'timeout',
-        message: 'Agent timed out after 5 minutes',
-        timestamp: '2026-01-01T00:00:00Z',
-      };
-      expect(event.type).toBe('dogfood-signal');
-      expect(event.subsystem).toBe('orchestrator');
-      expect(event.failureMode).toBe('timeout');
-      expect(event.message).toBe('Agent timed out after 5 minutes');
-      expect(event.timestamp).toBe('2026-01-01T00:00:00Z');
-    });
-
-    it('DogfoodSignalEvent has optional issueNumber and severity', () => {
-      const event: DogfoodSignalEvent = {
-        type: 'dogfood-signal',
-        subsystem: 'code-writer',
-        failureMode: 'parse-error',
-        message: 'Failed to parse output',
-        issueNumber: 42,
-        severity: 'high',
-        timestamp: '2026-01-01T00:00:00Z',
-      };
-      expect(event.issueNumber).toBe(42);
-      expect(event.severity).toBe('high');
-    });
-
-    it('DogfoodSignalEvent optional fields are undefined when omitted', () => {
-      const event: DogfoodSignalEvent = {
-        type: 'dogfood-signal',
-        subsystem: 'test',
-        failureMode: 'unknown',
-        message: 'test',
-        timestamp: '2026-01-01T00:00:00Z',
-      };
-      expect(event.issueNumber).toBeUndefined();
-      expect(event.severity).toBeUndefined();
-    });
-
-    it('DogfoodTriageCompletedEvent has required fields', () => {
-      const event: DogfoodTriageCompletedEvent = {
-        type: 'dogfood-triage-completed',
-        topicsFound: 5,
-        issuesFiled: 3,
-        issuesSkipped: 2,
-      };
-      expect(event.type).toBe('dogfood-triage-completed');
-      expect(event.topicsFound).toBe(5);
-      expect(event.issuesFiled).toBe(3);
-      expect(event.issuesSkipped).toBe(2);
-    });
-
-    it('DogfoodIssueFiledEvent has required fields', () => {
-      const event: DogfoodIssueFiledEvent = {
-        type: 'dogfood-issue-filed',
-        topicKey: 'timeout-recovery',
-        issueNumber: 100,
-        severity: 'critical',
-      };
-      expect(event.type).toBe('dogfood-issue-filed');
-      expect(event.topicKey).toBe('timeout-recovery');
-      expect(event.issueNumber).toBe(100);
-      expect(event.severity).toBe('critical');
-    });
-
-    it('DogfoodIssueFiledEvent accepts all severity levels', () => {
-      for (const severity of ['critical', 'severe', 'high', 'medium', 'low'] as const) {
-        const event: DogfoodIssueFiledEvent = {
-          type: 'dogfood-issue-filed',
-          topicKey: 'test-topic',
-          issueNumber: 1,
-          severity,
-        };
-        expect(event.severity).toBe(severity);
-      }
-    });
-
-    it('DogfoodIssueSkippedEvent has required fields', () => {
-      const event: DogfoodIssueSkippedEvent = {
-        type: 'dogfood-issue-skipped',
-        topicKey: 'minor-cosmetic',
-        reason: 'Below minimum severity threshold',
-      };
-      expect(event.type).toBe('dogfood-issue-skipped');
-      expect(event.topicKey).toBe('minor-cosmetic');
-      expect(event.reason).toBe('Below minimum severity threshold');
-    });
-  });
-
   describe('CadreEvent discriminated union narrowing', () => {
     it('narrows to FleetStartedEvent via type discriminant', () => {
       const event: CadreEvent = { type: 'fleet-started', issueCount: 1, maxParallel: 1 };
@@ -429,51 +333,6 @@ describe('CadreEvent type definitions', () => {
       };
       const narrowed = narrowEvent(event, 'pr-created');
       expect(narrowed?.prNumber).toBe(77);
-    });
-
-    it('narrows to DogfoodSignalEvent correctly', () => {
-      const event: CadreEvent = {
-        type: 'dogfood-signal',
-        subsystem: 'orchestrator',
-        failureMode: 'crash',
-        message: 'Unexpected error',
-        timestamp: '2026-01-01T00:00:00Z',
-      };
-      const narrowed = narrowEvent(event, 'dogfood-signal');
-      expect(narrowed?.subsystem).toBe('orchestrator');
-      expect(narrowed?.failureMode).toBe('crash');
-    });
-
-    it('narrows to DogfoodTriageCompletedEvent correctly', () => {
-      const event: CadreEvent = {
-        type: 'dogfood-triage-completed',
-        topicsFound: 3,
-        issuesFiled: 2,
-        issuesSkipped: 1,
-      };
-      const narrowed = narrowEvent(event, 'dogfood-triage-completed');
-      expect(narrowed?.topicsFound).toBe(3);
-    });
-
-    it('narrows to DogfoodIssueFiledEvent correctly', () => {
-      const event: CadreEvent = {
-        type: 'dogfood-issue-filed',
-        topicKey: 'perf-issue',
-        issueNumber: 42,
-        severity: 'high',
-      };
-      const narrowed = narrowEvent(event, 'dogfood-issue-filed');
-      expect(narrowed?.topicKey).toBe('perf-issue');
-    });
-
-    it('narrows to DogfoodIssueSkippedEvent correctly', () => {
-      const event: CadreEvent = {
-        type: 'dogfood-issue-skipped',
-        topicKey: 'low-priority',
-        reason: 'Too minor',
-      };
-      const narrowed = narrowEvent(event, 'dogfood-issue-skipped');
-      expect(narrowed?.reason).toBe('Too minor');
     });
   });
 

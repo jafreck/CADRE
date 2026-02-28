@@ -351,20 +351,6 @@ export const CadreConfigSchema = z.object({
     })
     .default({}),
 
-  /** Dogfood self-improvement configuration. */
-  dogfood: z
-    .object({
-      /** Enable dogfood triage agent and issue filing at end of run. */
-      enabled: z.boolean().default(false),
-      /** Minimum severity level for filing dogfood issues. */
-      minimumIssueLevel: z
-        .enum(['critical', 'severe', 'high', 'medium', 'low'])
-        .default('medium'),
-      /** Maximum number of dogfood issues to file per run. */
-      maxIssuesPerRun: z.number().int().min(1).default(5),
-    })
-    .default({ enabled: false, minimumIssueLevel: 'medium', maxIssuesPerRun: 5 }),
-
   /** DAG (dependency graph) configuration for ordering issues by dependency. */
   dag: z
     .object({
@@ -380,5 +366,4 @@ export const CadreConfigSchema = z.object({
     .default({ enabled: false, verifyDepsBuild: false, autoMerge: false, onDependencyMergeConflict: 'fail' }),
 });
 
-export type DogfoodConfig = z.infer<typeof CadreConfigSchema>['dogfood'];
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;
