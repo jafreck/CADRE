@@ -20,6 +20,8 @@ import type { DependencyMergeConflictContext } from '../git/dependency-branch-me
 import { FleetEventBus } from './fleet-event-bus.js';
 import { FleetReporter } from './fleet-reporter.js';
 import { FleetScheduler } from './fleet-scheduler.js';
+import { PullRequestCompletionQueue, type CompletionFailure } from './pr-completion-queue.js';
+import type { PullRequestMergeMethod } from '../platform/provider.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -36,6 +38,12 @@ export interface FleetResult {
   totalDuration: number;
   /** Aggregate token usage. */
   tokenUsage: TokenSummary;
+  /** Summary of resume open-PR completion subsystem execution. */
+  prCompletion?: {
+    queued: number;
+    failed: number;
+    failures: CompletionFailure[];
+  };
 }
 
 /**
@@ -51,6 +59,7 @@ export class FleetOrchestrator {
   private fleetBudgetExceeded = false;
   private eventBus!: FleetEventBus;
   private reporter!: FleetReporter;
+  private readonly prCompletionQueue: PullRequestCompletionQueue;
 
   constructor(
     private readonly config: RuntimeConfig,
@@ -69,6 +78,20 @@ export class FleetOrchestrator {
     this.tokenTracker = new TokenTracker();
     this.costEstimator = new CostEstimator(config.copilot);
     this.contextBuilder = new ContextBuilder(config, logger);
+
+    const autoComplete = this.resolveAutoCompleteConfig();
+    this.prCompletionQueue = new PullRequestCompletionQueue(
+      this.platform,
+      this.logger,
+      this.config.baseBranch,
+      autoComplete.mergeMethod,
+      this.config.options.resume && autoComplete.enabled,
+      (dependencyIssueNumber) => {
+        const status = this.fleetCheckpoint.getIssueStatus(dependencyIssueNumber)?.status;
+        return status === 'completed';
+      },
+      this.config.options.maxParallelIssues,
+    );
   }
 
   /**
@@ -115,8 +138,22 @@ export class FleetOrchestrator {
       this.dag,
     );
 
+    await this.prCompletionQueue.drain();
+    const completionFailures = this.prCompletionQueue.getFailures();
+    const queuedCompletions = this.prCompletionQueue.getQueuedCount();
+    if (this.prCompletionQueue.getQueuedCount() > 0) {
+      this.logger.info(
+        `PR completion subsystem finished: ${this.prCompletionQueue.getQueuedCount()} queued, ${completionFailures.length} failed`,
+      );
+    }
+
     // Aggregate results
     const fleetResult = reporter.aggregateResults(results, startTime);
+    fleetResult.prCompletion = {
+      queued: queuedCompletions,
+      failed: completionFailures.length,
+      failures: completionFailures,
+    };
 
     // Write run report
     await reporter.writeReport(fleetResult, startTime);
@@ -133,6 +170,22 @@ export class FleetOrchestrator {
     );
 
     return fleetResult;
+  }
+
+  private resolveAutoCompleteConfig(): { enabled: boolean; mergeMethod: PullRequestMergeMethod } {
+    const autoComplete = this.config.pullRequest.autoComplete;
+    if (autoComplete == null) {
+      return { enabled: false, mergeMethod: 'squash' };
+    }
+
+    if (typeof autoComplete === 'boolean') {
+      return { enabled: autoComplete, mergeMethod: 'squash' };
+    }
+
+    return {
+      enabled: autoComplete.enabled ?? false,
+      mergeMethod: autoComplete.merge_method ?? 'squash',
+    };
   }
 
   /**
@@ -173,6 +226,11 @@ export class FleetOrchestrator {
       codeDoneNoPR: [],
       totalDuration: Date.now() - startTime,
       tokenUsage: this.tokenTracker.getSummary(),
+      prCompletion: {
+        queued: 0,
+        failed: 0,
+        failures: [],
+      },
     };
   }
 
@@ -221,6 +279,14 @@ export class FleetOrchestrator {
             `Skipping issue #${issue.number}: existing open PR found at ${existingPR.url}`,
             { issueNumber: issue.number },
           );
+          this.prCompletionQueue.enqueue({
+            issueNumber: issue.number,
+            issueTitle: issue.title,
+            prNumber: existingPR.number,
+            prUrl: existingPR.url,
+            branch: branchName,
+            dependencyIssueNumbers: dag ? dag.getDirectDeps(issue.number) : [],
+          });
           await this.fleetCheckpoint.setIssueStatus(
             issue.number,
             'completed',

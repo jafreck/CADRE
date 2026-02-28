@@ -58,6 +58,8 @@ vi.mock('../src/core/checkpoint.js', () => ({
     isIssueCompleted: vi.fn().mockReturnValue(false),
     setIssueStatus: vi.fn().mockResolvedValue(undefined),
     recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+    setDag: vi.fn().mockResolvedValue(undefined),
+    markWaveComplete: vi.fn().mockResolvedValue(undefined),
     getIssueStatus: vi.fn().mockReturnValue(null),
   })),
 }));
@@ -92,7 +94,7 @@ function makeConfig(overrides: Partial<RuntimeConfig['options']> = {}) {
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: [1] },
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
-    pullRequest: { autoCreate: true, draft: true, labels: [], reviewers: [], linkIssue: true },
+    pullRequest: { autoCreate: true, autoComplete: false, draft: true, labels: [], reviewers: [], linkIssue: true },
     options: {
       maxParallelIssues: 3,
       maxParallelAgents: 3,
@@ -109,6 +111,8 @@ function makeConfig(overrides: Partial<RuntimeConfig['options']> = {}) {
       ambiguityThreshold: 5,
       haltOnAmbiguity: false,
       respondToReviews: false,
+      maxWholePrReviewRetries: 1,
+      postCostComment: false,
       ...overrides,
     },
   });
@@ -160,6 +164,7 @@ function makeMockDeps() {
   };
   const platform = {
     findOpenPR: vi.fn().mockResolvedValue(null),
+    mergePullRequest: vi.fn().mockResolvedValue(undefined),
   };
   const logger = {
     info: vi.fn(),
@@ -1169,6 +1174,233 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
     expect(result.issues.every((i) => i.success === true)).toBe(true);
     expect(result.failedIssues).toHaveLength(0);
   });
+
+  it('on resume, queues and auto-completes existing open PRs', async () => {
+    const config = makeRuntimeConfig({
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [1, 2, 3] },
+      commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+      pullRequest: {
+        autoCreate: true,
+        autoComplete: true,
+        draft: true,
+        labels: [],
+        reviewers: [],
+        linkIssue: true,
+      },
+      options: {
+        maxParallelIssues: 3,
+        maxParallelAgents: 3,
+        maxRetriesPerTask: 3,
+        dryRun: false,
+        resume: true,
+        invocationDelayMs: 0,
+        buildVerification: false,
+        testVerification: false,
+        perTaskBuildCheck: true,
+        maxBuildFixRounds: 2,
+        skipValidation: false,
+        maxIntegrationFixRounds: 1,
+        ambiguityThreshold: 5,
+        haltOnAmbiguity: false,
+        respondToReviews: false,
+        maxWholePrReviewRetries: 1,
+        postCostComment: false,
+      },
+    });
+    const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockImplementation(async (issueNumber: number) => ({
+      number: 200 + issueNumber,
+      url: `https://github.com/owner/repo/pull/${200 + issueNumber}`,
+      title: `PR for issue ${issueNumber}`,
+    }));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(platform.mergePullRequest).toHaveBeenCalledTimes(3);
+    expect(platform.mergePullRequest).toHaveBeenCalledWith(201, config.baseBranch, 'squash');
+    expect(platform.mergePullRequest).toHaveBeenCalledWith(202, config.baseBranch, 'squash');
+    expect(platform.mergePullRequest).toHaveBeenCalledWith(203, config.baseBranch, 'squash');
+    expect(worktreeManager.provision).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-complete existing open PRs when not resuming', async () => {
+    const config = makeConfig({ resume: false });
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockResolvedValue({
+      number: 42,
+      url: 'https://github.com/owner/repo/pull/42',
+      title: 'Existing PR',
+    });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(platform.mergePullRequest).not.toHaveBeenCalled();
+  });
+
+  it('uses pullRequest.autoComplete.merge_method for resume open-PR completion', async () => {
+    const config = makeRuntimeConfig({
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [1] },
+      commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+      pullRequest: {
+        autoCreate: true,
+        autoComplete: { enabled: true, merge_method: 'rebase' },
+        draft: true,
+        labels: [],
+        reviewers: [],
+        linkIssue: true,
+      },
+      options: {
+        maxParallelIssues: 3,
+        maxParallelAgents: 3,
+        maxRetriesPerTask: 3,
+        dryRun: false,
+        resume: true,
+        invocationDelayMs: 0,
+        buildVerification: false,
+        testVerification: false,
+        perTaskBuildCheck: true,
+        maxBuildFixRounds: 2,
+        skipValidation: false,
+        maxIntegrationFixRounds: 1,
+        ambiguityThreshold: 5,
+        haltOnAmbiguity: false,
+        respondToReviews: false,
+        maxWholePrReviewRetries: 1,
+        postCostComment: false,
+      },
+    });
+    const issues = [makeIssue(1)];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockResolvedValue({
+      number: 77,
+      url: 'https://github.com/owner/repo/pull/77',
+      title: 'Existing PR',
+    });
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    expect(platform.mergePullRequest).toHaveBeenCalledWith(77, config.baseBranch, 'rebase');
+  });
+
+  it('on resume with DAG, merges queued existing PRs in dependency order', async () => {
+    const config = makeRuntimeConfig({
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [1, 2] },
+      commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+      pullRequest: {
+        autoCreate: true,
+        autoComplete: true,
+        draft: true,
+        labels: [],
+        reviewers: [],
+        linkIssue: true,
+      },
+      dag: {
+        enabled: true,
+        verifyDepsBuild: false,
+        autoMerge: false,
+        onDependencyMergeConflict: 'resolve',
+      },
+      options: {
+        maxParallelIssues: 3,
+        maxParallelAgents: 3,
+        maxRetriesPerTask: 3,
+        dryRun: false,
+        resume: true,
+        invocationDelayMs: 0,
+        buildVerification: false,
+        testVerification: false,
+        perTaskBuildCheck: true,
+        maxBuildFixRounds: 2,
+        skipValidation: false,
+        maxIntegrationFixRounds: 1,
+        ambiguityThreshold: 5,
+        haltOnAmbiguity: false,
+        respondToReviews: false,
+        maxWholePrReviewRetries: 1,
+        postCostComment: false,
+      },
+    });
+    const issue1 = makeIssue(1);
+    const issue2 = makeIssue(2);
+    const issues = [issue1, issue2];
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    platform.findOpenPR.mockImplementation(async (issueNumber: number) => ({
+      number: 300 + issueNumber,
+      url: `https://github.com/owner/repo/pull/${300 + issueNumber}`,
+      title: `PR for issue ${issueNumber}`,
+    }));
+
+    const dag = {
+      getWaves: vi.fn().mockReturnValue([[issue1], [issue2]]),
+      getTransitiveDepsOrdered: vi.fn().mockImplementation((issueNumber: number) =>
+        issueNumber === 2 ? [issue1] : []),
+      getDirectDeps: vi.fn().mockImplementation((issueNumber: number) =>
+        issueNumber === 2 ? [1] : []),
+      getAllIssues: vi.fn().mockReturnValue([issue1, issue2]),
+    };
+
+    const fleet = new FleetOrchestrator(
+      config,
+      issues,
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+      dag as any,
+    );
+
+    await fleet.run();
+
+    expect(platform.mergePullRequest).toHaveBeenCalledTimes(2);
+    const mergeCalls = (platform.mergePullRequest as ReturnType<typeof vi.fn>).mock.calls;
+    expect(mergeCalls[0][0]).toBe(301);
+    expect(mergeCalls[1][0]).toBe(302);
+  });
+
 });
 
 describe('FleetOrchestrator — codeDoneNoPR', () => {

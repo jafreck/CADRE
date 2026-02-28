@@ -96,6 +96,9 @@ export class GitHubProvider implements PlatformProvider {
     const issues: IssueDetail[] = [];
 
     for (const raw of rawIssues) {
+      if ('pull_request' in asRecord(raw)) {
+        continue;
+      }
       const issueNumber = asNumber(raw.number);
       try {
         const detail = await this.getIssue(issueNumber);

@@ -711,6 +711,24 @@ describe('GitHubProvider – listIssues', () => {
 
     expect(issues).toEqual([]);
   });
+
+  it('should ignore pull_request items returned by api.listIssues', async () => {
+    getApiMock().listIssues.mockResolvedValue([
+      { number: 1 },
+      { number: 999, pull_request: { url: 'https://api.github.com/pulls/999' } },
+      { number: 2 },
+    ]);
+    getApiMock().getIssue
+      .mockResolvedValueOnce({ number: 1, title: 'First', state: 'open', comments: [] })
+      .mockResolvedValueOnce({ number: 2, title: 'Second', state: 'open', comments: [] });
+
+    const issues = await provider.listIssues({});
+
+    expect(issues).toHaveLength(2);
+    expect(issues.map((i) => i.number)).toEqual([1, 2]);
+    expect(getApiMock().getIssue).toHaveBeenCalledTimes(2);
+    expect(getApiMock().getIssue).not.toHaveBeenCalledWith(999);
+  });
 });
 
 describe('GitHubProvider – addIssueComment', () => {
