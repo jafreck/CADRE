@@ -1,5 +1,6 @@
 export * from './budget/token-tracker.js';
 export * from './output/cadre-json.js';
+export * from './output/result-parser.js';
 export * from './context/types.js';
 export * from './retry/retry.js';
 export * from './backend/backend.js';
