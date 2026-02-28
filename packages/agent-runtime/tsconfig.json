@@ -5,7 +5,8 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
     "outDir": "dist",
-    "rootDir": ".",
+    "rootDir": "src",
+    "composite": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -15,11 +16,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": [
-    "src/**/*",
-    "packages/command-diagnostics/src/**/*",
-    "packages/pipeline-engine/src/**/*",
-    "packages/agent-runtime/src/**/*"
-  ],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

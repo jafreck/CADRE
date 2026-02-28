@@ -23,6 +23,7 @@
     "test:e2e": "CADRE_E2E=1 vitest run tests/e2e-*.test.ts"
   },
   "dependencies": {
+    "@cadre/agent-runtime": "workspace:*",
     "@cadre/command-diagnostics": "workspace:*",
     "@inquirer/prompts": "^7",
     "@modelcontextprotocol/sdk": "^1.12",
