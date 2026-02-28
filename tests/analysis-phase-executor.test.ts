@@ -277,6 +277,42 @@ describe('AnalysisPhaseExecutor', () => {
       expect(ctx.callbacks.recordTokens).toHaveBeenCalledWith('codebase-scout', 50);
     });
 
+    it('should persist analysis.md from issue-analyst stdout when output file is missing', async () => {
+      const analystResult: AgentResult = {
+        ...makeSuccessAgentResult('issue-analyst'),
+        outputExists: false,
+        stdout: [
+          '## Requirements',
+          '1. Add regression coverage',
+          '',
+          '```cadre-json',
+          JSON.stringify({
+            requirements: ['Add regression coverage'],
+            changeType: 'bug-fix',
+            scope: 'small',
+            affectedAreas: ['tests/'],
+            ambiguities: [],
+          }, null, 2),
+          '```',
+        ].join('\n'),
+      };
+      const scoutResult = makeSuccessAgentResult('codebase-scout');
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(analystResult)
+          .mockResolvedValueOnce(scoutResult),
+      };
+
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
+      await executor.execute(ctx);
+
+      expect(writeFile).toHaveBeenCalledWith(
+        join('/tmp/progress', 'analysis.md'),
+        `${analystResult.stdout}\n`,
+        'utf-8',
+      );
+    });
+
     it('should check budget multiple times during execution', async () => {
       const ctx = makeCtx();
       await executor.execute(ctx);
@@ -308,6 +344,20 @@ describe('AnalysisPhaseExecutor', () => {
 
       const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Issue analyst failed:');
+    });
+
+    it('should throw if issue-analyst succeeds without output file and without cadre-json in stdout', async () => {
+      const analystResult: AgentResult = {
+        ...makeSuccessAgentResult('issue-analyst'),
+        outputExists: false,
+        stdout: 'plain text without structured output',
+      };
+      const launcher = {
+        launchAgent: vi.fn().mockResolvedValue(analystResult),
+      };
+
+      const ctx = makeCtx({ services: { launcher: launcher } as never });
+      await expect(executor.execute(ctx)).rejects.toThrow('issue-analyst exited successfully but stdout did not contain a cadre-json block');
     });
 
     it('should throw if codebase-scout fails', async () => {

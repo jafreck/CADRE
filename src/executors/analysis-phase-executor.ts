@@ -5,6 +5,8 @@ import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
 import { captureBaseline as captureBaselineCmd } from '@cadre/command-diagnostics';
 import type { BaselineResults } from '@cadre/command-diagnostics';
+import type { AgentResult } from '../agents/types.js';
+import { extractCadreJson } from '../util/cadre-json.js';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 1;
@@ -43,6 +45,8 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
     if (!analystResult.success) {
       throw new Error(`Issue analyst failed: ${analystResult.error}`);
     }
+
+    await this.ensureOutputFile(analystResult, join(ctx.io.progressDir, 'analysis.md'));
 
     // Build context for codebase-scout (needs analysis.md)
     const scoutContextPath = await ctx.services.contextBuilder.build('codebase-scout', {
@@ -89,5 +93,21 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
     }
 
     await atomicWriteJSON(baselinePath, baseline);
+  }
+
+  private async ensureOutputFile(result: AgentResult, outputPath: string): Promise<void> {
+    if (result.outputExists) return;
+
+    const stdout = result.stdout.trim();
+    if (stdout.length === 0) {
+      throw new Error('issue-analyst exited successfully but did not write analysis.md');
+    }
+
+    const extracted = extractCadreJson(stdout);
+    if (extracted === null) {
+      throw new Error('issue-analyst exited successfully but stdout did not contain a cadre-json block');
+    }
+
+    await writeFile(outputPath, `${stdout}\n`, 'utf-8');
   }
 }

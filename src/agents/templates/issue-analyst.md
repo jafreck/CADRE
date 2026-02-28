@@ -11,6 +11,8 @@ You will receive:
 
 Use your tools to fetch the full issue text, comments, and any linked code or files referenced in the issue.
 
+Read the `outputPath` field from your context file. Write your output markdown to that exact path.
+
 ## Output Contract
 
 Produce a structured analysis with the following sections:
@@ -44,6 +46,11 @@ List any unclear requirements, missing context, or decisions that need clarifica
 After all human-readable sections, you MUST append a `cadre-json` fenced block containing the structured analysis. **cadre does not read the markdown prose — it reads only this block. If the block is missing or uses a different fence language (e.g. plain `json`), the pipeline will fail.**
 
 The block must match the `AnalysisResult` schema: `requirements` (string array), `changeType` (one of `"bug-fix"`, `"feature"`, `"refactor"`, `"docs"`, `"chore"`), `scope` (one of `"small"`, `"medium"`, `"large"`), `affectedAreas` (string array), `ambiguities` (string array).
+
+## File Write (MANDATORY)
+
+- Write the complete markdown output to `outputPath`.
+- CADRE validates `analysis.md` from disk in the progress directory; returning text only in stdout is insufficient.
 
 ## Tool Permissions
 

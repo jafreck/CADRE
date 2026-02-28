@@ -52,6 +52,11 @@ describe('issue-analyst.md template', () => {
     it('should describe an Ambiguities output section', () => {
       expect(content).toMatch(/Ambiguit/i);
     });
+
+    it('should instruct writing output to outputPath', () => {
+      expect(content).toMatch(/outputPath/i);
+      expect(content).toMatch(/write/i);
+    });
   });
 
   describe('tool permissions', () => {
