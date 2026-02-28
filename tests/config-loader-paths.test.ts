@@ -26,11 +26,14 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
     baseBranch: 'main',
     issues: { ids: [1] },
     stateDir: '/abs/state',
-    copilot: {
-      cliCommand: 'gh copilot',
+    agent: {
+      backend: 'copilot' as const,
       model: 'claude-sonnet-4.6',
-      agentDir: 'agents', // default bare name
       timeout: 300_000,
+      copilot: {
+        cliCommand: 'gh copilot',
+        agentDir: 'agents', // default bare name
+      },
     },
     ...overrides,
   };
@@ -52,72 +55,77 @@ describe('loadConfig – resolveAgentDir branches', () => {
 
   it('returns an absolute agentDir unchanged', async () => {
     setupFs(makeConfig({
-      copilot: {
-        cliCommand: 'gh copilot',
-        model: 'claude-sonnet-4.6',
-        agentDir: '/absolute/path/agents',
-        timeout: 300_000,
+      agent: {
+        backend: 'copilot',
+        copilot: {
+          cliCommand: 'gh copilot',
+          agentDir: '/absolute/path/agents',
+        },
       },
     }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    expect(config.copilot.agentDir).toBe('/absolute/path/agents');
+    expect(config.agent.copilot.agentDir).toBe('/absolute/path/agents');
   });
 
   it('resolves a .cadre/-prefixed agentDir under stateDir (strips prefix)', async () => {
     setupFs(makeConfig({
-      copilot: {
-        cliCommand: 'gh copilot',
-        model: 'claude-sonnet-4.6',
-        agentDir: '.cadre/my-agents',
-        timeout: 300_000,
+      agent: {
+        backend: 'copilot',
+        copilot: {
+          cliCommand: 'gh copilot',
+          agentDir: '.cadre/my-agents',
+        },
       },
     }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    expect(config.copilot.agentDir).toBe('/abs/state/my-agents');
+    expect(config.agent.copilot.agentDir).toBe('/abs/state/my-agents');
   });
 
   it('resolves a .claude/-prefixed agentDir under stateDir (strips prefix)', async () => {
     setupFs(makeConfig({
-      copilot: {
-        cliCommand: 'gh copilot',
-        model: 'claude-sonnet-4.6',
-        agentDir: '.claude/agents',
-        timeout: 300_000,
+      agent: {
+        backend: 'copilot',
+        copilot: {
+          cliCommand: 'gh copilot',
+          agentDir: '.claude/agents',
+        },
       },
     }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    expect(config.copilot.agentDir).toBe('/abs/state/agents');
+    expect(config.agent.copilot.agentDir).toBe('/abs/state/agents');
   });
 
   it('resolves a bare name (no /) under stateDir', async () => {
     setupFs(makeConfig({
-      copilot: {
-        cliCommand: 'gh copilot',
-        model: 'claude-sonnet-4.6',
-        agentDir: 'agents',
-        timeout: 300_000,
+      agent: {
+        backend: 'copilot',
+        copilot: {
+          cliCommand: 'gh copilot',
+          agentDir: 'agents',
+        },
       },
     }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    expect(config.copilot.agentDir).toBe('/abs/state/agents');
+    expect(config.agent.copilot.agentDir).toBe('/abs/state/agents');
   });
 
   it('resolves a repo-relative path (contains / but not .cadre/ or .claude/) under repoPath', async () => {
     setupFs(makeConfig({
-      copilot: {
-        cliCommand: 'gh copilot',
-        model: 'claude-sonnet-4.6',
-        agentDir: '.github/agents',
-        timeout: 300_000,
+      agent: {
+        backend: 'copilot',
+        copilot: {
+          cliCommand: 'gh copilot',
+          agentDir: '.github/agents',
+        },
       },
     }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    expect(config.copilot.agentDir).toBe('/tmp/repo/.github/agents');
+    expect(config.agent.copilot.agentDir).toBe('/tmp/repo/.github/agents');
   });
 });
 
@@ -126,27 +134,39 @@ describe('loadConfig – agent field handling', () => {
     vi.clearAllMocks();
   });
 
-  it('synthesizes agent from copilot fields when config.agent is absent', async () => {
+  it('applies default agent config when config.agent is absent', async () => {
     setupFs(makeConfig());
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        projectName: 'test-project',
+        repository: 'owner/repo',
+        repoPath: '/tmp/repo',
+        baseBranch: 'main',
+        issues: { ids: [1] },
+        stateDir: '/abs/state',
+      }) as unknown as Buffer,
+    );
     const config = await loadConfig('/tmp/cadre.config.json');
     expect(config.agent).toBeDefined();
     expect(config.agent.backend).toBe('copilot');
   });
 
-  it('uses config.agent verbatim when it is present', async () => {
+  it('uses config.agent values while normalizing agentDir paths when present', async () => {
     setupFs(makeConfig({
       agent: {
         backend: 'claude',
         model: 'claude-opus-4.5',
         timeout: 60_000,
-        copilot: { cliCommand: 'gh copilot', agentDir: '/abs/state/agents' },
-        claude: { cliCommand: '/usr/local/bin/claude', agentDir: '/abs/state/agents' },
+        copilot: { cliCommand: 'gh copilot', agentDir: 'agents' },
+        claude: { cliCommand: '/usr/local/bin/claude', agentDir: '.cadre/claude-agents' },
       },
     }));
 
     const config = await loadConfig('/tmp/cadre.config.json');
     expect(config.agent.backend).toBe('claude');
     expect(config.agent.model).toBe('claude-opus-4.5');
+    expect(config.agent.copilot.agentDir).toBe('/abs/state/agents');
+    expect(config.agent.claude.agentDir).toBe('/abs/state/claude-agents');
   });
 });
 

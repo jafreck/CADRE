@@ -6,14 +6,14 @@ import { exists } from '../util/fs.js';
 
 /**
  * Config as consumed by the runtime: all fields that loadConfig always
- * synthesises are narrowed to required. Everything else is inherited as-is.
+ * resolves are narrowed to required. Everything else is inherited as-is.
  */
 export interface RuntimeConfig extends Omit<CadreConfig, 'stateDir' | 'worktreeRoot' | 'agent'> {
   /** Always an absolute path — resolved by loadConfig. */
   readonly stateDir: string;
   /** Always an absolute path — resolved by loadConfig. */
   readonly worktreeRoot: string;
-  /** Always synthesised from copilot legacy fields if absent. */
+  /** Always present (CadreConfigSchema defaults this object). */
   readonly agent: NonNullable<CadreConfig['agent']>;
 }
 
@@ -81,8 +81,8 @@ export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
    * Resolve an agent directory path.
    *
    * - Absolute paths are returned unchanged.
-   * - Paths starting with `.cadre/` or `.claude/` are legacy in-repo state paths; the prefix is
-   *   stripped and the remainder is resolved under `stateDir` (backwards compatibility).
+    * - Paths starting with `.cadre/` or `.claude/` are treated as state-root-relative; the prefix
+    *   is stripped and the remainder is resolved under `stateDir`.
    * - Simple bare names (e.g. `agents`, the new default) resolve under `stateDir`.
    * - Any other relative path (e.g. `.github/agents`) is assumed to be repo-relative and resolves
    *   against `repoPath`, since directories like `.github/` are tracked by git.
@@ -103,17 +103,18 @@ export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
     return join(resolvedRepoPath, agentDir);
   }
 
-  // Synthesize agent config from legacy copilot config if agent is not set
-  const agent = config.agent ?? {
-    backend: 'copilot' as const,
-    model: config.copilot.model,
-    timeout: config.copilot.timeout,
+  // Normalize backend-specific agent directories to avoid cwd-dependent
+  // relative path behavior.
+  const agent = {
+    ...config.agent,
     copilot: {
-      cliCommand: config.copilot.cliCommand,
-      agentDir: resolveAgentDir(config.copilot.agentDir),
-      costOverrides: config.copilot.costOverrides,
+      ...config.agent.copilot,
+      agentDir: resolveAgentDir(config.agent.copilot.agentDir),
     },
-    claude: { cliCommand: 'claude', agentDir: join(resolvedStateDir, 'agents') },
+    claude: {
+      ...config.agent.claude,
+      agentDir: resolveAgentDir(config.agent.claude.agentDir),
+    },
   };
 
   // Validate repoPath is a git repository
@@ -129,10 +130,6 @@ export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
     repoPath: resolvedRepoPath,
     stateDir: resolvedStateDir,
     worktreeRoot: resolvedWorktreeRoot,
-    copilot: {
-      ...config.copilot,
-      agentDir: resolveAgentDir(config.copilot.agentDir),
-    },
     agent,
   };
 

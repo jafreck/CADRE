@@ -34,9 +34,10 @@ describe('CadreConfigSchema', () => {
     expect(result.pullRequest.autoComplete).toBe(false);
     expect(result.pullRequest.draft).toBe(true);
     expect(result.pullRequest.labels).toEqual(['cadre-generated']);
-    expect(result.copilot.cliCommand).toBe('copilot');
-    expect(result.copilot.agentDir).toBe('agents');
-    expect(result.copilot.timeout).toBe(300_000);
+    expect(result.agent.backend).toBe('copilot');
+    expect(result.agent.copilot.cliCommand).toBe('copilot');
+    expect(result.agent.copilot.agentDir).toBe('agents');
+    expect(result.agent.timeout).toBe(300_000);
     expect(result.github?.mcpServer.command).toBe('github-mcp-server');
     expect(result.github?.mcpServer.args).toEqual(['stdio']);
     // Auth is a union — the validConfig uses App auth
@@ -779,11 +780,12 @@ describe('CadreConfigSchema', () => {
   });
 
   describe('agent field', () => {
-    it('should accept a config without an agent field (backward compat)', () => {
+    it('should apply default agent config when agent field is omitted', () => {
       const result = CadreConfigSchema.safeParse(validConfig);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.agent).toBeUndefined();
+        expect(result.data.agent).toBeDefined();
+        expect(result.data.agent.backend).toBe('copilot');
       }
     });
 
@@ -976,14 +978,14 @@ describe('AgentConfigSchema', () => {
     expect(result.claude.cliCommand).toBe('claude');
   });
 
-  it('should leave model undefined by default', () => {
+  it('should default model to claude-sonnet-4.6', () => {
     const result = AgentConfigSchema.parse({});
-    expect(result.model).toBeUndefined();
+    expect(result.model).toBe('claude-sonnet-4.6');
   });
 
-  it('should leave timeout undefined by default', () => {
+  it('should default timeout to 300000', () => {
     const result = AgentConfigSchema.parse({});
-    expect(result.timeout).toBeUndefined();
+    expect(result.timeout).toBe(300_000);
   });
 
   it('should accept backend claude with custom cliCommand', () => {

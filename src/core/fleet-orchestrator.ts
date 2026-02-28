@@ -76,7 +76,7 @@ export class FleetOrchestrator {
     this.fleetCheckpoint = new FleetCheckpointManager(this.cadreDir, config.projectName, logger);
     this.fleetProgress = new FleetProgressWriter(this.cadreDir, logger);
     this.tokenTracker = new TokenTracker();
-    this.costEstimator = new CostEstimator(config.copilot);
+    this.costEstimator = new CostEstimator(config.agent.copilot);
     this.contextBuilder = new ContextBuilder(config, logger);
 
     const autoComplete = this.resolveAutoCompleteConfig();

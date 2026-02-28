@@ -41,8 +41,8 @@ export class ReportService {
     }
 
     const duration = (run.duration / 1000).toFixed(1);
-    const estimator = new CostEstimator(this.config.copilot);
-    const costStr = estimator.format(estimator.estimate(run.totalTokens, this.config.copilot.model));
+    const estimator = new CostEstimator(this.config.agent.copilot);
+    const costStr = estimator.format(estimator.estimate(run.totalTokens, this.config.agent.model));
 
     console.log('\n=== CADRE Run Report ===\n');
     console.log(`  Run ID:   ${run.runId}`);

@@ -21,11 +21,14 @@ const BASE_CONFIG = {
   repoPath: '/tmp/repo',
   baseBranch: 'main',
   issues: { ids: [1] },
-  copilot: {
-    cliCommand: 'gh copilot',
+  agent: {
+    backend: 'copilot' as const,
     model: 'claude-sonnet-4.6',
-    agentDir: '.github/agents',
     timeout: 300_000,
+    copilot: {
+      cliCommand: 'gh copilot',
+      agentDir: '.github/agents',
+    },
   },
 };
 
@@ -37,34 +40,34 @@ function setupFs(config: object) {
   mockReadFile.mockResolvedValue(JSON.stringify(config) as unknown as Buffer);
 }
 
-describe('loadConfig – agent backward-compat normalisation', () => {
+describe('loadConfig – agent configuration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should synthesize agent from copilot config when no agent key is present', async () => {
+  it('should preserve explicit agent.backend = "copilot"', async () => {
     setupFs(BASE_CONFIG);
     const config = await loadConfig('/tmp/repo/cadre.config.json');
     expect(config.agent).toBeDefined();
-    expect(config.agent!.backend).toBe('copilot');
+    expect(config.agent.backend).toBe('copilot');
   });
 
-  it('should set agent.copilot.cliCommand from copilot.cliCommand when synthesizing', async () => {
+  it('should preserve explicit agent.copilot.cliCommand', async () => {
     setupFs(BASE_CONFIG);
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.copilot.cliCommand).toBe('gh copilot');
+    expect(config.agent.copilot.cliCommand).toBe('gh copilot');
   });
 
-  it('should set agent.model from copilot.model when synthesizing', async () => {
+  it('should preserve explicit agent.model', async () => {
     setupFs(BASE_CONFIG);
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.model).toBe('claude-sonnet-4.6');
+    expect(config.agent.model).toBe('claude-sonnet-4.6');
   });
 
-  it('should set agent.timeout from copilot.timeout when synthesizing', async () => {
+  it('should preserve explicit agent.timeout', async () => {
     setupFs(BASE_CONFIG);
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.timeout).toBe(300_000);
+    expect(config.agent.timeout).toBe(300_000);
   });
 
   it('should preserve explicit agent.backend = "claude" unchanged', async () => {
@@ -73,7 +76,7 @@ describe('loadConfig – agent backward-compat normalisation', () => {
       agent: { backend: 'claude', claude: { cliCommand: 'claude' } },
     });
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.backend).toBe('claude');
+    expect(config.agent.backend).toBe('claude');
   });
 
   it('should preserve explicit agent config entirely when agent key is present', async () => {
@@ -85,9 +88,9 @@ describe('loadConfig – agent backward-compat normalisation', () => {
     };
     setupFs({ ...BASE_CONFIG, agent: agentConfig });
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.backend).toBe('claude');
-    expect(config.agent!.model).toBe('claude-opus-4.5');
-    expect(config.agent!.timeout).toBe(60_000);
+    expect(config.agent.backend).toBe('claude');
+    expect(config.agent.model).toBe('claude-opus-4.5');
+    expect(config.agent.timeout).toBe(60_000);
   });
 
   it('should preserve explicit copilot backend agent config unchanged', async () => {
@@ -96,14 +99,24 @@ describe('loadConfig – agent backward-compat normalisation', () => {
       agent: { backend: 'copilot', copilot: { cliCommand: 'custom-copilot' } },
     });
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.backend).toBe('copilot');
-    expect(config.agent!.copilot.cliCommand).toBe('custom-copilot');
+    expect(config.agent.backend).toBe('copilot');
+    expect(config.agent.copilot.cliCommand).toBe('custom-copilot');
   });
 
-  it('should set agent.copilot.agentDir from copilot.agentDir when synthesizing', async () => {
+  it('should normalize agent.copilot.agentDir', async () => {
     setupFs(BASE_CONFIG);
     const config = await loadConfig('/tmp/repo/cadre.config.json');
-    expect(config.agent!.copilot.agentDir).toBe('/tmp/repo/.github/agents');
+    expect(config.agent.copilot.agentDir).toBe('/tmp/repo/.github/agents');
+  });
+
+  it('should default agent config when omitted', async () => {
+    const configWithoutAgent = { ...BASE_CONFIG } as Record<string, unknown>;
+    delete configWithoutAgent.agent;
+    setupFs(configWithoutAgent);
+    const config = await loadConfig('/tmp/repo/cadre.config.json');
+    expect(config.agent.backend).toBe('copilot');
+    expect(config.agent.model).toBe('claude-sonnet-4.6');
+    expect(config.agent.timeout).toBe(300_000);
   });
 
   it('should return a frozen config object', async () => {

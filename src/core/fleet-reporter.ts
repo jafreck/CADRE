@@ -138,7 +138,7 @@ export class FleetReporter {
    */
   async writeReport(fleetResult: FleetResult, startTime: number): Promise<void> {
     try {
-      const reportWriter = new ReportWriter(this.config, new CostEstimator(this.config.copilot));
+      const reportWriter = new ReportWriter(this.config, new CostEstimator(this.config.agent.copilot));
       const report = reportWriter.buildReport(fleetResult, this.issues, startTime);
       const reportPath = await reportWriter.write(report);
       this.logger.info(`Run report written: ${reportPath}`);
