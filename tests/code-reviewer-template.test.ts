@@ -107,6 +107,18 @@ describe('code-reviewer.md template', () => {
     it('should explicitly exclude naming conventions from needs-fixes', () => {
       expect(content).toMatch(/[Nn]aming conventions?/);
     });
+
+    it('should include instructions about duplicate type definitions across files', () => {
+      expect(content).toMatch(/[Dd]uplicate type definitions?/);
+      expect(content).toMatch(/same name/i);
+      expect(content).toMatch(/import.*export|export.*import/i);
+    });
+
+    it('should include instructions about env-var vs config gate checks', () => {
+      expect(content).toMatch(/process\.env/);
+      expect(content).toMatch(/config.schema/i);
+      expect(content).toMatch(/warning/i);
+    });
   });
 
   describe('ReviewResult interface compliance', () => {

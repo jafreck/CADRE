@@ -26,6 +26,8 @@ Only flag an issue as `needs-fixes` if it falls into one of these categories:
 3. **Logic errors** – misuse of APIs, incorrect assumptions about data shape, race conditions, incorrect error handling
 4. **Silent argument omission** – when a function accepts a configuration/behavioural parameter that has a fallback default (e.g. `backend = 'copilot'`, `env = 'production'`), verify that every call site in the diff passes that argument explicitly. A missing argument that silently uses a hard-coded default is a logic error; flag it as `warning`.
 5. **Duplicate test blocks** – when reviewing test files, flag `describe` or `it` blocks that share a name or cover overlapping scenarios with another block in the same file as `warning`. Duplicate test structure gives false confidence and masks missing coverage.
+6. **Duplicate type definitions** – search for interfaces or types with the same name declared in more than one file where there is no `import`/`export` relationship between those files. Duplicated type definitions drift over time and cause subtle type-mismatch bugs; flag each occurrence as `warning`.
+7. **Env-var vs config gate** – when a new `process.env` boolean gate is introduced, check whether the project already has an established config-schema convention (e.g. a shared config file, JSON schema, or typed configuration object). If it does, flag the raw env-var gate as inconsistent and suggest migrating it to the existing config schema; severity is `warning`.
 
 Do **not** flag issues for:
 - Code style or formatting
