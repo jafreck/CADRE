@@ -27,4 +27,40 @@ describe('agent-runtime barrel exports', () => {
     const result = agentRuntime.extractCadreJson('```cadre-json\n{"ok": true}\n```');
     expect(result).toEqual({ ok: true });
   });
+
+  // session-002 exports
+  it('should export RetryExecutor class', () => {
+    expect(agentRuntime.RetryExecutor).toBeDefined();
+    expect(typeof agentRuntime.RetryExecutor).toBe('function');
+  });
+
+  it('should export CopilotBackend class', () => {
+    expect(agentRuntime.CopilotBackend).toBeDefined();
+    expect(typeof agentRuntime.CopilotBackend).toBe('function');
+  });
+
+  it('should export ClaudeBackend class', () => {
+    expect(agentRuntime.ClaudeBackend).toBeDefined();
+    expect(typeof agentRuntime.ClaudeBackend).toBe('function');
+  });
+
+  it('should export isCopilotCliInvocationError function', () => {
+    expect(agentRuntime.isCopilotCliInvocationError).toBeDefined();
+    expect(typeof agentRuntime.isCopilotCliInvocationError).toBe('function');
+  });
+
+  it('should export createAgentBackend function', () => {
+    expect(agentRuntime.createAgentBackend).toBeDefined();
+    expect(typeof agentRuntime.createAgentBackend).toBe('function');
+  });
+
+  it('should export AgentLauncher class', () => {
+    expect(agentRuntime.AgentLauncher).toBeDefined();
+    expect(typeof agentRuntime.AgentLauncher).toBe('function');
+  });
+
+  it('should export launchWithRetry function', () => {
+    expect(agentRuntime.launchWithRetry).toBeDefined();
+    expect(typeof agentRuntime.launchWithRetry).toBe('function');
+  });
 });
