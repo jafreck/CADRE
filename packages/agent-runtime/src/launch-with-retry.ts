@@ -3,8 +3,6 @@ import type { RetryOptions, RetryResult } from './retry/retry.js';
 import { RetryExecutor, type LoggerLike } from './retry/retry.js';
 import { TokenTracker } from './budget/token-tracker.js';
 import { AgentLauncher } from './launcher/agent-launcher.js';
-import type { BackendRuntimeConfig, BackendLoggerLike } from './backend/backend.js';
-
 /** Options for launchWithRetry (extends RetryOptions minus fn). */
 export interface LaunchWithRetryOptions {
   /** The invocation request to execute. */
@@ -58,7 +56,7 @@ export async function launchWithRetry(
   // Track token usage from the final result
   if (retryResult.result) {
     const usage = retryResult.result.tokenUsage;
-    const tokens = typeof usage === 'number' ? usage : 0;
+    const tokens = typeof usage === 'number' ? usage : (usage ? usage.input + usage.output : 0);
     tokenTracker.record(
       options.invocation.issueNumber,
       options.invocation.agent,

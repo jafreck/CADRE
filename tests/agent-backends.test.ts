@@ -3,30 +3,26 @@ import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeProcessResult, makeConfig, makeInvocation } from './helpers/backend-fixtures.js';
 import type { AgentInvocation } from '../src/agents/types.js';
 
-vi.mock('../src/util/process.js', () => ({
+vi.mock('@cadre/command-diagnostics', () => ({
   spawnProcess: vi.fn(),
   stripVSCodeEnv: vi.fn((env: Record<string, string | undefined>) => ({ ...env })),
   trackProcess: vi.fn(),
 }));
 
-vi.mock('../src/util/fs.js', () => ({
-  exists: vi.fn(),
-  ensureDir: vi.fn(),
-}));
-
 vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn(),
+  mkdir: vi.fn(),
+  access: vi.fn(),
 }));
 
-import { spawnProcess, trackProcess } from '../src/util/process.js';
-import { exists, ensureDir } from '../src/util/fs.js';
-import { writeFile } from 'node:fs/promises';
+import { spawnProcess, trackProcess } from '@cadre/command-diagnostics';
+import { writeFile, mkdir, access } from 'node:fs/promises';
 import { AgentBackend, CopilotBackend, ClaudeBackend } from '../src/agents/backend.js';
 
 const mockSpawnProcess = vi.mocked(spawnProcess);
 const mockTrackProcess = vi.mocked(trackProcess);
-const mockExists = vi.mocked(exists);
-const mockEnsureDir = vi.mocked(ensureDir);
+const mockAccess = vi.mocked(access);
+const mockMkdir = vi.mocked(mkdir);
 const mockWriteFile = vi.mocked(writeFile);
 
 function setupSpawn(result: ReturnType<typeof makeProcessResult>) {
@@ -66,8 +62,8 @@ describe('CopilotBackend', () => {
     vi.clearAllMocks();
     logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
     config = makeConfig();
-    mockExists.mockResolvedValue(true);
-    mockEnsureDir.mockResolvedValue(undefined);
+    mockAccess.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
   });
 
@@ -191,7 +187,7 @@ describe('CopilotBackend', () => {
   it('should return outputExists=true when outputPath exists', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    mockExists.mockResolvedValue(true);
+    mockAccess.mockResolvedValue(undefined);
     const result = await backend.invoke(makeInvocation(), '/tmp/worktree');
     expect(result.outputExists).toBe(true);
   });
@@ -199,7 +195,7 @@ describe('CopilotBackend', () => {
   it('should return outputExists=false when outputPath does not exist', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    mockExists.mockResolvedValue(false);
+    mockAccess.mockRejectedValue(new Error("ENOENT"));
     const result = await backend.invoke(makeInvocation(), '/tmp/worktree');
     expect(result.outputExists).toBe(false);
   });
@@ -310,8 +306,8 @@ describe('ClaudeBackend', () => {
     vi.clearAllMocks();
     logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
     config = makeConfig();
-    mockExists.mockResolvedValue(true);
-    mockEnsureDir.mockResolvedValue(undefined);
+    mockAccess.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
   });
 
@@ -515,8 +511,8 @@ describe('parseTokenUsage (via invoke)', () => {
     vi.clearAllMocks();
     logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
     config = makeConfig();
-    mockExists.mockResolvedValue(true);
-    mockEnsureDir.mockResolvedValue(undefined);
+    mockAccess.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
   });
 

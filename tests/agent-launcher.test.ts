@@ -8,11 +8,11 @@ import { Logger } from '../src/logging/logger.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { AgentInvocation } from '../src/agents/types.js';
 
-vi.mock('../src/agents/backend-factory.js', () => ({
+vi.mock('../packages/agent-runtime/src/backend/factory.js', () => ({
   createAgentBackend: vi.fn(),
 }));
 
-import { createAgentBackend } from '../src/agents/backend-factory.js';
+import { createAgentBackend } from '../packages/agent-runtime/src/backend/factory.js';
 const mockCreateAgentBackend = vi.mocked(createAgentBackend);
 
 function makeConfig(): CadreConfig {
