@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CadreConfigSchema, AgentConfigSchema } from '../src/config/schema.js';
-import type { NotificationsConfig } from '../src/config/schema.js';
+import type { NotificationsConfig, DogfoodConfig } from '../src/config/schema.js';
 
 describe('CadreConfigSchema', () => {
   const validConfig = {
@@ -951,6 +951,87 @@ describe('CadreConfigSchema', () => {
         dag: { enabled: 'yes' },
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('dogfood section', () => {
+    it('should apply dogfood defaults when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.dogfood).toEqual({
+        enabled: false,
+        minimumIssueLevel: 'medium',
+        maxIssuesPerRun: 5,
+      });
+    });
+
+    it('should accept valid dogfood config with all fields', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: { enabled: true, minimumIssueLevel: 'critical', maxIssuesPerRun: 10 },
+      });
+      expect(result.dogfood.enabled).toBe(true);
+      expect(result.dogfood.minimumIssueLevel).toBe('critical');
+      expect(result.dogfood.maxIssuesPerRun).toBe(10);
+    });
+
+    it('should accept partial dogfood config and fill defaults', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        dogfood: { enabled: true },
+      });
+      expect(result.dogfood.enabled).toBe(true);
+      expect(result.dogfood.minimumIssueLevel).toBe('medium');
+      expect(result.dogfood.maxIssuesPerRun).toBe(5);
+    });
+
+    it('should accept all valid minimumIssueLevel values', () => {
+      for (const level of ['critical', 'severe', 'high', 'medium', 'low'] as const) {
+        const result = CadreConfigSchema.safeParse({
+          ...validConfig,
+          dogfood: { minimumIssueLevel: level },
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it('should reject invalid minimumIssueLevel', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dogfood: { minimumIssueLevel: 'info' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject maxIssuesPerRun less than 1', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dogfood: { maxIssuesPerRun: 0 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject non-integer maxIssuesPerRun', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dogfood: { maxIssuesPerRun: 2.5 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject non-boolean enabled', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        dogfood: { enabled: 'yes' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should produce DogfoodConfig type matching parsed dogfood field', () => {
+      const parsed = CadreConfigSchema.parse(validConfig);
+      const dogfood: DogfoodConfig = parsed.dogfood;
+      expect(dogfood.enabled).toBe(false);
+      expect(dogfood.minimumIssueLevel).toBe('medium');
+      expect(dogfood.maxIssuesPerRun).toBe(5);
     });
   });
 });
