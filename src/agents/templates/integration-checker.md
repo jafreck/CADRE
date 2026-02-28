@@ -44,6 +44,22 @@ If it exists, read it. It contains a list of test/check names that were already 
 
 If `.cadre/baseline-results.json` does not exist, treat all failures as regressions.
 
+## Dead-property Detection
+
+After the build succeeds, scan every file touched by the current change set for properties assigned on `this` or on a returned/exported object. For each such property, verify that at least one **read** call-site exists somewhere in the codebase outside the setter (i.e., outside the function or constructor that writes the value).
+
+- Flag any property that is written but **never read** — these are dead properties and likely indicate incomplete wiring (e.g., a value stored during initialization but never consumed by any method or external caller).
+- Include the file path, property name, and the location of the write site in the report summary so the author can investigate.
+
+## Singleton Lifecycle Check
+
+When the change set introduces or modifies a long-lived object (e.g., a class instantiated once and reused across requests), verify the following:
+
+1. **Handle utilization** — If the singleton stores a subprocess handle, connection, or similar resource that is started in an `initialize()` or `start()` method, confirm that the handle is actually used to **serve requests** (not only as a readiness probe or health check).
+2. **No redundant spawning** — Confirm that consumers of the singleton do **not** independently spawn equivalent subprocess or connection instances on a per-call basis. All consumers should route through the singleton's stored handle.
+
+Flag any case where a handle is stored but unused for serving, or where consumers bypass the singleton and create their own instances.
+
 ## Output
 Respond with a `cadre-json` fenced block matching the `IntegrationReport` structure. **The fence language must be `cadre-json` exactly — cadre uses this marker to parse the output.**
 

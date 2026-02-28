@@ -116,6 +116,34 @@ describe('integration-checker.md template', () => {
     });
   });
 
+  describe('dead-property detection', () => {
+    it('should have a Dead-property Detection section heading', () => {
+      expect(content).toMatch(/## Dead-property Detection/);
+    });
+
+    it('should instruct verifying properties on this or returned objects have read call-sites', () => {
+      expect(content).toMatch(/properties assigned on `this` or on a returned/i);
+    });
+
+    it('should instruct flagging properties with no readers', () => {
+      expect(content).toMatch(/flag.*property.*never read|written but.*never read/i);
+    });
+  });
+
+  describe('singleton lifecycle check', () => {
+    it('should have a Singleton Lifecycle Check section heading', () => {
+      expect(content).toMatch(/## Singleton Lifecycle Check/);
+    });
+
+    it('should instruct verifying handles are used to serve requests', () => {
+      expect(content).toMatch(/used to.*serve requests/i);
+    });
+
+    it('should instruct checking consumers do not independently spawn equivalent instances', () => {
+      expect(content).toMatch(/consumers.*do.*not.*independently spawn/i);
+    });
+  });
+
   describe('baseline comparison', () => {
     it('should reference baseline-results.json', () => {
       expect(content).toMatch(/baseline-results\.json/);
@@ -137,6 +165,69 @@ describe('integration-checker.md template', () => {
   describe('tool permissions', () => {
     it('should mention bash as a permitted tool', () => {
       expect(content).toMatch(/\bbash\b/i);
+    });
+  });
+
+  describe('agent file parity', () => {
+    const AGENT_PATH = resolve(__dirname, '../.github/agents/integration-checker.agent.md');
+    let agentContent: string;
+
+    beforeAll(() => {
+      agentContent = readFileSync(AGENT_PATH, 'utf-8');
+    });
+
+    it('should have a Dead-property Detection section in the agent file', () => {
+      expect(agentContent).toMatch(/## Dead-property Detection/);
+    });
+
+    it('should have a Singleton Lifecycle Check section in the agent file', () => {
+      expect(agentContent).toMatch(/## Singleton Lifecycle Check/);
+    });
+
+    it('should have matching Dead-property Detection content between template and agent file', () => {
+      const extractSection = (text: string, heading: string): string => {
+        const regex = new RegExp(`## ${heading}\\n([\\s\\S]*?)(?=\\n## |$)`);
+        const match = text.match(regex);
+        return match ? match[1].trim() : '';
+      };
+      const templateSection = extractSection(content, 'Dead-property Detection');
+      const agentSection = extractSection(agentContent, 'Dead-property Detection');
+      expect(agentSection).toBe(templateSection);
+    });
+
+    it('should have matching Singleton Lifecycle Check content between template and agent file', () => {
+      const extractSection = (text: string, heading: string): string => {
+        const regex = new RegExp(`## ${heading}\\n([\\s\\S]*?)(?=\\n## |$)`);
+        const match = text.match(regex);
+        return match ? match[1].trim() : '';
+      };
+      const templateSection = extractSection(content, 'Singleton Lifecycle Check');
+      const agentSection = extractSection(agentContent, 'Singleton Lifecycle Check');
+      expect(agentSection).toBe(templateSection);
+    });
+  });
+
+  describe('section ordering', () => {
+    it('should place Dead-property Detection after Baseline Comparison', () => {
+      const baselineIdx = content.indexOf('## Baseline Comparison');
+      const deadPropIdx = content.indexOf('## Dead-property Detection');
+      expect(baselineIdx).toBeGreaterThan(-1);
+      expect(deadPropIdx).toBeGreaterThan(baselineIdx);
+    });
+
+    it('should place Singleton Lifecycle Check after Dead-property Detection', () => {
+      const deadPropIdx = content.indexOf('## Dead-property Detection');
+      const singletonIdx = content.indexOf('## Singleton Lifecycle Check');
+      expect(deadPropIdx).toBeGreaterThan(-1);
+      expect(singletonIdx).toBeGreaterThan(deadPropIdx);
+    });
+
+    it('should place both new sections before the Output section', () => {
+      const deadPropIdx = content.indexOf('## Dead-property Detection');
+      const singletonIdx = content.indexOf('## Singleton Lifecycle Check');
+      const outputIdx = content.indexOf('## Output');
+      expect(deadPropIdx).toBeLessThan(outputIdx);
+      expect(singletonIdx).toBeLessThan(outputIdx);
     });
   });
 });
