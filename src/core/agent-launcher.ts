@@ -1,57 +1,26 @@
-import { resolve, join } from 'node:path';
-import type { RuntimeConfig } from '../config/loader.js';
-import type { AgentInvocation, AgentResult } from '../agents/types.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
-import { statOrNull } from '../util/fs.js';
-import { Logger } from '../logging/logger.js';
-import { type AgentBackend } from '../agents/backend.js';
-import { createAgentBackend } from '../agents/backend-factory.js';
+import type { AgentInvocation, AgentResult } from '../agents/types.js';
+import { AgentLauncher as _AgentLauncher } from '@cadre/agent-runtime';
+export type { AgentDefinitionLike } from '@cadre/agent-runtime';
 
 /**
  * Spawns agent invocations as headless child processes via the configured backend.
+ * Wraps @cadre/agent-runtime AgentLauncher with CADRE-specific AGENT_DEFINITIONS.
  */
-export class AgentLauncher {
-  private readonly backend: AgentBackend;
-
-  constructor(
-    private readonly config: RuntimeConfig,
-    private readonly logger: Logger,
-  ) {
-    this.backend = createAgentBackend(config, logger);
-  }
-
+export class AgentLauncher extends _AgentLauncher {
   /**
    * Validate that all agent instruction files exist and are non-empty.
-   * Returns an array of error strings for any missing or empty files.
-   * Copilot backend expects `{name}.agent.md`; Claude expects `{name}.md`.
+   * Uses the CADRE AGENT_DEFINITIONS registry.
    */
-  static async validateAgentFiles(agentDir: string): Promise<string[]> {
-    const resolvedDir = resolve(agentDir);
-    const issues: string[] = [];
-    for (const agent of AGENT_DEFINITIONS) {
-      // agentDir always stores plain {name}.md source files.
-      const filePath = join(resolvedDir, `${agent.name}.md`);
-      const fileStat = await statOrNull(filePath);
-      if (fileStat === null) {
-        issues.push(`  ❌ Missing: ${filePath}`);
-      } else if (fileStat.size === 0) {
-        issues.push(`  ❌ Empty:   ${filePath}`);
-      }
-    }
-    return issues;
-  }
-
-  /**
-   * Validate that the backend is ready (e.g., CLI available).
-   */
-  async init(): Promise<void> {
-    await this.backend.init();
+  static override async validateAgentFiles(agentDir: string): Promise<string[]> {
+    return _AgentLauncher.validateAgentFiles(agentDir, AGENT_DEFINITIONS);
   }
 
   /**
    * Launch an agent in the context of a specific worktree.
+   * Narrows return type to CADRE AgentResult.
    */
-  async launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
-    return this.backend.invoke(invocation, worktreePath);
+  override async launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
+    return super.launchAgent(invocation, worktreePath) as Promise<AgentResult>;
   }
 }

@@ -15,5 +15,8 @@
   ],
   "scripts": {
     "build": "tsc"
+  },
+  "dependencies": {
+    "@cadre/command-diagnostics": "workspace:*"
   }
 }
