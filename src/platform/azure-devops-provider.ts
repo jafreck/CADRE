@@ -13,6 +13,20 @@ import type {
 } from './provider.js';
 import { Logger } from '../logging/logger.js';
 
+const MERGE_POLL_INTERVAL_MS = 15_000;
+const MERGE_POLL_TIMEOUT_MS = 30 * 60_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractStatusCode(err: unknown): number | undefined {
+  const message = String(err);
+  const match = message.match(/Azure DevOps API error:\s*(\d{3})/);
+  if (!match) return undefined;
+  return Number(match[1]);
+}
+
 /**
  * Configuration for connecting to Azure DevOps.
  */
@@ -44,6 +58,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
   private readonly apiVersion: string;
   private readonly authHeader: string;
   private authenticated = false;
+  private authenticatedUserId: string | null = null;
 
   constructor(
     private readonly adoConfig: AzureDevOpsConfig,
@@ -81,6 +96,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
 
   async disconnect(): Promise<void> {
     this.authenticated = false;
+    this.authenticatedUserId = null;
     this.logger.info('Disconnected from Azure DevOps');
   }
 
@@ -407,20 +423,100 @@ export class AzureDevOpsProvider implements PlatformProvider {
     const url =
       `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/git/repositories/${repoName}/pullrequests/${prNumber}?api-version=${this.apiVersion}`;
 
-    // Fetch the PR to get the latest source commit (required by ADO API)
+    const mergeStrategy = this.toAdoMergeStrategy(mergeMethod);
     const pr = await this.fetch(url);
-    const lastMergeSourceCommit = pr.lastMergeSourceCommit as Record<string, unknown> | undefined;
+    const initialStatus = String(pr.status ?? '').toLowerCase();
+    if (initialStatus === 'completed') return;
 
-    await this.fetch(url, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: 'completed',
-        lastMergeSourceCommit,
-        completionOptions: {
-          mergeStrategy: mergeMethod === 'squash' ? 'squash' : 'noFastForward',
-        },
-      }),
-    });
+    let autoCompleteUserId: string | null = null;
+    try {
+      autoCompleteUserId = await this.getAuthenticatedUserId();
+      await this.fetch(url, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          autoCompleteSetBy: { id: autoCompleteUserId },
+          completionOptions: {
+            mergeStrategy,
+          },
+        }),
+      });
+    } catch (err) {
+      this.logger.warn(`Could not set Azure DevOps auto-complete for PR #${prNumber}: ${String(err)}`);
+    }
+
+    try {
+      await this.tryCompletePullRequest(url, pr, mergeStrategy);
+      return;
+    } catch (err) {
+      if (!this.isRetryableCompletionError(err)) throw err;
+    }
+
+    const deadline = Date.now() + MERGE_POLL_TIMEOUT_MS;
+
+    while (Date.now() < deadline) {
+      const pr = await this.fetch(url);
+      const prStatus = String(pr.status ?? '').toLowerCase();
+
+      if (prStatus === 'completed') return;
+      if (prStatus === 'abandoned') {
+        throw new Error(`PR #${prNumber} was abandoned before auto-complete could finish`);
+      }
+
+      const mergeStatus = String(pr.mergeStatus ?? '').toLowerCase();
+      if (mergeStatus.includes('conflict')) {
+        throw new Error(`PR #${prNumber} has merge conflicts`);
+      }
+
+      const isBehind = await this.isSourceBehindTarget(repoName, pr);
+      if (isBehind) {
+        this.logger.info(
+          `PR #${prNumber} appears behind base branch; requesting merge re-evaluation`,
+          { data: { prNumber, mergeStatus } },
+        );
+        try {
+          await this.refreshPullRequestMerge(url, pr, mergeStrategy, autoCompleteUserId);
+        } catch (err) {
+          this.logger.warn(`Could not refresh merge evaluation for PR #${prNumber}: ${String(err)}`);
+        }
+      }
+
+      const statusesUrl =
+        `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/git/repositories/${repoName}/pullRequests/${prNumber}/statuses?api-version=${this.apiVersion}`;
+      const statusesResponse = await this.fetch(statusesUrl);
+      const statuses = (statusesResponse.value ?? []) as Array<Record<string, unknown>>;
+
+      const failedContexts = statuses
+        .filter((s) => {
+          const state = String(s.state ?? '').toLowerCase();
+          return state === 'failed' || state === 'error';
+        })
+        .map((s) => {
+          const context = (s.context ?? {}) as Record<string, unknown>;
+          return String(context.name ?? s.description ?? 'policy-status');
+        });
+
+      if (failedContexts.length > 0) {
+        throw new Error(`PR #${prNumber} checks failed: ${failedContexts.join(', ')}`);
+      }
+
+      const hasPendingStatuses = statuses.some((s) => {
+        const state = String(s.state ?? '').toLowerCase();
+        return state === 'pending' || state === 'notset';
+      });
+
+      if (!hasPendingStatuses) {
+        try {
+          await this.tryCompletePullRequest(url, pr, mergeStrategy);
+          return;
+        } catch (err) {
+          if (!this.isRetryableCompletionError(err)) throw err;
+        }
+      }
+
+      await sleep(MERGE_POLL_INTERVAL_MS);
+    }
+
+    throw new Error(`Timed out waiting for PR #${prNumber} auto-complete`);
   }
 
   // ── Issue Linking ──
@@ -462,6 +558,118 @@ export class AzureDevOpsProvider implements PlatformProvider {
 
   private stripRefPrefix(ref: string): string {
     return ref.replace(/^refs\/heads\//, '');
+  }
+
+  private toAdoMergeStrategy(mergeMethod: PullRequestMergeMethod): 'squash' | 'noFastForward' | 'rebase' {
+    if (mergeMethod === 'squash') return 'squash';
+    if (mergeMethod === 'rebase') return 'rebase';
+    return 'noFastForward';
+  }
+
+  private isRetryableCompletionError(err: unknown): boolean {
+    const code = extractStatusCode(err);
+    const text = String(err).toLowerCase();
+    if (code === 412) return true;
+    return text.includes('policy') || text.includes('out of date') || text.includes('branch is behind');
+  }
+
+  private async tryCompletePullRequest(
+    url: string,
+    pr: Record<string, unknown>,
+    mergeStrategy: 'squash' | 'noFastForward' | 'rebase',
+  ): Promise<void> {
+    const lastMergeSourceCommit = pr.lastMergeSourceCommit as Record<string, unknown> | undefined;
+    const lastMergeTargetCommit = pr.lastMergeTargetCommit as Record<string, unknown> | undefined;
+    await this.fetch(url, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'completed',
+        lastMergeSourceCommit,
+        lastMergeTargetCommit,
+        completionOptions: {
+          mergeStrategy,
+        },
+      }),
+    });
+  }
+
+  private async isSourceBehindTarget(
+    repoName: string,
+    pr: Record<string, unknown>,
+  ): Promise<boolean> {
+    const mergeStatus = String(pr.mergeStatus ?? '').toLowerCase();
+    if (mergeStatus.includes('behind')) return true;
+
+    const targetRefName = String(pr.targetRefName ?? '');
+    if (!targetRefName.startsWith('refs/heads/')) return false;
+
+    const targetBranch = this.stripRefPrefix(targetRefName);
+    const targetHead = await this.getBranchHeadCommit(repoName, targetBranch);
+    if (!targetHead) return false;
+
+    const lastMergeTargetCommit = pr.lastMergeTargetCommit as Record<string, unknown> | undefined;
+    const mergedAgainst = typeof lastMergeTargetCommit?.commitId === 'string'
+      ? lastMergeTargetCommit.commitId
+      : '';
+
+    return mergedAgainst.length > 0 && mergedAgainst !== targetHead;
+  }
+
+  private async refreshPullRequestMerge(
+    url: string,
+    pr: Record<string, unknown>,
+    mergeStrategy: 'squash' | 'noFastForward' | 'rebase',
+    autoCompleteUserId: string | null,
+  ): Promise<void> {
+    const body: Record<string, unknown> = {
+      completionOptions: { mergeStrategy },
+      mergeOptions: {},
+    };
+
+    const lastMergeTargetCommit = pr.lastMergeTargetCommit as Record<string, unknown> | undefined;
+    if (lastMergeTargetCommit) {
+      body.lastMergeTargetCommit = lastMergeTargetCommit;
+    }
+    if (autoCompleteUserId) {
+      body.autoCompleteSetBy = { id: autoCompleteUserId };
+    }
+
+    await this.fetch(url, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  private async getBranchHeadCommit(
+    repoName: string,
+    branchName: string,
+  ): Promise<string | null> {
+    const filter = encodeURIComponent(`heads/${branchName}`);
+    const refsUrl =
+      `https://dev.azure.com/${this.adoConfig.organization}/${this.adoConfig.project}/_apis/git/repositories/${repoName}/refs?filter=${filter}&api-version=${this.apiVersion}`;
+    const refsResult = await this.fetch(refsUrl);
+    const refs = (refsResult.value ?? []) as Array<Record<string, unknown>>;
+    if (refs.length === 0) return null;
+
+    const exactName = `refs/heads/${branchName}`;
+    const match = refs.find((entry) => String(entry.name ?? '') === exactName) ?? refs[0];
+    const objectId = match.objectId;
+    return typeof objectId === 'string' && objectId.length > 0 ? objectId : null;
+  }
+
+  private async getAuthenticatedUserId(): Promise<string> {
+    if (this.authenticatedUserId) return this.authenticatedUserId;
+
+    const url = `https://dev.azure.com/${this.adoConfig.organization}/_apis/connectionData?connectOptions=1&api-version=${this.apiVersion}`;
+    const result = await this.fetch(url);
+    const user = result.authenticatedUser as Record<string, unknown> | undefined;
+    const userId = user?.id;
+    if (typeof userId !== 'string' || userId.length === 0) {
+      throw new Error('Could not determine authenticated Azure DevOps user for auto-complete');
+    }
+
+    this.authenticatedUserId = userId;
+    return userId;
   }
 
   /**

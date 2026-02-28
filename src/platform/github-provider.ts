@@ -31,6 +31,22 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+const MERGE_POLL_INTERVAL_MS = 15_000;
+const MERGE_POLL_TIMEOUT_MS = 30 * 60_000;
+
+function extractStatusCode(err: unknown): number | undefined {
+  if (err && typeof err === 'object') {
+    const value = err as { status?: unknown; response?: { status?: unknown } };
+    if (typeof value.status === 'number') return value.status;
+    if (typeof value.response?.status === 'number') return value.response.status;
+  }
+  return undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * GitHub implementation of PlatformProvider.
  *
@@ -162,6 +178,28 @@ export class GitHubProvider implements PlatformProvider {
     mergeMethod: PullRequestMergeMethod = 'merge',
   ): Promise<void> {
     const oct = this.octokit ?? new Octokit({ auth: process.env.GITHUB_TOKEN });
+    try {
+      await oct.rest.pulls.merge({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        merge_method: mergeMethod,
+      });
+      return;
+    } catch (err) {
+      const status = extractStatusCode(err);
+      const canRetry = status === 405 || status === 409 || status === 422;
+      if (!canRetry || !this.supportsMergeMonitoring(oct)) {
+        throw err;
+      }
+
+      this.logger.info(`PR #${prNumber} is not mergeable yet; waiting for checks and branch freshness`, {
+        data: { prNumber, status },
+      });
+    }
+
+    await this.waitForMergeReadiness(oct, prNumber);
+
     await oct.rest.pulls.merge({
       owner: this.owner,
       repo: this.repo,
@@ -257,6 +295,120 @@ export class GitHubProvider implements PlatformProvider {
   }
 
   // ── Helpers ──
+
+  private supportsMergeMonitoring(oct: Octokit): boolean {
+    const rest = (oct as unknown as { rest?: Record<string, unknown> }).rest;
+    if (!rest) return false;
+    const pulls = rest.pulls as Record<string, unknown> | undefined;
+    const repos = rest.repos as Record<string, unknown> | undefined;
+    const checks = rest.checks as Record<string, unknown> | undefined;
+    return (
+      typeof pulls?.get === 'function'
+      && typeof pulls?.updateBranch === 'function'
+      && typeof repos?.getCombinedStatusForRef === 'function'
+      && typeof checks?.listForRef === 'function'
+    );
+  }
+
+  private async waitForMergeReadiness(oct: Octokit, prNumber: number): Promise<void> {
+    const deadline = Date.now() + MERGE_POLL_TIMEOUT_MS;
+
+    while (Date.now() < deadline) {
+      const { data: pr } = await oct.rest.pulls.get({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+      });
+
+      if (pr.merged) return;
+      if (pr.state === 'closed') {
+        throw new Error(`PR #${prNumber} closed before auto-complete could finish`);
+      }
+
+      const headSha = pr.head?.sha;
+      if (!headSha) {
+        throw new Error(`PR #${prNumber} has no head SHA; cannot monitor checks`);
+      }
+
+      const mergeableState = (pr as { mergeable_state?: string }).mergeable_state;
+      if (mergeableState === 'behind') {
+        try {
+          await oct.rest.pulls.updateBranch({
+            owner: this.owner,
+            repo: this.repo,
+            pull_number: prNumber,
+          });
+          this.logger.info(`Queued base-branch update for PR #${prNumber}`);
+        } catch (err) {
+          this.logger.warn(`Could not update PR #${prNumber} branch from base: ${String(err)}`);
+        }
+      }
+
+      const checks = await this.getCheckHealth(oct, headSha);
+      if (checks.failed.length > 0) {
+        throw new Error(`PR #${prNumber} checks failed: ${checks.failed.join(', ')}`);
+      }
+
+      const isMergeable = pr.mergeable === true;
+      if (!checks.pending && isMergeable) {
+        return;
+      }
+
+      await sleep(MERGE_POLL_INTERVAL_MS);
+    }
+
+    throw new Error(`Timed out waiting for PR #${prNumber} checks/mergeability`);
+  }
+
+  private async getCheckHealth(
+    oct: Octokit,
+    headSha: string,
+  ): Promise<{ pending: boolean; failed: string[] }> {
+    const failed: string[] = [];
+    let pending = false;
+
+    const combined = await oct.rest.repos.getCombinedStatusForRef({
+      owner: this.owner,
+      repo: this.repo,
+      ref: headSha,
+    });
+    if (combined.data.state === 'pending') pending = true;
+    if (combined.data.state === 'failure' || combined.data.state === 'error') {
+      const statuses = combined.data.statuses ?? [];
+      for (const status of statuses) {
+        if (status.state === 'failure' || status.state === 'error') {
+          failed.push(status.context || 'commit-status');
+        }
+      }
+      if (failed.length === 0) failed.push('commit-status');
+    }
+
+    const checkRunsResult = await oct.rest.checks.listForRef({
+      owner: this.owner,
+      repo: this.repo,
+      ref: headSha,
+      per_page: 100,
+    });
+
+    for (const run of checkRunsResult.data.check_runs) {
+      if (run.status !== 'completed') {
+        pending = true;
+        continue;
+      }
+      const conclusion = String(run.conclusion ?? 'neutral');
+      if (
+        conclusion === 'failure'
+        || conclusion === 'timed_out'
+        || conclusion === 'cancelled'
+        || conclusion === 'action_required'
+        || conclusion === 'startup_failure'
+      ) {
+        failed.push(run.name);
+      }
+    }
+
+    return { pending, failed };
+  }
 
   private getAPI(): GitHubAPI {
     if (!this.api) {

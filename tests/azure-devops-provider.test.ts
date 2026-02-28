@@ -1146,7 +1146,11 @@ describe('AzureDevOpsProvider.mergePullRequest()', () => {
     const lastMergeSourceCommit = { commitId: 'abc123', url: 'https://example.com' };
     // First call: GET PR to retrieve lastMergeSourceCommit
     fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit }));
-    // Second call: PATCH to complete the PR
+    // Second call: GET connectionData for authenticated user
+    fetchStub.mockResolvedValueOnce(okJson({ authenticatedUser: { id: 'user-123' } }));
+    // Third call: PATCH autoComplete configuration
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 55, status: 'active' }));
+    // Fourth call: PATCH to complete the PR
     fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 55, status: 'completed' }));
 
     await provider.mergePullRequest(55, 'main');
@@ -1156,39 +1160,52 @@ describe('AzureDevOpsProvider.mergePullRequest()', () => {
     expect(getCall[0]).toContain('/pullrequests/55');
     expect(getCall[1]?.method ?? 'GET').toBe('GET');
 
-    // Verify the PATCH call
-    const patchCall = fetchStub.mock.calls[2];
-    expect(patchCall[0]).toContain('/pullrequests/55');
-    expect(patchCall[1].method).toBe('PATCH');
+    const patchCalls = fetchStub.mock.calls.filter(([, init]) => init?.method === 'PATCH');
+    const autoCompletePatch = patchCalls.find(([, init]) => {
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      return body.autoCompleteSetBy?.id === 'user-123';
+    });
+    const completionPatch = patchCalls.find(([, init]) => {
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      return body.status === 'completed';
+    });
 
-    const body = JSON.parse(patchCall[1].body as string);
-    expect(body.status).toBe('completed');
-    expect(body.lastMergeSourceCommit).toEqual(lastMergeSourceCommit);
-    expect(body.completionOptions.mergeStrategy).toBe('noFastForward');
+    expect(autoCompletePatch).toBeDefined();
+    expect(completionPatch).toBeDefined();
+
+    const completionBody = JSON.parse(completionPatch?.[1].body as string);
+    expect(completionBody.lastMergeSourceCommit).toEqual(lastMergeSourceCommit);
+    expect(completionBody.completionOptions.mergeStrategy).toBe('noFastForward');
   });
 
   it('should use repositoryName when provided', async () => {
     const provider = await makeConnectedProvider(fetchStub, 'custom-repo');
 
     fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit: null }));
+    fetchStub.mockResolvedValueOnce(okJson({ authenticatedUser: { id: 'user-123' } }));
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 10, status: 'active' }));
     fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 10, status: 'completed' }));
 
     await provider.mergePullRequest(10, 'main');
 
-    const patchCall = fetchStub.mock.calls[2];
-    expect(patchCall[0]).toContain('/repositories/custom-repo/pullrequests/10');
+    const prCalls = fetchStub.mock.calls.filter(([url]) => String(url).includes('/pullrequests/10'));
+    expect(prCalls.length).toBeGreaterThan(0);
+    expect(prCalls.some(([url]) => String(url).includes('/repositories/custom-repo/pullrequests/10'))).toBe(true);
   });
 
   it('should fall back to project name as repository when repositoryName is omitted', async () => {
     const provider = await makeConnectedProvider(fetchStub);
 
     fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit: null }));
+    fetchStub.mockResolvedValueOnce(okJson({ authenticatedUser: { id: 'user-123' } }));
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 20, status: 'active' }));
     fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 20, status: 'completed' }));
 
     await provider.mergePullRequest(20, 'main');
 
-    const patchCall = fetchStub.mock.calls[2];
-    expect(patchCall[0]).toContain('/repositories/my-project/pullrequests/20');
+    const prCalls = fetchStub.mock.calls.filter(([url]) => String(url).includes('/pullrequests/20'));
+    expect(prCalls.length).toBeGreaterThan(0);
+    expect(prCalls.some(([url]) => String(url).includes('/repositories/my-project/pullrequests/20'))).toBe(true);
   });
 
   it('should throw when not connected', async () => {
@@ -1209,8 +1226,31 @@ describe('AzureDevOpsProvider.mergePullRequest()', () => {
     const provider = await makeConnectedProvider(fetchStub);
 
     fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit: { commitId: 'xyz' } }));
+    fetchStub.mockResolvedValueOnce(okJson({ authenticatedUser: { id: 'user-123' } }));
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 77, status: 'active' }));
     fetchStub.mockResolvedValueOnce(new Response('Conflict', { status: 409 }));
 
     await expect(provider.mergePullRequest(77, 'main')).rejects.toThrow('Azure DevOps API error');
+  });
+
+  it('should use rebase merge strategy when mergeMethod is rebase', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(okJson({ lastMergeSourceCommit: { commitId: 'xyz' } }));
+    fetchStub.mockResolvedValueOnce(okJson({ authenticatedUser: { id: 'user-123' } }));
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 88, status: 'active' }));
+    fetchStub.mockResolvedValueOnce(okJson({ pullRequestId: 88, status: 'completed' }));
+
+    await provider.mergePullRequest(88, 'main', 'rebase');
+
+    const patchCalls = fetchStub.mock.calls.filter(([, init]) => init?.method === 'PATCH');
+    const completionPatch = patchCalls.find(([, init]) => {
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      return body.status === 'completed';
+    });
+
+    expect(completionPatch).toBeDefined();
+    const completionBody = JSON.parse(completionPatch?.[1].body as string);
+    expect(completionBody.completionOptions.mergeStrategy).toBe('rebase');
   });
 });
