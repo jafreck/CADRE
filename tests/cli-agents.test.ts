@@ -121,6 +121,16 @@ describe('registerAgentsCommand', () => {
       expect(loadConfig).toHaveBeenCalledWith('custom.config.json');
     });
 
+    it('should accept --provider flag without error', async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+
+      const program = makeProgram();
+      await program.parseAsync(['agents', 'list', '--provider', 'docker'], { from: 'user' });
+
+      expect(loadConfig).toHaveBeenCalledWith('cadre.config.json');
+      expect(logSpy).toHaveBeenCalled();
+    });
+
     it('should exit 1 and print error when loadConfig fails', async () => {
       vi.mocked(loadConfig).mockRejectedValue(new Error('config not found'));
 
@@ -231,6 +241,14 @@ describe('registerAgentsCommand', () => {
       await program.parseAsync(['agents', 'validate'], { from: 'user' });
 
       expect(statOrNull).toHaveBeenCalledWith(`/mock/agents/${firstAgent.name}.md`);
+    });
+    it('should accept --provider flag without error', async () => {
+      vi.mocked(statOrNull).mockResolvedValue({ size: 100 } as never);
+
+      const program = makeProgram();
+      await program.parseAsync(['agents', 'validate', '--provider', 'docker'], { from: 'user' });
+
+      expect(exitMock).toHaveBeenCalledWith(0);
     });
   });
 });

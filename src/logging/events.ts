@@ -176,6 +176,30 @@ export interface PRCreatedEvent {
   prUrl: string;
 }
 
+// ── Isolation events ──
+
+export interface IsolationSessionStartedEvent {
+  type: 'isolation-session-started';
+  providerName: string;
+  sessionId: string;
+  policyProfile: string;
+}
+
+export interface IsolationSessionEndedEvent {
+  type: 'isolation-session-ended';
+  providerName: string;
+  sessionId: string;
+  durationMs: number;
+  success: boolean;
+}
+
+export interface IsolationCapabilityDowngradeEvent {
+  type: 'isolation-capability-downgrade';
+  requestedProvider: string;
+  fallbackProvider: string;
+  reason: string;
+}
+
 // ── Budget events ──
 
 export interface AmbiguityDetectedEvent {
@@ -223,4 +247,7 @@ export type CadreEvent =
   | PRCreatedEvent
   | AmbiguityDetectedEvent
   | BudgetWarningEvent
-  | BudgetExceededEvent;
+  | BudgetExceededEvent
+  | IsolationSessionStartedEvent
+  | IsolationSessionEndedEvent
+  | IsolationCapabilityDowngradeEvent;

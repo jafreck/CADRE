@@ -1,5 +1,36 @@
 import { z } from 'zod';
 
+const IsolationDockerOptionsSchema = z.object({
+  /** Docker image to use for isolation (e.g. "node:20-slim"). */
+  image: z.string().optional(),
+  /** Extra arguments to pass to the docker run command. */
+  extraArgs: z.array(z.string()).optional(),
+});
+
+const IsolationConfigSchema = z
+  .object({
+    /** Enable isolation for agent invocations. */
+    enabled: z.boolean().default(false),
+    /** Isolation provider to use. */
+    provider: z.enum(['host', 'docker', 'kata']).default('host'),
+    /** Policy profile name to apply. */
+    policyProfile: z.string().default('default'),
+    /** Fall back to host execution if the configured provider is unavailable. */
+    allowFallbackToHost: z.boolean().default(false),
+    /** Docker-specific options (used when provider is 'docker'). */
+    dockerOptions: IsolationDockerOptionsSchema.optional(),
+    /** Kata Containers-specific options (used when provider is 'kata'). */
+    kata: z
+      .object({
+        /** Path to the Kata runtime binary (e.g., /usr/bin/kata-runtime). */
+        runtimePath: z.string().optional(),
+      })
+      .optional(),
+  })
+  .default({ enabled: false, provider: 'host', policyProfile: 'default', allowFallbackToHost: false });
+
+export type IsolationConfig = z.infer<typeof IsolationConfigSchema>;
+
 const NotificationsProviderSchema = z.object({
   /** Provider type. */
   type: z.enum(['webhook', 'slack', 'log']),
@@ -346,6 +377,9 @@ export const CadreConfigSchema = z.object({
       onDependencyMergeConflict: z.enum(['fail', 'resolve']).default('fail'),
     })
     .default({ enabled: false, verifyDepsBuild: false, autoMerge: false, onDependencyMergeConflict: 'fail' }),
+
+  /** Isolation provider configuration for agent invocations. */
+  isolation: IsolationConfigSchema,
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;

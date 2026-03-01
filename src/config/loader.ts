@@ -151,6 +151,7 @@ export function applyOverrides(
     skipValidation?: boolean;
     noPr?: boolean;
     respondToReviews?: boolean;
+    provider?: string;
   },
 ): RuntimeConfig {
   const merged = { ...config };
@@ -185,6 +186,10 @@ export function applyOverrides(
 
   if (overrides.respondToReviews != null) {
     merged.options = { ...merged.options, respondToReviews: overrides.respondToReviews };
+  }
+
+  if (overrides.provider != null) {
+    merged.isolation = { ...merged.isolation, provider: overrides.provider as RuntimeConfig['isolation']['provider'] };
   }
 
   return Object.freeze(merged) as RuntimeConfig;

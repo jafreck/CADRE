@@ -1,7 +1,7 @@
 {
-  "name": "@cadre/agent-runtime",
+  "name": "@cadre/agent-runtime-provider-kata",
   "version": "0.1.0",
-  "description": "Provider-agnostic runtime SDK with isolation APIs, backend execution, and shared agent primitives",
+  "description": "Kata Containers isolation provider for cadre agent runtimes",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -15,8 +15,5 @@
   ],
   "scripts": {
     "build": "tsc"
-  },
-  "dependencies": {
-    "@cadre/command-diagnostics": "workspace:*"
   }
 }

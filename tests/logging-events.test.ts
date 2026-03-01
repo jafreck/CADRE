@@ -23,6 +23,9 @@ import type {
   AmbiguityDetectedEvent,
   BudgetWarningEvent,
   BudgetExceededEvent,
+  IsolationSessionStartedEvent,
+  IsolationSessionEndedEvent,
+  IsolationCapabilityDowngradeEvent,
   LogEntry,
   LogLevel,
 } from '../src/logging/events.js';
@@ -308,6 +311,72 @@ describe('CadreEvent type definitions', () => {
         budget: 10000,
       };
       expect(event.budget).toBe(10000);
+    });
+  });
+
+  describe('Isolation events', () => {
+    it('IsolationSessionStartedEvent has required fields', () => {
+      const event: IsolationSessionStartedEvent = {
+        type: 'isolation-session-started',
+        providerName: 'host',
+        sessionId: 'abc-123',
+        policyProfile: 'default',
+      };
+      expect(event.type).toBe('isolation-session-started');
+      expect(event.providerName).toBe('host');
+      expect(event.sessionId).toBe('abc-123');
+      expect(event.policyProfile).toBe('default');
+    });
+
+    it('IsolationSessionEndedEvent has required fields', () => {
+      const event: IsolationSessionEndedEvent = {
+        type: 'isolation-session-ended',
+        providerName: 'docker',
+        sessionId: 'xyz-456',
+        durationMs: 3200,
+        success: true,
+      };
+      expect(event.type).toBe('isolation-session-ended');
+      expect(event.durationMs).toBe(3200);
+      expect(event.success).toBe(true);
+    });
+
+    it('IsolationCapabilityDowngradeEvent has required fields', () => {
+      const event: IsolationCapabilityDowngradeEvent = {
+        type: 'isolation-capability-downgrade',
+        requestedProvider: 'docker',
+        fallbackProvider: 'host',
+        reason: 'Docker not available',
+      };
+      expect(event.type).toBe('isolation-capability-downgrade');
+      expect(event.requestedProvider).toBe('docker');
+      expect(event.fallbackProvider).toBe('host');
+      expect(event.reason).toBe('Docker not available');
+    });
+
+    it('isolation events are part of the CadreEvent union', () => {
+      const started: CadreEvent = {
+        type: 'isolation-session-started',
+        providerName: 'host',
+        sessionId: 's1',
+        policyProfile: 'default',
+      };
+      const ended: CadreEvent = {
+        type: 'isolation-session-ended',
+        providerName: 'host',
+        sessionId: 's1',
+        durationMs: 100,
+        success: false,
+      };
+      const downgrade: CadreEvent = {
+        type: 'isolation-capability-downgrade',
+        requestedProvider: 'docker',
+        fallbackProvider: 'host',
+        reason: 'unsupported',
+      };
+      expect(started.type).toBe('isolation-session-started');
+      expect(ended.type).toBe('isolation-session-ended');
+      expect(downgrade.type).toBe('isolation-capability-downgrade');
     });
   });
 
