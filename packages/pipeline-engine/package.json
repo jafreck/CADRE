@@ -13,6 +13,9 @@
   "files": [
     "dist/"
   ],
+  "dependencies": {
+    "@cadre/agent-runtime": "*"
+  },
   "scripts": {
     "build": "tsc"
   }
