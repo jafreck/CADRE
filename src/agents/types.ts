@@ -314,6 +314,8 @@ export interface ContextBuildArgs {
   issueNumber: number;
   worktreePath: string;
   progressDir: string;
+  dependencyIssues?: Array<Record<string, unknown>>;
+  dependencyHint?: string;
   issueBody?: string;
   issueJsonPath?: string;
   analysisPath?: string;

@@ -1,0 +1,19 @@
+{
+  "name": "@cadre/agent-runtime-provider-kata",
+  "version": "0.1.0",
+  "description": "Kata Containers isolation provider for cadre agent runtimes",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc"
+  }
+}

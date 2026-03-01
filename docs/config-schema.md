@@ -116,6 +116,37 @@ Shell commands executed inside the issue worktree.
 
 ---
 
+## `isolation`
+
+Optional. Configures workload isolation for agent sessions. **Omitting this block leaves behaviour unchanged** — no isolation provider is selected and sessions run without sandboxing.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `provider` | `"kata"` | — | Isolation provider to use. Currently only `"kata"` is supported. |
+
+### `isolation.kata`
+
+Kata Containers-specific options. Required when `isolation.provider` is `"kata"`.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `runtimePath` | `string` | `"kata-runtime"` | Absolute path to the `kata-runtime` binary (or `containerd-shim-kata-v2`). Defaults to resolving `kata-runtime` from `PATH`. Supports `${ENV_VAR}` substitution. |
+
+**Example:**
+
+```json
+"isolation": {
+  "provider": "kata",
+  "kata": {
+    "runtimePath": "/usr/local/bin/kata-runtime"
+  }
+}
+```
+
+> **Note:** When `isolation` is omitted, no isolation provider is activated and sessions inherit the default execution environment. This preserves backward compatibility for all existing configurations.
+
+---
+
 ## `agent`
 
 Advanced agent backend configuration.

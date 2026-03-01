@@ -357,6 +357,21 @@ export const CadreConfigSchema = z.object({
     })
     .default({}),
 
+  /** Container isolation provider configuration. */
+  isolation: z
+    .object({
+      /** Isolation provider to use. */
+      provider: z.enum(['kata']),
+      /** Kata Containers-specific options. */
+      kata: z
+        .object({
+          /** Path to the Kata runtime binary (e.g., /usr/bin/kata-runtime). */
+          runtimePath: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+
   /** DAG (dependency graph) configuration for ordering issues by dependency. */
   dag: z
     .object({
