@@ -3,7 +3,7 @@ import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeProcessResult, makeConfig, makeInvocation } from './helpers/backend-fixtures.js';
 import type { AgentInvocation } from '../src/agents/types.js';
 
-vi.mock('../src/util/process.js', () => ({
+vi.mock('@cadre/command-diagnostics', () => ({
   spawnProcess: vi.fn(),
   stripVSCodeEnv: vi.fn((env: Record<string, string | undefined>) => ({ ...env })),
   trackProcess: vi.fn(),
@@ -16,11 +16,13 @@ vi.mock('../src/util/fs.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn(),
+  mkdir: vi.fn(),
+  access: vi.fn(),
 }));
 
-import { spawnProcess, trackProcess } from '../src/util/process.js';
+import { spawnProcess, trackProcess } from '@cadre/command-diagnostics';
 import { exists, ensureDir } from '../src/util/fs.js';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, mkdir, access } from 'node:fs/promises';
 import { AgentBackend, CopilotBackend, ClaudeBackend } from '../src/agents/backend.js';
 
 const mockSpawnProcess = vi.mocked(spawnProcess);
@@ -28,6 +30,8 @@ const mockTrackProcess = vi.mocked(trackProcess);
 const mockExists = vi.mocked(exists);
 const mockEnsureDir = vi.mocked(ensureDir);
 const mockWriteFile = vi.mocked(writeFile);
+const mockMkdir = vi.mocked(mkdir);
+const mockAccess = vi.mocked(access);
 
 function setupSpawn(result: ReturnType<typeof makeProcessResult>) {
   const fakeChild = {} as never;
@@ -69,6 +73,8 @@ describe('CopilotBackend', () => {
     mockExists.mockResolvedValue(true);
     mockEnsureDir.mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockAccess.mockResolvedValue(undefined);
   });
 
   it('should have name "copilot"', () => {
@@ -199,7 +205,7 @@ describe('CopilotBackend', () => {
   it('should return outputExists=false when outputPath does not exist', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    mockExists.mockResolvedValue(false);
+    mockAccess.mockRejectedValueOnce(new Error('ENOENT'));
     const result = await backend.invoke(makeInvocation(), '/tmp/worktree');
     expect(result.outputExists).toBe(false);
   });

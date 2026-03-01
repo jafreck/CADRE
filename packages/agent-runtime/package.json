@@ -17,6 +17,6 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@cadre/command-diagnostics": "workspace:*"
+    "@cadre/command-diagnostics": "file:../command-diagnostics"
   }
 }
