@@ -25,7 +25,7 @@ Write a `pr-content.md` file at the path specified by `outputPath` in your conte
 
 ```cadre-json
 {
-  "title": "Short, imperative-mood PR title (50 chars or fewer)",
+  "title": "Short, imperative-mood PR title core (50 chars or fewer, no issue suffix)",
   "body": "Full PR body in GitHub Flavored Markdown",
   "labels": ["array", "of", "label", "strings"]
 }
@@ -60,6 +60,7 @@ The body must include these sections in order:
 
 - Use imperative mood for the PR title (e.g., "Add timeout configuration", not "Added timeout configuration").
 - Keep the title concise (50 characters or fewer when possible).
+- Do not include issue-number suffixes like `(#42)` in `title`; CADRE appends the canonical ` (#<issue-number>)` suffix automatically.
 - Write the body in GitHub Flavored Markdown; use headings, bullet lists, and code spans where appropriate.
 - Do not include implementation details that are not relevant to reviewers.
 - Prefer labels from the repository's existing label set (e.g., `bug`, `enhancement`, `documentation`).
