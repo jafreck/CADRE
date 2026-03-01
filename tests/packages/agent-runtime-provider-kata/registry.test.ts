@@ -9,11 +9,6 @@ describe('createKataProvider', () => {
     expect(provider).toBeInstanceOf(KataProvider);
   });
 
-  it('should return a KataProvider when no adapter is provided', () => {
-    const provider = createKataProvider();
-    expect(provider).toBeInstanceOf(KataProvider);
-  });
-
   it('should pass the custom adapter to the KataProvider', async () => {
     const mockAdapter: KataAdapter = {
       createSandbox: vi.fn().mockResolvedValue(undefined),

@@ -69,6 +69,9 @@ export class KataProvider implements IsolationProvider {
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+    if (session.status !== "running") {
+      throw new Error(`Session not running: ${sessionId}`);
+    }
     return this.adapter.execInSandbox(sessionId, command);
   }
 
