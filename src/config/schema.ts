@@ -12,13 +12,20 @@ const IsolationConfigSchema = z
     /** Enable isolation for agent invocations. */
     enabled: z.boolean().default(false),
     /** Isolation provider to use. */
-    provider: z.enum(['host', 'docker']).default('host'),
+    provider: z.enum(['host', 'docker', 'kata']).default('host'),
     /** Policy profile name to apply. */
     policyProfile: z.string().default('default'),
     /** Fall back to host execution if the configured provider is unavailable. */
     allowFallbackToHost: z.boolean().default(false),
     /** Docker-specific options (used when provider is 'docker'). */
     dockerOptions: IsolationDockerOptionsSchema.optional(),
+    /** Kata Containers-specific options (used when provider is 'kata'). */
+    kata: z
+      .object({
+        /** Path to the Kata runtime binary (e.g., /usr/bin/kata-runtime). */
+        runtimePath: z.string().optional(),
+      })
+      .optional(),
   })
   .default({ enabled: false, provider: 'host', policyProfile: 'default', allowFallbackToHost: false });
 
@@ -356,21 +363,6 @@ export const CadreConfigSchema = z.object({
       autoReplyOnResolved: z.boolean().default(false),
     })
     .default({}),
-
-  /** Container isolation provider configuration. */
-  isolation: z
-    .object({
-      /** Isolation provider to use. */
-      provider: z.enum(['kata']),
-      /** Kata Containers-specific options. */
-      kata: z
-        .object({
-          /** Path to the Kata runtime binary (e.g., /usr/bin/kata-runtime). */
-          runtimePath: z.string().optional(),
-        })
-        .optional(),
-    })
-    .optional(),
 
   /** DAG (dependency graph) configuration for ordering issues by dependency. */
   dag: z
