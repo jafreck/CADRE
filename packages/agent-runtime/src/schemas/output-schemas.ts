@@ -57,3 +57,16 @@ export const prContentSchema = z.object({
   body: z.string(),
   labels: z.array(z.string()),
 });
+
+/* ------------------------------------------------------------------ */
+/*  Inferred types — keep in sync with hand-written interfaces in      */
+/*  context/types.ts.  Prefer these for new code; they are the         */
+/*  single-source-of-truth derived from the Zod schemas above.         */
+/* ------------------------------------------------------------------ */
+export type AnalysisResultOutput  = z.infer<typeof analysisResultSchema>;
+export type ScoutReportOutput     = z.infer<typeof scoutReportSchema>;
+export type ReviewIssueOutput     = z.infer<typeof reviewIssueSchema>;
+export type ReviewResultOutput    = z.infer<typeof reviewResultSchema>;
+export type CommandResultOutput   = z.infer<typeof commandResultSchema>;
+export type IntegrationReportOutput = z.infer<typeof integrationReportSchema>;
+export type PRContentOutput       = z.infer<typeof prContentSchema>;

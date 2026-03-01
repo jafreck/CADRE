@@ -183,8 +183,12 @@ export interface IssueDetail {
   linkedPRs: number[];
 }
 
-/** Agent context file structure written before launching an agent. */
-export interface AgentContext {
+/** Agent context file structure written before launching an agent.
+ *
+ *  `TPayload` defaults to `Record<string, unknown>` for backward compatibility.
+ *  Narrow it to a phase-specific input type (e.g. `AgentContext<AnalysisInput>`)
+ *  for compile-time safety on `payload`. */
+export interface AgentContext<TPayload = Record<string, unknown>> {
   agent: string;
   issueNumber: number;
   projectName: string;
@@ -203,7 +207,7 @@ export interface AgentContext {
   inputFiles: string[];
   outputPath: string;
   /** Typed payload — per-phase structured input passed to the agent.
-   *  Use the corresponding phase input schema from AgentContract for type-safe validation. */
-  payload?: Record<string, unknown>;
+   *  When `TPayload` is narrowed, this field is fully typed at compile time. */
+  payload?: TPayload;
   outputSchema?: Record<string, unknown>;
 }

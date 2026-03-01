@@ -20,6 +20,13 @@ export {
   prCompositionInputSchema,
 } from './schemas/index.js';
 export type {
+  AnalysisResultOutput,
+  ScoutReportOutput,
+  ReviewIssueOutput,
+  ReviewResultOutput,
+  CommandResultOutput,
+  IntegrationReportOutput,
+  PRContentOutput,
   AnalysisInput,
   PlanningInput,
   ImplementationInput,
