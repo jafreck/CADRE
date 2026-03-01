@@ -8,11 +8,11 @@
 export {
   CheckpointManager,
   FleetCheckpointManager,
-} from '../../packages/pipeline-engine/src/index.js';
+} from '@cadre/pipeline-engine';
 
 export type {
   FailedTask,
   CheckpointState,
   FleetIssueStatus,
   FleetCheckpointState,
-} from '../../packages/pipeline-engine/src/index.js';
+} from '@cadre/pipeline-engine';

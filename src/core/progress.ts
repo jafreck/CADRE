@@ -9,9 +9,9 @@ export {
   phaseNames,
   FleetProgressWriter,
   IssueProgressWriter,
-} from '../../packages/pipeline-engine/src/index.js';
+} from '@cadre/pipeline-engine';
 
 export type {
   PullRequestRef,
   IssueProgressInfo,
-} from '../../packages/pipeline-engine/src/index.js';
+} from '@cadre/pipeline-engine';

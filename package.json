@@ -25,6 +25,7 @@
   "dependencies": {
     "@cadre/agent-runtime": "workspace:*",
     "@cadre/command-diagnostics": "workspace:*",
+    "@cadre/pipeline-engine": "workspace:*",
     "@inquirer/prompts": "^7",
     "@modelcontextprotocol/sdk": "^1.12",
     "@octokit/rest": "^21",

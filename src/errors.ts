@@ -46,7 +46,7 @@ export class SchemaValidationError extends Error {
   }
 }
 
-export { CyclicDependencyError } from '../packages/pipeline-engine/src/index.js';
+export { CyclicDependencyError } from '@cadre/pipeline-engine';
 
 export class DependencyResolutionError extends Error {
   constructor(message: string) {
