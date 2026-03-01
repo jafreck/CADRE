@@ -3,7 +3,7 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { loadConfig } from '../config/loader.js';
+import { loadConfig, applyOverrides } from '../config/loader.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { withCommandHandler } from './command-error-handler.js';
 import { exists, statOrNull } from '../util/fs.js';
@@ -111,8 +111,9 @@ export function registerAgentsCommand(program: Command): void {
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
     .option('--provider <name>', 'Override the isolation provider')
     .action(withCommandHandler(async (opts: { config: string; provider?: string }) => {
-      const config = await loadConfig(opts.config);
-      const agentDir = resolve(resolveAgentDir(config, opts.provider));
+      let config = await loadConfig(opts.config);
+      if (opts.provider != null) config = applyOverrides(config, { provider: opts.provider });
+      const agentDir = resolve(resolveAgentDir(config));
 
       // Header row
       const col1 = 'Agent'.padEnd(30);
@@ -140,8 +141,9 @@ export function registerAgentsCommand(program: Command): void {
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
     .option('--provider <name>', 'Override the isolation provider')
     .action(withCommandHandler(async (opts: { config: string; provider?: string }) => {
-      const config = await loadConfig(opts.config);
-      const agentDir = resolve(resolveAgentDir(config, opts.provider));
+      let config = await loadConfig(opts.config);
+      if (opts.provider != null) config = applyOverrides(config, { provider: opts.provider });
+      const agentDir = resolve(resolveAgentDir(config));
       const issues: string[] = [];
 
       for (const agent of AGENT_DEFINITIONS) {

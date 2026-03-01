@@ -19,6 +19,7 @@ export class HostSession implements IsolationSession {
       exitCode: result.exitCode ?? 1,
       stdout: result.stdout,
       stderr: result.stderr,
+      timedOut: result.timedOut,
     };
   }
 

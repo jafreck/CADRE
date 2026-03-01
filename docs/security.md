@@ -99,7 +99,7 @@ Even if `isolation.enabled: true` is set in config, if `isolation.provider` is `
 
 ### 4.5 Secrets Not Yet Supported for DockerProvider
 
-Secret bindings (`IsolationPolicy.secrets`) are not yet implemented. The planned approach is to inject secrets as environment variables via `-e KEY=VALUE` flags on `docker run`, but this capability is currently marked as planned and will raise a capability negotiation error if used. Future versions will implement secret injection and may add support for volume-mounted secret files with tighter access control.
+Secret bindings (`IsolationPolicy.secrets`) are not yet implemented — no secret injection code exists in the current release. Using `IsolationPolicy.secrets` will raise a capability negotiation error. A future version plans to inject secrets as environment variables via `-e KEY=VALUE` flags on `docker run`, and may also add support for volume-mounted secret files with tighter access control.
 
 **Mitigation:** Do not rely on `IsolationPolicy.secrets` in the current release. Pass secrets through `envAllowlist` entries if necessary, with awareness of the associated risks.
 
