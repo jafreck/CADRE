@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
 import { IssueDag } from '../src/core/issue-dag.js';
 import { DependencyResolutionError } from '../src/errors.js';
@@ -102,7 +102,15 @@ describe('DependencyResolver', () => {
     // Issue 2 depends on 1, issue 3 depends on 1
     const depMap = { '2': [1], '3': [1] };
 
-    mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
+    mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string; contextPath: string }) => {
+      const context = JSON.parse(await readFile(invocation.contextPath, 'utf-8')) as {
+        outputPath: string;
+        payload?: { issues?: unknown[] };
+      };
+      expect(context.outputPath).toBe(invocation.outputPath);
+      expect(Array.isArray(context.payload?.issues)).toBe(true);
+      expect(context.payload?.issues).toHaveLength(3);
+
       await writeFile(invocation.outputPath, cadreJson(depMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
@@ -170,11 +178,21 @@ describe('DependencyResolver', () => {
     // Second call: valid acyclic dep map
     const validDepMap = { '2': [1] };
 
-    mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
+    mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string; contextPath: string }) => {
+      const context = JSON.parse(await readFile(invocation.contextPath, 'utf-8')) as {
+        payload?: { hint?: string };
+      };
+      expect(context.payload?.hint).toBeUndefined();
+
       await writeFile(invocation.outputPath, cadreJson(cyclicDepMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
-    mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string }) => {
+    mockLaunchAgent.mockImplementationOnce(async (invocation: { outputPath: string; contextPath: string }) => {
+      const context = JSON.parse(await readFile(invocation.contextPath, 'utf-8')) as {
+        payload?: { hint?: string };
+      };
+      expect(context.payload?.hint).toContain('acyclic dependency graph');
+
       await writeFile(invocation.outputPath, cadreJson(validDepMap), 'utf-8');
       return makeAgentResult(invocation.outputPath);
     });
