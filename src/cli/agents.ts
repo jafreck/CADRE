@@ -109,8 +109,7 @@ export function registerAgentsCommand(program: Command): void {
     .command('list')
     .description('List all CADRE agents and their file status')
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
-    .option('--provider <name>', 'Override isolation provider (e.g. host, docker)')
-    .action(withCommandHandler(async (opts: { config: string; provider?: string }) => {
+    .action(withCommandHandler(async (opts: { config: string }) => {
       const config = await loadConfig(opts.config);
       const agentDir = resolve(resolveAgentDir(config));
 
@@ -138,8 +137,7 @@ export function registerAgentsCommand(program: Command): void {
     .command('validate')
     .description('Validate that all agent instruction files exist and are non-empty')
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
-    .option('--provider <name>', 'Override isolation provider (e.g. host, docker)')
-    .action(withCommandHandler(async (opts: { config: string; provider?: string }) => {
+    .action(withCommandHandler(async (opts: { config: string }) => {
       const config = await loadConfig(opts.config);
       const agentDir = resolve(resolveAgentDir(config));
       const issues: string[] = [];
