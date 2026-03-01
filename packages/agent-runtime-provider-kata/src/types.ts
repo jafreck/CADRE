@@ -34,7 +34,7 @@ export type KataSessionConfig = {
  */
 export interface IsolationProvider {
   /** Start a new isolated session and return its session ID. */
-  startSession(config: KataSessionConfig): Promise<string>;
+  startSession(policy: IsolationPolicy): Promise<string>;
   /** Execute a command inside the given session. */
   exec(sessionId: string, command: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }>;
   /** Gracefully stop the given session. */
