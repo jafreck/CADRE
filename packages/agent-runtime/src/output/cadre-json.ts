@@ -1,3 +1,19 @@
+import type { ZodType } from 'zod';
+
+/**
+ * Like extractCadreJson, but validates the parsed result against a Zod schema.
+ * Returns a typed result on success, or null if no cadre-json block found.
+ * Throws ZodError if the block exists but fails schema validation.
+ */
+export function extractCadreJsonTyped<T>(
+  content: string,
+  schema: ZodType<T>,
+): T | null {
+  const { parsed } = extractCadreJsonWithError(content);
+  if (parsed === null) return null;
+  return schema.parse(parsed);
+}
+
 /**
  * Extract and JSON-parse the first ```cadre-json``` fenced block from content.
  * Returns the parsed value, or null if no such block exists or the JSON is invalid.

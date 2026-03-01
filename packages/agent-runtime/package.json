@@ -17,6 +17,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@cadre/command-diagnostics": "file:../command-diagnostics"
+    "@cadre/command-diagnostics": "file:../command-diagnostics",
+    "zod": "^3.23"
   }
 }

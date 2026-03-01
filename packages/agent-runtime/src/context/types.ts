@@ -202,6 +202,8 @@ export interface AgentContext {
   };
   inputFiles: string[];
   outputPath: string;
+  /** Typed payload — per-phase structured input passed to the agent.
+   *  Use the corresponding phase input schema from AgentContract for type-safe validation. */
   payload?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
 }
