@@ -1,7 +1,7 @@
 {
   "name": "@cadre/agent-runtime",
   "version": "0.1.0",
-  "description": "Provider-agnostic isolation API and registry for agent runtime",
+  "description": "Provider-agnostic runtime SDK with isolation APIs, backend execution, and shared agent primitives",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -15,5 +15,8 @@
   ],
   "scripts": {
     "build": "tsc"
+  },
+  "dependencies": {
+    "@cadre/command-diagnostics": "file:../command-diagnostics"
   }
 }

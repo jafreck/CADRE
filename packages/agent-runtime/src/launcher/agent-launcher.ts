@@ -1,11 +1,21 @@
 import { resolve, join } from 'node:path';
-import type { RuntimeConfig } from '../config/loader.js';
-import type { AgentInvocation, AgentResult } from '../agents/types.js';
-import { AGENT_DEFINITIONS } from '../agents/types.js';
-import { statOrNull } from '../util/fs.js';
-import { Logger } from '../logging/logger.js';
-import { type AgentBackend } from '../agents/backend.js';
-import { createAgentBackend } from '../agents/backend-factory.js';
+import { stat } from 'node:fs/promises';
+import type { AgentInvocation, AgentResult } from '../context/types.js';
+import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../backend/backend.js';
+import { createAgentBackend } from '../backend/factory.js';
+
+/** Metadata describing a single agent (for validateAgentFiles). */
+export interface AgentDefinitionLike {
+  name: string;
+}
+
+async function statOrNull(filePath: string): Promise<{ size: number } | null> {
+  try {
+    return await stat(filePath);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Spawns agent invocations as headless child processes via the configured backend.
@@ -14,8 +24,8 @@ export class AgentLauncher {
   private readonly backend: AgentBackend;
 
   constructor(
-    private readonly config: RuntimeConfig,
-    private readonly logger: Logger,
+    private readonly config: BackendRuntimeConfig,
+    private readonly logger: BackendLoggerLike,
   ) {
     this.backend = createAgentBackend(config, logger);
   }
@@ -25,10 +35,10 @@ export class AgentLauncher {
    * Returns an array of error strings for any missing or empty files.
    * Copilot backend expects `{name}.agent.md`; Claude expects `{name}.md`.
    */
-  static async validateAgentFiles(agentDir: string): Promise<string[]> {
+  static async validateAgentFiles(agentDir: string, agentDefinitions: readonly AgentDefinitionLike[]): Promise<string[]> {
     const resolvedDir = resolve(agentDir);
     const issues: string[] = [];
-    for (const agent of AGENT_DEFINITIONS) {
+    for (const agent of agentDefinitions) {
       // agentDir always stores plain {name}.md source files.
       const filePath = join(resolvedDir, `${agent.name}.md`);
       const fileStat = await statOrNull(filePath);
@@ -52,6 +62,6 @@ export class AgentLauncher {
    * Launch an agent in the context of a specific worktree.
    */
   async launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
-    return this.backend.invoke(invocation, worktreePath) as Promise<AgentResult>;
+    return this.backend.invoke(invocation, worktreePath);
   }
 }
