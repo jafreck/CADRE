@@ -955,6 +955,47 @@ describe('CadreConfigSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('isolation', () => {
+    it('should parse successfully when isolation is omitted (backward-compatible)', () => {
+      const result = CadreConfigSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.isolation).toBeUndefined();
+      }
+    });
+
+    it('should accept isolation.provider kata', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        isolation: { provider: 'kata' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.isolation?.provider).toBe('kata');
+      }
+    });
+
+    it('should accept isolation.provider kata with kata.runtimePath', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        isolation: { provider: 'kata', kata: { runtimePath: '/usr/bin/kata-runtime' } },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.isolation?.provider).toBe('kata');
+        expect(result.data.isolation?.kata?.runtimePath).toBe('/usr/bin/kata-runtime');
+      }
+    });
+
+    it('should reject an unknown isolation.provider value', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        isolation: { provider: 'docker' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
 
 describe('AgentConfigSchema', () => {
