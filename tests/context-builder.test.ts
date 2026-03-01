@@ -100,6 +100,35 @@ describe('ContextBuilder', () => {
     expect(typeof ctx).toBe('string');
   });
 
+  it('should build context for dependency-analyst', async () => {
+    const ctx = await builder.build('dependency-analyst', {
+      issueNumber: 0,
+      worktreePath: '/tmp/worktree',
+      progressDir: '/tmp/progress',
+      dependencyIssues: [{ number: 1 }, { number: 2 }],
+      dependencyHint: 'avoid cycles',
+    });
+
+    expect(ctx).toBeDefined();
+    expect(typeof ctx).toBe('string');
+
+    const written = captureWrittenContext();
+    expect(written.agent).toBe('dependency-analyst');
+    expect(written.outputPath).toBe('/tmp/progress/dep-map.md');
+    expect(written.inputFiles).toEqual([]);
+    expect(written.outputSchema).toEqual({
+      type: 'object',
+      additionalProperties: {
+        type: 'array',
+        items: { type: 'number' },
+      },
+    });
+    expect(written.payload).toEqual({
+      issues: [{ number: 1 }, { number: 2 }],
+      hint: 'avoid cycles',
+    });
+  });
+
   it('should build context for implementation-planner', async () => {
     const ctx = await builder.build('implementation-planner', {
       issueNumber: 42,
@@ -673,6 +702,7 @@ describe('ContextBuilder', () => {
     const EXPECTED_AGENTS: AgentName[] = [
       'issue-analyst',
       'codebase-scout',
+      'dependency-analyst',
       'implementation-planner',
       'adjudicator',
       'code-writer',
@@ -686,7 +716,7 @@ describe('ContextBuilder', () => {
       'dep-conflict-resolver',
     ];
 
-    it('should contain descriptors for all 13 agents', () => {
+    it('should contain descriptors for all 14 agents', () => {
       for (const agent of EXPECTED_AGENTS) {
         expect(AGENT_CONTEXT_REGISTRY[agent]).toBeDefined();
       }

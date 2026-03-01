@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeFile, readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { IssueDetail } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
@@ -11,6 +11,7 @@ import { IssueDag } from './issue-dag.js';
 import { CyclicDependencyError, DependencyResolutionError } from '../errors.js';
 import { Logger } from '../logging/logger.js';
 import { extractCadreJson } from '../util/cadre-json.js';
+import { ContextBuilder } from '../agents/context-builder.js';
 
 /** Zod schema for the dependency-analyst agent output: maps issue number (string key) to list of dependency issue numbers. */
 export const depMapSchema = z.record(z.string(), z.array(z.number()));
@@ -27,12 +28,16 @@ export type DepMapOutput = z.infer<typeof depMapSchema>;
  * - After exhausting retries: throws DependencyResolutionError.
  */
 export class DependencyResolver {
+  private readonly contextBuilder: ContextBuilder;
+
   constructor(
     private readonly config: RuntimeConfig,
     private readonly launcher: AgentLauncher,
     private readonly logger: Logger,
     private readonly worktreeManager?: WorktreeManager,
-  ) {}
+  ) {
+    this.contextBuilder = new ContextBuilder(config, logger);
+  }
 
   async resolve(issues: IssueDetail[], repoPath: string): Promise<IssueDag> {
     const validIssueNumbers = new Set(issues.map((i) => i.number));
@@ -108,23 +113,15 @@ export class DependencyResolver {
     const tmpDir = join(tmpdir(), `cadre-dep-resolver-${invocationId}`);
     await mkdir(tmpDir, { recursive: true });
 
-    const contextPath = join(tmpDir, 'context.json');
     const outputPath = join(tmpDir, 'dep-map.md');
 
-    const context = {
-      agent: 'dependency-analyst',
+    const contextPath = await this.contextBuilder.build('dependency-analyst', {
       issueNumber: 0,
-      projectName: this.config.projectName,
-      repository: this.config.repository,
       worktreePath: agentCwd,
-      phase: 1,
-      config: { commands: this.config.commands ?? {} },
-      inputFiles: [],
-      outputPath,
-      payload: { issues, ...(hint !== undefined ? { hint } : {}) },
-    };
-
-    await writeFile(contextPath, JSON.stringify(context, null, 2), 'utf-8');
+      progressDir: tmpDir,
+      dependencyIssues: issues as unknown as Array<Record<string, unknown>>,
+      ...(hint !== undefined ? { dependencyHint: hint } : {}),
+    });
 
     const result = await this.launcher.launchAgent(
       {

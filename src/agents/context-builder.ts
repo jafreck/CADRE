@@ -20,6 +20,14 @@ import {
   prContentSchema,
 } from './schemas/index.js';
 
+const dependencyMapSchema: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: {
+    type: 'array',
+    items: { type: 'number' },
+  },
+};
+
 /** Registry mapping each agent to its context descriptor. */
 export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
   'issue-analyst': {
@@ -33,6 +41,16 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
     outputFile: (args) => join(args.progressDir, 'scout-report.md'),
     inputFiles: async (args) => [args.analysisPath!, args.fileTreePath!],
     outputSchema: zodToJsonSchema(scoutReportSchema) as Record<string, unknown>,
+  },
+  'dependency-analyst': {
+    phase: 1,
+    outputFile: (args) => join(args.progressDir, 'dep-map.md'),
+    inputFiles: async () => [],
+    payload: (args) => ({
+      issues: args.dependencyIssues ?? [],
+      ...(args.dependencyHint !== undefined ? { hint: args.dependencyHint } : {}),
+    }),
+    outputSchema: dependencyMapSchema,
   },
   'implementation-planner': {
     phase: 2,
