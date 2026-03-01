@@ -1,16 +1,7 @@
-/** IsolationPolicy defines the resource and security constraints for an agent session. */
-export type IsolationPolicy = {
-  /** Memory limit in bytes */
-  memory?: number;
-  /** CPU quota (e.g. number of cores or millicores) */
-  cpu?: number;
-  /** Whether to enable network isolation (no external network access) */
-  networkIsolation?: boolean;
-  /** Whether to mount the container root filesystem as read-only */
-  readOnlyRootfs?: boolean;
-  /** Additional policy fields for forward-compatibility */
-  [key: string]: unknown;
-};
+/**
+ * Kata-specific type definitions.
+ * Canonical isolation types (IsolationProvider, IsolationPolicy, etc.) come from @cadre/agent-runtime.
+ */
 
 /** KataSessionConfig holds the Kata OCI/VM runtime parameters produced by policy translation. */
 export type KataSessionConfig = {
@@ -27,21 +18,6 @@ export type KataSessionConfig = {
   /** Arbitrary OCI annotations forwarded to the Kata runtime */
   annotations?: Record<string, string>;
 };
-
-/**
- * IsolationProvider is the local placeholder for the contract defined in issue #271.
- * Replace with the shared interface once that package is available.
- */
-export interface IsolationProvider {
-  /** Start a new isolated session and return its session ID. */
-  startSession(policy: IsolationPolicy): Promise<string>;
-  /** Execute a command inside the given session. */
-  exec(sessionId: string, command: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }>;
-  /** Gracefully stop the given session. */
-  stopSession(sessionId: string): Promise<void>;
-  /** Forcefully destroy the given session and release all resources. */
-  destroySession(sessionId: string): Promise<void>;
-}
 
 /** Thrown when one or more IsolationPolicy fields cannot be satisfied by the Kata provider. */
 export class CapabilityMismatchError extends Error {

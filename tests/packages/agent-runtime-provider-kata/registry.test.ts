@@ -18,19 +18,18 @@ describe('createKataProvider', () => {
     };
 
     const provider = createKataProvider(mockAdapter);
-    const sessionId = await provider.startSession({});
-    const result = await provider.exec(sessionId, ['echo', 'test']);
+    const session = await provider.createSession({});
+    const result = await session.exec('echo', ['test']);
 
     expect(mockAdapter.createSandbox).toHaveBeenCalledOnce();
-    expect(mockAdapter.execInSandbox).toHaveBeenCalledWith(sessionId, ['echo', 'test']);
+    expect(mockAdapter.execInSandbox).toHaveBeenCalled();
     expect(result.stdout).toBe('custom');
   });
 
-  it('should return a provider that implements the IsolationProvider interface', () => {
+  it('should return a provider that implements the canonical IsolationProvider interface', () => {
     const provider = createKataProvider();
-    expect(typeof provider.startSession).toBe('function');
-    expect(typeof provider.exec).toBe('function');
-    expect(typeof provider.stopSession).toBe('function');
-    expect(typeof provider.destroySession).toBe('function');
+    expect(provider.name).toBe('kata');
+    expect(typeof provider.capabilities).toBe('function');
+    expect(typeof provider.createSession).toBe('function');
   });
 });

@@ -19,10 +19,9 @@ describe('index public exports', () => {
 
   it('should export a functional KataProvider from the public surface', () => {
     const provider = new indexExports.KataProvider();
-    expect(typeof provider.startSession).toBe('function');
-    expect(typeof provider.exec).toBe('function');
-    expect(typeof provider.stopSession).toBe('function');
-    expect(typeof provider.destroySession).toBe('function');
+    expect(provider.name).toBe('kata');
+    expect(typeof provider.capabilities).toBe('function');
+    expect(typeof provider.createSession).toBe('function');
   });
 
   it('should export a functional createKataProvider factory from the public surface', () => {

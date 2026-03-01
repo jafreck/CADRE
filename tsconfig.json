@@ -21,7 +21,8 @@
     "packages/pipeline-engine/src/**/*",
     "packages/agent-runtime/src/**/*",
     "packages/agent-runtime-provider-host/src/**/*",
-    "packages/agent-runtime-provider-docker/src/**/*"
+    "packages/agent-runtime-provider-docker/src/**/*",
+    "packages/agent-runtime-provider-kata/src/**/*"
   ],
   "exclude": ["node_modules", "dist", "tests"]
 }
