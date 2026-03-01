@@ -21,7 +21,7 @@ Cadre runs AI-generated code in agent sessions. The isolation model is designed 
 - **Network isolation.** The network mode is controlled by `IsolationPolicy.networkMode`. Setting it to `none` prevents all outbound and inbound network access. `allowlist` and `full` modes both use a bridge network (see §4.3 for residual risks).
 - **Environment variable isolation.** Only environment variables explicitly listed in `IsolationPolicy.envAllowlist` are forwarded into the container. All other host variables are withheld.
 - **Resource limits.** CPU shares, memory, PID count, ulimits, and execution timeouts are enforced via Docker's resource-limiting flags when specified in `IsolationPolicy.resources`.
-- **Secret handling.** Secret bindings (`IsolationPolicy.secrets`) are currently injected as environment variables inside the container. They are not written to disk. Secrets are not logged.
+- **Secret handling.** Secret bindings (`IsolationPolicy.secrets`) are not yet implemented for DockerProvider. Secret injection via environment variables is planned for a future release.
 
 ---
 
@@ -97,11 +97,11 @@ Even if `isolation.enabled: true` is set in config, if `isolation.provider` is `
 
 **Mitigation:** Set `allowFallbackToHost: false` (the default) and ensure `provider` is set to `'docker'` for hardened deployments.
 
-### 4.5 Secrets Injected as Environment Variables
+### 4.5 Secrets Not Yet Supported for DockerProvider
 
-Secret bindings are currently passed into containers as environment variables via `-e KEY=VALUE` flags on `docker run`. Environment variables are visible to all processes inside the container, may be captured in process listings, and can leak through subprocess execution.
+Secret bindings (`IsolationPolicy.secrets`) are not yet implemented. The planned approach is to inject secrets as environment variables via `-e KEY=VALUE` flags on `docker run`, but this capability is currently marked as planned and will raise a capability negotiation error if used. Future versions will implement secret injection and may add support for volume-mounted secret files with tighter access control.
 
-**Mitigation:** Use secrets with a narrow scope and short lifetime. Avoid injecting long-lived credentials as secrets. Future versions will support volume-mounted secret files with tighter access control.
+**Mitigation:** Do not rely on `IsolationPolicy.secrets` in the current release. Pass secrets through `envAllowlist` entries if necessary, with awareness of the associated risks.
 
 ### 4.6 Capability Negotiation Failure-Mode
 

@@ -50,6 +50,7 @@ export interface ExecResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  timedOut?: boolean;
 }
 
 export interface IsolationSession {

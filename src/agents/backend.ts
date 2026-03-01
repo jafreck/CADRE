@@ -137,6 +137,7 @@ function createDefaultSession(): IsolationSession {
         exitCode: result.exitCode ?? 1,
         stdout: result.stdout,
         stderr: result.stderr,
+        timedOut: result.timedOut,
       };
     },
     async destroy() {},
@@ -191,7 +192,7 @@ async function runInvokePipeline(
     stdout: execResult.stdout,
     stderr: execResult.stderr,
     signal: null,
-    timedOut: false,
+    timedOut: execResult.timedOut ?? false,
   };
 
   await writeAgentLog(logFile, invocation, startTime, processResult);
