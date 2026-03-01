@@ -18,7 +18,10 @@
   "include": [
     "src/**/*",
     "packages/command-diagnostics/src/**/*",
-    "packages/pipeline-engine/src/**/*"
+    "packages/pipeline-engine/src/**/*",
+    "packages/agent-runtime/src/**/*",
+    "packages/agent-runtime-provider-host/src/**/*",
+    "packages/agent-runtime-provider-docker/src/**/*"
   ],
   "exclude": ["node_modules", "dist", "tests"]
 }

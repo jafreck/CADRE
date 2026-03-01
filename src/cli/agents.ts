@@ -3,7 +3,7 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { loadConfig } from '../config/loader.js';
+import { loadConfig, applyOverrides } from '../config/loader.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { withCommandHandler } from './command-error-handler.js';
 import { exists, statOrNull } from '../util/fs.js';
@@ -109,8 +109,10 @@ export function registerAgentsCommand(program: Command): void {
     .command('list')
     .description('List all CADRE agents and their file status')
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
-    .action(withCommandHandler(async (opts: { config: string }) => {
-      const config = await loadConfig(opts.config);
+    .option('--provider <name>', 'Override the isolation provider')
+    .action(withCommandHandler(async (opts: { config: string; provider?: string }) => {
+      let config = await loadConfig(opts.config);
+      if (opts.provider != null) config = applyOverrides(config, { provider: opts.provider });
       const agentDir = resolve(resolveAgentDir(config));
 
       // Header row
@@ -137,8 +139,10 @@ export function registerAgentsCommand(program: Command): void {
     .command('validate')
     .description('Validate that all agent instruction files exist and are non-empty')
     .option('-c, --config <path>', 'Path to cadre.config.json', 'cadre.config.json')
-    .action(withCommandHandler(async (opts: { config: string }) => {
-      const config = await loadConfig(opts.config);
+    .option('--provider <name>', 'Override the isolation provider')
+    .action(withCommandHandler(async (opts: { config: string; provider?: string }) => {
+      let config = await loadConfig(opts.config);
+      if (opts.provider != null) config = applyOverrides(config, { provider: opts.provider });
       const agentDir = resolve(resolveAgentDir(config));
       const issues: string[] = [];
 

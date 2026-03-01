@@ -28,6 +28,7 @@ const baseConfig: CadreConfig = {
   commands: {},
   copilot: { cliCommand: 'copilot', model: 'claude-sonnet-4.6', agentDir: '.github/agents', timeout: 300_000 },
   environment: { inheritShellPath: true, extraPath: [] },
+  isolation: { enabled: false, provider: 'host', policyProfile: 'default', allowFallbackToHost: false },
 };
 
 describe('applyOverrides – noPr', () => {
@@ -127,6 +128,42 @@ describe('applyOverrides – respondToReviews', () => {
 
   it('should return a frozen object', () => {
     const result = applyOverrides(baseConfig, { respondToReviews: true });
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+});
+
+describe('applyOverrides – provider', () => {
+  it('should set isolation.provider to docker when override is "docker"', () => {
+    const result = applyOverrides(baseConfig, { provider: 'docker' });
+    expect(result.isolation.provider).toBe('docker');
+  });
+
+  it('should set isolation.provider to host when override is "host"', () => {
+    const config = applyOverrides(baseConfig, { provider: 'docker' });
+    const result = applyOverrides(config, { provider: 'host' });
+    expect(result.isolation.provider).toBe('host');
+  });
+
+  it('should not change isolation.provider when override is undefined', () => {
+    const result = applyOverrides(baseConfig, {});
+    expect(result.isolation.provider).toBe('host');
+  });
+
+  it('should preserve other isolation fields when applying provider override', () => {
+    const result = applyOverrides(baseConfig, { provider: 'docker' });
+    expect(result.isolation.enabled).toBe(false);
+    expect(result.isolation.policyProfile).toBe('default');
+    expect(result.isolation.allowFallbackToHost).toBe(false);
+  });
+
+  it('should preserve other top-level config fields when applying provider override', () => {
+    const result = applyOverrides(baseConfig, { provider: 'docker' });
+    expect(result.options.dryRun).toBe(false);
+    expect(result.pullRequest.autoCreate).toBe(true);
+  });
+
+  it('should return a frozen object', () => {
+    const result = applyOverrides(baseConfig, { provider: 'docker' });
     expect(Object.isFrozen(result)).toBe(true);
   });
 });

@@ -957,43 +957,75 @@ describe('CadreConfigSchema', () => {
   });
 
   describe('isolation', () => {
-    it('should parse successfully when isolation is omitted (backward-compatible)', () => {
-      const result = CadreConfigSchema.safeParse(validConfig);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.isolation).toBeUndefined();
-      }
+    it('should default isolation to { enabled: false, provider: "host", policyProfile: "default", allowFallbackToHost: false } when omitted', () => {
+      const result = CadreConfigSchema.parse(validConfig);
+      expect(result.isolation).toEqual({
+        enabled: false,
+        provider: 'host',
+        policyProfile: 'default',
+        allowFallbackToHost: false,
+      });
     });
 
-    it('should accept isolation.provider kata', () => {
+    it('should accept isolation with enabled: true and provider: "docker"', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
-        isolation: { provider: 'kata' },
+        isolation: { enabled: true, provider: 'docker' },
       });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.isolation?.provider).toBe('kata');
+        expect(result.data.isolation.enabled).toBe(true);
+        expect(result.data.isolation.provider).toBe('docker');
       }
     });
 
-    it('should accept isolation.provider kata with kata.runtimePath', () => {
+    it('should accept isolation with all fields set', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
-        isolation: { provider: 'kata', kata: { runtimePath: '/usr/bin/kata-runtime' } },
+        isolation: {
+          enabled: true,
+          provider: 'docker',
+          policyProfile: 'strict',
+          allowFallbackToHost: true,
+          dockerOptions: { image: 'node:20-slim', extraArgs: ['--rm'] },
+        },
       });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.isolation?.provider).toBe('kata');
-        expect(result.data.isolation?.kata?.runtimePath).toBe('/usr/bin/kata-runtime');
+        expect(result.data.isolation.policyProfile).toBe('strict');
+        expect(result.data.isolation.allowFallbackToHost).toBe(true);
+        expect(result.data.isolation.dockerOptions?.image).toBe('node:20-slim');
+        expect(result.data.isolation.dockerOptions?.extraArgs).toEqual(['--rm']);
       }
     });
 
-    it('should reject an unknown isolation.provider value', () => {
+    it('should reject an unknown isolation provider', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
-        isolation: { provider: 'docker' },
+        isolation: { provider: 'kubernetes' },
       });
       expect(result.success).toBe(false);
+    });
+
+    it('should accept isolation with provider: "host" explicitly', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        isolation: { provider: 'host' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.isolation.provider).toBe('host');
+      }
+    });
+
+    it('should apply per-field defaults when isolation object is provided partially', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        isolation: { enabled: true },
+      });
+      expect(result.isolation.provider).toBe('host');
+      expect(result.isolation.policyProfile).toBe('default');
+      expect(result.isolation.allowFallbackToHost).toBe(false);
     });
   });
 });

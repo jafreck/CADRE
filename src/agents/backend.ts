@@ -2,6 +2,7 @@ import { join, resolve } from 'node:path';
 import { writeFile, copyFile } from 'node:fs/promises';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { AgentInvocation, AgentResult } from './types.js';
+import type { IsolationSession } from '@cadre/agent-runtime';
 import { spawnProcess, stripVSCodeEnv, trackProcess, type ProcessResult } from '../util/process.js';
 import { exists, ensureDir } from '../util/fs.js';
 import { Logger } from '../logging/logger.js';
@@ -13,7 +14,7 @@ export interface AgentBackend {
   /** Validate prerequisites (CLI availability, etc.). */
   init(): Promise<void>;
   /** Invoke an agent and return the result. */
-  invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult>;
+  invoke(invocation: AgentInvocation, worktreePath: string, session?: IsolationSession): Promise<AgentResult>;
 }
 
 /**
@@ -118,6 +119,32 @@ async function writeAgentLog(
 }
 
 /**
+ * Creates a default IsolationSession that delegates directly to spawnProcess.
+ * Used when no explicit session is injected (e.g. in tests or legacy call sites).
+ */
+function createDefaultSession(): IsolationSession {
+  return {
+    sessionId: 'host-default',
+    async exec(command: string, args: string[], options?: { env?: Record<string, string>; cwd?: string; timeoutMs?: number }) {
+      const { promise, process: child } = spawnProcess(command, args, {
+        cwd: options?.cwd,
+        env: options?.env as Record<string, string | undefined>,
+        timeout: options?.timeoutMs,
+      });
+      trackProcess(child);
+      const result = await promise;
+      return {
+        exitCode: result.exitCode ?? 1,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        timedOut: result.timedOut,
+      };
+    },
+    async destroy() {},
+  };
+}
+
+/**
  * Shared invoke pipeline: handles log-dir creation, process spawn, log writing,
  * token parsing, and result construction. Backend-specific arg building and
  * success detection are injected as parameters.
@@ -135,6 +162,7 @@ async function runInvokePipeline(
   backendName: string,
   timeout: number,
   detectSuccess: (r: ProcessResult) => { success: boolean; error?: string; failureMessage?: string },
+  session: IsolationSession,
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const logDir = join(worktreePath, '.cadre', 'issues', String(invocation.issueNumber), 'logs');
@@ -151,14 +179,21 @@ async function runInvokePipeline(
   });
 
   const env = buildEnv(invocation, worktreePath, config);
-  const { promise, process: child } = spawnProcess(cliCommand, args, {
+
+  const execResult = await session.exec(cliCommand, args, {
     cwd: worktreePath,
-    env,
-    timeout,
+    env: env as Record<string, string>,
+    timeoutMs: timeout,
   });
 
-  trackProcess(child);
-  const processResult = await promise;
+  // Adapt ExecResult to ProcessResult shape for log writing and detectSuccess
+  const processResult: ProcessResult = {
+    exitCode: execResult.exitCode,
+    stdout: execResult.stdout,
+    stderr: execResult.stderr,
+    signal: null,
+    timedOut: execResult.timedOut ?? false,
+  };
 
   await writeAgentLog(logFile, invocation, startTime, processResult);
 
@@ -236,7 +271,7 @@ export class CopilotBackend implements AgentBackend {
     this.logger.debug(`CopilotBackend initialized (cli: ${this.cliCommand})`);
   }
 
-  async invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
+  async invoke(invocation: AgentInvocation, worktreePath: string, session?: IsolationSession): Promise<AgentResult> {
     const prompt = `Read your context file at: ${invocation.contextPath}`;
     const args = [
       '--agent', invocation.agent,
@@ -272,6 +307,7 @@ export class CopilotBackend implements AgentBackend {
             : undefined,
         };
       },
+      session ?? createDefaultSession(),
     );
   }
 }
@@ -299,7 +335,7 @@ export class ClaudeBackend implements AgentBackend {
     this.logger.debug(`ClaudeBackend initialized (cli: ${this.cliCommand})`);
   }
 
-  async invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
+  async invoke(invocation: AgentInvocation, worktreePath: string, session?: IsolationSession): Promise<AgentResult> {
     const prompt = `Read your context file at: ${invocation.contextPath}`;
     const args = [
       '-p', prompt,
@@ -326,6 +362,7 @@ export class ClaudeBackend implements AgentBackend {
           error: success ? undefined : r.stderr || `Exit code: ${r.exitCode}`,
         };
       },
+      session ?? createDefaultSession(),
     );
   }
 }
