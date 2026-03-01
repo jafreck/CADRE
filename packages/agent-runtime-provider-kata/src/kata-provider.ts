@@ -1,12 +1,14 @@
-import { randomUUID } from "node:crypto";
-import type { IsolationPolicy, IsolationProvider, KataSessionConfig } from "./types.js";
-import { translatePolicy } from "./policy-translator.js";
-
-/** Internal session state tracked by the provider. */
-type SessionState = {
-  config: KataSessionConfig;
-  status: "running" | "stopped";
-};
+import { randomUUID } from 'node:crypto';
+import type {
+  ExecOptions,
+  ExecResult,
+  IsolationCapabilities,
+  IsolationPolicy,
+  IsolationProvider,
+  IsolationSession,
+} from '@cadre/agent-runtime';
+import type { KataSessionConfig } from './types.js';
+import { translatePolicy } from './policy-translator.js';
 
 /**
  * Minimal Kata OCI adapter interface.
@@ -27,7 +29,7 @@ export class StubKataAdapter implements KataAdapter {
     _sessionId: string,
     _command: string[],
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-    return { exitCode: 0, stdout: "", stderr: "" };
+    return { exitCode: 0, stdout: '', stderr: '' };
   }
 
   async stopSandbox(_sessionId: string): Promise<void> {}
@@ -35,63 +37,57 @@ export class StubKataAdapter implements KataAdapter {
   async destroySandbox(_sessionId: string): Promise<void> {}
 }
 
+/** IsolationSession backed by a Kata sandbox. */
+class KataSession implements IsolationSession {
+  readonly sessionId: string;
+  private readonly adapter: KataAdapter;
+
+  constructor(sessionId: string, adapter: KataAdapter) {
+    this.sessionId = sessionId;
+    this.adapter = adapter;
+  }
+
+  async exec(command: string, args: string[], _options?: ExecOptions): Promise<ExecResult> {
+    const result = await this.adapter.execInSandbox(this.sessionId, [command, ...args]);
+    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  async destroy(): Promise<void> {
+    await this.adapter.destroySandbox(this.sessionId);
+  }
+}
+
 /**
- * KataProvider implements the IsolationProvider contract using Kata Containers.
+ * KataProvider implements the canonical IsolationProvider contract using Kata Containers.
  * Translates IsolationPolicy to KataSessionConfig and delegates lifecycle
  * operations to a KataAdapter.
  */
 export class KataProvider implements IsolationProvider {
+  readonly name = 'kata';
   private readonly adapter: KataAdapter;
-  private readonly sessions = new Map<string, SessionState>();
 
   constructor(adapter: KataAdapter = new StubKataAdapter()) {
     this.adapter = adapter;
   }
 
+  capabilities(): IsolationCapabilities {
+    return {
+      mounts: false,
+      networkModes: ['none', 'full'],
+      envAllowlist: false,
+      secrets: false,
+      resources: true,
+    };
+  }
+
   /**
-   * Translate the policy and start a new Kata sandbox session.
+   * Translate the policy and create a new Kata sandbox session.
    * Throws CapabilityMismatchError if the policy contains unsupported fields.
    */
-  async startSession(policy: IsolationPolicy): Promise<string> {
+  async createSession(policy: IsolationPolicy): Promise<IsolationSession> {
     const config = translatePolicy(policy);
     const sessionId = randomUUID();
     await this.adapter.createSandbox(sessionId, config);
-    this.sessions.set(sessionId, { config, status: "running" });
-    return sessionId;
-  }
-
-  /** Execute a command in the given session and return stdout/stderr/exit code. */
-  async exec(
-    sessionId: string,
-    command: string[],
-  ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    if (session.status !== "running") {
-      throw new Error(`Session not running: ${sessionId}`);
-    }
-    return this.adapter.execInSandbox(sessionId, command);
-  }
-
-  /** Gracefully stop the given session. */
-  async stopSession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    await this.adapter.stopSandbox(sessionId);
-    session.status = "stopped";
-  }
-
-  /** Forcefully destroy the session and release all resources. */
-  async destroySession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    await this.adapter.destroySandbox(sessionId);
-    this.sessions.delete(sessionId);
+    return new KataSession(sessionId, this.adapter);
   }
 }
