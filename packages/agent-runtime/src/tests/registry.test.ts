@@ -87,4 +87,57 @@ describe('ProviderRegistry', () => {
     registry.register(config);
     expect(registry.resolve('sandbox', 'docker')).toBe(cli);
   });
+
+  it('has() returns true for registered providers', () => {
+    registry.register(makeProvider('host'));
+    expect(registry.has('host')).toBe(true);
+    expect(registry.has('docker')).toBe(false);
+  });
+
+  it('has() returns true for factory-registered providers', () => {
+    registry.registerFactory('docker', () => makeProvider('docker'));
+    expect(registry.has('docker')).toBe(true);
+  });
+
+  it('list() returns all registered names', () => {
+    registry.register(makeProvider('host'));
+    registry.registerFactory('docker', () => makeProvider('docker'));
+    expect(registry.list().sort()).toEqual(['docker', 'host']);
+  });
+
+  it('list() deduplicates names present in both maps', () => {
+    registry.register(makeProvider('host'));
+    registry.registerFactory('host', () => makeProvider('host'));
+    expect(registry.list()).toEqual(['host']);
+  });
+
+  it('resolve() instantiates lazy factories on first call', () => {
+    let called = 0;
+    registry.registerFactory('docker', () => { called++; return makeProvider('docker'); });
+    expect(called).toBe(0);
+    registry.resolve('docker');
+    expect(called).toBe(1);
+    // Second resolve uses cached instance
+    registry.resolve('docker');
+    expect(called).toBe(1);
+  });
+
+  it('resolve() prefers direct registration over factory', () => {
+    const direct = makeProvider('docker');
+    registry.register(direct);
+    registry.registerFactory('docker', () => makeProvider('docker'));
+    expect(registry.resolve('docker')).toBe(direct);
+  });
+
+  it('unregister() removes providers', () => {
+    registry.register(makeProvider('host'));
+    registry.unregister('host');
+    expect(registry.has('host')).toBe(false);
+  });
+
+  it('unregister() removes factory-registered providers', () => {
+    registry.registerFactory('docker', () => makeProvider('docker'));
+    registry.unregister('docker');
+    expect(registry.has('docker')).toBe(false);
+  });
 });
