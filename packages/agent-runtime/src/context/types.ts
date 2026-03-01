@@ -161,6 +161,28 @@ export interface PhaseResult {
   gateResult?: GateResult;
 }
 
+/** Comment on an issue or work item. */
+export interface IssueComment {
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+/** Normalized representation of an issue or work item across platforms. */
+export interface IssueDetail {
+  number: number;
+  title: string;
+  body: string;
+  labels: string[];
+  assignees: string[];
+  milestone?: string;
+  comments: IssueComment[];
+  state: 'open' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+  linkedPRs: number[];
+}
+
 /** Agent context file structure written before launching an agent. */
 export interface AgentContext {
   agent: string;
