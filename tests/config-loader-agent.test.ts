@@ -125,6 +125,17 @@ describe('loadConfig – agent configuration', () => {
     expect(Object.isFrozen(config)).toBe(true);
   });
 
+  it('should include isolation defaults in loaded config', async () => {
+    setupFs(BASE_CONFIG);
+    const config = await loadConfig('/tmp/repo/cadre.config.json');
+    expect(config.isolation).toEqual({
+      enabled: false,
+      provider: 'host',
+      policyProfile: 'default',
+      allowFallbackToHost: false,
+    });
+  });
+
   it('should throw ConfigLoadError when config file does not exist', async () => {
     mockExists.mockResolvedValue(false);
     await expect(loadConfig('/nonexistent/cadre.config.json')).rejects.toThrow('Config file not found');
