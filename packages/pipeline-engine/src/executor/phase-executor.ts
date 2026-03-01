@@ -6,31 +6,48 @@
  * these to concrete types without type incompatibilities.
  */
 
+import type { Logger, TokenRecord } from '../types.js';
+import type { CheckpointManager } from '../checkpoint/checkpoint.js';
+import type { IssueProgressWriter } from '../progress/progress.js';
+
 /** Cross-cutting services used by every phase. */
-export type PhaseServices = {
-  launcher: any;
-  retryExecutor: any;
-  tokenTracker: any;
-  contextBuilder: any;
-  resultParser: any;
-  logger: any;
-};
+export interface PhaseServices {
+  launcher: {
+    launch(invocation: { agent: string; contextPath: string; outputPath: string; timeout?: number }): Promise<{ success: boolean; exitCode: number | null; timedOut: boolean; duration: number; stdout: string; stderr: string; tokenUsage: unknown; outputPath: string; outputExists: boolean; error?: string }>;
+  };
+  retryExecutor: {
+    executeWithRetry<T>(fn: () => Promise<T>, maxRetries?: number): Promise<T>;
+  };
+  tokenTracker: {
+    record(agent: string, phase: number, tokens: number): void;
+    getTotal(): number;
+  };
+  contextBuilder: {
+    build(params: Record<string, unknown>): Promise<string>;
+  };
+  resultParser: {
+    parse(outputPath: string): Promise<unknown>;
+  };
+  logger: Logger;
+}
 
 /** I/O and persistence dependencies. */
-export type PhaseIO = {
+export interface PhaseIO {
   progressDir: string;
-  progressWriter: any;
-  checkpoint: any;
-  commitManager: any;
-};
+  progressWriter: IssueProgressWriter;
+  checkpoint: CheckpointManager;
+  commitManager: {
+    commitPhase(message: string): Promise<string | null>;
+  };
+}
 
 /** Callbacks injected by the orchestrator. */
-export type PhaseCallbacks = {
-  recordTokens: (agent: string, tokens: any) => void;
+export interface PhaseCallbacks {
+  recordTokens: (agent: string, tokens: { input?: number; output?: number; total: number }) => void;
   checkBudget: () => void;
   updateProgress: () => Promise<void>;
-  setPR?: (pr: any) => void;
-};
+  setPR?: (pr: { number: number; url: string }) => void;
+}
 
 /**
  * All dependencies and shared state needed by a phase during execution.
