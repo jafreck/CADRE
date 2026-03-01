@@ -7,6 +7,15 @@ export {
   integrationReportSchema,
   prContentSchema,
 } from './output-schemas.js';
+export type {
+  AnalysisResultOutput,
+  ScoutReportOutput,
+  ReviewIssueOutput,
+  ReviewResultOutput,
+  CommandResultOutput,
+  IntegrationReportOutput,
+  PRContentOutput,
+} from './output-schemas.js';
 
 export {
   analysisInputSchema,
