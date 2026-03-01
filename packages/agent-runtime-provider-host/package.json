@@ -1,0 +1,23 @@
+{
+  "name": "@cadre/agent-runtime-provider-host",
+  "version": "0.1.0",
+  "description": "Host isolation provider for agent runtime (direct process launch)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@cadre/agent-runtime": "*",
+    "@cadre/command-diagnostics": "*"
+  }
+}

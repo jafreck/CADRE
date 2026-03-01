@@ -1,0 +1,19 @@
+{
+  "name": "@cadre/agent-runtime",
+  "version": "0.1.0",
+  "description": "Provider-agnostic isolation API and registry for agent runtime",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc"
+  }
+}

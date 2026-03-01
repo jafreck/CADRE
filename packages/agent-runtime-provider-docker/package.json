@@ -1,0 +1,22 @@
+{
+  "name": "@cadre/agent-runtime-provider-docker",
+  "version": "0.1.0",
+  "description": "Docker isolation provider for agent runtime",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@cadre/agent-runtime": "*"
+  }
+}
