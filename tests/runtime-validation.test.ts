@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies before importing CadreRuntime
-vi.mock('../src/logging/logger.js', () => {
+vi.mock('@cadre/observability', () => {
   const Logger = vi.fn().mockImplementation(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -13,6 +13,12 @@ vi.mock('../src/logging/logger.js', () => {
   }));
   return { Logger };
 });
+
+vi.mock('@cadre/notifications', () => ({
+  NotificationManager: vi.fn().mockImplementation(() => ({
+    dispatch: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 vi.mock('../src/platform/factory.js', () => ({
   createPlatformProvider: vi.fn().mockReturnValue({
@@ -25,7 +31,7 @@ vi.mock('../src/platform/factory.js', () => ({
   }),
 }));
 
-vi.mock('../src/validation/index.js', () => ({
+vi.mock('@cadre/validation', () => ({
   PreRunValidationSuite: vi.fn(),
   gitValidator: { name: 'git', validate: vi.fn() },
   agentBackendValidator: { name: 'agent-backend', validate: vi.fn() },
@@ -36,7 +42,7 @@ vi.mock('../src/validation/index.js', () => ({
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
-import { PreRunValidationSuite } from '../src/validation/index.js';
+import { PreRunValidationSuite } from '@cadre/validation';
 
 const makeConfig = (skipValidation = false) =>
   makeRuntimeConfig({
