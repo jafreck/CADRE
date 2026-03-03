@@ -54,6 +54,14 @@ Estimate the scope as one of:
 - `medium` – 3–10 files, some design decisions needed
 - `large` – 10+ files or significant architectural impact
 
+### Scout Policy
+Decide whether `codebase-scout` is required for this issue:
+- `required` – scout must run and produce `scout-report.md` before planning
+- `optional` – scout should run, but pipeline may continue without it if scout fails
+- `skip` – do not run scout for this issue
+
+Use `required` for medium/large or cross-cutting issues. Use `optional` for straightforward issues where scout helps but is not critical. Use `skip` only for very localized/simple changes where analyst context is sufficient.
+
 ### Affected Areas
 List the directories, modules, or subsystems that will likely need changes based on the issue description and any code references.
 
@@ -64,7 +72,7 @@ List any unclear requirements, missing context, or decisions that need clarifica
 
 After all human-readable sections, you MUST append a `cadre-json` fenced block containing the structured analysis. **cadre does not read the markdown prose — it reads only this block. If the block is missing or uses a different fence language (e.g. plain `json`), the pipeline will fail.**
 
-The block must match the `AnalysisResult` schema: `requirements` (string array), `changeType` (one of `"bug-fix"`, `"feature"`, `"refactor"`, `"docs"`, `"chore"`), `scope` (one of `"small"`, `"medium"`, `"large"`), `affectedAreas` (string array), `ambiguities` (string array).
+The block must match the `AnalysisResult` schema: `requirements` (string array), `changeType` (one of `"bug-fix"`, `"feature"`, `"refactor"`, `"docs"`, `"chore"`), `scope` (one of `"small"`, `"medium"`, `"large"`), `scoutPolicy` (one of `"required"`, `"optional"`, `"skip"`), `affectedAreas` (string array), `ambiguities` (string array).
 
 ## File Write (MANDATORY)
 
@@ -113,6 +121,7 @@ small
   ],
   "changeType": "feature",
   "scope": "small",
+  "scoutPolicy": "optional",
   "affectedAreas": [
     "src/cli/",
     "src/executor/",

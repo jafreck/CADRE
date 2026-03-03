@@ -47,7 +47,7 @@ export class ResultParser {
    */
   private async parseArtifact<T>(
     filePath: string,
-    schema: ZodType<T>,
+    schema: ZodType<T, any, unknown>,
     agentDescription: string,
     transform?: (result: T) => T,
   ): Promise<T> {
@@ -115,6 +115,7 @@ export class ResultParser {
   async parseAnalysis(analysisPath: string): Promise<AnalysisResult> {
     return this.parseArtifact(analysisPath, analysisSchema, 'issue-analyst', (result) => ({
       ...result,
+      scoutPolicy: result.scoutPolicy ?? 'required',
       requirements: result.requirements.map((s) => this.unescapeText(s)),
       affectedAreas: result.affectedAreas.map((s) => this.unescapeText(s)),
       ambiguities: result.ambiguities.map((s) => this.unescapeText(s)),

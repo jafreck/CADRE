@@ -205,6 +205,8 @@ export interface ContextBuildArgs {
   analysisPath?: string;
   fileTreePath?: string;
   scoutReportPath?: string;
+  scoutAvailable?: boolean;
+  scoutRequired?: boolean;
   session?: AgentSession;
   sessionId?: string;
   sessionPlanPath?: string;

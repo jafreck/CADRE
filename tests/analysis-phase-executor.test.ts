@@ -81,7 +81,16 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     retryExecutor: retryExecutor as never,
     tokenTracker: {} as never,
     contextBuilder: contextBuilder as never,
-    resultParser: {} as never,
+    resultParser: {
+      parseAnalysis: vi.fn().mockResolvedValue({
+        requirements: ['req'],
+        changeType: 'feature',
+        scope: 'small',
+        scoutPolicy: 'required',
+        affectedAreas: ['src/core'],
+        ambiguities: [],
+      }),
+    } as never,
     logger: {
       info: vi.fn(),
       warn: vi.fn(),
@@ -384,6 +393,71 @@ describe('AnalysisPhaseExecutor', () => {
 
       const ctx = makeCtx({ services: { launcher: launcher } as never });
       await expect(executor.execute(ctx)).rejects.toThrow('Codebase scout failed:');
+    });
+
+    it('should continue when codebase-scout fails and scoutPolicy is optional', async () => {
+      const analystResult = makeSuccessAgentResult('issue-analyst');
+      const scoutResult: AgentResult = {
+        agent: 'codebase-scout',
+        success: false,
+        exitCode: 1,
+        timedOut: false,
+        duration: 100,
+        stdout: '',
+        stderr: 'scout error',
+        tokenUsage: null,
+        outputPath: '',
+        outputExists: false,
+        error: 'scout error',
+      };
+
+      const launcher = {
+        launchAgent: vi.fn()
+          .mockResolvedValueOnce(analystResult)
+          .mockResolvedValueOnce(scoutResult),
+      };
+
+      const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue({
+          requirements: ['req'],
+          changeType: 'feature',
+          scope: 'small',
+          scoutPolicy: 'optional',
+          affectedAreas: ['src/core'],
+          ambiguities: [],
+        }),
+      };
+
+      const ctx = makeCtx({ services: { launcher, resultParser } as never });
+      await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'scout-report.md'));
+      expect((ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn)
+        .toHaveBeenCalledWith(
+          expect.stringContaining('continuing without scout report'),
+          expect.objectContaining({ issueNumber: 42, phase: 1 }),
+        );
+    });
+
+    it('should skip codebase-scout when scoutPolicy is skip', async () => {
+      const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue({
+          requirements: ['req'],
+          changeType: 'feature',
+          scope: 'small',
+          scoutPolicy: 'skip',
+          affectedAreas: ['src/core'],
+          ambiguities: [],
+        }),
+      };
+
+      const ctx = makeCtx({ services: { resultParser } as never });
+      await expect(executor.execute(ctx)).resolves.toBe(join('/tmp/progress', 'analysis.md'));
+      expect((ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent)
+        .toHaveBeenCalledTimes(1);
+      expect((ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info)
+        .toHaveBeenCalledWith(
+          expect.stringContaining('Skipping codebase-scout'),
+          expect.objectContaining({ issueNumber: 42, phase: 1 }),
+        );
     });
 
     it('should not launch codebase-scout if issue-analyst fails', async () => {

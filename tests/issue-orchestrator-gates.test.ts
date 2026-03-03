@@ -32,6 +32,7 @@ const {
   mockCommitSquash,
   mockCommitStripCadreFiles,
   mockResultParserParsePlan,
+  mockResultParserParseAnalysis,
   mockRetryExecutorExecute,
   mockTokenTrackerGetTotal,
   mockEnsureDir,
@@ -65,6 +66,14 @@ const {
   mockCommitSquash: vi.fn().mockResolvedValue(undefined),
   mockCommitStripCadreFiles: vi.fn().mockResolvedValue(undefined),
   mockResultParserParsePlan: vi.fn().mockResolvedValue([]),
+  mockResultParserParseAnalysis: vi.fn().mockResolvedValue({
+    requirements: ['req'],
+    changeType: 'feature',
+    scope: 'small',
+    scoutPolicy: 'required',
+    affectedAreas: ['src/core'],
+    ambiguities: [],
+  }),
   mockRetryExecutorExecute: vi.fn(),
   mockTokenTrackerGetTotal: vi.fn().mockReturnValue(0),
   mockEnsureDir: vi.fn().mockResolvedValue(undefined),
@@ -123,6 +132,7 @@ vi.mock('../src/agents/context-builder.js', () => ({
 
 vi.mock('../src/agents/result-parser.js', () => ({
   ResultParser: vi.fn(() => ({
+    parseAnalysis: mockResultParserParseAnalysis,
     parseImplementationPlan: mockResultParserParsePlan,
     parseReview: vi.fn().mockResolvedValue({ verdict: 'pass', issues: [], summary: '' }),
     parsePRContent: vi.fn().mockResolvedValue({ title: 'PR', body: '', labels: [] }),
@@ -386,6 +396,14 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     vi.clearAllMocks();
 
     mockResultParserParsePlan.mockResolvedValue([]);
+    mockResultParserParseAnalysis.mockResolvedValue({
+      requirements: ['req'],
+      changeType: 'feature',
+      scope: 'small',
+      scoutPolicy: 'required',
+      affectedAreas: ['src/core'],
+      ambiguities: [],
+    });
     mockSessionQueueInstance.topologicalSort.mockReturnValue([]);
     mockSessionQueueInstance.isComplete.mockReturnValue(true);
     mockSessionQueueInstance.getReady.mockReturnValue([]);

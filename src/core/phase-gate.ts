@@ -53,6 +53,7 @@ export class AnalysisToPlanningGate implements PhaseGate {
     const errors: string[] = [];
     const warnings: string[] = [];
     const artifactsDir = context.artifactsDir;
+    let scoutRequired = true;
 
     if (!artifactsDir) {
       return fail(['Gate context is missing artifactsDir']);
@@ -81,6 +82,8 @@ export class AnalysisToPlanningGate implements PhaseGate {
           }
         } else if (result.data.requirements.length === 0) {
           errors.push('analysis.md cadre-json: requirements array is empty');
+        } else {
+          scoutRequired = result.data.scoutPolicy === 'required';
         }
       }
     }
@@ -90,7 +93,11 @@ export class AnalysisToPlanningGate implements PhaseGate {
     const scoutContent = await readFileSafe(scoutPath);
 
     if (scoutContent === null) {
-      errors.push('scout-report.md is missing from the progress directory');
+      if (scoutRequired) {
+        errors.push('scout-report.md is missing from the progress directory');
+      } else {
+        warnings.push('scout-report.md is missing from the progress directory but analysis scoutPolicy allows continuing without scout');
+      }
     } else {
       const parsed = extractCadreJson(scoutContent);
       if (parsed === null) {

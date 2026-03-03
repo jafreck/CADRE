@@ -47,26 +47,45 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
 
     await this.ensureOutputFile(analystResult, join(ctx.io.progressDir, 'analysis.md'));
 
-    // Build context for codebase-scout (needs analysis.md)
-    const scoutContextPath = await ctx.services.contextBuilder.build('codebase-scout', {
-      issueNumber: ctx.issue.number,
-      worktreePath: ctx.worktree.path,
-      analysisPath: join(ctx.io.progressDir, 'analysis.md'),
-      fileTreePath,
-      progressDir: ctx.io.progressDir,
-    });
+    const analysisPath = join(ctx.io.progressDir, 'analysis.md');
+    const analysis = await ctx.services.resultParser.parseAnalysis(analysisPath);
+    const scoutPolicy = analysis.scoutPolicy;
+    const shouldRunScout = scoutPolicy !== 'skip';
+    const scoutRequired = scoutPolicy === 'required';
 
-    // Launch codebase-scout
-    const scoutResult = await launchWithRetry(ctx, 'codebase-scout', {
-      agent: 'codebase-scout',
-      issueNumber: ctx.issue.number,
-      phase: 1,
-      contextPath: scoutContextPath,
-      outputPath: join(ctx.io.progressDir, 'scout-report.md'),
-    });
+    if (shouldRunScout) {
+      // Build context for codebase-scout (needs analysis.md)
+      const scoutContextPath = await ctx.services.contextBuilder.build('codebase-scout', {
+        issueNumber: ctx.issue.number,
+        worktreePath: ctx.worktree.path,
+        analysisPath,
+        fileTreePath,
+        progressDir: ctx.io.progressDir,
+      });
 
-    if (!scoutResult.success) {
-      throw new Error(`Codebase scout failed: ${scoutResult.error}`);
+      // Launch codebase-scout
+      const scoutResult = await launchWithRetry(ctx, 'codebase-scout', {
+        agent: 'codebase-scout',
+        issueNumber: ctx.issue.number,
+        phase: 1,
+        contextPath: scoutContextPath,
+        outputPath: join(ctx.io.progressDir, 'scout-report.md'),
+      });
+
+      if (!scoutResult.success) {
+        if (scoutRequired) {
+          throw new Error(`Codebase scout failed: ${scoutResult.error}`);
+        }
+        ctx.services.logger.warn(
+          `Codebase scout failed but scoutPolicy is ${scoutPolicy}; continuing without scout report: ${scoutResult.error}`,
+          { issueNumber: ctx.issue.number, phase: 1 },
+        );
+      }
+    } else {
+      ctx.services.logger.info(
+        `Skipping codebase-scout due to issue-analyst scoutPolicy=${scoutPolicy}`,
+        { issueNumber: ctx.issue.number, phase: 1 },
+      );
     }
 
     // Capture baseline build/test results (unless opted out)
@@ -74,7 +93,7 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
       await this.captureBaseline(ctx);
     }
 
-    return join(ctx.io.progressDir, 'scout-report.md');
+    return shouldRunScout ? join(ctx.io.progressDir, 'scout-report.md') : analysisPath;
   }
 
   private async captureBaseline(ctx: PhaseContext): Promise<void> {
