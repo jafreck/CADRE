@@ -1,19 +1,23 @@
 import pLimit from 'p-limit';
+import { getContractForStep, mergeContracts, schemaAtPath, validateFlowContracts, type IndexedFlow } from './contracts.js';
 import {
+  FlowContractError,
   FlowCycleError,
   FlowExecutionError,
   type DataRef,
   type FlowCheckpointSnapshot,
+  type FlowContracts,
   type FlowDefinition,
   type FlowExecutionContext,
   type FlowNode,
   type FlowRunResult,
   type FlowRunnerOptions,
-  type InputValue,
 } from './types.js';
 
 interface RunnerState<TContext> {
   flow: FlowDefinition<TContext>;
+  indexedNodes: Map<string, FlowNode<TContext>>;
+  contracts: FlowContracts;
   context: TContext;
   outputs: Record<string, unknown>;
   executionOutputs: Record<string, unknown>;
@@ -37,6 +41,8 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     const startedAt = new Date().toISOString();
     const state: RunnerState<TContext> = {
       flow,
+      indexedNodes: this.indexNodes(flow.nodes),
+      contracts: mergeContracts(flow.contracts, options.contracts ?? this.defaults.contracts),
       context,
       outputs: {},
       executionOutputs: {},
@@ -47,6 +53,21 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     };
 
     await this.loadCheckpoint(state);
+
+    if (Object.keys(state.contracts).length > 0) {
+      const validation = validateFlowContracts(flow, state.contracts);
+      if (!validation.valid) {
+        const first = validation.issues[0];
+        throw new FlowContractError(
+          flow.id,
+          first.toStep,
+          `${flow.id}/${first.toStep}`,
+          first.fromStep,
+          first.fieldPath,
+          first.reason,
+        );
+      }
+    }
 
     try {
       await this.executeNodeList(state, flow.nodes, [flow.id]);
@@ -189,11 +210,14 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     executionId: string,
   ): Promise<unknown> {
     const context = this.buildExecutionContext(state, executionPath);
-    const resolvedInput = this.resolveInput(node.input, context);
+    const resolvedInput = this.resolveInput(state, node.input, context, node.id, executionId, 'input');
+    this.validateConsumerInput(state, node.id, executionId, resolvedInput, 'input', 'flow-input');
 
     switch (node.kind) {
       case 'step': {
-        return node.run(context, resolvedInput);
+        const output = await node.run(context, resolvedInput);
+        this.validateProducerOutput(state, node.id, executionId, output);
+        return output;
       }
       case 'gate': {
         const passed = await node.evaluate(context, resolvedInput);
@@ -261,7 +285,14 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     }
   }
 
-  private resolveInput(value: InputValue | undefined, context: FlowExecutionContext<TContext>): unknown {
+  private resolveInput(
+    state: RunnerState<TContext>,
+    value: unknown,
+    context: FlowExecutionContext<TContext>,
+    toStepId: string,
+    executionId: string,
+    inputPath: string,
+  ): unknown {
     if (value === undefined) return undefined;
     if (value === null) return null;
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -269,30 +300,44 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     }
 
     if (Array.isArray(value)) {
-      return value.map((entry) => this.resolveInput(entry, context));
+      return value.map((entry, index) => this.resolveInput(state, entry, context, toStepId, executionId, `${inputPath}.${index}`));
     }
 
     if (this.isDataRef(value)) {
-      return this.resolveDataRef(value, context);
+      return this.resolveDataRef(state, value, context, toStepId, executionId, inputPath);
     }
 
     const out: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value)) {
-      out[key] = this.resolveInput(entry as InputValue, context);
+      out[key] = this.resolveInput(state, entry, context, toStepId, executionId, `${inputPath}.${key}`);
     }
     return out;
   }
 
-  private resolveDataRef(ref: DataRef, context: FlowExecutionContext<TContext>): unknown {
+  private resolveDataRef(
+    state: RunnerState<TContext>,
+    ref: DataRef,
+    context: FlowExecutionContext<TContext>,
+    toStepId: string,
+    executionId: string,
+    inputPath: string,
+  ): unknown {
     switch (ref.kind) {
       case 'fromStep': {
-        return this.getAtPath(context.getStepOutput(ref.stepId), ref.path);
+        const value = this.getAtPath(context.getStepOutput(ref.stepId), ref.path);
+        this.validateProducerRefPath(state, executionId, ref.stepId, toStepId, ref.path, value, inputPath);
+        this.validateConsumerInput(state, toStepId, executionId, value, inputPath, ref.stepId);
+        return value;
       }
       case 'fromSteps': {
         const out: Record<string, unknown> = {};
         for (const stepId of ref.stepIds) {
-          out[stepId] = this.getAtPath(context.getStepOutput(stepId), ref.path);
+          const value = this.getAtPath(context.getStepOutput(stepId), ref.path);
+          this.validateProducerRefPath(state, executionId, stepId, toStepId, ref.path, value, `${inputPath}.${stepId}`);
+          this.validateConsumerInput(state, toStepId, executionId, value, `${inputPath}.${stepId}`, stepId);
+          out[stepId] = value;
         }
+        this.validateConsumerInput(state, toStepId, executionId, out, inputPath, ref.stepIds.join(','));
         return out;
       }
       case 'fromContext': {
@@ -336,6 +381,116 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     }
     const candidate = value as { kind?: string };
     return candidate.kind === 'fromStep' || candidate.kind === 'fromSteps' || candidate.kind === 'fromContext';
+  }
+
+  private validateProducerOutput(
+    state: RunnerState<TContext>,
+    stepId: string,
+    executionId: string,
+    output: unknown,
+  ): void {
+    const contract = getContractForStep(stepId, this.asIndexedFlow(state), state.contracts);
+    if (!contract.outputSchema) {
+      return;
+    }
+    const parsed = contract.outputSchema.safeParse(output);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+      throw new FlowContractError(state.flow.id, stepId, executionId, stepId, path, issue.message, parsed.error);
+    }
+  }
+
+  private validateProducerRefPath(
+    state: RunnerState<TContext>,
+    executionId: string,
+    fromStepId: string,
+    toStepId: string,
+    producerPath: string | undefined,
+    value: unknown,
+    inputPath: string,
+  ): void {
+    const contract = getContractForStep(fromStepId, this.asIndexedFlow(state), state.contracts);
+    if (!contract.outputSchema) {
+      return;
+    }
+    const expectedSchema = schemaAtPath(contract.outputSchema, producerPath);
+    if (!expectedSchema) {
+      const refPath = producerPath && producerPath.length > 0 ? producerPath : '<root>';
+      throw new FlowContractError(state.flow.id, toStepId, executionId, fromStepId, inputPath, `Producer schema path '${refPath}' does not exist`);
+    }
+    const parsed = expectedSchema.safeParse(value);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new FlowContractError(state.flow.id, toStepId, executionId, fromStepId, inputPath, issue.message, parsed.error);
+    }
+  }
+
+  private validateConsumerInput(
+    state: RunnerState<TContext>,
+    toStepId: string,
+    executionId: string,
+    value: unknown,
+    inputPath: string,
+    fromStepId: string,
+  ): void {
+    const contract = getContractForStep(toStepId, this.asIndexedFlow(state), state.contracts);
+    if (!contract.inputSchema) {
+      return;
+    }
+    const targetSchema = schemaAtPath(contract.inputSchema, inputPath.replace(/^input\.?/, ''));
+    if (!targetSchema) {
+      throw new FlowContractError(
+        state.flow.id,
+        toStepId,
+        executionId,
+        fromStepId,
+        inputPath,
+        `Consumer schema path '${inputPath.replace(/^input\.?/, '') || '<root>'}' does not exist`,
+      );
+    }
+    const parsed = targetSchema.safeParse(value);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new FlowContractError(state.flow.id, toStepId, executionId, fromStepId, inputPath, issue.message, parsed.error);
+    }
+  }
+
+  private asIndexedFlow(state: RunnerState<TContext>): IndexedFlow {
+    const nodes: IndexedFlow['nodes'] = new Map();
+    for (const [id, node] of state.indexedNodes) {
+      nodes.set(id, {
+        id,
+        inputSchema: 'inputSchema' in node ? node.inputSchema : undefined,
+        outputSchema: 'outputSchema' in node ? node.outputSchema : undefined,
+      });
+    }
+    return { nodes };
+  }
+
+  private indexNodes(nodes: FlowNode<TContext>[]): Map<string, FlowNode<TContext>> {
+    const indexed = new Map<string, FlowNode<TContext>>();
+    const visit = (items: FlowNode<TContext>[]): void => {
+      for (const node of items) {
+        if (!indexed.has(node.id)) {
+          indexed.set(node.id, node);
+        }
+        if (node.kind === 'conditional') {
+          visit(node.then);
+          visit(node.else ?? []);
+        }
+        if (node.kind === 'loop') {
+          visit(node.do);
+        }
+        if (node.kind === 'parallel') {
+          for (const branch of Object.values(node.branches)) {
+            visit(branch);
+          }
+        }
+      }
+    };
+    visit(nodes);
+    return indexed;
   }
 
   private validateNodeIds(nodes: FlowNode<TContext>[], scope: string): void {
