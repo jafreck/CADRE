@@ -381,6 +381,47 @@ describe('CommitManager', () => {
 
       await expect(manager.stripCadreFiles('base123')).resolves.toBeUndefined();
     });
+
+    it('should call resolveConflicts callback when strip replay detects unmerged files', async () => {
+      mockGit.raw
+        .mockResolvedValueOnce('deadbeef\n')
+        .mockResolvedValue('');
+
+      mockGit.status
+        .mockResolvedValueOnce({
+          isClean: () => false,
+          staged: ['src/index.ts'],
+          conflicted: ['package-lock.json'],
+          files: [{ path: 'package-lock.json', index: 'U', working_dir: 'U' }],
+        })
+        .mockResolvedValueOnce({
+          isClean: () => false,
+          staged: ['src/index.ts'],
+          conflicted: [],
+          files: [{ path: 'src/index.ts' }],
+        });
+
+      const resolveConflicts = vi.fn().mockResolvedValue(undefined);
+
+      await manager.stripCadreFiles('base123', resolveConflicts);
+
+      expect(resolveConflicts).toHaveBeenCalledWith(['package-lock.json'], 'deadbeef');
+    });
+
+    it('should throw when unmerged files exist and no resolver callback is provided', async () => {
+      mockGit.raw
+        .mockResolvedValueOnce('deadbeef\n')
+        .mockResolvedValue('');
+
+      mockGit.status.mockResolvedValue({
+        isClean: () => false,
+        staged: ['src/index.ts'],
+        conflicted: ['package-lock.json'],
+        files: [{ path: 'package-lock.json', index: 'U', working_dir: 'U' }],
+      });
+
+      await expect(manager.stripCadreFiles('base123')).rejects.toThrow(/unresolved merge conflicts/);
+    });
   });
 
   describe('commit with sign', () => {

@@ -135,7 +135,46 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
 
   /** Strip cadre artefacts, push, and open the pull request. */
   private async createPullRequest(ctx: PhaseContext, prContent: PRContent, originalDiff: string): Promise<void> {
-    await ctx.io.commitManager.stripCadreFiles(ctx.worktree.baseCommit);
+    await ctx.io.commitManager.stripCadreFiles(
+      ctx.worktree.baseCommit,
+      async (conflictedFiles: string[], commitSha: string) => {
+        ctx.services.logger.warn(
+          `stripCadreFiles encountered merge conflicts while replaying ${commitSha.slice(0, 8)}; launching conflict-resolver`,
+          {
+            issueNumber: ctx.issue.number,
+            data: { conflictedFiles },
+          },
+        );
+
+        const contextPath = await ctx.services.contextBuilder.build('conflict-resolver', {
+          issueNumber: ctx.issue.number,
+          worktreePath: ctx.worktree.path,
+          conflictedFiles,
+          progressDir: ctx.io.progressDir,
+        });
+
+        const resolverResult = await launchWithRetry(ctx, 'conflict-resolver', {
+          agent: 'conflict-resolver',
+          issueNumber: ctx.issue.number,
+          phase: 5,
+          contextPath,
+          outputPath: join(ctx.io.progressDir, 'conflict-resolution-report.md'),
+        });
+
+        if (!resolverResult.success) {
+          const detail = resolverResult.timedOut
+            ? `timed out after ${resolverResult.duration}ms`
+            : `exit ${resolverResult.exitCode}`;
+          throw new Error(`Conflict-resolver agent failed during PR composition (${detail})`);
+        }
+
+        if (!resolverResult.outputExists) {
+          throw new Error(
+            `Conflict-resolver agent exited successfully but produced no output at ${resolverResult.outputPath}`,
+          );
+        }
+      },
+    );
 
     // Guard: if stripping removed all content from a non-empty diff, abort before pushing.
     const postStripDiff = await ctx.io.commitManager.getDiff(ctx.worktree.baseCommit);
