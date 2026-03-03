@@ -5,7 +5,7 @@
  * Cadre-specific context types are defined here for full type safety.
  */
 
-import type { PhaseExecutor as EnginePhaseExecutor } from '@cadre/pipeline-engine';
+import type { PhaseExecutor as EnginePhaseExecutor } from '@cadre/framework/engine';
 
 import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PlatformProvider, PullRequestInfo } from '../platform/provider.js';
@@ -16,9 +16,9 @@ import type { AgentLauncher } from './agent-launcher.js';
 import type { ContextBuilder } from '../agents/context-builder.js';
 import type { ResultParser } from '../agents/result-parser.js';
 import type { CommitManager } from '../git/commit.js';
-import type { RetryExecutor } from '@cadre/execution';
+import type { RetryExecutor } from '@cadre/framework/engine';
 import type { TokenTracker } from '../budget/token-tracker.js';
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 import type { TokenUsageDetail } from '../agents/types.js';
 
 /** Cross-cutting services used by every phase. */

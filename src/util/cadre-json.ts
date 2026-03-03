@@ -1,2 +1,2 @@
-export { extractCadreJson, extractCadreJsonWithError } from '@cadre/agent-runtime';
+export { extractCadreJson, extractCadreJsonWithError } from '@cadre/framework/runtime';
 

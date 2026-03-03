@@ -1,4 +1,4 @@
-import type { CadreEvent } from '@cadre/observability';
+import type { CadreEvent } from '@cadre/framework/core';
 import type { NotificationProvider } from './types.js';
 
 interface WebhookConfig {

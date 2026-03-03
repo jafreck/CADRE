@@ -1,5 +1,5 @@
 import pLimit from 'p-limit';
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 import type { PlatformProvider, PullRequestMergeMethod } from '../platform/provider.js';
 
 interface QueueItem {

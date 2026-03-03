@@ -14,8 +14,8 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@cadre/command-diagnostics', async (importOriginal) => {
-  const orig = await importOriginal<typeof import('@cadre/command-diagnostics')>();
+vi.mock('@cadre/framework/runtime', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@cadre/framework/runtime')>();
   return {
     ...orig,
     captureBaseline: vi.fn().mockResolvedValue({
@@ -29,7 +29,7 @@ vi.mock('@cadre/command-diagnostics', async (importOriginal) => {
 
 import { ensureDir, atomicWriteJSON, listFilesRecursive } from '../src/util/fs.js';
 import { writeFile } from 'node:fs/promises';
-import { captureBaseline } from '@cadre/command-diagnostics';
+import { captureBaseline } from '@cadre/framework/runtime';
 
 function makeSuccessAgentResult(agent: string): AgentResult {
   return {

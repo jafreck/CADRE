@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { TokenTracker } from '../../../../packages/agent-runtime/src/budget/token-tracker.js';
-import type { TokenRecord, TokenSummary } from '../../../../packages/agent-runtime/src/budget/token-tracker.js';
+import { TokenTracker } from '../../../../packages/framework/src/runtime/budget/token-tracker.js';
+import type { TokenRecord, TokenSummary } from '../../../../packages/framework/src/runtime/budget/token-tracker.js';
 
 describe('TokenTracker (agent-runtime)', () => {
   function setupTracker(): TokenTracker {

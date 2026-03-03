@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as pkg from '../../../packages/command-diagnostics/src/index.js';
+import * as pkg from '../../../packages/framework/src/runtime/commands/index.js';
 
 describe('@cadre/command-diagnostics barrel exports', () => {
   it('should export extractFailures', () => {

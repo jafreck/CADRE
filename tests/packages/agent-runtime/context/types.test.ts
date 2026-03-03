@@ -8,7 +8,7 @@ import type {
   GateResult,
   PhaseResult,
   AgentContext,
-} from '../../../../packages/agent-runtime/src/context/types.js';
+} from '../../../../packages/framework/src/runtime/context/types.js';
 
 /**
  * These types have no runtime behaviour; tests verify the type contracts are

@@ -1,4 +1,4 @@
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 import type { IssueDetail } from '../platform/provider.js';
 import { WorktreeProvisioner } from './worktree-provisioner.js';
 

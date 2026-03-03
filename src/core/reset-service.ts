@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from '../config/loader.js';
 import { FleetCheckpointManager } from './checkpoint.js';
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 
 export class ResetService {
   private readonly cadreDir: string;

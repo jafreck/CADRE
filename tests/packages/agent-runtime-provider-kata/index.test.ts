@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as indexExports from '../../../packages/agent-runtime-provider-kata/src/index.js';
+import * as indexExports from '../../../packages/runtime-provider-kata/src/index.js';
 
 describe('index public exports', () => {
   it('should export KataProvider', () => {

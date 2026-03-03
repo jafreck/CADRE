@@ -1,1 +1,1 @@
-export { ParallelExecutor } from '@cadre/execution';
+export { ParallelExecutor } from '@cadre/framework/engine';

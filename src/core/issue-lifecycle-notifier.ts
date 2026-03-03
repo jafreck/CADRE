@@ -1,4 +1,4 @@
-import type { NotificationManager } from '@cadre/notifications';
+import type { NotificationManager } from '@cadre/framework/notifications';
 
 /**
  * Dispatches typed lifecycle notification events for an issue pipeline.

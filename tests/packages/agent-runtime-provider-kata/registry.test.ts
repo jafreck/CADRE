@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createKataProvider } from '../../../packages/agent-runtime-provider-kata/src/registry.js';
-import { KataProvider } from '../../../packages/agent-runtime-provider-kata/src/kata-provider.js';
-import type { KataAdapter } from '../../../packages/agent-runtime-provider-kata/src/kata-provider.js';
+import { createKataProvider } from '../../../packages/runtime-provider-kata/src/registry.js';
+import { KataProvider } from '../../../packages/runtime-provider-kata/src/kata-provider.js';
+import type { KataAdapter } from '../../../packages/runtime-provider-kata/src/kata-provider.js';
 
 describe('createKataProvider', () => {
   it('should return a KataProvider instance', () => {

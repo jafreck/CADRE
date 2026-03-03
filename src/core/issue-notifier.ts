@@ -1,8 +1,8 @@
 import type { RuntimeConfig } from '../config/loader.js';
 import type { PlatformProvider } from '../platform/provider.js';
-import type { Logger } from '@cadre/observability';
-import type { CadreEvent } from '@cadre/observability';
-import type { NotificationProvider } from '@cadre/notifications';
+import type { Logger } from '@cadre/framework/core';
+import type { CadreEvent } from '@cadre/framework/core';
+import type { NotificationProvider } from '@cadre/framework/notifications';
 
 /**
  * Posts lifecycle comments to issues via the platform provider.

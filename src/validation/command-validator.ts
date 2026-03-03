@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from '../config/loader.js';
 import { exec } from '../util/process.js';
-import type { PreRunValidator, ValidationResult } from '@cadre/validation';
+import type { PreRunValidator, ValidationResult } from '@cadre/framework/core';
 
 export const commandValidator: PreRunValidator = {
   name: 'command',

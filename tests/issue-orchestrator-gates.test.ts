@@ -141,7 +141,8 @@ vi.mock('../src/git/commit.js', () => ({
   })),
 }));
 
-vi.mock('@cadre/execution', () => ({
+vi.mock('@cadre/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
   RetryExecutor: vi.fn(() => ({
     execute: mockRetryExecutorExecute,
   })),

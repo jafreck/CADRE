@@ -15,7 +15,7 @@ import {
   validateFlowContracts,
   type FlowCheckpointAdapter,
   type FlowCheckpointSnapshot,
-} from '@cadre/flow';
+} from '@cadre/framework/flow';
 
 describe('@cadre/flow FlowRunner', () => {
   it('runs a linear flow with data routing from context and prior steps', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RetryExecutor, type LoggerLike, type RetryOptions, type RetryResult } from '../../../../packages/agent-runtime/src/retry/retry.js';
+import { RetryExecutor, type LoggerLike, type RetryOptions, type RetryResult } from '../../../../packages/framework/src/runtime/retry/retry.js';
 
 function makeLogger(): LoggerLike {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };

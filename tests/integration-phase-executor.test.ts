@@ -12,7 +12,7 @@ vi.mock('../src/util/process.js', () => ({
   execShell: sharedExecShell,
 }));
 
-vi.mock('../packages/command-diagnostics/src/exec.js', () => ({
+vi.mock('../packages/framework/src/runtime/commands/exec.js', () => ({
   execShell: sharedExecShell,
   stripVSCodeEnv: vi.fn((env: Record<string, string>) => env),
   spawnProcess: vi.fn(),

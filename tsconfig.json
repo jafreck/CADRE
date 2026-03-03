@@ -17,17 +17,9 @@
   },
   "include": [
     "src/**/*",
-    "packages/command-diagnostics/src/**/*",
-    "packages/pipeline-engine/src/**/*",
-    "packages/notifications/src/**/*",
-    "packages/observability/src/**/*",
-    "packages/execution/src/**/*",
-    "packages/flow/src/**/*",
-    "packages/validation/src/**/*",
-    "packages/agent-runtime/src/**/*",
-    "packages/agent-runtime-provider-host/src/**/*",
-    "packages/agent-runtime-provider-docker/src/**/*",
-    "packages/agent-runtime-provider-kata/src/**/*"
+    "packages/framework/src/**/*",
+    "packages/runtime-provider-docker/src/**/*",
+    "packages/runtime-provider-kata/src/**/*"
   ],
   "exclude": ["node_modules", "dist", "tests"]
 }

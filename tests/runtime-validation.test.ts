@@ -2,19 +2,27 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies before importing CadreRuntime
-vi.mock('@cadre/observability', () => {
-  const Logger = vi.fn().mockImplementation(() => ({
+vi.mock('@cadre/framework/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/core')>()),
+  Logger: vi.fn().mockImplementation(() => ({
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     child: vi.fn().mockReturnValue({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     agentLogger: vi.fn().mockReturnValue({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
-  }));
-  return { Logger };
-});
+  })),
+  PreRunValidationSuite: vi.fn(),
+  gitValidator: { name: 'git', validate: vi.fn() },
+  agentBackendValidator: { name: 'agent-backend', validate: vi.fn() },
+  platformValidator: { name: 'platform', validate: vi.fn() },
+  commandValidator: { name: 'command', validate: vi.fn() },
+  diskValidator: { name: 'disk', validate: vi.fn() },
+  registryCompletenessValidator: { name: 'registry-completeness', validate: vi.fn() },
+}));
 
-vi.mock('@cadre/notifications', () => ({
+vi.mock('@cadre/framework/notifications', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/notifications')>()),
   NotificationManager: vi.fn().mockImplementation(() => ({
     dispatch: vi.fn().mockResolvedValue(undefined),
   })),
@@ -31,18 +39,8 @@ vi.mock('../src/platform/factory.js', () => ({
   }),
 }));
 
-vi.mock('@cadre/validation', () => ({
-  PreRunValidationSuite: vi.fn(),
-  gitValidator: { name: 'git', validate: vi.fn() },
-  agentBackendValidator: { name: 'agent-backend', validate: vi.fn() },
-  platformValidator: { name: 'platform', validate: vi.fn() },
-  commandValidator: { name: 'command', validate: vi.fn() },
-  diskValidator: { name: 'disk', validate: vi.fn() },
-  registryCompletenessValidator: { name: 'registry-completeness', validate: vi.fn() },
-}));
-
 import { CadreRuntime } from '../src/core/runtime.js';
-import { PreRunValidationSuite } from '@cadre/validation';
+import { PreRunValidationSuite } from '@cadre/framework/core';
 
 const makeConfig = (skipValidation = false) =>
   makeRuntimeConfig({

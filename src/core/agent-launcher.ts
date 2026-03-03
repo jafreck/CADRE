@@ -3,7 +3,7 @@ import type { RuntimeConfig } from '../config/loader.js';
 import type { AgentInvocation, AgentResult } from '../agents/types.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { statOrNull } from '../util/fs.js';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 import { type AgentBackend } from '../agents/backend.js';
 import { createAgentBackend } from '../agents/backend-factory.js';
 

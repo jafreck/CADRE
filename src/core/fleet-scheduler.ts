@@ -5,7 +5,7 @@ import type { IssueDag } from './issue-dag.js';
 import type { FleetCheckpointManager } from './checkpoint.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 
 /** Callback type for processing a single issue. */
 export type ProcessIssueFn = (issue: IssueDetail, dag?: IssueDag) => Promise<IssueResult>;

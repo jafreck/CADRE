@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CapabilityMismatchError } from '../../../packages/agent-runtime-provider-kata/src/types.js';
+import { CapabilityMismatchError } from '../../../packages/runtime-provider-kata/src/types.js';
 
 describe('CapabilityMismatchError', () => {
   it('should be an instance of Error', () => {

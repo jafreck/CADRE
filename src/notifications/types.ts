@@ -10,7 +10,7 @@ import type {
   BudgetExceededEvent,
   PhaseCompletedEvent,
   AmbiguityDetectedEvent,
-} from '@cadre/observability';
+} from '@cadre/framework/core';
 
 export type { CadreEvent };
 

@@ -7,7 +7,7 @@ import { FleetProgressWriter, type IssueProgressInfo, type PullRequestRef } from
 import { getPhaseCount } from './phase-registry.js';
 import { ReportWriter } from '../reporting/report-writer.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 import type { FleetResult } from './fleet-orchestrator.js';
 
 /**

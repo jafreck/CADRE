@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as pipelineEngine from '@cadre/pipeline-engine';
+import * as pipelineEngine from '@cadre/framework/engine';
 import { PhaseRegistry as CorePhaseRegistry, buildRegistry as buildCoreRegistry } from '../../../src/core/phase-registry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -53,7 +53,7 @@ describe('pipeline-engine runtime integration path', () => {
 
     for (const relativePath of coreFiles) {
       const content = readFileSync(resolve(__dirname, relativePath), 'utf8');
-      expect(content).not.toContain('packages/pipeline-engine/src/');
+      expect(content).not.toContain('packages/framework/src/engine/');
     }
   });
 });

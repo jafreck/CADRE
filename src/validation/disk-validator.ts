@@ -1,1 +1,1 @@
-export { diskValidator } from '@cadre/validation';
+export { diskValidator } from '@cadre/framework/core';

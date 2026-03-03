@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@cadre/command-diagnostics', () => ({
+vi.mock('../../../../packages/framework/src/runtime/commands/exec.js', () => ({
   spawnProcess: vi.fn(),
   stripVSCodeEnv: vi.fn((env: Record<string, string | undefined>) => ({ ...env })),
   trackProcess: vi.fn(),
+  killAllTrackedProcesses: vi.fn(),
+  getTrackedProcessCount: vi.fn(() => 0),
+  exec: vi.fn(),
+  execShell: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -19,9 +23,9 @@ import {
   type BackendRuntimeConfig,
   type BackendLoggerLike,
   type AgentBackend,
-} from '../../../../packages/agent-runtime/src/backend/backend.js';
-import type { AgentInvocation } from '../../../../packages/agent-runtime/src/context/types.js';
-import { spawnProcess } from '@cadre/command-diagnostics';
+} from '../../../../packages/framework/src/runtime/backend/backend.js';
+import type { AgentInvocation } from '../../../../packages/framework/src/runtime/context/types.js';
+import { spawnProcess } from '../../../../packages/framework/src/runtime/commands/exec.js';
 
 const mockSpawnProcess = vi.mocked(spawnProcess);
 

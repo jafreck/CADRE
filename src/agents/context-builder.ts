@@ -10,7 +10,7 @@ import type {
   DescriptorHelpers,
 } from './types.js';
 import type { IssueDetail, ReviewThread } from '../platform/provider.js';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 import {
   analysisSchema,
   scoutReportSchema,

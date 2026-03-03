@@ -1,5 +1,5 @@
 import { isAbsolute, join } from 'node:path';
-import type { CadreEvent } from '@cadre/observability';
+import type { CadreEvent } from '@cadre/framework/core';
 import type { NotificationsConfig } from '../config/schema.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { NotificationProvider } from './types.js';

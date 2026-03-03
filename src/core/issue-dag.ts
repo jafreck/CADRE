@@ -5,4 +5,4 @@
  * This module re-exports it for backward compatibility.
  */
 
-export { WorkItemDag, IssueDag } from '@cadre/pipeline-engine';
+export { WorkItemDag, IssueDag } from '@cadre/framework/engine';

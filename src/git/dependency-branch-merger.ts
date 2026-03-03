@@ -2,7 +2,7 @@ import { simpleGit, type SimpleGit } from 'simple-git';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { writeFile } from 'node:fs/promises';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 import { ensureDir } from '../util/fs.js';
 import { DependencyMergeConflictError } from '../errors.js';
 import type { IssueDetail } from '../platform/provider.js';

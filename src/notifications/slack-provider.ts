@@ -1,5 +1,5 @@
 import type { NotificationProvider } from './types.js';
-import type { CadreEvent } from '@cadre/observability';
+import type { CadreEvent } from '@cadre/framework/core';
 
 export interface SlackProviderConfig {
 	webhookUrl: string;
