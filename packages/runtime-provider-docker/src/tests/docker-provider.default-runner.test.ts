@@ -7,15 +7,17 @@ vi.mock('node:child_process', () => ({
 }));
 
 describe('DockerProvider default runner', () => {
+  const execFileMock = execFile as unknown as ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('uses execFile("docker", args, cb) and returns session id on success', async () => {
-    vi.mocked(execFile).mockImplementation(((_file, _args, cb) => {
+    execFileMock.mockImplementation((_file: string, _args: readonly string[], cb: (error: Error | null, stdout: string, stderr: string) => void) => {
       cb(null, 'container-from-exec\n', '');
       return undefined as never;
-    }) as typeof execFile);
+    });
 
     const provider = new DockerProvider({ image: 'ubuntu:22.04' });
     const session = await provider.createSession({});
@@ -29,22 +31,22 @@ describe('DockerProvider default runner', () => {
   });
 
   it('treats numeric error.code as non-zero exitCode', async () => {
-    vi.mocked(execFile).mockImplementation(((_file, _args, cb) => {
+    execFileMock.mockImplementation((_file: string, _args: readonly string[], cb: (error: Error | null, stdout: string, stderr: string) => void) => {
       const error = Object.assign(new Error('docker failed'), { code: 137 });
       cb(error, '', 'killed');
       return undefined as never;
-    }) as typeof execFile);
+    });
 
     const provider = new DockerProvider({ image: 'ubuntu:22.04' });
     await expect(provider.createSession({})).rejects.toThrow('Failed to start Docker container: killed');
   });
 
   it('treats non-numeric error.code as exitCode 1', async () => {
-    vi.mocked(execFile).mockImplementation(((_file, _args, cb) => {
+    execFileMock.mockImplementation((_file: string, _args: readonly string[], cb: (error: Error | null, stdout: string, stderr: string) => void) => {
       const error = Object.assign(new Error('docker failed'), { code: 'ENOENT' });
       cb(error, '', 'docker missing');
       return undefined as never;
-    }) as typeof execFile);
+    });
 
     const provider = new DockerProvider({ image: 'ubuntu:22.04' });
     await expect(provider.createSession({})).rejects.toThrow('Failed to start Docker container: docker missing');
