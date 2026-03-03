@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WorktreeManager } from '../src/git/worktree.js';
 import { WorktreeProvisioner } from '../src/git/worktree-provisioner.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 
 // Mock the provisioner module so we can spy on its prototype methods without
 // needing real git or file-system access.

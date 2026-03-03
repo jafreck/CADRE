@@ -1,7 +1,7 @@
 import type { CadreConfig } from '../config/schema.js';
-import type { FleetCheckpointState, FleetIssueStatus, CheckpointState } from '../core/checkpoint.js';
-import { phaseNames } from '../core/progress.js';
-import { CostEstimator } from '../budget/cost-estimator.js';
+import type { FleetCheckpointState, FleetIssueStatus, CheckpointState } from '@cadre/framework/engine';
+import { phaseNames } from '@cadre/framework/engine';
+import { CostEstimator } from '@cadre/framework/core';
 
 const STATUS_EMOJI: Record<FleetIssueStatus['status'], string> = {
   'not-started': '⏳',

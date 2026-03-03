@@ -6,7 +6,7 @@ import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { CommitManager } from '../git/commit.js';
 import { AgentLauncher } from './agent-launcher.js';
-import { CheckpointManager } from './checkpoint.js';
+import { CheckpointManager } from '@cadre/framework/engine';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
 import { REVIEW_RESPONSE_PHASES } from './phase-registry.js';
 export { REVIEW_RESPONSE_PHASES };

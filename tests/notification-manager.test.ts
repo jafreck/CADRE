@@ -5,7 +5,7 @@ import {
   registerNotificationProviderFactory,
   hasNotificationProviderFactory,
   resetNotificationProviderFactories,
-} from '../src/notifications/manager.js';
+} from '@cadre/framework/notifications';
 import type { CadreEvent } from '../src/notifications/types.js';
 import type { NotificationsConfig } from '../src/config/schema.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';

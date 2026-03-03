@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { RuntimeConfig } from '../config/loader.js';
-import { FleetCheckpointManager, CheckpointManager } from './checkpoint.js';
+import { FleetCheckpointManager, CheckpointManager } from '@cadre/framework/engine';
 import { exists } from '../util/fs.js';
 import { renderFleetStatus, renderIssueDetail } from '../cli/status-renderer.js';
 import type { Logger } from '@cadre/framework/core';

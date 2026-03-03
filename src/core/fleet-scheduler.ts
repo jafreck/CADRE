@@ -1,8 +1,7 @@
 import pLimit from 'p-limit';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { IssueResult } from './issue-orchestrator.js';
-import type { IssueDag } from './issue-dag.js';
-import type { FleetCheckpointManager } from './checkpoint.js';
+import type { IssueDag, FleetCheckpointManager } from '@cadre/framework/engine';
 import type { PlatformProvider } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import { Logger } from '@cadre/framework/core';

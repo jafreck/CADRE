@@ -23,9 +23,3 @@ export const implementationPlanSchema = z.array(agentSessionSchema);
 export type AgentStep = z.infer<typeof agentStepSchema>;
 export type AgentSession = z.infer<typeof agentSessionSchema>;
 export type ImplementationPlan = z.infer<typeof implementationPlanSchema>;
-
-// Backward-compatibility aliases (deprecated — use AgentSession / AgentStep)
-/** @deprecated Use AgentSession */
-export type ImplementationTask = AgentSession;
-/** @deprecated Use agentSessionSchema */
-export const implementationTaskSchema = agentSessionSchema;

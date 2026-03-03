@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BranchManager } from '../src/git/branch.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 
 // Mock simple-git
 vi.mock('simple-git', () => {

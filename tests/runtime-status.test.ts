@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies
-vi.mock('../src/logging/logger.js', () => ({
+vi.mock('@cadre/framework/core', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock('../src/platform/factory.js', () => ({
   }),
 }));
 
-vi.mock('../src/notifications/manager.js', () => ({
+vi.mock('@cadre/framework/notifications', () => ({
   NotificationManager: vi.fn(),
   createNotificationManager: vi.fn().mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) }),
 }));
@@ -42,20 +42,20 @@ vi.mock('../src/core/agent-launcher.js', () => ({
 
 vi.mock('../src/util/process.js', () => ({ killAllTrackedProcesses: vi.fn() }));
 
-vi.mock('../src/budget/cost-estimator.js', () => ({
+vi.mock('@cadre/framework/core', () => ({
   CostEstimator: vi.fn().mockImplementation(() => ({
     estimate: vi.fn().mockReturnValue({ totalCost: 0 }),
     format: vi.fn().mockReturnValue('$0.00'),
   })),
 }));
 
-vi.mock('../src/budget/token-tracker.js', () => ({ TokenTracker: vi.fn() }));
+vi.mock('@cadre/framework/runtime', () => ({ TokenTracker: vi.fn() }));
 
 vi.mock('../src/reporting/report-writer.js', () => ({
   ReportWriter: { listReports: vi.fn().mockResolvedValue([]), readReport: vi.fn() },
 }));
 
-vi.mock('../src/core/progress.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   FleetProgressWriter: vi.fn().mockImplementation(() => ({
     appendEvent: vi.fn().mockResolvedValue(undefined),
   })),
@@ -69,7 +69,7 @@ vi.mock('../src/util/fs.js', () => ({
   readJSON: vi.fn(),
 }));
 
-vi.mock('../src/core/checkpoint.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({
       projectName: 'test-project',
@@ -109,7 +109,7 @@ vi.mock('../src/cli/status-renderer.js', () => ({
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
-import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoint.js';
+import { FleetCheckpointManager, CheckpointManager } from '@cadre/framework/engine';
 import { exists } from '../src/util/fs.js';
 import { renderFleetStatus, renderIssueDetail } from '../src/cli/status-renderer.js';
 

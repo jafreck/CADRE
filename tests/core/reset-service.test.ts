@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../../src/core/checkpoint.js', () => ({
+vi.mock('../@cadre/framework/engine', () => ({
   FleetCheckpointManager: vi.fn(),
 }));
 
 import { ResetService } from '../../src/core/reset-service.js';
-import { FleetCheckpointManager } from '../../src/core/checkpoint.js';
+import { FleetCheckpointManager } from '../@cadre/framework/engine';
 import type { RuntimeConfig } from '../../src/config/loader.js';
 
 const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnType<typeof vi.fn>;

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
-import type { CheckpointManager } from '../src/core/checkpoint.js';
+import type { CheckpointManager } from '@cadre/framework/engine';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { PlatformProvider } from '../src/platform/provider.js';
 import type { IssueDetail } from '../src/platform/provider.js';
@@ -108,7 +108,7 @@ vi.mock('../src/core/phase-gate.js', () => ({
   clearGatePlugins: vi.fn(),
 }));
 
-vi.mock('../src/core/progress.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   IssueProgressWriter: vi.fn(() => ({
     appendEvent: mockProgressAppendEvent,
     write: mockProgressWrite,
@@ -156,14 +156,23 @@ const mockSessionQueueInstance = {
   restoreState: vi.fn(),
 };
 
-vi.mock('../src/execution/task-queue.js', () => ({
+vi.mock('@cadre/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
   TaskQueue: vi.fn(() => mockSessionQueueInstance),
   SessionQueue: vi.fn(() => mockSessionQueueInstance),
   // static method:
   selectNonOverlappingBatch: vi.fn().mockReturnValue([]),
+  IssueProgressWriter: vi.fn(() => ({
+    appendEvent: mockProgressAppendEvent,
+    write: mockProgressWrite,
+  })),
+  RetryExecutor: vi.fn(() => ({
+    execute: mockRetryExecutorExecute,
+  })),
 }));
 
-vi.mock('../src/budget/token-tracker.js', () => ({
+vi.mock('@cadre/framework/runtime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/runtime')>()),
   TokenTracker: vi.fn(() => ({
     record: vi.fn(),
     getTotal: mockTokenTrackerGetTotal,
@@ -209,6 +218,7 @@ function makeConfig() {
     },
     pullRequest: {
       autoCreate: false, // disable so we don't need platform mock for PR
+      autoComplete: false,
       draft: true,
       labels: [],
       reviewers: [],
@@ -230,8 +240,16 @@ function makeConfig() {
       ambiguityThreshold: 5,
       haltOnAmbiguity: false,
       respondToReviews: false,
+      maxWholePrReviewRetries: 1,
+      postCostComment: false,
     },
-    copilot: { cliCommand: 'copilot', agentDir: '.agents', timeout: 300000, model: 'claude-sonnet-4.6' },
+    agent: {
+      backend: 'copilot',
+      model: 'claude-sonnet-4.6',
+      timeout: 300000,
+      copilot: { cliCommand: 'copilot', agentDir: '.agents' },
+      claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+    },
   });
 }
 
@@ -257,6 +275,7 @@ function makeWorktree(): WorktreeInfo {
     branch: 'cadre/issue-42',
     exists: true,
     baseCommit: 'abc123',
+    syncedAgentFiles: [],
   };
 }
 
@@ -501,7 +520,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const appendCalls = (mockProgressAppendEvent as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(appendCalls.some((m: string) => m.includes('Gate phase 1') && m.includes('passed'))).toBe(true);
   });
@@ -553,7 +572,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const warnCalls = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(warnCalls.some((m: string) => m.includes('missing integration test'))).toBe(true);
     expect(warnCalls.some((m: string) => m.includes('coverage below 80%'))).toBe(true);
@@ -572,7 +591,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const appendCalls = (mockProgressAppendEvent as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(appendCalls.some((m: string) => m.includes('warning'))).toBe(true);
   });
@@ -617,7 +636,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const appendCalls = (mockProgressAppendEvent as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(appendCalls.some((m: string) => m.toLowerCase().includes('gate failed') && m.includes('retry'))).toBe(true);
   });
@@ -652,7 +671,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const errorCalls = (mockLogger.error as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(errorCalls.some((m: string) => m.includes('missing requirements section'))).toBe(true);
     expect(errorCalls.some((m: string) => m.includes('no scope defined'))).toBe(true);
@@ -722,7 +741,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const appendCalls = (mockProgressAppendEvent as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(
       appendCalls.some((m: string) => m.toLowerCase().includes('abort') && m.includes('gate')),
@@ -872,7 +891,7 @@ describe('IssueOrchestrator – Ambiguity Gating', () => {
 
     await orchestrator.run();
 
-    const warnMessages = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls.map(([m]: [string]) => m);
+    const warnMessages = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls.map(([m]) => m);
     expect(warnMessages.some((m) => m.includes('Ambiguity one'))).toBe(true);
     expect(warnMessages.some((m) => m.includes('Ambiguity two'))).toBe(true);
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AzureDevOpsProvider } from '../src/platform/azure-devops-provider.js';
-import type { Logger } from '../src/logging/logger.js';
+import type { Logger } from '@cadre/framework/core';
 
 const mockLogger: Logger = {
   info: vi.fn(),

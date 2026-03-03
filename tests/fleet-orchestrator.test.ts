@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
-import { NotificationManager } from '../src/notifications/manager.js';
+import { NotificationManager } from '@cadre/framework/notifications';
 import { RemoteBranchMissingError } from '../src/git/worktree.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
@@ -46,7 +46,8 @@ vi.mock('../src/git/worktree.js', () => {
 vi.mock('../src/core/agent-launcher.js', () => ({
   AgentLauncher: vi.fn(),
 }));
-vi.mock('../src/core/checkpoint.js', () => ({
+vi.mock('@cadre/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
   CheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({}),
     setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
@@ -63,12 +64,30 @@ vi.mock('../src/core/checkpoint.js', () => ({
     getIssueStatus: vi.fn().mockReturnValue(null),
   })),
 }));
-vi.mock('../src/core/progress.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
+  CheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue({}),
+    setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
+    startPhase: vi.fn().mockResolvedValue(undefined),
+    completePhase: vi.fn().mockResolvedValue(undefined),
+  })),
+  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue(undefined),
+    isIssueCompleted: vi.fn().mockReturnValue(false),
+    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+    setDag: vi.fn().mockResolvedValue(undefined),
+    markWaveComplete: vi.fn().mockResolvedValue(undefined),
+    getIssueStatus: vi.fn().mockReturnValue(null),
+  })),
   FleetProgressWriter: vi.fn().mockImplementation(() => ({
     write: vi.fn().mockResolvedValue(undefined),
     appendEvent: vi.fn().mockResolvedValue(undefined),
   })),
   IssueProgressWriter: vi.fn(),
+  RetryExecutor: vi.fn().mockImplementation(() => ({
+    execute: vi.fn(),
+  })),
 }));
 vi.mock('../src/core/issue-orchestrator.js', () => ({
   IssueOrchestrator: vi.fn().mockImplementation(() => ({
@@ -85,7 +104,8 @@ vi.mock('../src/core/issue-orchestrator.js', () => ({
 vi.mock('../src/core/phase-registry.js', () => ({
   getPhaseCount: vi.fn().mockReturnValue(5),
 }));
-vi.mock('../src/logging/logger.js', () => ({
+vi.mock('@cadre/framework/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/core')>()),
   Logger: vi.fn(),
 }));
 
@@ -842,11 +862,11 @@ describe('FleetOrchestrator — RemoteBranchMissingError handling', () => {
 
     expect(logger.warn).toHaveBeenCalled();
     const warnCall = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.find(
-      ([msg]: [string]) => typeof msg === 'string' && msg.includes('remote branch is missing'),
+      ([msg]) => typeof msg === 'string' && msg.includes('remote branch is missing'),
     );
     expect(warnCall).toBeDefined();
     const errorCall = (logger.error as ReturnType<typeof vi.fn>).mock.calls.find(
-      ([msg]: [string]) => typeof msg === 'string' && msg.includes('#1'),
+      ([msg]) => typeof msg === 'string' && msg.includes('#1'),
     );
     expect(errorCall).toBeUndefined();
   });
@@ -1034,13 +1054,13 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
     await fleet.run();
 
     const infoCall = (logger.info as ReturnType<typeof vi.fn>).mock.calls.find(
-      ([msg]: [string]) => typeof msg === 'string' && msg.includes(existingPR.url),
+      ([msg]) => typeof msg === 'string' && msg.includes(existingPR.url),
     );
     expect(infoCall).toBeDefined();
   });
 
   it('records the issue as completed in the fleet checkpoint when skipping', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatusMock = vi.fn().mockResolvedValue(undefined);
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       load: vi.fn().mockResolvedValue(undefined),
@@ -1466,7 +1486,7 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
       }),
     }));
 
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       load: vi.fn().mockResolvedValue(undefined),
       isIssueCompleted: vi.fn().mockReturnValue(false),
@@ -1550,7 +1570,7 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
     }));
 
     const setIssueStatus = vi.fn().mockResolvedValue(undefined);
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       load: vi.fn().mockResolvedValue(undefined),
       isIssueCompleted: vi.fn().mockReturnValue(false),
@@ -1577,7 +1597,7 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
     await fleet.run();
 
     const codeCompleteCall = setIssueStatus.mock.calls.find(
-      ([, status]: [number, string]) => status === 'code-complete',
+      ([, status]) => status === 'code-complete',
     );
     expect(codeCompleteCall).toBeDefined();
     expect(codeCompleteCall![0]).toBe(2);
@@ -1639,7 +1659,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   }
 
   it('calls setDag() on the fleet checkpoint when dag is provided', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint();
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -1669,7 +1689,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('passes a resolver callback to provisionWithDeps when dag.onDependencyMergeConflict is resolve', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
@@ -1708,7 +1728,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('does not pass a resolver callback when dag.onDependencyMergeConflict is fail', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
@@ -1826,7 +1846,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('logs the DAG plan before executing', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint();
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -1867,7 +1887,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('issues with no deps are dispatched before their dependents', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
@@ -1904,7 +1924,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('calls provision() for issues with no deps and provisionWithDeps() for issues with deps', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
@@ -1943,7 +1963,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('marks transitive dependents as dep-blocked when an issue fails with dep-merge-conflict', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
       setIssueStatus,
@@ -1992,13 +2012,13 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     await fleet.run();
 
     const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 2 && status === 'dep-blocked',
+      ([num, status]) => num === 2 && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
 
   it('skips already-completed issues on resume', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint({
       getState: vi.fn().mockReturnValue({ completedWaves: [] }),
       isIssueCompleted: vi.fn().mockImplementation((num: number) => num === 1),
@@ -2029,13 +2049,13 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     await fleet.run();
 
     // issue1 is already completed, so provision should only be called for issue2
-    const provisionCalls = worktreeManager.provision.mock.calls.map(([num]: [number]) => num);
+    const provisionCalls = worktreeManager.provision.mock.calls.map(([num]) => num);
     expect(provisionCalls).not.toContain(1);
     expect(provisionCalls).toContain(2);
   });
 
   it('does not perform autoMerge when config.dag.autoMerge is false', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
@@ -2079,7 +2099,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('merges successful PRs after each wave when config.dag.autoMerge is true', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
@@ -2143,7 +2163,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   });
 
   it('marks issue as dep-merge-conflict and propagates dep-blocked when autoMerge PR fails', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
       setIssueStatus,
@@ -2193,19 +2213,19 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
     // issue1 should be marked dep-merge-conflict due to failed PR merge
     const depMergeConflictCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 1 && status === 'dep-merge-conflict',
+      ([num, status]) => num === 1 && status === 'dep-merge-conflict',
     );
     expect(depMergeConflictCall).toBeDefined();
 
     // issue2 should be marked dep-blocked
     const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 2 && status === 'dep-blocked',
+      ([num, status]) => num === 2 && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
 
   it('propagates dep-blocked to dependents when an issue checkpoint has dep-failed status', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
       setIssueStatus,
@@ -2257,13 +2277,13 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     await fleet.run();
 
     const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 2 && status === 'dep-blocked',
+      ([num, status]) => num === 2 && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
 
   it('propagates dep-blocked to dependents when an issue checkpoint has dep-build-broken status', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
       setIssueStatus,
@@ -2315,13 +2335,13 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     await fleet.run();
 
     const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 2 && status === 'dep-blocked',
+      ([num, status]) => num === 2 && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
 
   it('passes dagDepMap to setDag() when provided', async () => {
-    const { FleetCheckpointManager } = await import('../src/core/checkpoint.js');
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint();
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 

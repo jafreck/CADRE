@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { IssueOrchestrator, BudgetExceededError } from '../src/core/issue-orchestrator.js';
-import { NotificationManager } from '../src/notifications/manager.js';
+import { NotificationManager } from '@cadre/framework/notifications';
 import { AnalysisAmbiguityGate } from '../src/core/phase-gate.js';
 import * as fsUtils from '../src/util/fs.js';
 import { mkdir, rm } from 'node:fs/promises';
@@ -9,9 +9,9 @@ import { tmpdir } from 'node:os';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
-import type { CheckpointManager } from '../src/core/checkpoint.js';
+import type { CheckpointManager } from '@cadre/framework/engine';
 import type { AgentLauncher } from '../src/agents/types.js';
-import type { Logger } from '../src/logging/logger.js';
+import type { Logger } from '@cadre/framework/core';
 
 // ── Mock IssueNotifier so we can spy on lifecycle calls ──
 const mockNotifierMethods = {
@@ -76,7 +76,7 @@ vi.mock('../src/core/phase-gate.js', () => {
 });
 
 // Mock heavy I/O and pipeline dependencies so unit tests stay fast and deterministic.
-vi.mock('../src/core/progress.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   IssueProgressWriter: vi.fn().mockImplementation(() => ({
     appendEvent: vi.fn().mockResolvedValue(undefined),
     write: vi.fn().mockResolvedValue(undefined),
@@ -103,15 +103,15 @@ vi.mock('../src/agents/result-parser.js', () => ({
   ResultParser: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('../src/execution/retry.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   RetryExecutor: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('../src/execution/task-queue.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   TaskQueue: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('../src/budget/token-tracker.js', () => ({
+vi.mock('@cadre/framework/runtime', () => ({
   TokenTracker: vi.fn().mockImplementation(() => ({
     getTotal: vi.fn().mockReturnValue(0),
     record: vi.fn(),

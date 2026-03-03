@@ -10,6 +10,10 @@ vi.mock('@cadre/framework/core', () => ({
     error: vi.fn(),
     child: vi.fn().mockReturnThis(),
   })),
+  CostEstimator: vi.fn().mockImplementation(() => ({
+    estimate: vi.fn().mockReturnValue(0),
+    format: vi.fn().mockReturnValue('$0.00'),
+  })),
 }));
 
 vi.mock('../src/platform/factory.js', () => ({
@@ -79,7 +83,8 @@ vi.mock('../src/core/agent-launcher.js', () => ({
   })),
 }));
 
-vi.mock('../src/core/checkpoint.js', () => ({
+vi.mock('@cadre/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byIssue: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
     setIssueStatus: vi.fn().mockResolvedValue(undefined),
@@ -114,9 +119,38 @@ vi.mock('../src/util/fs.js', () => ({
   atomicWriteJSON: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../src/core/progress.js', () => ({
+vi.mock('@cadre/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
+  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byIssue: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
+    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+  })),
+  CheckpointManager: vi.fn().mockImplementation(() => ({
+    load: vi.fn().mockResolvedValue({
+      issueNumber: 1,
+      currentPhase: 1,
+      completedPhases: [],
+      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+      gateResults: {},
+      currentTask: null,
+      completedTasks: [],
+      failedTasks: [],
+      blockedTasks: [],
+      phaseOutputs: {},
+      version: 1,
+      worktreePath: '',
+      branchName: '',
+      baseCommit: '',
+      startedAt: '',
+      lastCheckpoint: '',
+      resumeCount: 0,
+    }),
+  })),
   FleetProgressWriter: vi.fn().mockImplementation(() => ({
     appendEvent: vi.fn().mockResolvedValue(undefined),
+  })),
+  RetryExecutor: vi.fn().mockImplementation(() => ({
+    execute: vi.fn(),
   })),
   phaseNames: [
     'Analysis & Scouting',
@@ -127,14 +161,21 @@ vi.mock('../src/core/progress.js', () => ({
   ],
 }));
 
-vi.mock('../src/budget/cost-estimator.js', () => ({
+vi.mock('@cadre/framework/core', () => ({
+  Logger: vi.fn().mockImplementation(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn().mockReturnThis(),
+  })),
   CostEstimator: vi.fn().mockImplementation(() => ({
     estimate: vi.fn().mockReturnValue(0),
     format: vi.fn().mockReturnValue('$0.00'),
   })),
 }));
 
-vi.mock('../src/budget/token-tracker.js', () => ({
+vi.mock('@cadre/framework/runtime', () => ({
   TokenTracker: vi.fn(),
 }));
 
@@ -191,8 +232,8 @@ import { CadreRuntime } from '../src/core/runtime.js';
 import { NotificationManager } from '@cadre/framework/notifications';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
-import { FleetProgressWriter } from '../src/core/progress.js';
-import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoint.js';
+import { FleetProgressWriter } from '@cadre/framework/engine';
+import { FleetCheckpointManager, CheckpointManager } from '@cadre/framework/engine';
 import { exists } from '../src/util/fs.js';
 import { checkStaleState } from '../src/validation/stale-state-validator.js';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
@@ -219,7 +260,7 @@ function makeConfig(issueIds = [1]) {
     branchTemplate: 'cadre/issue-{issue}',
     issues: { ids: issueIds },
     commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
-    pullRequest: { autoCreate: true, draft: true, labels: [], reviewers: [], linkIssue: true },
+    pullRequest: { autoCreate: true, autoComplete: false, draft: true, labels: [], reviewers: [], linkIssue: true },
     options: {
       maxParallelIssues: 3,
       maxParallelAgents: 3,
@@ -236,9 +277,13 @@ function makeConfig(issueIds = [1]) {
       ambiguityThreshold: 5,
       haltOnAmbiguity: false,
       respondToReviews: false,
+      maxWholePrReviewRetries: 1,
+      postCostComment: false,
     },
     agent: {
       backend: 'copilot',
+      model: 'claude-sonnet-4.6',
+      timeout: 300000,
       copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
       claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
     },
@@ -246,13 +291,13 @@ function makeConfig(issueIds = [1]) {
 }
 
 describe('CadreRuntime — NotificationManager wiring', () => {
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Prevent real SIGINT/SIGTERM listeners being registered on the process
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
 
     MockCreateNotificationManager.mockReturnValue({
       dispatch: vi.fn().mockResolvedValue(undefined),
@@ -344,12 +389,12 @@ describe('CadreRuntime — NotificationManager wiring', () => {
 const flushAsync = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
 
 describe('CadreRuntime — review-response routing', () => {
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
 
     MockCreateNotificationManager.mockReturnValue({
       dispatch: vi.fn().mockResolvedValue(undefined),
@@ -421,8 +466,8 @@ describe('CadreRuntime — review-response routing', () => {
 });
 
 describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () => {
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
+  let processExitSpy: any;
   // Each stored handler calls the raw listener and waits for async completion
   const capturedHandlers: Map<string, () => Promise<void>> = new Map();
 
@@ -448,7 +493,7 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
       return process;
     });
 
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as unknown as (code?: number) => never);
+    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as unknown as (code?: string | number | null) => never);
 
     MockCreateNotificationManager.mockReturnValue({
       dispatch: vi.fn().mockResolvedValue(undefined),
@@ -496,7 +541,7 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
     const runtime = new CadreRuntime(config);
     await runtime.run();
 
-    const registeredEvents = processOnSpy.mock.calls.map(([event]) => event);
+    const registeredEvents = processOnSpy.mock.calls.map(([event]: any[]) => event);
     expect(registeredEvents).toContain('SIGINT');
     expect(registeredEvents).toContain('SIGTERM');
   });
@@ -641,11 +686,11 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
 describe('CadreRuntime — status() rendering', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockExists.mockResolvedValue(false);
   });
@@ -777,8 +822,8 @@ describe('CadreRuntime — status() rendering', () => {
 });
 
 describe('CadreRuntime — stale-state check wiring', () => {
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
+  let processExitSpy: any;
   let mockCheckStaleState: ReturnType<typeof vi.fn>;
 
   function makeConfigWithValidation(issueIds = [42]) {
@@ -787,7 +832,7 @@ describe('CadreRuntime — stale-state check wiring', () => {
       branchTemplate: 'cadre/issue-{issue}',
       issues: { ids: issueIds },
       commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
-      pullRequest: { autoCreate: true, draft: true, labels: [], reviewers: [], linkIssue: true },
+      pullRequest: { autoCreate: true, autoComplete: false, draft: true, labels: [], reviewers: [], linkIssue: true },
       options: {
         maxParallelIssues: 3,
         maxParallelAgents: 3,
@@ -804,9 +849,13 @@ describe('CadreRuntime — stale-state check wiring', () => {
         ambiguityThreshold: 5,
         haltOnAmbiguity: false,
         respondToReviews: false,
+      maxWholePrReviewRetries: 1,
+      postCostComment: false,
       },
       agent: {
         backend: 'copilot',
+        model: 'claude-sonnet-4.6',
+        timeout: 300000,
         copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
         claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
       },
@@ -816,8 +865,8 @@ describe('CadreRuntime — stale-state check wiring', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as unknown as (code?: number) => never);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
+    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as unknown as (code?: string | number | null) => never);
 
     mockCheckStaleState = checkStaleState as unknown as ReturnType<typeof vi.fn>;
     mockCheckStaleState.mockResolvedValue({ hasConflicts: false, conflicts: new Map() });
@@ -987,12 +1036,12 @@ describe('CadreRuntime — stale-state check wiring', () => {
 });
 
 describe('CadreRuntime — DAG wiring', () => {
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
 
     MockCreateNotificationManager.mockReturnValue({
       dispatch: vi.fn().mockResolvedValue(undefined),
@@ -1106,11 +1155,11 @@ describe('CadreRuntime — DAG wiring', () => {
 });
 
 describe('CadreRuntime — validate()', () => {
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     MockPreRunValidationSuite.mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(true),
     }));
@@ -1151,11 +1200,11 @@ describe('CadreRuntime — validate()', () => {
 
 describe('CadreRuntime — reset()', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     MockFleetCheckpointManager.mockImplementation(() => ({
@@ -1233,11 +1282,11 @@ describe('CadreRuntime — reset()', () => {
 
 describe('CadreRuntime — report()', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     MockReportWriter.listReports.mockResolvedValue([]);
@@ -1307,11 +1356,11 @@ describe('CadreRuntime — report()', () => {
 
 describe('CadreRuntime — listWorktrees()', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -1347,11 +1396,11 @@ describe('CadreRuntime — listWorktrees()', () => {
 
 describe('CadreRuntime — pruneWorktrees()', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     MockCreateNotificationManager.mockReturnValue({
@@ -1477,11 +1526,11 @@ describe('CadreRuntime — pruneWorktrees()', () => {
 });
 
 describe('CadreRuntime — resolveIssues() error handling', () => {
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
     MockFleetOrchestrator.mockImplementation(() => ({
       run: vi.fn().mockResolvedValue({

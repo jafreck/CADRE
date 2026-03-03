@@ -4,7 +4,7 @@
 
 import type { SessionReviewSummary } from './schemas/session-review-summary.schema.js';
 
-// Re-export generic agent runtime types from @cadre/agent-runtime
+// Re-export generic agent runtime types from @cadre/framework/runtime
 export type {
   AgentInvocation as _AgentInvocationBase,
   AgentResult as _AgentResultBase,
@@ -189,9 +189,6 @@ export interface AgentInvocation extends Omit<_AgentInvocationBase, 'agent'> {
 export interface AgentResult extends Omit<_AgentResultBase, 'agent'> {
   agent: AgentName;
 }
-
-/** @deprecated Use AgentSession */
-export type ImplementationTask = AgentSession;
 
 /** Summary produced by a whole-pr-reviewer or session-review agent. */
 export type { SessionReviewSummary } from './schemas/session-review-summary.schema.js';

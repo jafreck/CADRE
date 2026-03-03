@@ -3,7 +3,7 @@ import { simpleGit } from 'simple-git';
 import * as fsp from 'node:fs/promises';
 import { WorktreeManager, RemoteBranchMissingError } from '../src/git/worktree.js';
 import { DependencyMergeConflictError } from '../src/errors.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 import * as fsUtils from '../src/util/fs.js';
 
 // Mock node:fs/promises so we can assert dep-conflict.json writes without touching disk

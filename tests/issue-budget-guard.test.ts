@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue-budget-guard.js';
-import type { TokenTracker } from '../src/budget/token-tracker.js';
-import type { NotificationManager } from '../src/notifications/manager.js';
-import type { CheckpointManager } from '../src/core/checkpoint.js';
-import type { CheckpointState } from '../src/core/checkpoint.js';
+import type { TokenTracker } from '@cadre/framework/runtime';
+import type { NotificationManager } from '@cadre/framework/notifications';
+import type { CheckpointManager } from '@cadre/framework/engine';
+import type { CheckpointState } from '@cadre/framework/engine';
 
 function makeTokenTracker(overrides: {
   getTotal?: () => number;

@@ -23,7 +23,7 @@ vi.mock('../src/agents/result-parser.js', () => ({
   })),
 }));
 
-vi.mock('../src/core/checkpoint.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   CheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue(undefined),
     resetPhases: vi.fn().mockResolvedValue(undefined),
@@ -52,11 +52,11 @@ vi.mock('../src/agents/context-builder.js', () => ({
   })),
 }));
 
-vi.mock('../src/logging/logger.js', () => ({
+vi.mock('@cadre/framework/core', () => ({
   Logger: vi.fn(),
 }));
 
-vi.mock('../src/notifications/manager.js', () => ({
+vi.mock('@cadre/framework/notifications', () => ({
   NotificationManager: vi.fn().mockImplementation(() => ({
     dispatch: vi.fn().mockResolvedValue(undefined),
   })),

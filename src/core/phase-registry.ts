@@ -1,14 +1,10 @@
 /**
  * Phase definitions and ordering for CADRE's per-issue pipeline.
  *
- * Generic types and helpers are provided by @cadre/pipeline-engine;
+ * Generic types and helpers are provided by @cadre/framework/engine;
  * this module re-exports them alongside Cadre-specific constants.
  */
 
-export type { PhaseDefinition, PhaseManifestEntry } from '@cadre/framework/engine';
-export { PhaseRegistry } from '@cadre/framework/engine';
-
-import type { PhaseDefinition, PhaseManifestEntry } from '@cadre/framework/engine';
 import {
   PhaseRegistry,
   getPhaseSubset as _getPhaseSubset,
@@ -17,6 +13,8 @@ import {
   isLastPhase as _isLastPhase,
   buildRegistry as _buildRegistry,
   buildGateMap as _buildGateMap,
+  type PhaseDefinition,
+  type PhaseManifestEntry,
 } from '@cadre/framework/engine';
 
 import type { GatePlugin, PhaseGate } from './phase-gate.js';
@@ -32,6 +30,9 @@ import { PlanningPhaseExecutor } from '../executors/planning-phase-executor.js';
 import { ImplementationPhaseExecutor } from '../executors/implementation-phase-executor.js';
 import { IntegrationPhaseExecutor } from '../executors/integration-phase-executor.js';
 import { PRCompositionPhaseExecutor } from '../executors/pr-composition-phase-executor.js';
+
+export type { PhaseDefinition, PhaseManifestEntry };
+export { PhaseRegistry };
 
 export const ISSUE_PHASES: PhaseDefinition[] = [
   { id: 1, name: 'Analysis & Scouting', critical: true, commitType: 'chore', commitMessage: 'analyze issue #{issueNumber}' },

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReviewPlanBuilder } from '../src/core/review-plan-builder.js';
 import type { ReviewThread, PRComment, PRReview } from '../src/platform/provider.js';
 
-vi.mock('../src/logging/logger.js', () => ({
+vi.mock('@cadre/framework/core', () => ({
   Logger: vi.fn(),
 }));
 
