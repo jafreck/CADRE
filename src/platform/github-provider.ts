@@ -425,39 +425,40 @@ export class GitHubProvider implements PlatformProvider {
       return [];
     }
 
-    const envelope = raw as Record<string, unknown>;
-    const threads = asArray(envelope.reviewThreads);
+    const threads = Array.isArray(raw)
+      ? raw
+      : asArray((raw as Record<string, unknown>).reviewThreads);
 
     return threads.map((t) => {
       const thread = asRecord(t);
 
-      const rawCommentsContainer = thread.Comments;
+      const rawCommentsContainer = thread.Comments ?? thread.comments;
       const rawComments = Array.isArray(rawCommentsContainer)
         ? rawCommentsContainer
         : asArray(asRecord(rawCommentsContainer).Nodes);
 
       const comments = rawComments.map((c) => {
         const comment = asRecord(c);
-        const authorContainer = comment.Author;
+        const authorContainer = comment.Author ?? comment.author;
         const author = asRecord(authorContainer);
-        const login = asString(author.Login, 'unknown');
+        const login = asString(author.Login ?? author.login, 'unknown');
 
-        const lineVal = comment.Line;
+        const lineVal = comment.Line ?? comment.line;
         return {
-          id: asString(comment.ID),
+          id: asString(comment.ID ?? comment.id),
           author: login,
-          body: asString(comment.Body),
-          createdAt: asString(comment.CreatedAt),
-          path: asString(comment.Path),
+          body: asString(comment.Body ?? comment.body),
+          createdAt: asString(comment.CreatedAt ?? comment.createdAt),
+          path: asString(comment.Path ?? comment.path),
           line: typeof lineVal === 'number' ? lineVal : undefined,
         };
       });
 
-      const isResolved = thread.IsResolved;
-      const isOutdated = thread.IsOutdated;
+      const isResolved = thread.IsResolved ?? thread.isResolved;
+      const isOutdated = thread.IsOutdated ?? thread.isOutdated;
 
       return {
-        id: asString(thread.ID),
+        id: asString(thread.ID ?? thread.id),
         prNumber,
         isResolved: isResolved === true,
         isOutdated: isOutdated === true,

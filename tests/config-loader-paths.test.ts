@@ -21,6 +21,7 @@ const mockReadFile = vi.mocked(readFile);
 function makeConfig(overrides: Record<string, unknown> = {}) {
   return {
     projectName: 'test-project',
+    platform: 'github',
     repository: 'owner/repo',
     repoPath: '/tmp/repo',
     baseBranch: 'main',
@@ -139,6 +140,7 @@ describe('loadConfig – agent field handling', () => {
     mockReadFile.mockResolvedValue(
       JSON.stringify({
         projectName: 'test-project',
+        platform: 'github',
         repository: 'owner/repo',
         repoPath: '/tmp/repo',
         baseBranch: 'main',

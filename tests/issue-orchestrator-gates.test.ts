@@ -799,7 +799,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
 
   // ── Gate context is built correctly ───────────────────────────────────────
 
-  it('should pass the worktreePath and baseCommit in the gate context', async () => {
+  it('should pass the workspacePath and baselineRef in the gate context', async () => {
     mockAnalysisGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
 
     const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
@@ -808,11 +808,11 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const [context] = mockAnalysisGateValidate.mock.calls[0];
-    expect(context.worktreePath).toBe('/tmp/worktree-42');
-    expect(context.baseCommit).toBe('abc123');
+    expect(context.workspacePath).toBe('/tmp/worktree-42');
+    expect(context.baselineRef).toBe('abc123');
   });
 
-  it('should pass the progressDir in the gate context', async () => {
+  it('should pass the artifactsDir in the gate context', async () => {
     mockAnalysisGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });
 
     const checkpoint = makeMockCheckpoint([2, 3, 4, 5]);
@@ -821,9 +821,9 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     const [context] = mockAnalysisGateValidate.mock.calls[0];
-    // progressDir is derived from worktree.path + '.cadre/issues/<issueNumber>'
-    expect(context.progressDir).toContain('42');
-    expect(context.progressDir).toContain('.cadre');
+    // artifactsDir is derived from worktree.path + '.cadre/issues/<issueNumber>'
+    expect(context.artifactsDir).toContain('42');
+    expect(context.artifactsDir).toContain('.cadre');
   });
 });
 
