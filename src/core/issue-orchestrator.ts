@@ -12,7 +12,7 @@ import { AgentLauncher } from './agent-launcher.js';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { CommitManager } from '../git/commit.js';
-import { RetryExecutor } from '../execution/retry.js';
+import { RetryExecutor } from '@cadre/execution';
 import { TokenTracker } from '../budget/token-tracker.js';
 import { Logger } from '@cadre/observability';
 import { IssueNotifier } from './issue-notifier.js';

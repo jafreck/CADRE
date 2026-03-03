@@ -24,6 +24,7 @@ import {
   AnalysisToPlanningGate,
   ImplementationToIntegrationGate,
   IntegrationToPRGate,
+  listGatePlugins,
   PlanningToImplementationGate,
 } from './phase-gate.js';
 import { AnalysisPhaseExecutor } from '../executors/analysis-phase-executor.js';
@@ -138,5 +139,5 @@ export function buildRegistry(): PhaseRegistry {
  * Build a gate map from PHASE_MANIFEST, keyed by phase ID.
  */
 export function buildGateMap(plugins?: readonly GatePlugin[]): Record<number, PhaseGate> {
-  return _buildGateMap(PHASE_MANIFEST, plugins ?? []);
+  return _buildGateMap(PHASE_MANIFEST, plugins ?? listGatePlugins());
 }
