@@ -2,14 +2,39 @@
  * Shared type definitions for the pipeline engine.
  */
 
-// Re-export shared types from agent-runtime (canonical home)
+// Re-export shared generic runtime types from agent-runtime
 export type {
   GateResult,
   PhaseResult,
   TokenRecord,
-  IssueComment,
-  IssueDetail,
 } from '@cadre/agent-runtime';
+
+/** Comment on a work item. */
+export interface WorkItemComment {
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * Normalized representation of a schedulable work item.
+ *
+ * Framework packages should depend on this generic shape rather than
+ * CADRE-specific issue provider types.
+ */
+export interface WorkItem {
+  number: number;
+  title: string;
+  body: string;
+  labels: string[];
+  assignees: string[];
+  milestone?: string;
+  comments: WorkItemComment[];
+  state: 'open' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+  linkedPRs: number[];
+}
 
 /** Minimal logger interface for engine consumers. */
 export interface Logger {

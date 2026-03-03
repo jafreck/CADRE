@@ -1,30 +1,30 @@
 /**
- * Directed Acyclic Graph of issues, supporting topological wave computation
+ * Directed Acyclic Graph of work items, supporting topological wave computation
  * and transitive dependency resolution via Kahn's algorithm.
  *
- * Dependencies are expressed as: depMap[issueNumber] = [list of issue numbers this issue depends on].
- * An issue in wave N means all its dependencies appear in waves 0..N-1.
+ * Dependencies are expressed as: depMap[itemNumber] = [list of item numbers this item depends on].
+ * A work item in wave N means all its dependencies appear in waves 0..N-1.
  */
 
-import { CyclicDependencyError, type IssueDetail } from '../types.js';
+import { CyclicDependencyError, type WorkItem } from '../types.js';
 
-export class IssueDag {
-  private readonly issues: Map<number, IssueDetail>;
+export class WorkItemDag<TWorkItem extends WorkItem = WorkItem> {
+  private readonly items: Map<number, TWorkItem>;
   private readonly depMap: Record<number, number[]>;
-  private readonly waves: IssueDetail[][];
-  /** Topological order: index of each issue number → its position in the sorted order */
+  private readonly waves: TWorkItem[][];
+  /** Topological order: index of each work item number → its position in the sorted order */
   private readonly topoOrder: number[];
 
-  constructor(issues: IssueDetail[], depMap: Record<number, number[]>) {
-    this.issues = new Map(issues.map((i) => [i.number, i]));
+  constructor(items: TWorkItem[], depMap: Record<number, number[]>) {
+    this.items = new Map(items.map((i) => [i.number, i]));
     // Normalize depMap: only include entries for issues we know about
     this.depMap = depMap;
     this.topoOrder = [];
     this.waves = this.computeWaves();
   }
 
-  private computeWaves(): IssueDetail[][] {
-    const issueNumbers = [...this.issues.keys()];
+  private computeWaves(): TWorkItem[][] {
+    const issueNumbers = [...this.items.keys()];
 
     // Build in-degree and adjacency list (edges go from dependency → dependent)
     const inDegree = new Map<number, number>();
@@ -39,23 +39,23 @@ export class IssueDag {
     for (const num of issueNumbers) {
       const deps = this.depMap[num] ?? [];
       for (const dep of deps) {
-        if (!this.issues.has(dep)) continue; // ignore deps not in our issue set
+        if (!this.items.has(dep)) continue; // ignore deps not in our issue set
         inDegree.set(num, (inDegree.get(num) ?? 0) + 1);
         dependents.get(dep)!.push(num);
       }
     }
 
     // Kahn's algorithm with wave tracking
-    const waves: IssueDetail[][] = [];
+    const waves: TWorkItem[][] = [];
     let currentQueue = issueNumbers.filter((n) => inDegree.get(n) === 0);
     const processed = new Set<number>();
 
     while (currentQueue.length > 0) {
-      const wave: IssueDetail[] = [];
+      const wave: TWorkItem[] = [];
       const nextQueue: number[] = [];
 
       for (const num of currentQueue) {
-        wave.push(this.issues.get(num)!);
+        wave.push(this.items.get(num)!);
         this.topoOrder.push(num);
         processed.add(num);
 
@@ -76,7 +76,7 @@ export class IssueDag {
     if (processed.size !== issueNumbers.length) {
       const cycleParticipants = issueNumbers.filter((n) => !processed.has(n));
       throw new CyclicDependencyError(
-        `Cyclic dependency detected among issues: ${cycleParticipants.join(', ')}`,
+        `Cyclic dependency detected among work items: ${cycleParticipants.join(', ')}`,
         cycleParticipants,
       );
     }
@@ -84,43 +84,51 @@ export class IssueDag {
     return waves;
   }
 
-  /** Returns issues grouped into waves; wave 0 has no dependencies. */
-  getWaves(): IssueDetail[][] {
+  /** Returns work items grouped into waves; wave 0 has no dependencies. */
+  getWaves(): TWorkItem[][] {
     return this.waves;
   }
 
-  /** Returns all issues in the DAG. */
-  getAllIssues(): IssueDetail[] {
-    return [...this.issues.values()];
+  /** Returns all work items in the DAG. */
+  getAllItems(): TWorkItem[] {
+    return [...this.items.values()];
+  }
+
+  /** @deprecated Use getAllItems(). */
+  getAllIssues(): TWorkItem[] {
+    return this.getAllItems();
   }
 
   /**
-   * Returns the direct dependency issue numbers for the given issue
+   * Returns the direct dependency item numbers for the given item
    * (only those present in the DAG's issue set).
    */
-  getDirectDeps(issueNumber: number): number[] {
-    return (this.depMap[issueNumber] ?? []).filter((n) => this.issues.has(n));
+  getDirectDeps(itemNumber: number): number[] {
+    return (this.depMap[itemNumber] ?? []).filter((n) => this.items.has(n));
   }
 
   /**
-   * Returns all transitive dependencies of the given issue in topological order
+   * Returns all transitive dependencies of the given item in topological order
    * (deepest/earliest dependencies first).
    */
-  getTransitiveDepsOrdered(issueNumber: number): IssueDetail[] {
+  getTransitiveDepsOrdered(itemNumber: number): TWorkItem[] {
     const visited = new Set<number>();
     const collect = (num: number): void => {
       const deps = this.depMap[num] ?? [];
       for (const dep of deps) {
-        if (!this.issues.has(dep) || visited.has(dep)) continue;
+        if (!this.items.has(dep) || visited.has(dep)) continue;
         collect(dep);
         visited.add(dep);
       }
     };
-    collect(issueNumber);
+    collect(itemNumber);
 
     // Return in topological order (topoOrder was built during wave computation)
     return this.topoOrder
       .filter((n) => visited.has(n))
-      .map((n) => this.issues.get(n)!);
+      .map((n) => this.items.get(n)!);
   }
 }
+
+/** @deprecated Use WorkItemDag<TWorkItem>. */
+export class IssueDag<TWorkItem extends WorkItem = WorkItem> extends WorkItemDag<TWorkItem> {}

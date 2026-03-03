@@ -88,60 +88,6 @@ export interface AgentSession {
   testable?: boolean;
 }
 
-/** Parsed analysis output. */
-export interface AnalysisResult {
-  requirements: string[];
-  changeType: 'bug-fix' | 'feature' | 'refactor' | 'docs' | 'chore';
-  scope: 'small' | 'medium' | 'large';
-  affectedAreas: string[];
-  ambiguities: string[];
-}
-
-/** Parsed scout report output. */
-export interface ScoutReport {
-  relevantFiles: Array<{ path: string; reason: string }>;
-  dependencyMap: Record<string, string[]>;
-  testFiles: string[];
-  estimatedChanges: Array<{ path: string; linesEstimate: number }>;
-}
-
-/** Parsed code review output. */
-export interface ReviewResult {
-  verdict: 'pass' | 'needs-fixes';
-  issues: ReviewIssue[];
-  summary: string;
-}
-
-export interface ReviewIssue {
-  file: string;
-  line?: number;
-  severity: 'error' | 'warning' | 'suggestion';
-  description: string;
-}
-
-/** Parsed integration report. */
-export interface IntegrationReport {
-  buildResult: CommandResult;
-  testResult: CommandResult;
-  lintResult?: CommandResult;
-  overallPass: boolean;
-}
-
-export interface CommandResult {
-  command: string;
-  exitCode: number | null;
-  signal?: string | null;
-  output: string;
-  pass: boolean;
-}
-
-/** Parsed PR content output. */
-export interface PRContent {
-  title: string;
-  body: string;
-  labels: string[];
-}
-
 /** Result of a quality gate evaluation. */
 export interface GateResult {
   status: 'pass' | 'warn' | 'fail';
@@ -159,28 +105,6 @@ export interface PhaseResult {
   outputPath?: string;
   error?: string;
   gateResult?: GateResult;
-}
-
-/** Comment on an issue or work item. */
-export interface IssueComment {
-  author: string;
-  body: string;
-  createdAt: string;
-}
-
-/** Normalized representation of an issue or work item across platforms. */
-export interface IssueDetail {
-  number: number;
-  title: string;
-  body: string;
-  labels: string[];
-  assignees: string[];
-  milestone?: string;
-  comments: IssueComment[];
-  state: 'open' | 'closed';
-  createdAt: string;
-  updatedAt: string;
-  linkedPRs: number[];
 }
 
 /** Agent context file structure written before launching an agent.
