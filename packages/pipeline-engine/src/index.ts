@@ -6,8 +6,8 @@ export type {
   GateResult,
   TokenRecord,
   PhaseResult,
-  IssueComment,
-  IssueDetail,
+  WorkItemComment,
+  WorkItem,
 } from './types.js';
 export { CyclicDependencyError } from './types.js';
 
@@ -45,7 +45,7 @@ export type {
 export { CheckpointManager, FleetCheckpointManager } from './checkpoint/checkpoint.js';
 
 // Scheduler
-export { IssueDag } from './scheduler/issue-dag.js';
+export { WorkItemDag, IssueDag } from './scheduler/issue-dag.js';
 
 // Progress
 export type { PullRequestRef, IssueProgressInfo } from './progress/progress.js';

@@ -17,7 +17,8 @@ describe('@cadre/pipeline-engine barrel exports', () => {
     expect(typeof pipelineEngine.FleetCheckpointManager).toBe('function');
   });
 
-  it('should export IssueDag', () => {
+  it('should export WorkItemDag and IssueDag', () => {
+    expect(typeof pipelineEngine.WorkItemDag).toBe('function');
     expect(typeof pipelineEngine.IssueDag).toBe('function');
   });
 

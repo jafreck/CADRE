@@ -5,13 +5,6 @@ import type {
   AgentStep,
   AgentSession,
   TokenUsageDetail,
-  AnalysisResult,
-  ScoutReport,
-  ReviewResult,
-  ReviewIssue,
-  IntegrationReport,
-  CommandResult,
-  PRContent,
   GateResult,
   PhaseResult,
   AgentContext,
@@ -121,87 +114,6 @@ describe('Agent runtime types (agent-runtime)', () => {
       testable: false,
     };
     expect(session.testable).toBe(false);
-  });
-
-  it('should satisfy AnalysisResult shape', () => {
-    const analysis: AnalysisResult = {
-      requirements: ['req1'],
-      changeType: 'feature',
-      scope: 'medium',
-      affectedAreas: ['src/'],
-      ambiguities: [],
-    };
-    expect(analysis.changeType).toBe('feature');
-  });
-
-  it('should accept all changeType values', () => {
-    const types: AnalysisResult['changeType'][] = ['bug-fix', 'feature', 'refactor', 'docs', 'chore'];
-    for (const t of types) {
-      const a: AnalysisResult = { requirements: [], changeType: t, scope: 'small', affectedAreas: [], ambiguities: [] };
-      expect(a.changeType).toBe(t);
-    }
-  });
-
-  it('should satisfy ScoutReport shape', () => {
-    const report: ScoutReport = {
-      relevantFiles: [{ path: 'src/index.ts', reason: 'entry' }],
-      dependencyMap: { 'a.ts': ['b.ts'] },
-      testFiles: ['test.ts'],
-      estimatedChanges: [{ path: 'a.ts', linesEstimate: 10 }],
-    };
-    expect(report.relevantFiles).toHaveLength(1);
-  });
-
-  it('should satisfy ReviewResult and ReviewIssue shapes', () => {
-    const issue: ReviewIssue = {
-      file: 'src/x.ts',
-      line: 42,
-      severity: 'error',
-      description: 'Bad code',
-    };
-    const review: ReviewResult = {
-      verdict: 'needs-fixes',
-      issues: [issue],
-      summary: 'Fix it',
-    };
-    expect(review.verdict).toBe('needs-fixes');
-    expect(review.issues[0].severity).toBe('error');
-  });
-
-  it('should allow ReviewIssue without line number', () => {
-    const issue: ReviewIssue = {
-      file: 'src/x.ts',
-      severity: 'warning',
-      description: 'Consider refactoring',
-    };
-    expect(issue.line).toBeUndefined();
-  });
-
-  it('should satisfy IntegrationReport shape', () => {
-    const cmd: CommandResult = { command: 'npm test', exitCode: 0, output: 'ok', pass: true };
-    const report: IntegrationReport = {
-      buildResult: cmd,
-      testResult: cmd,
-      overallPass: true,
-    };
-    expect(report.overallPass).toBe(true);
-    expect(report.lintResult).toBeUndefined();
-  });
-
-  it('should satisfy CommandResult with signal', () => {
-    const cmd: CommandResult = {
-      command: 'npm build',
-      exitCode: null,
-      signal: 'SIGTERM',
-      output: '',
-      pass: false,
-    };
-    expect(cmd.signal).toBe('SIGTERM');
-  });
-
-  it('should satisfy PRContent shape', () => {
-    const pr: PRContent = { title: 'Fix bug', body: 'Details', labels: ['bug'] };
-    expect(pr.labels).toHaveLength(1);
   });
 
   it('should satisfy GateResult shape', () => {

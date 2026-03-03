@@ -5,7 +5,7 @@
  * Cadre-specific context types are defined here for full type safety.
  */
 
-export type { PhaseExecutor } from '@cadre/pipeline-engine';
+import type { PhaseExecutor as EnginePhaseExecutor } from '@cadre/pipeline-engine';
 
 import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PlatformProvider, PullRequestInfo } from '../platform/provider.js';
@@ -59,3 +59,5 @@ export type PhaseContext = {
   io: PhaseIO;
   callbacks: PhaseCallbacks;
 };
+
+export type PhaseExecutor = EnginePhaseExecutor<PhaseContext>;
