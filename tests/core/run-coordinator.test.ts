@@ -3,7 +3,7 @@ import { makeRuntimeConfig } from '../helpers/make-runtime-config.js';
 
 // ─── Module mocks ────────────────────────────────────────────────────────────
 
-vi.mock('../../src/logging/logger.js', () => ({
+vi.mock('../@cadre/framework/core', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -62,14 +62,14 @@ vi.mock('../../src/core/dependency-resolver.js', () => ({
   })),
 }));
 
-vi.mock('../../src/budget/cost-estimator.js', () => ({
+vi.mock('../@cadre/framework/core', () => ({
   CostEstimator: vi.fn().mockImplementation(() => ({
     estimate: vi.fn().mockReturnValue(0),
     format: vi.fn().mockReturnValue('$0.00'),
   })),
 }));
 
-vi.mock('../../src/core/progress.js', () => ({
+vi.mock('../@cadre/framework/engine', () => ({
   FleetProgressWriter: vi.fn().mockImplementation(() => ({
     appendEvent: vi.fn().mockResolvedValue(undefined),
   })),
@@ -108,7 +108,7 @@ import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } f
 import { killAllTrackedProcesses } from '../../src/util/process.js';
 import type { RuntimeConfig } from '../../src/config/loader.js';
 import type { PlatformProvider } from '../../src/platform/provider.js';
-import type { NotificationManager } from '../../src/notifications/manager.js';
+import type { NotificationManager } from '../@cadre/framework/notifications';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockDependencyResolver = DependencyResolver as unknown as ReturnType<typeof vi.fn>;

@@ -4,10 +4,9 @@ import type { GateResult, PhaseResult } from '../agents/types.js';
 import { AnalysisAmbiguityGate, type GateContext } from './phase-gate.js';
 import { buildGateMap } from './phase-registry.js';
 import type { PhaseGate } from './phase-gate.js';
-import type { CheckpointManager } from './checkpoint.js';
-import type { IssueProgressWriter } from './progress.js';
+import type { CheckpointManager, IssueProgressWriter } from '@cadre/framework/engine';
 import type { Logger } from '@cadre/framework/core';
-import { extractCadreJson } from '../util/cadre-json.js';
+import { extractCadreJson } from '@cadre/framework/runtime';
 
 export interface GateCoordinatorOptions {
   ambiguityThreshold: number;

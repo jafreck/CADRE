@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ZodError } from 'zod';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
-import type { CheckpointManager } from '../src/core/checkpoint.js';
+import type { CheckpointManager } from '@cadre/framework/engine';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { PlatformProvider, IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
-import type { Logger } from '../src/logging/logger.js';
+import type { Logger } from '@cadre/framework/core';
 
 // ── Hoisted mock functions ────────────────────────────────────────────────────
 
@@ -95,7 +95,7 @@ vi.mock('../src/core/phase-gate.js', () => ({
   clearGatePlugins: vi.fn(),
 }));
 
-vi.mock('../src/core/progress.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   IssueProgressWriter: vi.fn(() => ({
     appendEvent: mockProgressAppendEvent,
     write: mockProgressWrite,
@@ -136,7 +136,8 @@ vi.mock('@cadre/framework/engine', async (importOriginal) => ({
   })),
 }));
 
-vi.mock('../src/execution/task-queue.js', () => {
+vi.mock('@cadre/framework/engine', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@cadre/framework/engine')>();
   // selectNonOverlappingBatch is a static method on the TaskQueue class, so it must be
   // attached to the mock constructor function itself (not as a module-level export).
   const QueueFactory = vi.fn(() => ({
@@ -160,10 +161,22 @@ vi.mock('../src/execution/task-queue.js', () => {
     complete: vi.fn(),
     markBlocked: vi.fn(),
   })), { selectNonOverlappingBatch: mockSelectNonOverlappingBatch });
-  return { TaskQueue: TaskQueueMock, SessionQueue: SessionQueueMock };
+  return {
+    ...original,
+    TaskQueue: TaskQueueMock,
+    SessionQueue: SessionQueueMock,
+    IssueProgressWriter: vi.fn(() => ({
+      appendEvent: mockProgressAppendEvent,
+      write: mockProgressWrite,
+    })),
+    RetryExecutor: vi.fn(() => ({
+      execute: mockRetryExecutorExecute,
+    })),
+  };
 });
 
-vi.mock('../src/budget/token-tracker.js', () => ({
+vi.mock('@cadre/framework/runtime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre/framework/runtime')>()),
   TokenTracker: vi.fn(() => ({
     record: vi.fn(),
     getTotal: mockTokenTrackerGetTotal,
@@ -211,6 +224,7 @@ function makeConfig() {
     },
     pullRequest: {
       autoCreate: false,
+      autoComplete: false,
       draft: true,
       labels: [],
       reviewers: [],
@@ -232,8 +246,16 @@ function makeConfig() {
       ambiguityThreshold: 5,
       haltOnAmbiguity: false,
       respondToReviews: false,
+      maxWholePrReviewRetries: 1,
+      postCostComment: false,
     },
-    copilot: { cliCommand: 'copilot', agentDir: '.agents', timeout: 300000, model: 'claude-sonnet-4.6' },
+    agent: {
+      backend: 'copilot',
+      model: 'claude-sonnet-4.6',
+      timeout: 300000,
+      copilot: { cliCommand: 'copilot', agentDir: '.agents' },
+      claude: { cliCommand: 'claude', agentDir: '.claude/agents' },
+    },
   });
 }
 
@@ -259,6 +281,7 @@ function makeWorktree(): WorktreeInfo {
     branch: 'cadre/issue-42',
     exists: true,
     baseCommit: 'abc123',
+    syncedAgentFiles: [],
   } as unknown as WorktreeInfo;
 }
 
@@ -435,7 +458,7 @@ describe('IssueOrchestrator – ZodError retry handling in executeTask', () => {
 
     // Assert: logger.warn was called with the ZodError-formatted message
     const warnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(warnCalls.some((m: string) => m.includes('validation failed') && m.includes('will retry'))).toBe(true);
   });
@@ -466,7 +489,7 @@ describe('IssueOrchestrator – ZodError retry handling in executeTask', () => {
     await orchestrator.run();
 
     const warnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     const validationWarn = warnCalls.find((m: string) => m.includes('validation failed'));
     expect(validationWarn).toBeDefined();
@@ -501,7 +524,7 @@ describe('IssueOrchestrator – ZodError retry handling in executeTask', () => {
     await orchestrator.run();
 
     const warnCall = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.find(
-      ([msg]: [string]) => msg.includes('validation failed'),
+      ([msg]) => msg.includes('validation failed'),
     );
     expect(warnCall).toBeDefined();
     // Second arg is the metadata object – should contain taskId
@@ -533,7 +556,7 @@ describe('IssueOrchestrator – ZodError retry handling in executeTask', () => {
     await orchestrator.run();
 
     const warnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.map(
-      ([msg]: [string]) => msg,
+      ([msg]) => msg,
     );
     expect(warnCalls.some((m: string) => m.includes('validation failed'))).toBe(false);
   });

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { FleetResult } from '../core/fleet-orchestrator.js';
 import type { IssueDetail } from '../platform/provider.js';
-import { CostEstimator } from '../budget/cost-estimator.js';
+import { CostEstimator } from '@cadre/framework/core';
 import { ISSUE_PHASES } from '../core/phase-registry.js';
 import { atomicWriteJSON, ensureDir, readJSON } from '../util/fs.js';
 import type { RunReport, RunIssueSummary, RunPhaseSummary, RunTotals } from './types.js';

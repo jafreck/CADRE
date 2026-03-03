@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeFile, readFile } from 'node:fs/promises';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
-import { IssueDag } from '../src/core/issue-dag.js';
+import { IssueDag } from '@cadre/framework/engine';
 import { DependencyResolutionError } from '../src/errors.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { WorktreeManager } from '../src/git/worktree.js';
 import type { AgentResult } from '../src/agents/types.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 
 function makeIssue(number: number): IssueDetail {
   return {

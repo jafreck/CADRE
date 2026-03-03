@@ -4,7 +4,7 @@ import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
 import type { ReviewThread } from '../src/platform/provider.js';
 import type { AgentSession, AgentName } from '../src/agents/types.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 import { readFile, writeFile, mkdir, rename, access } from 'node:fs/promises';
 
 vi.mock('node:fs/promises');

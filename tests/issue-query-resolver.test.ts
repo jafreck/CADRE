@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueQueryResolver } from '../src/github/query.js';
 import { IssueFetcher } from '../src/github/issues.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
 

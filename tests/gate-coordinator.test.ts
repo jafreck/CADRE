@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GateCoordinator } from '../src/core/gate-coordinator.js';
-import type { CheckpointManager } from '../src/core/checkpoint.js';
-import type { IssueProgressWriter } from '../src/core/progress.js';
-import type { Logger } from '../src/logging/logger.js';
+import type { CheckpointManager } from '@cadre/framework/engine';
+import type { IssueProgressWriter } from '@cadre/framework/engine';
+import type { Logger } from '@cadre/framework/core';
 import type { PhaseResult, GateResult } from '../src/agents/types.js';
 
 // ── Hoisted mock functions ────────────────────────────────────────────────────

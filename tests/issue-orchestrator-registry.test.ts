@@ -56,10 +56,10 @@ import { ImplementationPhaseExecutor } from '../src/executors/implementation-pha
 import { IntegrationPhaseExecutor } from '../src/executors/integration-phase-executor.js';
 import { PRCompositionPhaseExecutor } from '../src/executors/pr-composition-phase-executor.js';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import type { CheckpointManager } from '../src/core/checkpoint.js';
+import type { CheckpointManager } from '@cadre/framework/engine';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { PlatformProvider } from '../src/platform/provider.js';
-import type { Logger } from '../src/logging/logger.js';
+import type { Logger } from '@cadre/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail, WorktreeInfo } from '../src/platform/provider.js';
 import type { PhaseContext } from '../src/core/phase-executor.js';

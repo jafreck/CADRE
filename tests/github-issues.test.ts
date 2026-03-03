@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GitHubAPI } from '../src/github/api.js';
 import type { Octokit } from '@octokit/rest';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 
 describe('GitHubAPI', () => {
   let api: GitHubAPI;

@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from '../config/loader.js';
-import { FleetCheckpointManager } from './checkpoint.js';
+import { FleetCheckpointManager } from '@cadre/framework/engine';
 import type { Logger } from '@cadre/framework/core';
 
 export class ResetService {

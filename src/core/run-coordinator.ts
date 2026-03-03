@@ -6,10 +6,10 @@ import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
 import { ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
-import { CostEstimator } from '../budget/cost-estimator.js';
+import { CostEstimator } from '@cadre/framework/core';
 import type { Logger } from '@cadre/framework/core';
 import { killAllTrackedProcesses } from '../util/process.js';
-import { FleetProgressWriter } from './progress.js';
+import { FleetProgressWriter, type IssueDag } from '@cadre/framework/engine';
 import {
   PreRunValidationSuite,
   diskValidator,
@@ -22,7 +22,6 @@ import { registryCompletenessValidator } from '../validation/registry-completene
 import { checkStaleState } from '../validation/stale-state-validator.js';
 import type { NotificationManager } from '@cadre/framework/notifications';
 import { DependencyResolver } from './dependency-resolver.js';
-import type { IssueDag } from './issue-dag.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../errors.js';
 
 export class RunCoordinator {

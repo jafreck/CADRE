@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
-import type { CheckpointManager } from '../src/core/checkpoint.js';
+import type { CheckpointManager } from '@cadre/framework/engine';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { PlatformProvider, IssueDetail } from '../src/platform/provider.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
@@ -55,12 +55,25 @@ vi.mock('../src/core/phase-gate.js', () => ({
   clearGatePlugins: vi.fn(),
 }));
 
-vi.mock('../src/core/progress.js', () => ({
-  IssueProgressWriter: vi.fn(() => ({
-    appendEvent: mockProgressAppendEvent,
-    write: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('@cadre/framework/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre/framework/engine')>();
+  return {
+    ...actual,
+    IssueProgressWriter: vi.fn(() => ({
+      appendEvent: mockProgressAppendEvent,
+      write: vi.fn().mockResolvedValue(undefined),
+    })),
+    RetryExecutor: vi.fn(() => ({ execute: mockRetryExecutorExecute })),
+    TaskQueue: vi.fn(() => ({
+      topologicalSort: vi.fn().mockReturnValue([]),
+      isComplete: vi.fn().mockReturnValue(true),
+      getReady: vi.fn().mockReturnValue([]),
+      getCounts: vi.fn().mockReturnValue({ total: 0, completed: 0, blocked: 0 }),
+      restoreState: vi.fn(),
+    })),
+    selectNonOverlappingBatch: vi.fn().mockReturnValue([]),
+  };
+});
 
 vi.mock('../src/agents/context-builder.js', () => ({
   ContextBuilder: vi.fn(() => ({
@@ -88,28 +101,17 @@ vi.mock('../src/git/commit.js', () => ({
   })),
 }));
 
-vi.mock('../src/execution/retry.js', () => ({
-  RetryExecutor: vi.fn(() => ({ execute: mockRetryExecutorExecute })),
-}));
-
-vi.mock('../src/execution/task-queue.js', () => ({
-  TaskQueue: vi.fn(() => ({
-    topologicalSort: vi.fn().mockReturnValue([]),
-    isComplete: vi.fn().mockReturnValue(true),
-    getReady: vi.fn().mockReturnValue([]),
-    getCounts: vi.fn().mockReturnValue({ total: 0, completed: 0, blocked: 0 }),
-    restoreState: vi.fn(),
-  })),
-  selectNonOverlappingBatch: vi.fn().mockReturnValue([]),
-}));
-
-vi.mock('../src/budget/token-tracker.js', () => ({
-  TokenTracker: vi.fn(() => ({
-    record: vi.fn(),
-    getTotal: vi.fn().mockReturnValue(0),
-    checkIssueBudget: vi.fn().mockReturnValue('ok'),
-  })),
-}));
+vi.mock('@cadre/framework/runtime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre/framework/runtime')>();
+  return {
+    ...actual,
+    TokenTracker: vi.fn(() => ({
+      record: vi.fn(),
+      getTotal: vi.fn().mockReturnValue(0),
+      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    })),
+  };
+});
 
 vi.mock('../src/util/fs.js', () => ({
   ensureDir: vi.fn().mockResolvedValue(undefined),

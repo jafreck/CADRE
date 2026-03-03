@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PullRequestCreator } from '../src/git/pr.js';
 import { GitHubAPI } from '../src/github/api.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { Octokit } from '@octokit/rest';
 

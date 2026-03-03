@@ -10,7 +10,7 @@ vi.mock('../../src/git/worktree.js', () => ({
   })),
 }));
 
-vi.mock('../../src/core/checkpoint.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({
       projectName: 'test-project',
@@ -23,7 +23,7 @@ vi.mock('../../src/core/checkpoint.js', () => ({
 }));
 
 import { WorktreeLifecycleService } from '../../src/core/worktree-lifecycle-service.js';
-import { FleetCheckpointManager } from '../../src/core/checkpoint.js';
+import { FleetCheckpointManager } from '@cadre/framework/engine';
 import type { RuntimeConfig } from '../../src/config/loader.js';
 
 const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnType<typeof vi.fn>;

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueFetcher } from '../src/github/issues.js';
 import { GitHubAPI } from '../src/github/api.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 
 vi.mock('../src/github/api.js', () => ({

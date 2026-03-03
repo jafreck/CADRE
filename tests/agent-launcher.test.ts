@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AgentLauncher } from '../src/core/agent-launcher.js';
 import { AGENT_DEFINITIONS } from '../src/agents/types.js';
-import { Logger } from '../src/logging/logger.js';
+import { Logger } from '@cadre/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { AgentInvocation } from '../src/agents/types.js';
 

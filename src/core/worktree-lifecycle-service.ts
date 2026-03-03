@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from '../config/loader.js';
 import { WorktreeManager } from '../git/worktree.js';
-import { FleetCheckpointManager } from './checkpoint.js';
+import { FleetCheckpointManager } from '@cadre/framework/engine';
 import type { PlatformProvider } from '../platform/provider.js';
 import type { Logger } from '@cadre/framework/core';
 

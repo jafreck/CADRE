@@ -4,7 +4,7 @@ vi.mock('../../src/util/fs.js', () => ({
   exists: vi.fn(),
 }));
 
-vi.mock('../../src/core/checkpoint.js', () => ({
+vi.mock('@cadre/framework/engine', () => ({
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({
       projectName: 'test-project',
@@ -43,7 +43,7 @@ vi.mock('../../src/cli/status-renderer.js', () => ({
 }));
 
 import { StatusService } from '../../src/core/status-service.js';
-import { FleetCheckpointManager, CheckpointManager } from '../../src/core/checkpoint.js';
+import { FleetCheckpointManager, CheckpointManager } from '@cadre/framework/engine';
 import { exists } from '../../src/util/fs.js';
 import { renderFleetStatus, renderIssueDetail } from '../../src/cli/status-renderer.js';
 import type { RuntimeConfig } from '../../src/config/loader.js';

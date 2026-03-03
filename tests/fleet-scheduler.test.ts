@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetScheduler, type ProcessIssueFn, type MarkDepBlockedFn } from '../src/core/fleet-scheduler.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { IssueResult } from '../src/core/issue-orchestrator.js';
-import type { IssueDag } from '../src/core/issue-dag.js';
+import type { IssueDag } from '@cadre/framework/engine';
 
 function makeIssue(number: number): IssueDetail {
   return {

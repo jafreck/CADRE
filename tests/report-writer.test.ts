@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import { ReportWriter } from '../src/reporting/report-writer.js';
-import { CostEstimator } from '../src/budget/cost-estimator.js';
+import { CostEstimator } from '@cadre/framework/core';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
 import type { FleetResult } from '../src/core/fleet-orchestrator.js';
