@@ -28,24 +28,24 @@
     "@cadre/framework": "*",
     "@cadre/runtime-provider-docker": "*",
     "@cadre/runtime-provider-kata": "*",
-    "@inquirer/prompts": "^7",
-    "@modelcontextprotocol/sdk": "^1.12",
-    "@octokit/rest": "^21",
+    "@inquirer/prompts": "^8",
+    "@modelcontextprotocol/sdk": "^1.27",
+    "@octokit/rest": "^22",
     "chalk": "^5",
-    "commander": "^12",
-    "date-fns": "^3",
-    "ora": "^8",
-    "p-limit": "^6",
-    "p-queue": "^8",
-    "simple-git": "^3.27",
-    "zod": "^3.23",
-    "zod-to-json-schema": "^3.23"
+    "commander": "^14",
+    "date-fns": "^4",
+    "ora": "^9",
+    "p-limit": "^7",
+    "p-queue": "^9",
+    "simple-git": "^3.32",
+    "zod": "^3.25",
+    "zod-to-json-schema": "^3.25"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^25",
     "@vitest/coverage-v8": "^2",
     "tsx": "^4",
-    "typescript": "^5.5",
+    "typescript": "^5.9",
     "vitest": "^2"
   }
 }
