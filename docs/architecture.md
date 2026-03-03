@@ -533,6 +533,8 @@ graph TD
 
 `PHASE_MANIFEST` in `src/core/phase-registry.ts` is the **single source of truth** for all pipeline phase metadata. Rather than scattering phase registrations, gate assignments, and review-response membership across multiple files, every piece of per-phase configuration lives in one typed array entry.
 
+The shared phase primitives are consumed from the workspace package boundary, `@cadre/pipeline-engine`. Runtime modules should import from `@cadre/pipeline-engine` (or CADRE core wrappers such as `src/core/phase-registry.ts`) rather than `packages/pipeline-engine/src/*` paths.
+
 ### `PhaseManifestEntry` Fields
 
 | Field | Type | Purpose |
