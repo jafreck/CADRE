@@ -13,7 +13,15 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cadre/framework": ["packages/framework/src/index.ts"],
+      "@cadre/framework/*": [
+        "packages/framework/src/*/index.ts",
+        "packages/framework/src/*"
+      ]
+    }
   },
   "include": [
     "src/**/*",
