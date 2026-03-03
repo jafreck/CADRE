@@ -1272,6 +1272,33 @@ describe('GitHubProvider – mergePullRequest', () => {
     expect(mergeMock).toHaveBeenCalledTimes(2);
   });
 
+  it('fails fast when mergeable_state is dirty', async () => {
+    const mergeMock = vi.fn().mockRejectedValueOnce({ status: 409 });
+    const mockOctokit = {
+      rest: {
+        pulls: {
+          merge: mergeMock,
+          get: vi.fn().mockResolvedValue({
+            data: {
+              merged: false,
+              state: 'open',
+              head: { sha: 'deadbeef' },
+              mergeable: false,
+              mergeable_state: 'dirty',
+            },
+          }),
+          updateBranch: vi.fn(),
+        },
+        repos: { getCombinedStatusForRef: vi.fn() },
+        checks: { listForRef: vi.fn() },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(151, 'main')).rejects.toThrow('mergeable_state=dirty');
+  });
+
   it('throws when combined commit statuses are failing with no named contexts', async () => {
     const mergeMock = vi.fn().mockRejectedValueOnce({ status: 409 });
     const mockOctokit = {
