@@ -76,12 +76,18 @@ vi.mock('../src/core/phase-gate.js', () => {
 });
 
 // Mock heavy I/O and pipeline dependencies so unit tests stay fast and deterministic.
-vi.mock('@cadre/framework/engine', () => ({
-  IssueProgressWriter: vi.fn().mockImplementation(() => ({
-    appendEvent: vi.fn().mockResolvedValue(undefined),
-    write: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('@cadre/framework/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre/framework/engine')>();
+  return {
+    ...actual,
+    IssueProgressWriter: vi.fn().mockImplementation(() => ({
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockResolvedValue(undefined),
+    })),
+    RetryExecutor: vi.fn().mockImplementation(() => ({})),
+    TaskQueue: vi.fn().mockImplementation(() => ({})),
+  };
+});
 
 vi.mock('../src/git/commit.js', () => ({
   CommitManager: vi.fn().mockImplementation(() => ({
@@ -101,14 +107,6 @@ vi.mock('../src/agents/context-builder.js', () => ({
 
 vi.mock('../src/agents/result-parser.js', () => ({
   ResultParser: vi.fn().mockImplementation(() => ({})),
-}));
-
-vi.mock('@cadre/framework/engine', () => ({
-  RetryExecutor: vi.fn().mockImplementation(() => ({})),
-}));
-
-vi.mock('@cadre/framework/engine', () => ({
-  TaskQueue: vi.fn().mockImplementation(() => ({})),
 }));
 
 vi.mock('@cadre/framework/runtime', () => ({

@@ -2,15 +2,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies
-vi.mock('@cadre/framework/core', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  })),
-}));
+vi.mock('@cadre/framework/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre/framework/core')>();
+  return {
+    ...actual,
+    Logger: vi.fn().mockImplementation(() => ({
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    })),
+    CostEstimator: vi.fn().mockImplementation(() => ({
+      estimate: vi.fn().mockReturnValue({ totalCost: 0 }),
+      format: vi.fn().mockReturnValue('$0.00'),
+    })),
+  };
+});
 
 vi.mock('../src/platform/factory.js', () => ({
   createPlatformProvider: vi.fn().mockReturnValue({
@@ -42,23 +50,10 @@ vi.mock('../src/core/agent-launcher.js', () => ({
 
 vi.mock('../src/util/process.js', () => ({ killAllTrackedProcesses: vi.fn() }));
 
-vi.mock('@cadre/framework/core', () => ({
-  CostEstimator: vi.fn().mockImplementation(() => ({
-    estimate: vi.fn().mockReturnValue({ totalCost: 0 }),
-    format: vi.fn().mockReturnValue('$0.00'),
-  })),
-}));
-
 vi.mock('@cadre/framework/runtime', () => ({ TokenTracker: vi.fn() }));
 
 vi.mock('../src/reporting/report-writer.js', () => ({
   ReportWriter: { listReports: vi.fn().mockResolvedValue([]), readReport: vi.fn() },
-}));
-
-vi.mock('@cadre/framework/engine', () => ({
-  FleetProgressWriter: vi.fn().mockImplementation(() => ({
-    appendEvent: vi.fn().mockResolvedValue(undefined),
-  })),
 }));
 
 // Mocks under test for status()
@@ -69,39 +64,46 @@ vi.mock('../src/util/fs.js', () => ({
   readJSON: vi.fn(),
 }));
 
-vi.mock('@cadre/framework/engine', () => ({
-  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({
-      projectName: 'test-project',
-      issues: {},
-      tokenUsage: { total: 0, byIssue: {} },
-      lastCheckpoint: '',
-      resumeCount: 0,
-    }),
-    setIssueStatus: vi.fn().mockResolvedValue(undefined),
-  })),
-  CheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({
-      issueNumber: 1,
-      version: 1,
-      currentPhase: 1,
-      currentTask: null,
-      completedPhases: [],
-      completedTasks: [],
-      failedTasks: [],
-      blockedTasks: [],
-      phaseOutputs: {},
-      gateResults: {},
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-      worktreePath: '',
-      branchName: '',
-      baseCommit: '',
-      startedAt: new Date().toISOString(),
-      lastCheckpoint: new Date().toISOString(),
-      resumeCount: 0,
-    }),
-  })),
-}));
+vi.mock('@cadre/framework/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre/framework/engine')>();
+  return {
+    ...actual,
+    FleetProgressWriter: vi.fn().mockImplementation(() => ({
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+    })),
+    FleetCheckpointManager: vi.fn().mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        projectName: 'test-project',
+        issues: {},
+        tokenUsage: { total: 0, byIssue: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+      }),
+      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    })),
+    CheckpointManager: vi.fn().mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        version: 1,
+        currentPhase: 1,
+        currentTask: null,
+        completedPhases: [],
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        gateResults: {},
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        worktreePath: '',
+        branchName: '',
+        baseCommit: '',
+        startedAt: new Date().toISOString(),
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+      }),
+    })),
+  };
+});
 
 vi.mock('../src/cli/status-renderer.js', () => ({
   renderFleetStatus: vi.fn().mockReturnValue('fleet status table'),

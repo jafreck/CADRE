@@ -7,7 +7,7 @@ vi.mock('../../src/reporting/report-writer.js', () => ({
   },
 }));
 
-vi.mock('../@cadre/framework/core', () => ({
+vi.mock('@cadre/framework/core', () => ({
   CostEstimator: vi.fn().mockImplementation(() => ({
     estimate: vi.fn().mockReturnValue({ totalCost: 0.05 }),
     format: vi.fn().mockReturnValue('$0.05'),
@@ -16,7 +16,7 @@ vi.mock('../@cadre/framework/core', () => ({
 
 import { ReportService } from '../../src/core/report-service.js';
 import { ReportWriter } from '../../src/reporting/report-writer.js';
-import { CostEstimator } from '../@cadre/framework/core';
+import { CostEstimator } from '@cadre/framework/core';
 import type { RuntimeConfig } from '../../src/config/loader.js';
 
 const mockListReports = ReportWriter.listReports as ReturnType<typeof vi.fn>;

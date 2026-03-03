@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   analysisSchema,
   scoutReportSchema,
-  implementationTaskSchema,
+  agentSessionSchema,
   implementationPlanSchema,
   reviewIssueSchema,
   reviewSchema,
@@ -132,7 +132,7 @@ describe('scoutReportSchema', () => {
 // ---------------------------------------------------------------------------
 // implementationTaskSchema / implementationPlanSchema
 // ---------------------------------------------------------------------------
-describe('implementationTaskSchema', () => {
+describe('agentSessionSchema', () => {
   const validTask = {
     id: 'session-001',
     name: 'Add feature',
@@ -149,26 +149,26 @@ describe('implementationTaskSchema', () => {
   };
 
   it('should accept a valid ImplementationTask', () => {
-    const result = implementationTaskSchema.safeParse(validTask);
+    const result = agentSessionSchema.safeParse(validTask);
     expect(result.success).toBe(true);
   });
 
   it('should reject an unknown complexity value', () => {
     const invalid = { ...validTask, steps: [{ ...validTask.steps[0], complexity: 'extreme' }] };
-    const result = implementationTaskSchema.safeParse(invalid);
+    const result = agentSessionSchema.safeParse(invalid);
     expect(result.success).toBe(false);
   });
 
   it('should reject when id field is missing', () => {
     const { id: _i, ...without } = validTask;
-    const result = implementationTaskSchema.safeParse(without);
+    const result = agentSessionSchema.safeParse(without);
     expect(result.success).toBe(false);
   });
 
   it('should reject when acceptanceCriteria field is missing', () => {
     const { acceptanceCriteria: _a, ...withoutAc } = validTask.steps[0];
     const invalid = { ...validTask, steps: [withoutAc] };
-    const result = implementationTaskSchema.safeParse(invalid);
+    const result = agentSessionSchema.safeParse(invalid);
     expect(result.success).toBe(false);
   });
 
@@ -176,7 +176,7 @@ describe('implementationTaskSchema', () => {
     const complexities = ['simple', 'moderate', 'complex'] as const;
     for (const complexity of complexities) {
       const invalid = { ...validTask, steps: [{ ...validTask.steps[0], complexity }] };
-      const result = implementationTaskSchema.safeParse(invalid);
+      const result = agentSessionSchema.safeParse(invalid);
       expect(result.success).toBe(true);
     }
   });

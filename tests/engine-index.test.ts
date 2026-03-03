@@ -46,9 +46,6 @@ describe('pipeline-engine runtime integration path', () => {
       '../src/core/phase-executor.ts',
       '../src/core/phase-gate.ts',
       '../src/core/phase-registry.ts',
-      '../src/core/issue-dag.ts',
-      '../src/core/checkpoint.ts',
-      '../src/core/progress.ts',
     ];
 
     for (const relativePath of coreFiles) {

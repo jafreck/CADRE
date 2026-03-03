@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { implementationTaskSchema, implementationPlanSchema } from '../../src/agents/schemas/index.js';
+import { agentSessionSchema, implementationPlanSchema } from '../../src/agents/schemas/index.js';
 
 const makeValidSession = (id = 'session-001') => ({
   id,
@@ -16,30 +16,30 @@ const makeValidSession = (id = 'session-001') => ({
   }],
 });
 
-describe('implementationTaskSchema', () => {
+describe('agentSessionSchema', () => {
   const validTask = makeValidSession();
 
   it('should accept a valid ImplementationTask', () => {
-    const result = implementationTaskSchema.safeParse(validTask);
+    const result = agentSessionSchema.safeParse(validTask);
     expect(result.success).toBe(true);
   });
 
   it('should reject when id field is missing', () => {
     const { id: _i, ...without } = validTask;
-    const result = implementationTaskSchema.safeParse(without);
+    const result = agentSessionSchema.safeParse(without);
     expect(result.success).toBe(false);
   });
 
   it('should reject an unknown complexity value', () => {
     const invalid = { ...validTask, steps: [{ ...validTask.steps[0], complexity: 'extreme' }] };
-    const result = implementationTaskSchema.safeParse(invalid);
+    const result = agentSessionSchema.safeParse(invalid);
     expect(result.success).toBe(false);
   });
 
   it('should reject when acceptanceCriteria field is missing', () => {
     const { acceptanceCriteria: _a, ...withoutAc } = validTask.steps[0];
     const invalid = { ...validTask, steps: [withoutAc] };
-    const result = implementationTaskSchema.safeParse(invalid);
+    const result = agentSessionSchema.safeParse(invalid);
     expect(result.success).toBe(false);
   });
 
@@ -47,13 +47,13 @@ describe('implementationTaskSchema', () => {
     const complexities = ['simple', 'moderate', 'complex'];
     for (const complexity of complexities) {
       const valid = { ...validTask, steps: [{ ...validTask.steps[0], complexity }] };
-      const result = implementationTaskSchema.safeParse(valid);
+      const result = agentSessionSchema.safeParse(valid);
       expect(result.success).toBe(true);
     }
   });
 
   it('should strip unknown extra fields', () => {
-    const result = implementationTaskSchema.safeParse({ ...validTask, unexpectedField: 'extra' });
+    const result = agentSessionSchema.safeParse({ ...validTask, unexpectedField: 'extra' });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(Object.keys(result.data)).not.toContain('unexpectedField');
@@ -61,7 +61,7 @@ describe('implementationTaskSchema', () => {
   });
 
   it('should default testable to true when omitted', () => {
-    const result = implementationTaskSchema.safeParse(validTask);
+    const result = agentSessionSchema.safeParse(validTask);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.testable).toBe(true);
@@ -69,7 +69,7 @@ describe('implementationTaskSchema', () => {
   });
 
   it('should accept testable: false', () => {
-    const result = implementationTaskSchema.safeParse({ ...validTask, testable: false });
+    const result = agentSessionSchema.safeParse({ ...validTask, testable: false });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.testable).toBe(false);
