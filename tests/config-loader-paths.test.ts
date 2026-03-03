@@ -230,3 +230,29 @@ describe('loadConfig – worktreeRoot resolution', () => {
     expect(config.worktreeRoot).toBe(join(expectedStateDir, 'worktrees'));
   });
 });
+
+describe('loadConfig – cwd-based normalization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('resolves relative configPath and relative repoPath against process.cwd()', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/workspace/root');
+
+    try {
+      const cfg = makeConfig({
+        repoPath: 'repos/demo',
+        stateDir: 'state',
+      });
+
+      mockExists.mockImplementation(async (_p: string) => true);
+      mockReadFile.mockResolvedValue(JSON.stringify(cfg) as unknown as Buffer);
+
+      const config = await loadConfig('cadre.config.json');
+      expect(config.repoPath).toBe(resolve('/workspace/root', 'repos/demo'));
+      expect(config.stateDir).toBe(resolve('/workspace/root', 'state'));
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+});

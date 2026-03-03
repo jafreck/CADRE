@@ -1254,3 +1254,186 @@ describe('AzureDevOpsProvider.mergePullRequest()', () => {
     expect(completionBody.completionOptions.mergeStrategy).toBe('rebase');
   });
 });
+
+describe('AzureDevOpsProvider.auth lifecycle and issue parsing fallbacks', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('connect() throws a clear auth error when project validation fails', async () => {
+    const provider = makeProvider();
+    fetchStub.mockResolvedValueOnce(okJson({ name: 'my-project' }));
+
+    await expect(provider.connect()).rejects.toThrow('Azure DevOps authentication failed');
+  });
+
+  it('checkAuth() returns false when API request errors', async () => {
+    const provider = makeProvider();
+    fetchStub.mockResolvedValueOnce(errorResponse(401, 'Unauthorized'));
+
+    await expect(provider.checkAuth()).resolves.toBe(false);
+  });
+
+  it('disconnect() clears connection state so subsequent API calls fail fast', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    await provider.disconnect();
+
+    await expect(provider.getPullRequest(1)).rejects.toThrow('not connected');
+  });
+
+  it('getIssue() parses closed state, labels, milestone, uniqueName assignee, and comments', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        id: 123,
+        fields: {
+          'System.Title': 'Investigate regression',
+          'System.Description': 'Details',
+          'System.State': 'Resolved',
+          'System.Tags': 'bug; needs-triage ; ',
+          'System.AssignedTo': { uniqueName: 'owner@example.com' },
+          'System.IterationPath': 'my-project\\Sprint 12',
+          'System.CreatedDate': '2025-01-01T00:00:00Z',
+          'System.ChangedDate': '2025-01-02T00:00:00Z',
+        },
+      }),
+    );
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        comments: [
+          {
+            createdBy: { displayName: 'Alice Reviewer' },
+            text: 'Looks good',
+            createdDate: '2025-01-03T00:00:00Z',
+          },
+        ],
+      }),
+    );
+
+    const result = await provider.getIssue(123);
+
+    expect(result.state).toBe('closed');
+    expect(result.labels).toEqual(['bug', 'needs-triage']);
+    expect(result.assignees).toEqual(['owner@example.com']);
+    expect(result.milestone).toBe('Sprint 12');
+    expect(result.comments).toEqual([
+      {
+        author: 'Alice Reviewer',
+        body: 'Looks good',
+        createdAt: '2025-01-03T00:00:00Z',
+      },
+    ]);
+  });
+
+  it('getIssue() falls back to empty comments and logs debug when comments endpoint fails', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        id: 124,
+        fields: {
+          'System.Title': 'Open issue',
+          'System.State': 'Active',
+          'System.IterationPath': 'Backlog',
+        },
+      }),
+    );
+    fetchStub.mockResolvedValueOnce(errorResponse(500, 'comment API failed'));
+
+    const result = await provider.getIssue(124);
+
+    expect(result.state).toBe('open');
+    expect(result.milestone).toBe('Backlog');
+    expect(result.comments).toEqual([]);
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Could not fetch comments for work item 124'),
+    );
+  });
+
+  it('getIssue() propagates API errors for the primary work item fetch', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+
+    fetchStub.mockResolvedValueOnce(errorResponse(404, 'work item not found'));
+
+    await expect(provider.getIssue(404)).rejects.toThrow('Azure DevOps API error: 404');
+  });
+});
+
+describe('AzureDevOpsProvider.pull request state parsing and filter fallbacks', () => {
+  let fetchStub: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchStub = vi.fn();
+    vi.stubGlobal('fetch', fetchStub);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ['completed', 'merged'],
+    ['abandoned', 'closed'],
+    ['active', 'open'],
+  ] as const)('getPullRequest() maps ADO status "%s" to "%s"', async (adoStatus, expected) => {
+    const provider = await makeConnectedProvider(fetchStub);
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        pullRequestId: 501,
+        title: 'Status mapping',
+        sourceRefName: 'refs/heads/feature/x',
+        targetRefName: 'refs/heads/main',
+        status: adoStatus,
+      }),
+    );
+
+    const result = await provider.getPullRequest(501);
+
+    expect(result.state).toBe(expected);
+  });
+
+  it('listPullRequests() supports base filter, all-state mapping, and unknown status fallback to open', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+    fetchStub.mockResolvedValueOnce(
+      okJson({
+        value: [
+          {
+            pullRequestId: 601,
+            title: 'Unknown status PR',
+            sourceRefName: 'refs/heads/feature/y',
+            targetRefName: 'refs/heads/release/1.0',
+            status: 'mystery',
+          },
+        ],
+      }),
+    );
+
+    const result = await provider.listPullRequests({ state: 'all', base: 'release/1.0' });
+    const listCall = fetchStub.mock.calls[1];
+
+    expect(listCall[0]).toContain('searchCriteria.status=all');
+    expect(listCall[0]).toContain('searchCriteria.targetRefName=refs%2Fheads%2Frelease%2F1.0');
+    expect(result[0].state).toBe('open');
+  });
+
+  it('listPullRequests() falls back to active status for unknown state values', async () => {
+    const provider = await makeConnectedProvider(fetchStub);
+    fetchStub.mockResolvedValueOnce(okJson({ value: [] }));
+
+    await provider.listPullRequests({ state: 'unexpected' as any });
+
+    const listCall = fetchStub.mock.calls[1];
+    expect(listCall[0]).toContain('searchCriteria.status=active');
+  });
+});

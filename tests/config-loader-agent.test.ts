@@ -151,4 +151,12 @@ describe('loadConfig – agent configuration', () => {
     mockReadFile.mockResolvedValue(JSON.stringify(BASE_CONFIG) as unknown as Buffer);
     await expect(loadConfig('/tmp/repo/cadre.config.json')).rejects.toThrow('not a git repository');
   });
+
+  it('should throw ConfigLoadError with validation issues when schema parse fails', async () => {
+    mockExists.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue(JSON.stringify({ repository: 'owner/repo' }) as unknown as Buffer);
+
+    await expect(loadConfig('/tmp/repo/cadre.config.json')).rejects.toThrow('Invalid config:');
+    await expect(loadConfig('/tmp/repo/cadre.config.json')).rejects.toThrow('projectName');
+  });
 });
