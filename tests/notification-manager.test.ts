@@ -1,30 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   NotificationManager,
-  createNotificationManager,
   registerNotificationProviderFactory,
   hasNotificationProviderFactory,
   resetNotificationProviderFactories,
-} from '../src/notifications/manager.js';
-import type { CadreEvent } from '../src/notifications/types.js';
-import type { NotificationsConfig } from '../src/config/schema.js';
+} from '../packages/framework/src/notifications/manager.js';
+import type { CadreEvent, NotificationsConfig } from '../packages/framework/src/notifications/types.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
-vi.mock('../src/notifications/webhook-provider.js', () => ({
+vi.mock('../packages/framework/src/notifications/webhook-provider.js', () => ({
   WebhookProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
 }));
 
-vi.mock('../src/notifications/slack-provider.js', () => ({
+vi.mock('../packages/framework/src/notifications/slack-provider.js', () => ({
   SlackProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
 }));
 
-vi.mock('../src/notifications/log-provider.js', () => ({
+vi.mock('../packages/framework/src/notifications/log-provider.js', () => ({
   LogProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
 }));
 
-import { WebhookProvider } from '../src/notifications/webhook-provider.js';
-import { SlackProvider } from '../src/notifications/slack-provider.js';
-import { LogProvider } from '../src/notifications/log-provider.js';
+import { WebhookProvider } from '../packages/framework/src/notifications/webhook-provider.js';
+import { SlackProvider } from '../packages/framework/src/notifications/slack-provider.js';
+import { LogProvider } from '../packages/framework/src/notifications/log-provider.js';
 
 const MockWebhookProvider = WebhookProvider as unknown as ReturnType<typeof vi.fn>;
 const MockSlackProvider = SlackProvider as unknown as ReturnType<typeof vi.fn>;
@@ -247,7 +245,7 @@ describe('NotificationManager', () => {
   });
 });
 
-describe('createNotificationManager', () => {
+describe('NotificationManager runtime config integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     MockWebhookProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
@@ -255,9 +253,9 @@ describe('createNotificationManager', () => {
     MockLogProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
   });
 
-  it('should return a NotificationManager instance', () => {
+  it('should construct a NotificationManager from runtime config values', () => {
     const config = makeRuntimeConfig({ notifications: makeConfig() });
-    const manager = createNotificationManager(config);
+    const manager = new NotificationManager(config.notifications, config.stateDir);
     expect(manager).toBeInstanceOf(NotificationManager);
   });
 
@@ -271,7 +269,7 @@ describe('createNotificationManager', () => {
       }),
     });
 
-    const manager = createNotificationManager(config);
+    const manager = new NotificationManager(config.notifications, config.stateDir);
     await manager.dispatch(sampleEvent);
 
     expect(webhookNotify).toHaveBeenCalledOnce();
@@ -286,7 +284,7 @@ describe('createNotificationManager', () => {
       }),
     });
 
-    createNotificationManager(config);
+    new NotificationManager(config.notifications, config.stateDir);
 
     expect(MockLogProvider).toHaveBeenCalledWith(
       expect.objectContaining({ logFile: '/tmp/cadre-state/notifications.log' }),
@@ -301,7 +299,7 @@ describe('createNotificationManager', () => {
       }),
     });
 
-    createNotificationManager(config);
+    new NotificationManager(config.notifications, config.stateDir);
 
     expect(MockLogProvider).toHaveBeenCalledWith(
       expect.objectContaining({ logFile: '/tmp/cadre-state/notifications.jsonl' }),
