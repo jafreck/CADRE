@@ -361,6 +361,12 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockResultParserParsePlan.mockResolvedValue([]);
+    mockSessionQueueInstance.topologicalSort.mockReturnValue([]);
+    mockSessionQueueInstance.isComplete.mockReturnValue(true);
+    mockSessionQueueInstance.getReady.mockReturnValue([]);
+    mockSessionQueueInstance.getCounts.mockReturnValue({ total: 0, completed: 0, blocked: 0 });
+
     // Default: retryExecutor.execute calls fn once and returns its result
     mockRetryExecutorExecute.mockImplementation(async ({ fn }: { fn: (attempt: number) => Promise<any> }) => {
       try {
