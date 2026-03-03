@@ -3,7 +3,7 @@ import { writeFile, readFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { AgentSession, SessionReviewSummary } from '../agents/types.js';
-import { SessionQueue } from '../execution/task-queue.js';
+import { SessionQueue } from '@cadre/execution';
 import { exists } from '../util/fs.js';
 import { runWithRetry } from '../util/command-verifier.js';
 

@@ -3,8 +3,8 @@ import type { RuntimeConfig } from '../config/loader.js';
 import type { FleetResult } from './fleet-orchestrator.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
-import { Logger } from '../logging/logger.js';
-import { createNotificationManager } from '../notifications/manager.js';
+import { Logger } from '@cadre/observability';
+import { NotificationManager } from '@cadre/notifications';
 import { StatusService } from './status-service.js';
 import { ResetService } from './reset-service.js';
 import { ReportService } from './report-service.js';
@@ -33,7 +33,7 @@ export class CadreRuntime {
 
     this.provider = createPlatformProvider(config, this.logger);
 
-    const notifications = createNotificationManager(config);
+    const notifications = new NotificationManager(config.notifications, config.stateDir);
 
     this.statusService = new StatusService(config, this.logger);
     this.resetService = new ResetService(config, this.logger);

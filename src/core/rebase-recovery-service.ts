@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { ContextBuilder } from '../agents/context-builder.js';
-import { Logger } from '../logging/logger.js';
+import { Logger } from '@cadre/observability';
 
 /**
  * Handles rebasing a worktree branch and resolving any merge conflicts

@@ -1,4 +1,4 @@
-import type { NotificationManager } from '../notifications/manager.js';
+import type { NotificationManager } from '@cadre/notifications';
 
 /**
  * Dispatches typed lifecycle notification events for an issue pipeline.

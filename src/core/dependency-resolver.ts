@@ -9,7 +9,7 @@ import type { AgentLauncher } from './agent-launcher.js';
 import type { WorktreeManager } from '../git/worktree.js';
 import { IssueDag } from './issue-dag.js';
 import { CyclicDependencyError, DependencyResolutionError } from '../errors.js';
-import { Logger } from '../logging/logger.js';
+import { Logger } from '@cadre/observability';
 import { extractCadreJson } from '../util/cadre-json.js';
 import { ContextBuilder } from '../agents/context-builder.js';
 
