@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock all heavy dependencies
-vi.mock('../src/logging/logger.js', () => ({
+vi.mock('@cadre/observability', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -34,13 +34,10 @@ vi.mock('../src/platform/factory.js', () => ({
   }),
 }));
 
-vi.mock('../src/notifications/manager.js', () => ({
+vi.mock('@cadre/notifications', () => ({
   NotificationManager: vi.fn().mockImplementation(() => ({
     dispatch: vi.fn().mockResolvedValue(undefined),
   })),
-  createNotificationManager: vi.fn().mockReturnValue({
-    dispatch: vi.fn().mockResolvedValue(undefined),
-  }),
 }));
 
 vi.mock('../src/core/fleet-orchestrator.js', () => ({
@@ -155,16 +152,26 @@ vi.mock('simple-git', () => {
   };
 });
 
-vi.mock('../src/validation/index.js', async (importActual) => {
-  const actual = await importActual<typeof import('../src/validation/index.js')>();
+vi.mock('@cadre/validation', async (importActual) => {
+  const actual = await importActual<typeof import('@cadre/validation')>();
+  const passResult = { passed: true, errors: [], warnings: [] as string[] };
   return {
     ...actual,
+    gitValidator: { name: 'git', validate: vi.fn().mockResolvedValue(passResult) },
+    diskValidator: { name: 'disk', validate: vi.fn().mockResolvedValue(passResult) },
+    agentBackendValidator: { name: 'agentBackend', validate: vi.fn().mockResolvedValue(passResult) },
+    platformValidator: { name: 'platform', validate: vi.fn().mockResolvedValue(passResult) },
+    commandValidator: { name: 'command', validate: vi.fn().mockResolvedValue(passResult) },
+    registryCompletenessValidator: { name: 'registryCompleteness', validate: vi.fn().mockResolvedValue(passResult) },
     PreRunValidationSuite: vi.fn().mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(true),
     })),
-    checkStaleState: vi.fn().mockResolvedValue({ hasConflicts: false, conflicts: new Map() }),
   };
 });
+
+vi.mock('../src/validation/stale-state-validator.js', () => ({
+  checkStaleState: vi.fn().mockResolvedValue({ hasConflicts: false, conflicts: new Map() }),
+}));
 
 vi.mock('../src/reporting/report-writer.js', () => ({
   ReportWriter: {
@@ -181,21 +188,21 @@ vi.mock('../src/reporting/report-writer.js', () => ({
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
-import { createNotificationManager } from '../src/notifications/manager.js';
+import { NotificationManager } from '@cadre/notifications';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { FleetProgressWriter } from '../src/core/progress.js';
 import { FleetCheckpointManager, CheckpointManager } from '../src/core/checkpoint.js';
 import { exists } from '../src/util/fs.js';
-import { checkStaleState } from '../src/validation/index.js';
+import { checkStaleState } from '../src/validation/stale-state-validator.js';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../src/errors.js';
 import { ReportWriter } from '../src/reporting/report-writer.js';
-import { PreRunValidationSuite } from '../src/validation/index.js';
+import { PreRunValidationSuite } from '@cadre/validation';
 import { WorktreeManager } from '../src/git/worktree.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
-const MockCreateNotificationManager = createNotificationManager as ReturnType<typeof vi.fn>;
+const MockCreateNotificationManager = NotificationManager as unknown as ReturnType<typeof vi.fn>;
 const MockCreatePlatformProvider = createPlatformProvider as ReturnType<typeof vi.fn>;
 const MockFleetProgressWriter = FleetProgressWriter as unknown as ReturnType<typeof vi.fn>;
 const MockFleetCheckpointManager = FleetCheckpointManager as unknown as ReturnType<typeof vi.fn>;
@@ -283,11 +290,11 @@ describe('CadreRuntime — NotificationManager wiring', () => {
     }));
   });
 
-  it('calls createNotificationManager with the config in the constructor', () => {
+  it('constructs NotificationManager with notifications config and state dir', () => {
     const config = makeConfig();
     new CadreRuntime(config);
     expect(MockCreateNotificationManager).toHaveBeenCalledOnce();
-    expect(MockCreateNotificationManager).toHaveBeenCalledWith(config);
+    expect(MockCreateNotificationManager).toHaveBeenCalledWith(config.notifications, config.stateDir);
   });
 
   it('passes the NotificationManager instance to FleetOrchestrator', async () => {

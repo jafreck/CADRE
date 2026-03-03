@@ -13,13 +13,13 @@ import { FleetProgressWriter } from './progress.js';
 import {
   PreRunValidationSuite,
   diskValidator,
-  gitValidator,
-  agentBackendValidator,
-  platformValidator,
-  commandValidator,
-  registryCompletenessValidator,
-  checkStaleState,
-} from '../validation/index.js';
+} from '@cadre/validation';
+import { gitValidator } from '../validation/git-validator.js';
+import { agentBackendValidator } from '../validation/agent-backend-validator.js';
+import { platformValidator } from '../validation/platform-validator.js';
+import { commandValidator } from '../validation/command-validator.js';
+import { registryCompletenessValidator } from '../validation/registry-completeness-validator.js';
+import { checkStaleState } from '../validation/stale-state-validator.js';
 import type { NotificationManager } from '@cadre/notifications';
 import { DependencyResolver } from './dependency-resolver.js';
 import type { IssueDag } from './issue-dag.js';
