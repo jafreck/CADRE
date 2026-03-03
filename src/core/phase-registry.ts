@@ -19,7 +19,7 @@ import {
   buildGateMap as _buildGateMap,
 } from '@cadre/pipeline-engine';
 
-import { listGatePlugins, type GatePlugin, type PhaseGate } from './phase-gate.js';
+import type { GatePlugin, PhaseGate } from './phase-gate.js';
 import {
   AnalysisToPlanningGate,
   ImplementationToIntegrationGate,
@@ -137,6 +137,6 @@ export function buildRegistry(): PhaseRegistry {
 /**
  * Build a gate map from PHASE_MANIFEST, keyed by phase ID.
  */
-export function buildGateMap(plugins: readonly GatePlugin[] = listGatePlugins()): Record<number, PhaseGate> {
-  return _buildGateMap(PHASE_MANIFEST, plugins);
+export function buildGateMap(plugins?: readonly GatePlugin[]): Record<number, PhaseGate> {
+  return _buildGateMap(PHASE_MANIFEST, plugins ?? []);
 }
