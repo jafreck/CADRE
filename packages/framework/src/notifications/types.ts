@@ -1,6 +1,16 @@
-import type { RuntimeEvent } from '../core/events.js';
+import type {
+  RuntimeEvent,
+  FrameworkBoundaryEvent,
+  CadreSemanticEvent,
+  CadreDomainEvent,
+} from '../core/events.js';
+
+export type { CadreEvent } from '../core/events.js';
 
 export type NotificationEvent = RuntimeEvent;
+export type FrameworkNotificationEvent = FrameworkBoundaryEvent;
+export type CadreSemanticNotificationEvent = CadreSemanticEvent;
+export type CadreNotificationEvent = CadreDomainEvent;
 
 export interface NotificationProvider {
   notify(event: NotificationEvent): Promise<void>;

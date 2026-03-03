@@ -20,10 +20,8 @@ import {
   CopilotBackend,
   ClaudeBackend,
   isCopilotCliInvocationError,
-  type BackendRuntimeConfig,
-  type BackendLoggerLike,
-  type AgentBackend,
 } from '../../../src/runtime/backend/backend.js';
+import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../../../src/runtime/backend/contract.js';
 import type { AgentInvocation } from '../../../src/runtime/context/types.js';
 import { spawnProcess } from '../../../src/runtime/commands/exec.js';
 

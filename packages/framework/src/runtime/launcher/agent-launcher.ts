@@ -1,7 +1,7 @@
 import { resolve, join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import type { AgentInvocation, AgentResult } from '../context/types.js';
-import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../backend/backend.js';
+import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../backend/contract.js';
 import { createAgentBackend } from '../backend/factory.js';
 
 /** Metadata describing a single agent (for validateAgentFiles). */

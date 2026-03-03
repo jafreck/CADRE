@@ -3,51 +3,23 @@ import { writeFile } from 'node:fs/promises';
 import { mkdir, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type { AgentInvocation, AgentResult } from '../context/types.js';
-import type { LoggerLike } from '../retry/retry.js';
 import { spawnProcess, stripVSCodeEnv, trackProcess, type ProcessResult } from '../commands/exec.js';
+import {
+  getAgentBackendOptions,
+  type BackendLoggerLike,
+  type BackendRuntimeConfig,
+  type AgentBackend,
+} from './contract.js';
 
-/**
- * Extended logger interface for backends (adds debug method).
- */
-export interface BackendLoggerLike extends LoggerLike {
-  debug(message: string, context?: Record<string, unknown>): void;
+export type { AgentBackend, BackendLoggerLike, BackendRuntimeConfig } from './contract.js';
+
+interface CopilotBackendOptions {
+  cliCommand?: string;
+  agentDir?: string;
 }
 
-/**
- * Minimal runtime config interface accepted by backends.
- * Mirrors the shape of RuntimeConfig without importing it directly.
- */
-export interface BackendRuntimeConfig {
-  agent: {
-    backend: string;
-    model?: string;
-    timeout?: number;
-    copilot: {
-      cliCommand: string;
-      agentDir: string;
-      costOverrides?: Record<string, unknown>;
-    };
-    claude: {
-      cliCommand: string;
-      agentDir?: string;
-    };
-  };
-  copilot?: {
-    timeout: number;
-  };
-  environment: {
-    extraPath: string[];
-  };
-}
-
-/** Interface for agent execution backends. */
-export interface AgentBackend {
-  /** Unique backend name. */
-  name: string;
-  /** Validate prerequisites (CLI availability, etc.). */
-  init(): Promise<void>;
-  /** Invoke an agent and return the result. */
-  invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult>;
+interface ClaudeBackendOptions {
+  cliCommand?: string;
 }
 
 async function fsExists(path: string): Promise<boolean> {
@@ -273,9 +245,9 @@ export class CopilotBackend implements AgentBackend {
     private readonly config: BackendRuntimeConfig,
     private readonly logger: BackendLoggerLike,
   ) {
-    // Prefer config.agent.copilot settings, fall back to legacy config.copilot
-    this.cliCommand = config.agent.copilot.cliCommand;
-    this.agentDir = config.agent.copilot.agentDir;
+    const options = getAgentBackendOptions<CopilotBackendOptions>(config, this.name);
+    this.cliCommand = options?.cliCommand?.trim() || 'copilot';
+    this.agentDir = options?.agentDir?.trim() || '.github/agents';
     this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }
@@ -338,7 +310,8 @@ export class ClaudeBackend implements AgentBackend {
     private readonly config: BackendRuntimeConfig,
     private readonly logger: BackendLoggerLike,
   ) {
-    this.cliCommand = config.agent.claude.cliCommand || 'claude';
+    const options = getAgentBackendOptions<ClaudeBackendOptions>(config, this.name);
+    this.cliCommand = options?.cliCommand?.trim() || 'claude';
     this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }

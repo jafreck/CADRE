@@ -5,6 +5,13 @@ import { join } from 'node:path';
 import { Logger, CostEstimator, FleetEventBus } from '@cadre/framework/core';
 import { NotificationManager } from '@cadre/framework/notifications';
 import { SessionQueue, ParallelExecutor, RetryExecutor } from '@cadre/framework/engine';
+import {
+  createAgentBackend,
+  registerAgentBackendFactory,
+  registerAgentBackends,
+  getAgentBackendOptions,
+  normalizeAgentBackendName,
+} from '@cadre/framework/runtime';
 import { PreRunValidationSuite, diskValidator } from '@cadre/framework/core';
 import { defineFlow, step, loop, parallel, conditional, gate, FlowRunner, fromStep, fromContext, fromSteps } from '@cadre/framework/flow';
 
@@ -46,6 +53,12 @@ describe('package boundary usage', () => {
     expect(fromContext).toBeTypeOf('function');
     expect(fromSteps).toBeTypeOf('function');
     expect(FlowRunner).toBeTypeOf('function');
+
+    expect(createAgentBackend).toBeTypeOf('function');
+    expect(registerAgentBackendFactory).toBeTypeOf('function');
+    expect(registerAgentBackends).toBeTypeOf('function');
+    expect(getAgentBackendOptions).toBeTypeOf('function');
+    expect(normalizeAgentBackendName).toBeTypeOf('function');
   });
 
   it('does not use src-relative imports for extracted modules in production code', () => {

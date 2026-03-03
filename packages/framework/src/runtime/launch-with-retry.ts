@@ -3,7 +3,7 @@ import type { RetryOptions, RetryResult } from './retry/retry.js';
 import { RetryExecutor, type LoggerLike } from './retry/retry.js';
 import { TokenTracker } from './budget/token-tracker.js';
 import { AgentLauncher } from './launcher/agent-launcher.js';
-import type { BackendRuntimeConfig, BackendLoggerLike } from './backend/backend.js';
+import type { BackendRuntimeConfig, BackendLoggerLike } from './backend/contract.js';
 
 /** Options for launchWithRetry (extends RetryOptions minus fn). */
 export interface LaunchWithRetryOptions {
