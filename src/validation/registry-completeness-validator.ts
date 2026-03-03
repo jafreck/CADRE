@@ -4,7 +4,7 @@ import type { RuntimeConfig } from '../config/loader.js';
 import { exists } from '../util/fs.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { AGENT_CONTEXT_REGISTRY } from '../agents/context-builder.js';
-import type { PreRunValidator, ValidationResult } from './types.js';
+import type { PreRunValidator, ValidationResult } from '@cadre/validation';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

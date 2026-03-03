@@ -3,7 +3,7 @@ import type { RuntimeConfig } from '../config/loader.js';
 import { FleetCheckpointManager, CheckpointManager } from './checkpoint.js';
 import { exists } from '../util/fs.js';
 import { renderFleetStatus, renderIssueDetail } from '../cli/status-renderer.js';
-import type { Logger } from '../logging/logger.js';
+import type { Logger } from '@cadre/observability';
 
 export class StatusService {
   private readonly cadreDir: string;

@@ -1,5 +1,5 @@
 import { Octokit } from '@octokit/rest';
-import { Logger } from '../logging/logger.js';
+import { Logger } from '@cadre/observability';
 
 /**
  * GitHub API layer backed by the Octokit REST client.

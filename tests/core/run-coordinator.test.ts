@@ -79,21 +79,30 @@ vi.mock('simple-git', () => ({
   simpleGit: vi.fn(() => ({ raw: vi.fn().mockResolvedValue('') })),
 }));
 
-vi.mock('../../src/validation/index.js', async (importActual) => {
-  const actual = await importActual<typeof import('../../src/validation/index.js')>();
+vi.mock('@cadre/validation', async (importActual) => {
+  const actual = await importActual<typeof import('@cadre/validation')>();
   return {
     ...actual,
     PreRunValidationSuite: vi.fn().mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(true),
     })),
-    checkStaleState: vi.fn().mockResolvedValue({ hasConflicts: false, conflicts: new Map() }),
+    gitValidator: { name: 'git', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+    agentBackendValidator: { name: 'agent-backend-validator', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+    platformValidator: { name: 'platform', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+    commandValidator: { name: 'command', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+    registryCompletenessValidator: { name: 'registry-completeness', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
   };
 });
+
+vi.mock('../../src/validation/stale-state-validator.js', () => ({
+  checkStaleState: vi.fn().mockResolvedValue({ hasConflicts: false, conflicts: new Map() }),
+}));
 
 import { RunCoordinator } from '../../src/core/run-coordinator.js';
 import { FleetOrchestrator } from '../../src/core/fleet-orchestrator.js';
 import { DependencyResolver } from '../../src/core/dependency-resolver.js';
-import { PreRunValidationSuite, checkStaleState } from '../../src/validation/index.js';
+import { PreRunValidationSuite } from '@cadre/validation';
+import { checkStaleState } from '../../src/validation/stale-state-validator.js';
 import { ensureDir } from '../../src/util/fs.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../../src/errors.js';
 import { killAllTrackedProcesses } from '../../src/util/process.js';
