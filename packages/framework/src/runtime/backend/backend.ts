@@ -246,8 +246,8 @@ export class CopilotBackend implements AgentBackend {
     private readonly logger: BackendLoggerLike,
   ) {
     const options = getAgentBackendOptions<CopilotBackendOptions>(config, this.name);
-    this.cliCommand = options?.cliCommand ?? 'copilot';
-    this.agentDir = options?.agentDir ?? '.github/agents';
+    this.cliCommand = options?.cliCommand?.trim() || 'copilot';
+    this.agentDir = options?.agentDir?.trim() || '.github/agents';
     this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }
@@ -311,7 +311,7 @@ export class ClaudeBackend implements AgentBackend {
     private readonly logger: BackendLoggerLike,
   ) {
     const options = getAgentBackendOptions<ClaudeBackendOptions>(config, this.name);
-    this.cliCommand = options?.cliCommand ?? 'claude';
+    this.cliCommand = options?.cliCommand?.trim() || 'claude';
     this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }
