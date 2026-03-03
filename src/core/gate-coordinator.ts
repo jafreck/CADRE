@@ -45,9 +45,6 @@ export class GateCoordinator {
       artifactsDir: this.progressDir,
       workspacePath: this.worktreePath,
       baselineRef: this.baseCommit,
-      progressDir: this.progressDir,
-      worktreePath: this.worktreePath,
-      baseCommit: this.baseCommit,
     };
 
     let result = await gate.validate(context);
