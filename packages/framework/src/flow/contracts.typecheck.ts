@@ -16,7 +16,7 @@ const _contracts: Contracts = {
 step<Record<string, unknown>, { value: { value: number } }, string>({
   id: 'consumerOk',
   input: {
-    value: fromStep<Contracts, 'producer'>('producer'),
+    value: fromStep<Contracts, 'producer'>('producer', 'value'),
   },
   run: (_ctx, input) => JSON.stringify(input.value.value),
 });
@@ -28,4 +28,22 @@ step<Record<string, unknown>, { value: string }, string>({
     value: fromStep<Contracts, 'producer'>('producer'),
   },
   run: (_ctx, input) => input.value,
+});
+
+step<Record<string, unknown>, { value: number }, string>({
+  id: 'consumerInvalidPath',
+  input: {
+    // @ts-expect-error producer output path does not exist on contract output type
+    value: fromStep<Contracts, 'producer'>('producer', 'value.missing'),
+  },
+  run: (_ctx, input) => String(input.value),
+});
+
+step<Record<string, unknown>, { value: number }, string>({
+  id: 'consumerInvalidProducer',
+  input: {
+    // @ts-expect-error producer id is not a valid contract key
+    value: fromStep<Contracts, 'missingProducer'>('missingProducer'),
+  },
+  run: (_ctx, input) => String(input.value),
 });
