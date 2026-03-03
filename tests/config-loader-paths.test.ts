@@ -13,18 +13,14 @@ vi.mock('node:fs/promises', () => ({
 import { readFile } from 'node:fs/promises';
 import { exists } from '../src/util/fs.js';
 import { loadConfig } from '../src/config/loader.js';
+import { makeCadreConfigInput } from './helpers/make-cadre-config.js';
 
 const mockExists = vi.mocked(exists);
 const mockReadFile = vi.mocked(readFile);
 
 /** Minimal valid config fixture. stateDir is set to a known absolute path by default. */
 function makeConfig(overrides: Record<string, unknown> = {}) {
-  return {
-    projectName: 'test-project',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    baseBranch: 'main',
-    issues: { ids: [1] },
+  return makeCadreConfigInput({
     stateDir: '/abs/state',
     agent: {
       backend: 'copilot' as const,
@@ -32,11 +28,11 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
       timeout: 300_000,
       copilot: {
         cliCommand: 'gh copilot',
-        agentDir: 'agents', // default bare name
+        agentDir: 'agents',
       },
     },
     ...overrides,
-  };
+  });
 }
 
 /** Set up file-system mocks for a given config object. */
@@ -137,14 +133,7 @@ describe('loadConfig – agent field handling', () => {
   it('applies default agent config when config.agent is absent', async () => {
     setupFs(makeConfig());
     mockReadFile.mockResolvedValue(
-      JSON.stringify({
-        projectName: 'test-project',
-        repository: 'owner/repo',
-        repoPath: '/tmp/repo',
-        baseBranch: 'main',
-        issues: { ids: [1] },
-        stateDir: '/abs/state',
-      }) as unknown as Buffer,
+      JSON.stringify(makeCadreConfigInput({ stateDir: '/abs/state' })) as unknown as Buffer,
     );
     const config = await loadConfig('/tmp/cadre.config.json');
     expect(config.agent).toBeDefined();

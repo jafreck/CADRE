@@ -6,6 +6,7 @@ import { CadreConfigSchema } from '../src/config/schema.js';
 
 const minimalConfig = CadreConfigSchema.parse({
   projectName: 'test-project',
+  platform: 'github',
   repository: 'owner/repo',
   repoPath: '/tmp/test-repo',
   stateDir: '/tmp/cadre-state',

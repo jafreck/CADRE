@@ -248,7 +248,7 @@ export class CopilotBackend implements AgentBackend {
     const options = getAgentBackendOptions<CopilotBackendOptions>(config, this.name);
     this.cliCommand = options?.cliCommand?.trim() || 'copilot';
     this.agentDir = options?.agentDir?.trim() || '.github/agents';
-    this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
+    this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }
 
@@ -280,8 +280,6 @@ export class CopilotBackend implements AgentBackend {
       'copilot',
       timeout,
       (r) => {
-        // The Copilot CLI can exit 0 while still reporting invocation errors in stderr
-        // (e.g. missing agent, invalid model). Treat these as hard failures.
         const invocationError = isCopilotCliInvocationError(r.stderr);
         const success = r.exitCode === 0 && !r.timedOut && !invocationError;
         return {
@@ -312,7 +310,7 @@ export class ClaudeBackend implements AgentBackend {
   ) {
     const options = getAgentBackendOptions<ClaudeBackendOptions>(config, this.name);
     this.cliCommand = options?.cliCommand?.trim() || 'claude';
-    this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
+    this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }
 

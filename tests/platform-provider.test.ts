@@ -45,23 +45,6 @@ describe('Platform Provider Factory', () => {
     expect(provider.name).toBe('GitHub');
   });
 
-  it('should create GitHubProvider by default when platform is omitted', () => {
-    const config = CadreConfigSchema.parse({
-      ...baseConfig,
-      repository: 'owner/repo',
-      github: {
-        auth: {
-          appId: '123',
-          installationId: '456',
-          privateKeyFile: '/tmp/key.pem',
-        },
-      },
-    });
-
-    const provider = createPlatformProvider(config, mockLogger);
-    expect(provider).toBeInstanceOf(GitHubProvider);
-  });
-
   it('should create AzureDevOpsProvider when platform is "azure-devops"', () => {
     const config = CadreConfigSchema.parse({
       ...baseConfig,
@@ -84,6 +67,7 @@ describe('Platform Provider Factory', () => {
   it('should create GitHubProvider with token-based auth', () => {
     const config = CadreConfigSchema.parse({
       ...baseConfig,
+      platform: 'github',
       repository: 'owner/repo',
       github: {
         auth: {
@@ -104,6 +88,7 @@ describe('Platform Provider Factory', () => {
 
     const config = CadreConfigSchema.parse({
       ...baseConfig,
+      platform: 'github',
       repository: 'owner/repo',
     });
 
@@ -121,6 +106,7 @@ describe('Platform Provider Factory', () => {
 
     const config = CadreConfigSchema.parse({
       ...baseConfig,
+      platform: 'github',
       repository: 'owner/repo',
     });
 
@@ -142,6 +128,7 @@ describe('Platform Provider Factory', () => {
 
     const config = CadreConfigSchema.parse({
       ...baseConfig,
+      platform: 'github',
       repository: 'owner/repo',
     });
 
@@ -175,6 +162,7 @@ describe('Platform Provider Factory', () => {
 
     const config = CadreConfigSchema.parse({
       ...baseConfig,
+      platform: 'github',
       repository: 'owner/repo',
       github: {
         auth: {
@@ -197,6 +185,7 @@ describe('Platform Provider Factory', () => {
     process.env.GITHUB_TOKEN = 'ghp_fallback_token';
     const config = CadreConfigSchema.parse({
       ...baseConfig,
+      platform: 'github',
       repository: 'owner/repo',
       github: {
         auth: {

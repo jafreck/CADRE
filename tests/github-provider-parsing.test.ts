@@ -373,40 +373,50 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
     await provider.connect();
   });
 
-  it('should return [] when the MCP response is an empty array', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([]);
+  it('should return [] when the MCP response has an empty reviewThreads array', async () => {
+    getApiMock().getPRReviewComments.mockResolvedValue({ reviewThreads: [] });
 
     const threads = await provider.listPRReviewComments(1);
 
     expect(threads).toEqual([]);
   });
 
-  it('should return [] when the MCP response is null or non-array', async () => {
+  it('should return [] when the MCP response is null or missing reviewThreads', async () => {
     getApiMock().getPRReviewComments.mockResolvedValue(null);
 
     const threads = await provider.listPRReviewComments(1);
 
     expect(threads).toEqual([]);
+
+    getApiMock().getPRReviewComments.mockResolvedValue({ threads: [] });
+
+    const threadsMissingField = await provider.listPRReviewComments(1);
+
+    expect(threadsMissingField).toEqual([]);
   });
 
   it('should parse a fully-populated review thread', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([
-      {
-        id: 'thread-1',
-        isResolved: false,
-        isOutdated: false,
-        comments: [
-          {
-            id: 'comment-1',
-            author: { login: 'alice' },
-            body: 'Please fix this.',
-            createdAt: '2024-03-01T10:00:00Z',
-            path: 'src/foo.ts',
-            line: 42,
+    getApiMock().getPRReviewComments.mockResolvedValue({
+      reviewThreads: [
+        {
+          ID: 'thread-1',
+          IsResolved: false,
+          IsOutdated: false,
+          Comments: {
+            Nodes: [
+              {
+                ID: 'comment-1',
+                Author: { Login: 'alice' },
+                Body: 'Please fix this.',
+                CreatedAt: '2024-03-01T10:00:00Z',
+                Path: 'src/foo.ts',
+                Line: 42,
+              },
+            ],
           },
-        ],
-      },
-    ]);
+        },
+      ],
+    });
 
     const threads = await provider.listPRReviewComments(10);
 
@@ -425,9 +435,11 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should map isResolved and isOutdated correctly', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([
-      { id: 'r', isResolved: true, isOutdated: true, comments: [] },
-    ]);
+    getApiMock().getPRReviewComments.mockResolvedValue({
+      reviewThreads: [
+        { ID: 'r', IsResolved: true, IsOutdated: true, Comments: { Nodes: [] } },
+      ],
+    });
 
     const threads = await provider.listPRReviewComments(5);
 
@@ -436,9 +448,11 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should default isResolved and isOutdated to false when absent', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([
-      { id: 'r', comments: [] },
-    ]);
+    getApiMock().getPRReviewComments.mockResolvedValue({
+      reviewThreads: [
+        { ID: 'r', Comments: { Nodes: [] } },
+      ],
+    });
 
     const threads = await provider.listPRReviewComments(5);
 
@@ -447,14 +461,16 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should default comment author to "unknown" when absent', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([
-      {
-        id: 'thread-2',
-        isResolved: false,
-        isOutdated: false,
-        comments: [{ id: 'c1', body: 'Hi', createdAt: '', path: 'a.ts' }],
-      },
-    ]);
+    getApiMock().getPRReviewComments.mockResolvedValue({
+      reviewThreads: [
+        {
+          ID: 'thread-2',
+          IsResolved: false,
+          IsOutdated: false,
+          Comments: { Nodes: [{ ID: 'c1', Body: 'Hi', CreatedAt: '', Path: 'a.ts' }] },
+        },
+      ],
+    });
 
     const threads = await provider.listPRReviewComments(2);
 
@@ -462,9 +478,11 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should produce an empty comments array when thread has no comments', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([
-      { id: 'empty-thread', isResolved: false, isOutdated: false, comments: [] },
-    ]);
+    getApiMock().getPRReviewComments.mockResolvedValue({
+      reviewThreads: [
+        { ID: 'empty-thread', IsResolved: false, IsOutdated: false, Comments: { Nodes: [] } },
+      ],
+    });
 
     const threads = await provider.listPRReviewComments(3);
 
@@ -472,14 +490,18 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should omit line from comment when it is not a number', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([
-      {
-        id: 'thread-3',
-        isResolved: false,
-        isOutdated: false,
-        comments: [{ id: 'c2', author: { login: 'bob' }, body: 'test', createdAt: '', path: 'b.ts' }],
-      },
-    ]);
+    getApiMock().getPRReviewComments.mockResolvedValue({
+      reviewThreads: [
+        {
+          ID: 'thread-3',
+          IsResolved: false,
+          IsOutdated: false,
+          Comments: {
+            Nodes: [{ ID: 'c2', Author: { Login: 'bob' }, Body: 'test', CreatedAt: '', Path: 'b.ts' }],
+          },
+        },
+      ],
+    });
 
     const threads = await provider.listPRReviewComments(4);
 
@@ -487,10 +509,12 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
   });
 
   it('should parse multiple threads correctly', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue([
-      { id: 't1', isResolved: false, isOutdated: false, comments: [] },
-      { id: 't2', isResolved: true, isOutdated: false, comments: [] },
-    ]);
+    getApiMock().getPRReviewComments.mockResolvedValue({
+      reviewThreads: [
+        { ID: 't1', IsResolved: false, IsOutdated: false, Comments: { Nodes: [] } },
+        { ID: 't2', IsResolved: true, IsOutdated: false, Comments: { Nodes: [] } },
+      ],
+    });
 
     const threads = await provider.listPRReviewComments(7);
 
@@ -500,10 +524,10 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
     expect(threads[1].isResolved).toBe(true);
   });
 
-  it('should parse threads from an envelope { threads: [...] } response', async () => {
+  it('should parse threads from an envelope { reviewThreads: [...] } response', async () => {
     getApiMock().getPRReviewComments.mockResolvedValue({
-      threads: [
-        { id: 'env-thread-1', isResolved: false, isOutdated: false, comments: [] },
+      reviewThreads: [
+        { ID: 'env-thread-1', IsResolved: false, IsOutdated: false, Comments: { Nodes: [] } },
       ],
     });
 
@@ -513,8 +537,8 @@ describe('GitHubProvider – listPRReviewComments parsing', () => {
     expect(threads[0].id).toBe('env-thread-1');
   });
 
-  it('should return [] when envelope threads field is missing or non-array', async () => {
-    getApiMock().getPRReviewComments.mockResolvedValue({ threads: null });
+  it('should return [] when envelope reviewThreads field is missing or non-array', async () => {
+    getApiMock().getPRReviewComments.mockResolvedValue({ reviewThreads: null });
 
     const threads = await provider.listPRReviewComments(9);
 

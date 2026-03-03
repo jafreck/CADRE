@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as pipelineEngine from '@cadre/framework/engine';
-import { PhaseRegistry as CorePhaseRegistry, buildRegistry as buildCoreRegistry } from '../src/core/phase-registry.js';
+import { PhaseRegistry as CorePhaseRegistry, buildRegistry as buildCoreRegistry } from '../../../../src/core/phase-registry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -43,9 +43,9 @@ describe('pipeline-engine runtime integration path', () => {
 
   it('core wrappers should avoid packages/pipeline-engine/src path leaks', () => {
     const coreFiles = [
-      '../src/core/phase-executor.ts',
-      '../src/core/phase-gate.ts',
-      '../src/core/phase-registry.ts',
+      '../../../../src/core/phase-executor.ts',
+      '../../../../src/core/phase-gate.ts',
+      '../../../../src/core/phase-registry.ts',
     ];
 
     for (const relativePath of coreFiles) {

@@ -22,10 +22,6 @@ export interface VerifyCommandResult {
   output: string;
 }
 
-/** Backward-compatible aliases */
-export type RunWithRetryConfig = VerifyCommandConfig;
-export type RunWithRetryResult = VerifyCommandResult;
-
 /**
  * Run a shell command with an extract-failures / diff-baseline / fix / retry loop.
  *

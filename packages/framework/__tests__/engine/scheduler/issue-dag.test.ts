@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { IssueDag } from '../../../src/engine/scheduler/issue-dag.js';
+import { WorkItemDag } from '../../../src/engine/scheduler/issue-dag.js';
 import { CyclicDependencyError } from '../../../src/engine/types.js';
 import type { IssueDetail } from '../../../src/engine/types.js';
 
@@ -18,10 +18,10 @@ function makeIssue(number: number): IssueDetail {
   };
 }
 
-describe('IssueDag', () => {
+describe('WorkItemDag', () => {
   describe('empty input', () => {
     it('produces no waves for empty issue list', () => {
-      const dag = new IssueDag([], {});
+      const dag = new WorkItemDag([], {});
       expect(dag.getWaves()).toEqual([]);
     });
   });
@@ -29,7 +29,7 @@ describe('IssueDag', () => {
   describe('single issue', () => {
     it('puts a single issue with no deps in wave 0', () => {
       const issue = makeIssue(1);
-      const dag = new IssueDag([issue], {});
+      const dag = new WorkItemDag([issue], {});
       const waves = dag.getWaves();
       expect(waves).toHaveLength(1);
       expect(waves[0]).toHaveLength(1);
@@ -40,7 +40,7 @@ describe('IssueDag', () => {
   describe('no dependencies', () => {
     it('puts all issues in a single wave when there are no deps', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
-      const dag = new IssueDag(issues, {});
+      const dag = new WorkItemDag(issues, {});
       const waves = dag.getWaves();
       expect(waves).toHaveLength(1);
       expect(waves[0].map((i) => i.number).sort()).toEqual([1, 2, 3]);
@@ -54,7 +54,7 @@ describe('IssueDag', () => {
     it('produces three waves for a linear chain', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
       const depMap = { 1: [2], 2: [3] };
-      const dag = new IssueDag(issues, depMap);
+      const dag = new WorkItemDag(issues, depMap);
       const waves = dag.getWaves();
       expect(waves).toHaveLength(3);
       expect(waves[0].map((i) => i.number)).toEqual([3]);
@@ -65,7 +65,7 @@ describe('IssueDag', () => {
     it('getTransitiveDepsOrdered returns deps in topological order (deepest first)', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
       const depMap = { 1: [2], 2: [3] };
-      const dag = new IssueDag(issues, depMap);
+      const dag = new WorkItemDag(issues, depMap);
       const deps = dag.getTransitiveDepsOrdered(1);
       expect(deps.map((i) => i.number)).toEqual([3, 2]);
     });
@@ -73,7 +73,7 @@ describe('IssueDag', () => {
     it('getTransitiveDepsOrdered returns empty for a leaf issue', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
       const depMap = { 1: [2], 2: [3] };
-      const dag = new IssueDag(issues, depMap);
+      const dag = new WorkItemDag(issues, depMap);
       const deps = dag.getTransitiveDepsOrdered(3);
       expect(deps).toHaveLength(0);
     });
@@ -86,7 +86,7 @@ describe('IssueDag', () => {
     it('produces correct wave grouping', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3), makeIssue(4)];
       const depMap = { 1: [2, 3], 2: [4], 3: [4] };
-      const dag = new IssueDag(issues, depMap);
+      const dag = new WorkItemDag(issues, depMap);
       const waves = dag.getWaves();
       expect(waves).toHaveLength(3);
       expect(waves[0].map((i) => i.number)).toEqual([4]);
@@ -97,7 +97,7 @@ describe('IssueDag', () => {
     it('getTransitiveDepsOrdered for diamond root returns all transitive deps', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3), makeIssue(4)];
       const depMap = { 1: [2, 3], 2: [4], 3: [4] };
-      const dag = new IssueDag(issues, depMap);
+      const dag = new WorkItemDag(issues, depMap);
       const deps = dag.getTransitiveDepsOrdered(1);
       const depNums = deps.map((i) => i.number);
       // 4 must come before 2 and 3
@@ -113,14 +113,14 @@ describe('IssueDag', () => {
     it('throws CyclicDependencyError for a direct cycle (A depends on B, B depends on A)', () => {
       const issues = [makeIssue(1), makeIssue(2)];
       const depMap = { 1: [2], 2: [1] };
-      expect(() => new IssueDag(issues, depMap)).toThrow(CyclicDependencyError);
+      expect(() => new WorkItemDag(issues, depMap)).toThrow(CyclicDependencyError);
     });
 
     it('includes cycle participant issue numbers in the error', () => {
       const issues = [makeIssue(1), makeIssue(2)];
       const depMap = { 1: [2], 2: [1] };
       try {
-        new IssueDag(issues, depMap);
+        new WorkItemDag(issues, depMap);
         expect.fail('should have thrown');
       } catch (err) {
         expect(err).toBeInstanceOf(CyclicDependencyError);
@@ -132,14 +132,14 @@ describe('IssueDag', () => {
     it('throws CyclicDependencyError for a longer cycle', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
       const depMap = { 1: [2], 2: [3], 3: [1] };
-      expect(() => new IssueDag(issues, depMap)).toThrow(CyclicDependencyError);
+      expect(() => new WorkItemDag(issues, depMap)).toThrow(CyclicDependencyError);
     });
 
     it('still computes waves for non-cyclic nodes when a cycle exists among others', () => {
       // Issue 4 is independent; 1,2,3 form a cycle
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3), makeIssue(4)];
       const depMap = { 1: [2], 2: [3], 3: [1] };
-      expect(() => new IssueDag(issues, depMap)).toThrow(CyclicDependencyError);
+      expect(() => new WorkItemDag(issues, depMap)).toThrow(CyclicDependencyError);
     });
   });
 
@@ -147,7 +147,7 @@ describe('IssueDag', () => {
     it('ignores dep references to unknown issues', () => {
       const issues = [makeIssue(1)];
       const depMap = { 1: [999] }; // 999 not in issues
-      const dag = new IssueDag(issues, depMap);
+      const dag = new WorkItemDag(issues, depMap);
       const waves = dag.getWaves();
       expect(waves).toHaveLength(1);
       expect(waves[0][0].number).toBe(1);
@@ -158,7 +158,7 @@ describe('IssueDag', () => {
     it('returns direct dep numbers filtered to the issue set', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
       const depMap = { 1: [2, 999], 2: [3] }; // 999 not in set
-      const dag = new IssueDag(issues, depMap);
+      const dag = new WorkItemDag(issues, depMap);
       expect(dag.getDirectDeps(1)).toEqual([2]);
       expect(dag.getDirectDeps(2)).toEqual([3]);
       expect(dag.getDirectDeps(3)).toEqual([]);
@@ -166,16 +166,16 @@ describe('IssueDag', () => {
 
     it('returns empty array for issue with no deps', () => {
       const issues = [makeIssue(5)];
-      const dag = new IssueDag(issues, {});
+      const dag = new WorkItemDag(issues, {});
       expect(dag.getDirectDeps(5)).toEqual([]);
     });
   });
 
-  describe('getAllIssues', () => {
+  describe('getAllItems', () => {
     it('returns all issues in the DAG', () => {
       const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
-      const dag = new IssueDag(issues, {});
-      const all = dag.getAllIssues();
+      const dag = new WorkItemDag(issues, {});
+      const all = dag.getAllItems();
       expect(all.map((i) => i.number).sort()).toEqual([1, 2, 3]);
     });
   });

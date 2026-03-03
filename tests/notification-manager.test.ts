@@ -1,30 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   NotificationManager,
-  createNotificationManager,
   registerNotificationProviderFactory,
   hasNotificationProviderFactory,
   resetNotificationProviderFactories,
-} from '../src/notifications/manager.js';
-import type { CadreEvent } from '../src/notifications/types.js';
-import type { NotificationsConfig } from '../src/config/schema.js';
+} from '../packages/framework/src/notifications/manager.js';
+import type { CadreEvent, NotificationsConfig } from '../packages/framework/src/notifications/types.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
-vi.mock('../src/notifications/webhook-provider.js', () => ({
+vi.mock('../packages/framework/src/notifications/webhook-provider.js', () => ({
   WebhookProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
 }));
 
-vi.mock('../src/notifications/slack-provider.js', () => ({
+vi.mock('../packages/framework/src/notifications/slack-provider.js', () => ({
   SlackProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
 }));
 
-vi.mock('../src/notifications/log-provider.js', () => ({
+vi.mock('../packages/framework/src/notifications/log-provider.js', () => ({
   LogProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
 }));
 
-import { WebhookProvider } from '../src/notifications/webhook-provider.js';
-import { SlackProvider } from '../src/notifications/slack-provider.js';
-import { LogProvider } from '../src/notifications/log-provider.js';
+import { WebhookProvider } from '../packages/framework/src/notifications/webhook-provider.js';
+import { SlackProvider } from '../packages/framework/src/notifications/slack-provider.js';
+import { LogProvider } from '../packages/framework/src/notifications/log-provider.js';
 
 const MockWebhookProvider = WebhookProvider as unknown as ReturnType<typeof vi.fn>;
 const MockSlackProvider = SlackProvider as unknown as ReturnType<typeof vi.fn>;
@@ -85,18 +83,9 @@ describe('NotificationManager', () => {
       );
     });
 
-    it('should fall back to webhookUrl for webhook provider when url is absent', () => {
+    it('should instantiate SlackProvider for type "slack" using url', () => {
       new NotificationManager(makeConfig({
-        providers: [{ type: 'webhook', webhookUrl: 'https://fallback.example.com/hook' }],
-      }));
-      expect(MockWebhookProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ url: 'https://fallback.example.com/hook' }),
-      );
-    });
-
-    it('should instantiate SlackProvider for type "slack" using webhookUrl', () => {
-      new NotificationManager(makeConfig({
-        providers: [{ type: 'slack', webhookUrl: 'https://hooks.slack.com/abc' }],
+        providers: [{ type: 'slack', url: 'https://hooks.slack.com/abc' }],
       }));
       expect(MockSlackProvider).toHaveBeenCalledOnce();
       expect(MockSlackProvider).toHaveBeenCalledWith(
@@ -104,18 +93,9 @@ describe('NotificationManager', () => {
       );
     });
 
-    it('should fall back to url for slack provider when webhookUrl is absent', () => {
-      new NotificationManager(makeConfig({
-        providers: [{ type: 'slack', url: 'https://hooks.slack.com/fallback' }],
-      }));
-      expect(MockSlackProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ webhookUrl: 'https://hooks.slack.com/fallback' }),
-      );
-    });
-
     it('should pass channel to SlackProvider', () => {
       new NotificationManager(makeConfig({
-        providers: [{ type: 'slack', webhookUrl: 'https://hooks.slack.com/abc', channel: '#alerts' }],
+        providers: [{ type: 'slack', url: 'https://hooks.slack.com/abc', channel: '#alerts' }],
       }));
       expect(MockSlackProvider).toHaveBeenCalledWith(
         expect.objectContaining({ channel: '#alerts' }),
@@ -136,7 +116,7 @@ describe('NotificationManager', () => {
       new NotificationManager(makeConfig({
         providers: [
           { type: 'webhook', url: 'https://example.com/hook' },
-          { type: 'slack', webhookUrl: 'https://hooks.slack.com/abc' },
+          { type: 'slack', url: 'https://hooks.slack.com/abc' },
           { type: 'log' },
         ],
       }));
@@ -168,7 +148,7 @@ describe('NotificationManager', () => {
       const manager = new NotificationManager(makeConfig({
         providers: [
           { type: 'webhook', url: 'https://example.com/hook' },
-          { type: 'slack', webhookUrl: 'https://hooks.slack.com/abc' },
+          { type: 'slack', url: 'https://hooks.slack.com/abc' },
         ],
       }));
 
@@ -265,7 +245,7 @@ describe('NotificationManager', () => {
   });
 });
 
-describe('createNotificationManager', () => {
+describe('NotificationManager runtime config integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     MockWebhookProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
@@ -273,9 +253,9 @@ describe('createNotificationManager', () => {
     MockLogProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
   });
 
-  it('should return a NotificationManager instance', () => {
+  it('should construct a NotificationManager from runtime config values', () => {
     const config = makeRuntimeConfig({ notifications: makeConfig() });
-    const manager = createNotificationManager(config);
+    const manager = new NotificationManager(config.notifications, config.stateDir);
     expect(manager).toBeInstanceOf(NotificationManager);
   });
 
@@ -289,7 +269,7 @@ describe('createNotificationManager', () => {
       }),
     });
 
-    const manager = createNotificationManager(config);
+    const manager = new NotificationManager(config.notifications, config.stateDir);
     await manager.dispatch(sampleEvent);
 
     expect(webhookNotify).toHaveBeenCalledOnce();
@@ -304,7 +284,7 @@ describe('createNotificationManager', () => {
       }),
     });
 
-    createNotificationManager(config);
+    new NotificationManager(config.notifications, config.stateDir);
 
     expect(MockLogProvider).toHaveBeenCalledWith(
       expect.objectContaining({ logFile: '/tmp/cadre-state/notifications.log' }),
@@ -319,7 +299,7 @@ describe('createNotificationManager', () => {
       }),
     });
 
-    createNotificationManager(config);
+    new NotificationManager(config.notifications, config.stateDir);
 
     expect(MockLogProvider).toHaveBeenCalledWith(
       expect.objectContaining({ logFile: '/tmp/cadre-state/notifications.jsonl' }),

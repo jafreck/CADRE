@@ -5,6 +5,7 @@ import type { NotificationsConfig } from '../src/config/schema.js';
 describe('CadreConfigSchema', () => {
   const validConfig = {
     projectName: 'test-project',
+    platform: 'github',
     repository: 'owner/repo',
     repoPath: '/tmp/repo',
     baseBranch: 'main',
@@ -408,6 +409,7 @@ describe('CadreConfigSchema', () => {
   it('should accept token-based github auth', () => {
     const result = CadreConfigSchema.safeParse({
       projectName: 'test-project',
+      platform: 'github',
       repository: 'owner/repo',
       repoPath: '/tmp/repo',
       issues: { ids: [1] },
@@ -423,6 +425,7 @@ describe('CadreConfigSchema', () => {
   it('should accept zero-config github (no github section at all)', () => {
     const result = CadreConfigSchema.safeParse({
       projectName: 'test-project',
+      platform: 'github',
       repository: 'owner/repo',
       repoPath: '/tmp/repo',
       issues: { ids: [1] },
@@ -437,6 +440,7 @@ describe('CadreConfigSchema', () => {
   it('should accept github with no auth (auto-detect from env)', () => {
     const result = CadreConfigSchema.safeParse({
       projectName: 'test-project',
+      platform: 'github',
       repository: 'owner/repo',
       repoPath: '/tmp/repo',
       issues: { ids: [1] },
@@ -480,7 +484,7 @@ describe('CadreConfigSchema', () => {
         notifications: {
           enabled: true,
           providers: [
-            { type: 'slack', webhookUrl: 'https://hooks.slack.com/xxx', channel: '#alerts' },
+            { type: 'slack', url: 'https://hooks.slack.com/xxx', channel: '#alerts' },
           ],
         },
       });
@@ -488,7 +492,7 @@ describe('CadreConfigSchema', () => {
       if (result.success) {
         const p = result.data.notifications.providers[0];
         expect(p.type).toBe('slack');
-        expect(p.webhookUrl).toBe('https://hooks.slack.com/xxx');
+        expect(p.url).toBe('https://hooks.slack.com/xxx');
         expect(p.channel).toBe('#alerts');
       }
     });
@@ -528,21 +532,21 @@ describe('CadreConfigSchema', () => {
       }
     });
 
-    it('should accept ${ENV_VAR} syntax in url and webhookUrl', () => {
+    it('should accept ${ENV_VAR} syntax in provider urls', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
         notifications: {
           enabled: true,
           providers: [
             { type: 'webhook', url: '${WEBHOOK_URL}' },
-            { type: 'slack', webhookUrl: '${SLACK_WEBHOOK}' },
+            { type: 'slack', url: '${SLACK_WEBHOOK}' },
           ],
         },
       });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.notifications.providers[0].url).toBe('${WEBHOOK_URL}');
-        expect(result.data.notifications.providers[1].webhookUrl).toBe('${SLACK_WEBHOOK}');
+        expect(result.data.notifications.providers[1].url).toBe('${SLACK_WEBHOOK}');
       }
     });
 

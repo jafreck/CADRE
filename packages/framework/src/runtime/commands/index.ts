@@ -23,8 +23,6 @@ export { type RegressionResult, computeRegressions } from './regression.js';
 export {
   type VerifyCommandConfig,
   type VerifyCommandResult,
-  type RunWithRetryConfig,
-  type RunWithRetryResult,
   verifyCommand,
 } from './verify.js';
 

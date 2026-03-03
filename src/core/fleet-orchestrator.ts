@@ -4,7 +4,7 @@ import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { WorktreeManager, RemoteBranchMissingError, type WorktreeInfo } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
-import { CheckpointManager, FleetCheckpointManager, FleetProgressWriter, IssueDag } from '@cadre/framework/engine';
+import { CheckpointManager, FleetCheckpointManager, FleetProgressWriter, WorkItemDag } from '@cadre/framework/engine';
 import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
 import { TokenTracker, type TokenSummary } from '@cadre/framework/runtime';
 import { CostEstimator, FleetEventBus, Logger } from '@cadre/framework/core';
@@ -65,7 +65,7 @@ export class FleetOrchestrator {
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
     private readonly notifications: NotificationManager = new NotificationManager(),
-    private readonly dag?: IssueDag,
+    private readonly dag?: WorkItemDag<IssueDetail>,
     private readonly dagDepMap?: Record<number, number[]>,
   ) {
     this.cadreDir = config.stateDir;
@@ -233,7 +233,7 @@ export class FleetOrchestrator {
   /**
    * Process a single issue through its full pipeline.
    */
-  private async processIssue(issue: IssueDetail, dag?: IssueDag): Promise<IssueResult> {
+  private async processIssue(issue: IssueDetail, dag?: WorkItemDag<IssueDetail>): Promise<IssueResult> {
     // Abort early if fleet budget was already exceeded by a completed issue
     if (this.fleetBudgetExceeded) {
       this.logger.warn(`Skipping issue #${issue.number}: fleet budget exceeded`, {

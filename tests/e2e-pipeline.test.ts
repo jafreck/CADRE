@@ -15,7 +15,7 @@ import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { CheckpointManager } from '@cadre/framework/engine';
 import { MockPlatformProvider } from './helpers/mock-platform-provider.js';
 import { Logger } from '@cadre/framework/core';
-import { CadreConfigSchema } from '../src/config/schema.js';
+import { makeCadreConfig } from './helpers/make-cadre-config.js';
 import { ensureDir, exists } from '../src/util/fs.js';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { WorktreeInfo } from '../src/git/worktree.js';
@@ -230,11 +230,10 @@ const ISSUE: IssueDetail = {
 };
 
 function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfig {
-  return CadreConfigSchema.parse({
+  return makeCadreConfig({
     projectName: 'test',
     repository: 'test/repo',
     repoPath: '/tmp',
-    issues: { ids: [1] },
     commits: {
       conventional: true,
       sign: false,

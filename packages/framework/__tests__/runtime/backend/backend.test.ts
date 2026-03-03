@@ -35,7 +35,6 @@ function makeConfig(overrides: Partial<BackendRuntimeConfig> = {}): BackendRunti
       copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
       claude: { cliCommand: 'claude' },
     },
-    copilot: { timeout: 300_000 },
     environment: { extraPath: [] },
     ...overrides,
   };

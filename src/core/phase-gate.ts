@@ -52,7 +52,7 @@ export class AnalysisToPlanningGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const artifactsDir = context.artifactsDir ?? context.progressDir;
+    const artifactsDir = context.artifactsDir;
 
     if (!artifactsDir) {
       return fail(['Gate context is missing artifactsDir']);
@@ -134,8 +134,8 @@ export class PlanningToImplementationGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const artifactsDir = context.artifactsDir ?? context.progressDir;
-    const workspacePath = context.workspacePath ?? context.worktreePath;
+    const artifactsDir = context.artifactsDir;
+    const workspacePath = context.workspacePath;
 
     if (!artifactsDir) {
       return fail(['Gate context is missing artifactsDir']);
@@ -229,8 +229,8 @@ export class PlanningToImplementationGate implements PhaseGate {
  */
 export class ImplementationToIntegrationGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
-    const workspacePath = context.workspacePath ?? context.worktreePath;
-    const baselineRef = context.baselineRef ?? context.baseCommit;
+    const workspacePath = context.workspacePath;
+    const baselineRef = context.baselineRef;
 
     if (!workspacePath) {
       return fail(['Gate context is missing workspacePath']);
@@ -272,7 +272,7 @@ export class IntegrationToPRGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const artifactsDir = context.artifactsDir ?? context.progressDir;
+    const artifactsDir = context.artifactsDir;
 
     if (!artifactsDir) {
       return fail(['Gate context is missing artifactsDir']);
@@ -355,7 +355,7 @@ export class AnalysisAmbiguityGate implements PhaseGate {
   }
 
   async validate(context: GateContext): Promise<GateResult> {
-    const artifactsDir = context.artifactsDir ?? context.progressDir;
+    const artifactsDir = context.artifactsDir;
     if (!artifactsDir) {
       return fail(['Gate context is missing artifactsDir']);
     }

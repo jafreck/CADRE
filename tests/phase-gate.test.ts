@@ -21,7 +21,11 @@ vi.mock('simple-git', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeContext(progressDir: string, worktreePath = '/tmp/worktree', baseCommit?: string) {
-  return { progressDir, worktreePath, baseCommit };
+  return {
+    artifactsDir: progressDir,
+    workspacePath: worktreePath,
+    baselineRef: baseCommit,
+  };
 }
 
 const VALID_ANALYSIS = `# Analysis

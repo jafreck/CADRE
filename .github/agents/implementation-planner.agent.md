@@ -101,6 +101,7 @@ The block must match this exact schema:
 Each session may optionally include a `"testable"` boolean field. It defaults to `true` — **only set it to `false` when no meaningful tests can be written for the session's changes**.
 
 Set `"testable": false` when the session exclusively contains:
+- **Documentation-only changes** (e.g., `README.md`, `docs/**`, inline comment wording updates with no behavior change)
 - **Config-only changes** (e.g., `tsconfig.json`, `.eslintrc`, `package.json` scripts with no logic changes)
 - **Lockfile changes** (e.g., `package-lock.json`, `yarn.lock`)
 - **Type-definition-only changes** (e.g., adding fields to a TypeScript interface with no runtime behaviour)

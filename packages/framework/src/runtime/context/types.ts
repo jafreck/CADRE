@@ -84,7 +84,7 @@ export interface AgentSession {
   dependencies: string[];
   /** Ordered steps to execute within this session. */
   steps: AgentStep[];
-  /** Whether to launch a test-writer for this session. Defaults to true. Set to false for sessions that produce no directly testable logic (e.g., config-only, lockfile, type-definition-only). */
+  /** Whether to launch a test-writer for this session. Defaults to true. Set to false for sessions that produce no directly testable logic (e.g., docs-only, config-only, lockfile, type-definition-only). */
   testable?: boolean;
 }
 
@@ -109,7 +109,7 @@ export interface PhaseResult {
 
 /** Agent context file structure written before launching an agent.
  *
- *  `TPayload` defaults to `Record<string, unknown>` for backward compatibility.
+ *  `TPayload` defaults to `Record<string, unknown>`.
  *  Narrow it to a phase-specific input type (e.g. `AgentContext<AnalysisInput>`)
  *  for compile-time safety on `payload`. */
 export interface AgentContext<TPayload = Record<string, unknown>> {

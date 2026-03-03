@@ -11,16 +11,12 @@ vi.mock('node:fs/promises', () => ({
 import { readFile } from 'node:fs/promises';
 import { exists } from '../src/util/fs.js';
 import { loadConfig } from '../src/config/loader.js';
+import { makeCadreConfigInput } from './helpers/make-cadre-config.js';
 
 const mockExists = vi.mocked(exists);
 const mockReadFile = vi.mocked(readFile);
 
-const BASE_CONFIG = {
-  projectName: 'test-project',
-  repository: 'owner/repo',
-  repoPath: '/tmp/repo',
-  baseBranch: 'main',
-  issues: { ids: [1] },
+const BASE_CONFIG = makeCadreConfigInput({
   agent: {
     backend: 'copilot' as const,
     model: 'claude-sonnet-4.6',
@@ -30,7 +26,7 @@ const BASE_CONFIG = {
       agentDir: '.github/agents',
     },
   },
-};
+});
 
 function setupFs(config: object) {
   mockExists.mockImplementation(async (p: string) => {

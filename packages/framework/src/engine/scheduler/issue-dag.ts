@@ -94,11 +94,6 @@ export class WorkItemDag<TWorkItem extends WorkItem = WorkItem> {
     return [...this.items.values()];
   }
 
-  /** @deprecated Use getAllItems(). */
-  getAllIssues(): TWorkItem[] {
-    return this.getAllItems();
-  }
-
   /**
    * Returns the direct dependency item numbers for the given item
    * (only those present in the DAG's issue set).
@@ -129,6 +124,3 @@ export class WorkItemDag<TWorkItem extends WorkItem = WorkItem> {
       .map((n) => this.items.get(n)!);
   }
 }
-
-/** @deprecated Use WorkItemDag<TWorkItem>. */
-export class IssueDag<TWorkItem extends WorkItem = WorkItem> extends WorkItemDag<TWorkItem> {}
