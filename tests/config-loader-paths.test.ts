@@ -255,4 +255,24 @@ describe('loadConfig – cwd-based normalization', () => {
       cwdSpy.mockRestore();
     }
   });
+
+  it('resolves relative repoPath against the config file directory for absolute config paths', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/workspace/root');
+
+    try {
+      const cfg = makeConfig({
+        repoPath: 'repos/demo',
+        stateDir: 'state',
+      });
+
+      mockExists.mockImplementation(async (_p: string) => true);
+      mockReadFile.mockResolvedValue(JSON.stringify(cfg) as unknown as Buffer);
+
+      const config = await loadConfig('/opt/configs/cadre.config.json');
+      expect(config.repoPath).toBe(resolve('/opt/configs', 'repos/demo'));
+      expect(config.stateDir).toBe(resolve('/opt/configs', 'state'));
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
 });
