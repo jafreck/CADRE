@@ -25,14 +25,14 @@ function ensureDefaultProviderFactoriesRegistered(): void {
   }
 
   registerNotificationProviderFactory('webhook', (providerConfig) => {
-    const config = providerConfig as { url?: string; webhookUrl?: string; events?: string[] };
-    return new WebhookProvider({ url: config.url ?? config.webhookUrl ?? '', events: config.events });
+    const config = providerConfig as { url?: string; events?: string[] };
+    return new WebhookProvider({ url: config.url ?? '', events: config.events });
   });
 
   registerNotificationProviderFactory('slack', (providerConfig) => {
-    const config = providerConfig as { webhookUrl?: string; url?: string; channel?: string; events?: string[] };
+    const config = providerConfig as { url?: string; channel?: string; events?: string[] };
     return new SlackProvider({
-      webhookUrl: config.webhookUrl ?? config.url ?? '',
+      webhookUrl: config.url ?? '',
       channel: config.channel,
       events: config.events,
     });

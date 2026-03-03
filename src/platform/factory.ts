@@ -67,16 +67,12 @@ function resolveGitHubAuthEnv(
   );
 }
 
-/**
- * Create a PlatformProvider based on the config's `platform` field.
- *
- * Defaults to GitHub when `platform` is omitted for backward compatibility.
- */
+/** Create a PlatformProvider based on the config's `platform` field. */
 export function createPlatformProvider(
   config: RuntimeConfig,
   logger: Logger,
 ): PlatformProvider {
-  const platform = config.platform ?? 'github';
+  const platform = config.platform;
 
   switch (platform) {
     case 'github': {

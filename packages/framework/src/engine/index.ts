@@ -58,7 +58,7 @@ export {
 } from './checkpoint/checkpoint.js';
 
 // Scheduler
-export { WorkItemDag, IssueDag } from './scheduler/issue-dag.js';
+export { WorkItemDag } from './scheduler/issue-dag.js';
 
 // Progress
 export type { PullRequestRef, IssueProgressInfo } from './progress/progress.js';

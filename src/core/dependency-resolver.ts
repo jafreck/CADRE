@@ -7,7 +7,7 @@ import type { IssueDetail } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { AgentLauncher } from './agent-launcher.js';
 import type { WorktreeManager } from '../git/worktree.js';
-import { IssueDag } from '@cadre/framework/engine';
+import { WorkItemDag } from '@cadre/framework/engine';
 import { CyclicDependencyError, DependencyResolutionError } from '../errors.js';
 import { Logger } from '@cadre/framework/core';
 import { extractCadreJson } from '@cadre/framework/runtime';
@@ -20,11 +20,11 @@ export type DepMapOutput = z.infer<typeof depMapSchema>;
 
 /**
  * Invokes the dependency-analyst agent to infer a dependency graph over a
- * set of issues, then constructs an IssueDag.
+ * set of issues, then constructs a WorkItemDag.
  *
  * Retry policy:
  * - On malformed JSON or Zod validation failure: one retry (no hint).
- * - On CyclicDependencyError from IssueDag: one retry with a hint to remove cycles.
+ * - On CyclicDependencyError from WorkItemDag: one retry with a hint to remove cycles.
  * - After exhausting retries: throws DependencyResolutionError.
  */
 export class DependencyResolver {
@@ -39,7 +39,7 @@ export class DependencyResolver {
     this.contextBuilder = new ContextBuilder(config, logger);
   }
 
-  async resolve(issues: IssueDetail[], repoPath: string): Promise<IssueDag> {
+  async resolve(issues: IssueDetail[], repoPath: string): Promise<WorkItemDag<IssueDetail>> {
     const validIssueNumbers = new Set(issues.map((i) => i.number));
     let cycleHint: string | undefined;
 
@@ -81,7 +81,7 @@ export class DependencyResolver {
         }
 
         try {
-          return new IssueDag(issues, filteredDepMap);
+          return new WorkItemDag(issues, filteredDepMap);
         } catch (err) {
           if (err instanceof CyclicDependencyError) {
             if (attempt === 0) {

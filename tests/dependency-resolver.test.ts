@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeFile, readFile } from 'node:fs/promises';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
-import { IssueDag } from '@cadre/framework/engine';
+import { WorkItemDag } from '@cadre/framework/engine';
 import { DependencyResolutionError } from '../src/errors.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
@@ -34,11 +34,18 @@ function makeConfig(): RuntimeConfig {
     stateDir: '/tmp/cadre',
     worktreeRoot: '/tmp/worktrees',
     issues: { ids: [] },
-    agent: { backend: 'copilot' as const },
-    copilot: {
-      cliCommand: 'copilot',
-      agentDir: '.github/agents',
+    agent: {
+      backend: 'copilot',
+      model: 'claude-sonnet-4.6',
       timeout: 300000,
+      copilot: {
+        cliCommand: 'copilot',
+        agentDir: '.github/agents',
+      },
+      claude: {
+        cliCommand: 'claude',
+        agentDir: '.claude/agents',
+      },
     },
   } as unknown as RuntimeConfig;
 }
@@ -97,7 +104,7 @@ describe('DependencyResolver', () => {
     launcher = { launchAgent: mockLaunchAgent } as unknown as AgentLauncher;
   });
 
-  it('successful resolution returns a correctly constructed IssueDag', async () => {
+  it('successful resolution returns a correctly constructed WorkItemDag', async () => {
     const issues = [makeIssue(1), makeIssue(2), makeIssue(3)];
     // Issue 2 depends on 1, issue 3 depends on 1
     const depMap = { '2': [1], '3': [1] };
@@ -118,7 +125,7 @@ describe('DependencyResolver', () => {
     const resolver = new DependencyResolver(config, launcher, logger);
     const dag = await resolver.resolve(issues, '/repo');
 
-    expect(dag).toBeInstanceOf(IssueDag);
+    expect(dag).toBeInstanceOf(WorkItemDag);
     const waves = dag.getWaves();
     // Issue 1 has no deps → wave 0; issues 2 and 3 depend on 1 → wave 1
     expect(waves).toHaveLength(2);
@@ -141,7 +148,7 @@ describe('DependencyResolver', () => {
     const resolver = new DependencyResolver(config, launcher, logger);
     const dag = await resolver.resolve(issues, '/repo');
 
-    expect(dag).toBeInstanceOf(IssueDag);
+    expect(dag).toBeInstanceOf(WorkItemDag);
     const waves = dag.getWaves();
     // Only issues 1 and 2 should appear; 999 is ignored
     const allNums = waves.flat().map((i) => i.number);
@@ -167,7 +174,7 @@ describe('DependencyResolver', () => {
     const resolver = new DependencyResolver(config, launcher, logger);
     const dag = await resolver.resolve(issues, '/repo');
 
-    expect(dag).toBeInstanceOf(IssueDag);
+    expect(dag).toBeInstanceOf(WorkItemDag);
     expect(mockLaunchAgent).toHaveBeenCalledTimes(2);
   });
 
@@ -200,7 +207,7 @@ describe('DependencyResolver', () => {
     const resolver = new DependencyResolver(config, launcher, logger);
     const dag = await resolver.resolve(issues, '/repo');
 
-    expect(dag).toBeInstanceOf(IssueDag);
+    expect(dag).toBeInstanceOf(WorkItemDag);
     expect(mockLaunchAgent).toHaveBeenCalledTimes(2);
     // On cycle retry, the hint should be included in the second invocation's context
     expect(logger.warn).toHaveBeenCalledWith(
@@ -267,7 +274,7 @@ describe('DependencyResolver', () => {
     const resolver = new DependencyResolver(config, launcher, logger, worktreeManager);
     const dag = await resolver.resolve(issues, '/repo');
 
-    expect(dag).toBeInstanceOf(IssueDag);
+    expect(dag).toBeInstanceOf(WorkItemDag);
     expect(mockProvision).toHaveBeenCalledTimes(1);
     // runId is a UUID — just verify it was called with a non-empty string
     expect(typeof mockProvision.mock.calls[0][0]).toBe('string');

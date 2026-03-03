@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetScheduler, type ProcessIssueFn, type MarkDepBlockedFn } from '../src/core/fleet-scheduler.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { IssueResult } from '../src/core/issue-orchestrator.js';
-import type { IssueDag } from '@cadre/framework/engine';
+import type { WorkItemDag } from '@cadre/framework/engine';
 
 function makeIssue(number: number): IssueDetail {
   return {
@@ -138,7 +138,7 @@ describe('FleetScheduler', () => {
         getWaves: () => [[issue1], [issue2]],
         getDirectDeps: vi.fn().mockImplementation((num: number) => (num === 2 ? [1] : [])),
         getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
-      } as unknown as IssueDag;
+      } as unknown as WorkItemDag<IssueDetail>;
 
       const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 
@@ -174,7 +174,7 @@ describe('FleetScheduler', () => {
         getWaves: () => [[issue1], [issue2]],
         getDirectDeps: vi.fn().mockImplementation((num: number) => (num === 2 ? [1] : [])),
         getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
-      } as unknown as IssueDag;
+      } as unknown as WorkItemDag<IssueDetail>;
 
       const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 
@@ -204,7 +204,7 @@ describe('FleetScheduler', () => {
         getWaves: () => [[issue1]],
         getDirectDeps: vi.fn().mockReturnValue([]),
         getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
-      } as unknown as IssueDag;
+      } as unknown as WorkItemDag<IssueDetail>;
 
       await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 
@@ -232,7 +232,7 @@ describe('FleetScheduler', () => {
         getWaves: () => [[issue1]],
         getDirectDeps: vi.fn().mockReturnValue([]),
         getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
-      } as unknown as IssueDag;
+      } as unknown as WorkItemDag<IssueDetail>;
 
       const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 
@@ -262,7 +262,7 @@ describe('FleetScheduler', () => {
         getWaves: () => [[issue1], [issue2]],
         getDirectDeps: vi.fn().mockImplementation((num: number) => (num === 2 ? [1] : [])),
         getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
-      } as unknown as IssueDag;
+      } as unknown as WorkItemDag<IssueDetail>;
 
       const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 
@@ -286,7 +286,7 @@ describe('FleetScheduler', () => {
         getWaves: () => [[issue1]],
         getDirectDeps: vi.fn().mockReturnValue([]),
         getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
-      } as unknown as IssueDag;
+      } as unknown as WorkItemDag<IssueDetail>;
 
       const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 

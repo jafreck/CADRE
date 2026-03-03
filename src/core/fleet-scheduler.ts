@@ -1,13 +1,13 @@
 import pLimit from 'p-limit';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { IssueResult } from './issue-orchestrator.js';
-import type { IssueDag, FleetCheckpointManager } from '@cadre/framework/engine';
+import type { WorkItemDag, FleetCheckpointManager } from '@cadre/framework/engine';
 import type { PlatformProvider } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import { Logger } from '@cadre/framework/core';
 
 /** Callback type for processing a single issue. */
-export type ProcessIssueFn = (issue: IssueDetail, dag?: IssueDag) => Promise<IssueResult>;
+export type ProcessIssueFn = (issue: IssueDetail, dag?: WorkItemDag<IssueDetail>) => Promise<IssueResult>;
 
 /** Callback type for marking an issue as dep-blocked. */
 export type MarkDepBlockedFn = (issue: IssueDetail) => Promise<IssueResult>;
@@ -32,7 +32,7 @@ export class FleetScheduler {
     issuesToProcess: IssueDetail[],
     processIssue: ProcessIssueFn,
     markDepBlocked: MarkDepBlockedFn,
-    dag?: IssueDag,
+    dag?: WorkItemDag<IssueDetail>,
   ): Promise<PromiseSettledResult<IssueResult>[]> {
     if (dag) {
       return this.runWithDag(dag, processIssue, markDepBlocked);
@@ -50,7 +50,7 @@ export class FleetScheduler {
    * Execute all issues wave-by-wave when a DAG is present.
    */
   private async runWithDag(
-    dag: IssueDag,
+    dag: WorkItemDag<IssueDetail>,
     processIssue: ProcessIssueFn,
     markDepBlocked: MarkDepBlockedFn,
   ): Promise<PromiseSettledResult<IssueResult>[]> {
@@ -136,7 +136,7 @@ export class FleetScheduler {
   private async runDagIssue(
     num: number,
     issue: IssueDetail,
-    dag: IssueDag,
+    dag: WorkItemDag<IssueDetail>,
     processIssue: ProcessIssueFn,
     completed: Set<number>,
     failed: Set<number>,

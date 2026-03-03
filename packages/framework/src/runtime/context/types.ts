@@ -109,7 +109,7 @@ export interface PhaseResult {
 
 /** Agent context file structure written before launching an agent.
  *
- *  `TPayload` defaults to `Record<string, unknown>` for backward compatibility.
+ *  `TPayload` defaults to `Record<string, unknown>`.
  *  Narrow it to a phase-specific input type (e.g. `AgentContext<AnalysisInput>`)
  *  for compile-time safety on `payload`. */
 export interface AgentContext<TPayload = Record<string, unknown>> {

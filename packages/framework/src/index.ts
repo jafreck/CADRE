@@ -43,7 +43,6 @@ export {
   FleetCheckpointManager,
   FileSystemCheckpointStore,
   WorkItemDag,
-  IssueDag,
   type PullRequestRef,
   type IssueProgressInfo,
   phaseNames,

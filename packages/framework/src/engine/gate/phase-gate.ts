@@ -12,12 +12,6 @@ export interface GateContext {
   workspacePath: string;
   /** Optional baseline revision used to compute diffs in implementation/integration gates. */
   baselineRef?: string;
-  /** @deprecated Use artifactsDir. */
-  progressDir?: string;
-  /** @deprecated Use workspacePath. */
-  worktreePath?: string;
-  /** @deprecated Use baselineRef. */
-  baseCommit?: string;
 }
 
 /** A quality gate that runs before transitioning between pipeline phases. */

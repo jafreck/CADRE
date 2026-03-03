@@ -49,13 +49,6 @@ describe('createPlatformProvider', () => {
       expect(vi.mocked(GitHubProvider)).toHaveBeenCalled();
     });
 
-    it('should return a GitHubProvider when platform is omitted (default)', () => {
-      const config = makeRuntimeConfig({ platform: undefined as never });
-      const provider = createPlatformProvider(config, makeLogger());
-      expect(provider).toBeDefined();
-      expect(vi.mocked(GitHubProvider)).toHaveBeenCalled();
-    });
-
     it('should set GITHUB_TOKEN when explicit token is provided in config', () => {
       const config = makeRuntimeConfig({
         platform: 'github',

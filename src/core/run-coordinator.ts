@@ -9,7 +9,7 @@ import type { PlatformProvider } from '../platform/provider.js';
 import { CostEstimator } from '@cadre/framework/core';
 import type { Logger } from '@cadre/framework/core';
 import { killAllTrackedProcesses } from '../util/process.js';
-import { FleetProgressWriter, type IssueDag } from '@cadre/framework/engine';
+import { FleetProgressWriter, type WorkItemDag } from '@cadre/framework/engine';
 import {
   PreRunValidationSuite,
   diskValidator,
@@ -150,7 +150,7 @@ export class RunCoordinator {
     await launcher.init();
 
     // 3b. Optionally resolve issue dependency graph (DAG mode)
-    let dag: IssueDag | undefined;
+    let dag: WorkItemDag<IssueDetail> | undefined;
     if (this.config.dag?.enabled) {
       this.logger.info('DAG mode enabled — resolving issue dependency graph');
       const resolver = new DependencyResolver(this.config, launcher, this.logger, worktreeManager);

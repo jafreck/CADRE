@@ -32,9 +32,6 @@ export interface BackendRuntimeConfig {
       agentDir?: string;
     };
   };
-  copilot?: {
-    timeout: number;
-  };
   environment: {
     extraPath: string[];
   };
@@ -273,10 +270,9 @@ export class CopilotBackend implements AgentBackend {
     private readonly config: BackendRuntimeConfig,
     private readonly logger: BackendLoggerLike,
   ) {
-    // Prefer config.agent.copilot settings, fall back to legacy config.copilot
     this.cliCommand = config.agent.copilot.cliCommand;
     this.agentDir = config.agent.copilot.agentDir;
-    this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
+      this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }
 
@@ -298,29 +294,27 @@ export class CopilotBackend implements AgentBackend {
       args.push('--model', this.defaultModel);
     }
     const timeout = invocation.timeout ?? this.defaultTimeout;
-    return runInvokePipeline(
-      this.cliCommand,
-      args,
-      invocation,
-      worktreePath,
-      this.config,
-      this.logger,
-      'copilot',
-      timeout,
-      (r) => {
-        // The Copilot CLI can exit 0 while still reporting invocation errors in stderr
-        // (e.g. missing agent, invalid model). Treat these as hard failures.
-        const invocationError = isCopilotCliInvocationError(r.stderr);
-        const success = r.exitCode === 0 && !r.timedOut && !invocationError;
-        return {
-          success,
-          error: success ? undefined : r.stderr.trim() || `Exit code: ${r.exitCode}`,
-          failureMessage: r.stderr.includes('No such agent:')
-            ? `Agent ${invocation.agent} not found in Copilot agent directory — run 'cadre agents scaffold' or check agentDir config`
-            : undefined,
-        };
-      },
-    );
+      return runInvokePipeline(
+        this.cliCommand,
+        args,
+        invocation,
+        worktreePath,
+        this.config,
+        this.logger,
+        'copilot',
+        timeout,
+        (r) => {
+          const invocationError = isCopilotCliInvocationError(r.stderr);
+          const success = r.exitCode === 0 && !r.timedOut && !invocationError;
+          return {
+            success,
+            error: success ? undefined : r.stderr.trim() || `Exit code: ${r.exitCode}`,
+            failureMessage: r.stderr.includes('No such agent:')
+              ? `Agent ${invocation.agent} not found in Copilot agent directory — run 'cadre agents scaffold' or check agentDir config`
+              : undefined,
+          };
+        },
+      );
   }
 }
 
@@ -339,7 +333,7 @@ export class ClaudeBackend implements AgentBackend {
     private readonly logger: BackendLoggerLike,
   ) {
     this.cliCommand = config.agent.claude.cliCommand || 'claude';
-    this.defaultTimeout = config.agent.timeout ?? config.copilot?.timeout ?? 120_000;
+    this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
   }
 

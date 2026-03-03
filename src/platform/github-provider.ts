@@ -421,56 +421,43 @@ export class GitHubProvider implements PlatformProvider {
   }
 
   private parseReviewThreads(prNumber: number, raw: unknown): ReviewThread[] {
-    // The get_review_comments response may be { reviewThreads: [...], pageInfo: {...}, totalCount: N }
-    // with Go-serialized capitalized field names (ID, IsResolved, IsOutdated, Comments.Nodes, etc.)
-    // It may also be a plain array of threads (legacy / test format).
-    let threads: unknown[];
-    if (Array.isArray(raw)) {
-      threads = raw;
-    } else if (raw !== null && typeof raw === 'object') {
-      const envelope = raw as Record<string, unknown>;
-      if ('reviewThreads' in envelope) {
-        threads = asArray(envelope.reviewThreads);
-      } else if ('threads' in envelope) {
-        threads = asArray(envelope.threads);
-      } else {
-        return [];
-      }
-    } else {
+    if (raw === null || typeof raw !== 'object') {
       return [];
     }
+
+    const envelope = raw as Record<string, unknown>;
+    const threads = asArray(envelope.reviewThreads);
 
     return threads.map((t) => {
       const thread = asRecord(t);
 
-      // Support both Go-serialized capitalized keys and lowercase (tests/legacy)
-      const rawCommentsContainer = thread.Comments ?? thread.comments;
+      const rawCommentsContainer = thread.Comments;
       const rawComments = Array.isArray(rawCommentsContainer)
         ? rawCommentsContainer
-        : asArray(asRecord(rawCommentsContainer).Nodes ?? asRecord(rawCommentsContainer).nodes);
+        : asArray(asRecord(rawCommentsContainer).Nodes);
 
       const comments = rawComments.map((c) => {
         const comment = asRecord(c);
-        const authorContainer = comment.Author ?? comment.author;
+        const authorContainer = comment.Author;
         const author = asRecord(authorContainer);
-        const login = asString(author.Login ?? author.login, 'unknown');
+        const login = asString(author.Login, 'unknown');
 
-        const lineVal = comment.Line ?? comment.line;
+        const lineVal = comment.Line;
         return {
-          id: asString(comment.ID ?? comment.id),
+          id: asString(comment.ID),
           author: login,
-          body: asString(comment.Body ?? comment.body),
-          createdAt: asString(comment.CreatedAt ?? comment.createdAt),
-          path: asString(comment.Path ?? comment.path),
+          body: asString(comment.Body),
+          createdAt: asString(comment.CreatedAt),
+          path: asString(comment.Path),
           line: typeof lineVal === 'number' ? lineVal : undefined,
         };
       });
 
-      const isResolved = thread.IsResolved ?? thread.isResolved;
-      const isOutdated = thread.IsOutdated ?? thread.isOutdated;
+      const isResolved = thread.IsResolved;
+      const isOutdated = thread.IsOutdated;
 
       return {
-        id: asString(thread.ID ?? thread.id),
+        id: asString(thread.ID),
         prNumber,
         isResolved: isResolved === true,
         isOutdated: isOutdated === true,

@@ -22,7 +22,6 @@ function makeConfig(): BackendRuntimeConfig {
       copilot: { cliCommand: 'copilot', agentDir: '.github/agents' },
       claude: { cliCommand: 'claude' },
     },
-    copilot: { timeout: 300_000 },
     environment: { extraPath: [] },
   };
 }

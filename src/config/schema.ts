@@ -36,8 +36,6 @@ const NotificationsProviderSchema = z.object({
   type: z.string().min(1),
   /** Webhook URL (webhook/slack providers). Supports ${ENV_VAR} syntax. */
   url: z.string().optional(),
-  /** Webhook URL alias (webhook provider). Supports ${ENV_VAR} syntax. */
-  webhookUrl: z.string().optional(),
   /** Slack channel (slack provider). */
   channel: z.string().optional(),
   /** Log file path (log provider). */
@@ -94,11 +92,8 @@ export const CadreConfigSchema = z.object({
   /** Human-readable project name, used for directory naming. */
   projectName: z.string().min(1).regex(/^[a-z0-9-]+$/),
 
-  /**
-   * Platform to use for issue tracking and PRs.
-   * Defaults to "github" for backward compatibility.
-   */
-  platform: z.enum(['github', 'azure-devops']).default('github'),
+  /** Platform to use for issue tracking and PRs. */
+  platform: z.enum(['github', 'azure-devops']),
 
   /**
    * Repository identifier.

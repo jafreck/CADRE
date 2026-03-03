@@ -85,18 +85,9 @@ describe('NotificationManager', () => {
       );
     });
 
-    it('should fall back to webhookUrl for webhook provider when url is absent', () => {
+    it('should instantiate SlackProvider for type "slack" using url', () => {
       new NotificationManager(makeConfig({
-        providers: [{ type: 'webhook', webhookUrl: 'https://fallback.example.com/hook' }],
-      }));
-      expect(MockWebhookProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ url: 'https://fallback.example.com/hook' }),
-      );
-    });
-
-    it('should instantiate SlackProvider for type "slack" using webhookUrl', () => {
-      new NotificationManager(makeConfig({
-        providers: [{ type: 'slack', webhookUrl: 'https://hooks.slack.com/abc' }],
+        providers: [{ type: 'slack', url: 'https://hooks.slack.com/abc' }],
       }));
       expect(MockSlackProvider).toHaveBeenCalledOnce();
       expect(MockSlackProvider).toHaveBeenCalledWith(
@@ -104,18 +95,9 @@ describe('NotificationManager', () => {
       );
     });
 
-    it('should fall back to url for slack provider when webhookUrl is absent', () => {
-      new NotificationManager(makeConfig({
-        providers: [{ type: 'slack', url: 'https://hooks.slack.com/fallback' }],
-      }));
-      expect(MockSlackProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ webhookUrl: 'https://hooks.slack.com/fallback' }),
-      );
-    });
-
     it('should pass channel to SlackProvider', () => {
       new NotificationManager(makeConfig({
-        providers: [{ type: 'slack', webhookUrl: 'https://hooks.slack.com/abc', channel: '#alerts' }],
+        providers: [{ type: 'slack', url: 'https://hooks.slack.com/abc', channel: '#alerts' }],
       }));
       expect(MockSlackProvider).toHaveBeenCalledWith(
         expect.objectContaining({ channel: '#alerts' }),
@@ -136,7 +118,7 @@ describe('NotificationManager', () => {
       new NotificationManager(makeConfig({
         providers: [
           { type: 'webhook', url: 'https://example.com/hook' },
-          { type: 'slack', webhookUrl: 'https://hooks.slack.com/abc' },
+          { type: 'slack', url: 'https://hooks.slack.com/abc' },
           { type: 'log' },
         ],
       }));
@@ -168,7 +150,7 @@ describe('NotificationManager', () => {
       const manager = new NotificationManager(makeConfig({
         providers: [
           { type: 'webhook', url: 'https://example.com/hook' },
-          { type: 'slack', webhookUrl: 'https://hooks.slack.com/abc' },
+          { type: 'slack', url: 'https://hooks.slack.com/abc' },
         ],
       }));
 
