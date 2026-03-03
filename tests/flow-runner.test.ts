@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
+  FlowContractError,
   FlowRunner,
   conditional,
   defineFlow,
@@ -10,6 +12,7 @@ import {
   loop,
   parallel,
   step,
+  validateFlowContracts,
   type FlowCheckpointAdapter,
   type FlowCheckpointSnapshot,
 } from '@cadre/flow';
@@ -280,5 +283,123 @@ describe('@cadre/flow FlowRunner', () => {
     expect(result.status).toBe('completed');
     expect(runSpy).not.toHaveBeenCalled();
     expect(result.outputs.next).toBe(43);
+  });
+
+  it('validates compatible contracts across fromStep and fromSteps routing', async () => {
+    const flow = defineFlow('contracts-valid', [
+      step({
+        id: 'producerA',
+        outputSchema: z.object({ score: z.number() }),
+        run: () => ({ score: 5 }),
+      }),
+      step({
+        id: 'producerB',
+        outputSchema: z.object({ score: z.number() }),
+        run: () => ({ score: 7 }),
+      }),
+      step({
+        id: 'consumerOne',
+        inputSchema: z.object({ score: z.number() }),
+        input: fromStep('producerA'),
+        run: (_ctx, input) => (input as { score: number }).score,
+      }),
+      step({
+        id: 'consumerMany',
+        inputSchema: z.object({ producerA: z.object({ score: z.number() }), producerB: z.object({ score: z.number() }) }),
+        input: fromSteps(['producerA', 'producerB']),
+        run: (_ctx, input) => {
+          const payload = input as { producerA: { score: number }; producerB: { score: number } };
+          return payload.producerA.score + payload.producerB.score;
+        },
+      }),
+    ]);
+
+    const staticValidation = validateFlowContracts(flow);
+    expect(staticValidation.valid).toBe(true);
+
+    const result = await new FlowRunner().run(flow, {});
+    expect(result.status).toBe('completed');
+    expect(result.outputs.consumerOne).toBe(5);
+    expect(result.outputs.consumerMany).toBe(12);
+  });
+
+  it('reports type mismatch with from-step and to-step details', async () => {
+    const flow = defineFlow('contracts-type-mismatch', [
+      step({
+        id: 'producer',
+        outputSchema: z.object({ score: z.number() }),
+        run: () => ({ score: 5 }),
+      }),
+      step({
+        id: 'consumer',
+        inputSchema: z.object({ score: z.string() }),
+        input: fromStep('producer'),
+        run: (_ctx, input) => input,
+      }),
+    ]);
+
+    const staticValidation = validateFlowContracts(flow);
+    expect(staticValidation.valid).toBe(false);
+    expect(staticValidation.issues[0]).toMatchObject({
+      fromStep: 'producer',
+      toStep: 'consumer',
+      fieldPath: 'input',
+    });
+
+    await expect(new FlowRunner().run(flow, {})).rejects.toMatchObject({
+      name: 'FlowContractError',
+      fromStep: 'producer',
+      toStep: 'consumer',
+      fieldPath: 'input',
+    } satisfies Partial<FlowContractError>);
+  });
+
+  it('reports missing producer field/path mismatch', async () => {
+    const flow = defineFlow('contracts-missing-field', [
+      step({
+        id: 'producer',
+        outputSchema: z.object({ score: z.number() }),
+        run: () => ({ score: 5 }),
+      }),
+      step({
+        id: 'consumer',
+        inputSchema: z.object({ score: z.number() }),
+        input: fromStep('producer', 'score.value'),
+        run: (_ctx, input) => input,
+      }),
+    ]);
+
+    const staticValidation = validateFlowContracts(flow);
+    expect(staticValidation.valid).toBe(false);
+    expect(staticValidation.issues[0]?.reason).toContain('does not exist');
+
+    await expect(new FlowRunner().run(flow, {})).rejects.toMatchObject({
+      name: 'FlowContractError',
+      fromStep: 'producer',
+      toStep: 'consumer',
+    } satisfies Partial<FlowContractError>);
+  });
+
+  it('detects schema evolution incompatibility between producer and consumer versions', async () => {
+    const flow = defineFlow('contracts-schema-evolution', [
+      step({
+        id: 'producerV2',
+        outputSchema: z.object({ score: z.string() }),
+        run: () => ({ score: '5' }),
+      }),
+      step({
+        id: 'consumerV1',
+        inputSchema: z.object({ score: z.number() }),
+        input: fromStep('producerV2'),
+        run: (_ctx, input) => input,
+      }),
+    ]);
+
+    const staticValidation = validateFlowContracts(flow);
+    expect(staticValidation.valid).toBe(false);
+    expect(staticValidation.issues[0]).toMatchObject({
+      fromStep: 'producerV2',
+      toStep: 'consumerV1',
+    });
   });
 });
