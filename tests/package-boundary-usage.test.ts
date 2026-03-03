@@ -6,6 +6,7 @@ import { Logger, CostEstimator, FleetEventBus } from '@cadre/observability';
 import { NotificationManager } from '@cadre/notifications';
 import { SessionQueue, ParallelExecutor, RetryExecutor } from '@cadre/execution';
 import { PreRunValidationSuite, diskValidator } from '@cadre/validation';
+import { defineFlow, step, loop, parallel, conditional, gate, FlowRunner, fromStep, fromContext, fromSteps } from '@cadre/flow';
 
 function walkTsFiles(dir: string): string[] {
   const out: string[] = [];
@@ -34,6 +35,17 @@ describe('package boundary usage', () => {
 
     expect(PreRunValidationSuite).toBeTypeOf('function');
     expect(diskValidator.name).toBe('disk');
+
+    expect(defineFlow).toBeTypeOf('function');
+    expect(step).toBeTypeOf('function');
+    expect(loop).toBeTypeOf('function');
+    expect(parallel).toBeTypeOf('function');
+    expect(conditional).toBeTypeOf('function');
+    expect(gate).toBeTypeOf('function');
+    expect(fromStep).toBeTypeOf('function');
+    expect(fromContext).toBeTypeOf('function');
+    expect(fromSteps).toBeTypeOf('function');
+    expect(FlowRunner).toBeTypeOf('function');
   });
 
   it('does not use src-relative imports for extracted modules in production code', () => {

@@ -22,6 +22,7 @@
     "packages/notifications/src/**/*",
     "packages/observability/src/**/*",
     "packages/execution/src/**/*",
+    "packages/flow/src/**/*",
     "packages/validation/src/**/*",
     "packages/agent-runtime/src/**/*",
     "packages/agent-runtime-provider-host/src/**/*",

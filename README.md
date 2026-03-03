@@ -217,6 +217,63 @@ Cadre supports runtime extension points without patching core switches:
 5. **Git operations are the runtime's job** — Agents write files; the runtime handles git.
 6. **MCP-native GitHub access** — GitHub interactions use the MCP protocol, not CLI wrappers.
 
+## Flow DSL Package (`@cadre/flow`)
+
+Cadre now includes a framework package for declarative pipeline orchestration graphs.
+This package is additive and does not replace the existing app orchestrators yet.
+See [docs/flow-dsl.md](docs/flow-dsl.md) for a complete reference.
+
+```ts
+import {
+  FlowRunner,
+  defineFlow,
+  step,
+  gate,
+  loop,
+  parallel,
+  conditional,
+  fromStep,
+  fromContext,
+} from '@cadre/flow';
+
+const flow = defineFlow('example', [
+  step({
+    id: 'seed',
+    input: fromContext('start'),
+    run: (_ctx, input) => Number(input),
+  }),
+  gate({
+    id: 'non-negative',
+    input: fromStep('seed'),
+    evaluate: (_ctx, value) => Number(value) >= 0,
+  }),
+  loop({
+    id: 'retry-loop',
+    maxIterations: 3,
+    do: [
+      parallel({
+        id: 'fan-out',
+        concurrency: 2,
+        branches: {
+          a: [step({ id: 'a-task', run: () => 'a' })],
+          b: [step({ id: 'b-task', run: () => 'b' })],
+        },
+      }),
+      conditional({
+        id: 'exit-check',
+        when: (ctx) => Boolean(ctx.getStepOutput('a-task')),
+        then: [step({ id: 'done', run: () => true })],
+        else: [step({ id: 'retry', run: () => false })],
+      }),
+    ],
+    until: (ctx) => Boolean(ctx.getStepOutput('done')),
+  }),
+]);
+
+const runner = new FlowRunner();
+await runner.run(flow, { start: 0 });
+```
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).

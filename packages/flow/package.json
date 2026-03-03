@@ -1,0 +1,23 @@
+{
+  "name": "@cadre/flow",
+  "version": "0.1.0",
+  "description": "Declarative flow graph DSL and runner for CADRE",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "dependencies": {
+    "p-limit": "^6",
+    "zod": "^3.23"
+  },
+  "scripts": {
+    "build": "tsc"
+  }
+}
