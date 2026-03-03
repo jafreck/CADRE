@@ -46,9 +46,14 @@ export class AnalysisToPlanningGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
+    const artifactsDir = context.artifactsDir ?? context.progressDir;
+
+    if (!artifactsDir) {
+      return fail(['Gate context is missing artifactsDir']);
+    }
 
     // --- analysis.md ---
-    const analysisPath = join(context.progressDir, 'analysis.md');
+    const analysisPath = join(artifactsDir, 'analysis.md');
     const analysisContent = await readFileSafe(analysisPath);
 
     if (analysisContent === null) {
@@ -75,7 +80,7 @@ export class AnalysisToPlanningGate implements PhaseGate {
     }
 
     // --- scout-report.md ---
-    const scoutPath = join(context.progressDir, 'scout-report.md');
+    const scoutPath = join(artifactsDir, 'scout-report.md');
     const scoutContent = await readFileSafe(scoutPath);
 
     if (scoutContent === null) {
@@ -123,8 +128,17 @@ export class PlanningToImplementationGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
+    const artifactsDir = context.artifactsDir ?? context.progressDir;
+    const workspacePath = context.workspacePath ?? context.worktreePath;
 
-    const planPath = join(context.progressDir, 'implementation-plan.md');
+    if (!artifactsDir) {
+      return fail(['Gate context is missing artifactsDir']);
+    }
+    if (!workspacePath) {
+      return fail(['Gate context is missing workspacePath']);
+    }
+
+    const planPath = join(artifactsDir, 'implementation-plan.md');
     const planContent = await readFileSafe(planPath);
 
     if (planContent === null) {
@@ -184,7 +198,7 @@ export class PlanningToImplementationGate implements PhaseGate {
     for (const session of sessions) {
       for (const step of session.steps) {
         for (const filePath of step.files) {
-          const resolvedPath = join(context.worktreePath, filePath);
+          const resolvedPath = join(workspacePath, filePath);
           try {
             await access(resolvedPath);
           } catch {
@@ -209,10 +223,17 @@ export class PlanningToImplementationGate implements PhaseGate {
  */
 export class ImplementationToIntegrationGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
+    const workspacePath = context.workspacePath ?? context.worktreePath;
+    const baselineRef = context.baselineRef ?? context.baseCommit;
+
+    if (!workspacePath) {
+      return fail(['Gate context is missing workspacePath']);
+    }
+
     try {
-      const git = simpleGit(context.worktreePath);
-      const diff = context.baseCommit
-        ? await git.diff([`${context.baseCommit}..HEAD`])
+      const git = simpleGit(workspacePath);
+      const diff = baselineRef
+        ? await git.diff([`${baselineRef}..HEAD`])
         : await git.diff(['HEAD']);
 
       if (!diff || diff.trim().length === 0) {
@@ -245,8 +266,13 @@ export class IntegrationToPRGate implements PhaseGate {
   async validate(context: GateContext): Promise<GateResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
+    const artifactsDir = context.artifactsDir ?? context.progressDir;
 
-    const reportPath = join(context.progressDir, 'integration-report.md');
+    if (!artifactsDir) {
+      return fail(['Gate context is missing artifactsDir']);
+    }
+
+    const reportPath = join(artifactsDir, 'integration-report.md');
     const reportContent = await readFileSafe(reportPath);
 
     if (reportContent === null) {
@@ -323,7 +349,12 @@ export class AnalysisAmbiguityGate implements PhaseGate {
   }
 
   async validate(context: GateContext): Promise<GateResult> {
-    const analysisPath = join(context.progressDir, 'analysis.md');
+    const artifactsDir = context.artifactsDir ?? context.progressDir;
+    if (!artifactsDir) {
+      return fail(['Gate context is missing artifactsDir']);
+    }
+
+    const analysisPath = join(artifactsDir, 'analysis.md');
     const analysisContent = await readFileSafe(analysisPath);
 
     if (analysisContent === null) {

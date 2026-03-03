@@ -11,6 +11,13 @@ export type {
   AgentStep,
   AgentSession,
   TokenUsageDetail,
+  GateResult,
+  PhaseResult,
+  AgentContext as _AgentContextBase,
+} from '@cadre/agent-runtime';
+
+import type { AgentInvocation as _AgentInvocationBase, AgentResult as _AgentResultBase, AgentContext as _AgentContextBase, AgentStep, AgentSession, TokenUsageDetail } from '@cadre/agent-runtime';
+import type {
   AnalysisResult,
   ScoutReport,
   ReviewResult,
@@ -18,12 +25,17 @@ export type {
   IntegrationReport,
   CommandResult,
   PRContent,
-  GateResult,
-  PhaseResult,
-  AgentContext as _AgentContextBase,
-} from '@cadre/agent-runtime';
+} from './schemas/index.js';
 
-import type { AgentInvocation as _AgentInvocationBase, AgentResult as _AgentResultBase, AgentContext as _AgentContextBase, AgentStep, AgentSession, TokenUsageDetail } from '@cadre/agent-runtime';
+export type {
+  AnalysisResult,
+  ScoutReport,
+  ReviewResult,
+  ReviewIssue,
+  IntegrationReport,
+  CommandResult,
+  PRContent,
+};
 
 /** All known agent names. */
 export type AgentName =

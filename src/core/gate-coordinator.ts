@@ -40,6 +40,9 @@ export class GateCoordinator {
     if (!gate) return 'pass';
 
     const context: GateContext = {
+      artifactsDir: this.progressDir,
+      workspacePath: this.worktreePath,
+      baselineRef: this.baseCommit,
       progressDir: this.progressDir,
       worktreePath: this.worktreePath,
       baseCommit: this.baseCommit,
