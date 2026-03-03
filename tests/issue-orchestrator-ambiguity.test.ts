@@ -83,6 +83,15 @@ vi.mock('../src/agents/context-builder.js', () => ({
 
 vi.mock('../src/agents/result-parser.js', () => ({
   ResultParser: vi.fn(() => ({
+    parseAnalysis: vi.fn().mockResolvedValue({
+      requirements: ['Some requirement'],
+      changeType: 'bug-fix',
+      scope: 'small',
+      affectedAreas: ['src/foo.ts'],
+      ambiguities: [],
+      scoutPolicy: 'required',
+    }),
+    parseScoutReport: vi.fn().mockResolvedValue({ files: [], dependencies: [], tests: [] }),
     parseImplementationPlan: vi.fn().mockResolvedValue([]),
     parseReview: vi.fn().mockResolvedValue({ verdict: 'pass', issues: [], summary: '' }),
     parsePRContent: vi.fn().mockResolvedValue({ title: 'PR', body: '', labels: [] }),
