@@ -140,4 +140,42 @@ describe('ProviderRegistry', () => {
     registry.unregister('docker');
     expect(registry.has('docker')).toBe(false);
   });
+
+  it('registerProvider() accepts instance registrations', () => {
+    const provider = makeProvider('host');
+    registry.registerProvider({ name: 'host', provider });
+    expect(registry.resolve('host')).toBe(provider);
+  });
+
+  it('registerProviders() accepts mixed registrations', () => {
+    const provider = makeProvider('host');
+    registry.registerProviders([
+      { name: 'host', provider },
+      { name: 'docker', factory: () => makeProvider('docker') },
+    ]);
+    expect(registry.has('host')).toBe(true);
+    expect(registry.has('docker')).toBe(true);
+  });
+
+  it('getCapabilities() returns provider capabilities', () => {
+    registry.register(makeProvider('host'));
+    expect(registry.getCapabilities('host')?.networkModes).toEqual(['none', 'allowlist', 'full']);
+  });
+
+  it('healthCheck() treats providers without healthCheck as healthy', async () => {
+    registry.register(makeProvider('host'));
+    await expect(registry.healthCheck('host')).resolves.toEqual(
+      expect.objectContaining({ healthy: true }),
+    );
+  });
+
+  it('describe() reports registered provider metadata', () => {
+    registry.register(makeProvider('host'));
+    registry.registerFactory('docker', () => makeProvider('docker'));
+
+    const descriptions = registry.describe();
+    expect(descriptions.map((d) => d.name)).toEqual(['docker', 'host']);
+    expect(descriptions.find((d) => d.name === 'host')?.registeredAs).toBe('instance');
+    expect(descriptions.find((d) => d.name === 'docker')?.registeredAs).toBe('factory');
+  });
 });

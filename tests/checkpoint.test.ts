@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { CheckpointManager, FleetCheckpointManager } from '../src/core/checkpoint.js';
 import type { CheckpointState, FleetIssueStatus } from '../src/core/checkpoint.js';
+import type { CheckpointStore } from '../src/core/checkpoint.js';
 import { Logger } from '../src/logging/logger.js';
 import type { GateResult } from '../src/agents/types.js';
 
@@ -35,6 +36,26 @@ describe('CheckpointManager', () => {
     expect(state.completedPhases).toEqual([]);
     expect(state.completedTasks).toEqual([]);
     expect(state.resumeCount).toBe(0);
+  });
+
+  it('supports a pluggable CheckpointStore backend', async () => {
+    const backingState: Record<string, unknown> = {};
+    const mockStore: CheckpointStore = {
+      ensureDir: vi.fn().mockResolvedValue(undefined),
+      exists: vi.fn().mockImplementation(async (path: string) => path in backingState),
+      readJSON: vi.fn().mockImplementation(async (path: string) => backingState[path]),
+      writeJSON: vi.fn().mockImplementation(async (path: string, data: unknown) => {
+        backingState[path] = data;
+      }),
+      copyFile: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const manager = new CheckpointManager(tempDir, mockLogger, mockStore);
+    await manager.load('42');
+    await manager.startPhase(1);
+
+    expect(mockStore.ensureDir).toHaveBeenCalled();
+    expect(mockStore.writeJSON).toHaveBeenCalled();
   });
 
   it('should persist and reload checkpoint', async () => {
@@ -449,6 +470,26 @@ describe('FleetCheckpointManager', () => {
     expect(state.projectName).toBe('my-project');
     expect(state.issues).toEqual({});
     expect(state.resumeCount).toBe(0);
+  });
+
+  it('supports a pluggable CheckpointStore backend', async () => {
+    const backingState: Record<string, unknown> = {};
+    const mockStore: CheckpointStore = {
+      ensureDir: vi.fn().mockResolvedValue(undefined),
+      exists: vi.fn().mockImplementation(async (path: string) => path in backingState),
+      readJSON: vi.fn().mockImplementation(async (path: string) => backingState[path]),
+      writeJSON: vi.fn().mockImplementation(async (path: string, data: unknown) => {
+        backingState[path] = data;
+      }),
+      copyFile: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger, mockStore);
+    await manager.load();
+    await manager.setIssueStatus(1, 'in-progress', '/path', 'branch', 1, 'Custom store test');
+
+    expect(mockStore.ensureDir).toHaveBeenCalled();
+    expect(mockStore.writeJSON).toHaveBeenCalled();
   });
 
   it('isIssueCompleted should return true for completed status', async () => {

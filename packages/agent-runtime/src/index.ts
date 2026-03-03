@@ -24,9 +24,10 @@ export type {
   ExecResult,
   IsolationSession,
   IsolationProvider,
+  IsolationProviderHealthCheckResult,
 } from './types.js';
 
 export { ProviderRegistry } from './registry.js';
-export type { ProviderFactory } from './registry.js';
+export type { ProviderFactory, ProviderRegistration, ProviderDescriptor } from './registry.js';
 export { negotiatePolicy, CapabilityMismatchError } from './negotiation.js';
 export type { NegotiationOptions } from './negotiation.js';
