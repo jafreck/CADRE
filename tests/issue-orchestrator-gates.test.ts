@@ -470,6 +470,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     await orchestrator.run();
 
     expect(mockIntegrationGateValidate).toHaveBeenCalledTimes(1);
+    expect(mockCommitStripCadreFiles).toHaveBeenCalledWith('abc123', expect.any(Function));
   });
 
   it('should NOT call any gate after phase 5 (no gate for last phase)', async () => {
@@ -483,6 +484,7 @@ describe('IssueOrchestrator – Gate Validation (runGate)', () => {
     expect(mockPlanningGateValidate).not.toHaveBeenCalled();
     expect(mockImplGateValidate).not.toHaveBeenCalled();
     expect(mockIntegrationGateValidate).not.toHaveBeenCalled();
+    expect(mockCommitStripCadreFiles).not.toHaveBeenCalled();
   });
 
   // ── Gate `pass` behaviour ──────────────────────────────────────────────────

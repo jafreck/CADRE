@@ -33,7 +33,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       const prContent = await this.parseWithRetry(
         ctx, analysisPath, planPath, integrationReportPath, diffPath, prContentPath,
       );
-      await this.createPullRequest(ctx, prContent, diff);
+      await this.createPullRequest(ctx, prContent);
     }
 
     return prContentPath;
@@ -133,59 +133,8 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     );
   }
 
-  /** Strip cadre artefacts, push, and open the pull request. */
-  private async createPullRequest(ctx: PhaseContext, prContent: PRContent, originalDiff: string): Promise<void> {
-    await ctx.io.commitManager.stripCadreFiles(
-      ctx.worktree.baseCommit,
-      async (conflictedFiles: string[], commitSha: string) => {
-        ctx.services.logger.warn(
-          `stripCadreFiles encountered merge conflicts while replaying ${commitSha.slice(0, 8)}; launching conflict-resolver`,
-          {
-            issueNumber: ctx.issue.number,
-            data: { conflictedFiles },
-          },
-        );
-
-        const contextPath = await ctx.services.contextBuilder.build('conflict-resolver', {
-          issueNumber: ctx.issue.number,
-          worktreePath: ctx.worktree.path,
-          conflictedFiles,
-          progressDir: ctx.io.progressDir,
-        });
-
-        const resolverResult = await launchWithRetry(ctx, 'conflict-resolver', {
-          agent: 'conflict-resolver',
-          issueNumber: ctx.issue.number,
-          phase: 5,
-          contextPath,
-          outputPath: join(ctx.io.progressDir, 'conflict-resolution-report.md'),
-        });
-
-        if (!resolverResult.success) {
-          const detail = resolverResult.timedOut
-            ? `timed out after ${resolverResult.duration}ms`
-            : `exit ${resolverResult.exitCode}`;
-          throw new Error(`Conflict-resolver agent failed during PR composition (${detail})`);
-        }
-
-        if (!resolverResult.outputExists) {
-          throw new Error(
-            `Conflict-resolver agent exited successfully but produced no output at ${resolverResult.outputPath}`,
-          );
-        }
-      },
-    );
-
-    // Guard: if stripping removed all content from a non-empty diff, abort before pushing.
-    const postStripDiff = await ctx.io.commitManager.getDiff(ctx.worktree.baseCommit);
-    if (originalDiff.length > 0 && postStripDiff.trim().length === 0) {
-      throw new Error(
-        'PR creation aborted: stripCadreFiles() removed all changes from the branch. ' +
-        'The post-strip diff is empty even though the original diff was non-empty. ' +
-        'No content would be pushed to the remote branch.',
-      );
-    }
-
+  /** Push and open the pull request. */
+  private async createPullRequest(ctx: PhaseContext, prContent: PRContent): Promise<void> {
     await ctx.io.commitManager.push(true, ctx.worktree.branch);
 
     const prTitle = formatPullRequestTitle(prContent.title, ctx.issue.title, ctx.issue.number);

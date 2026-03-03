@@ -32,6 +32,18 @@ vi.mock('../src/executors/pr-composition-phase-executor.js', () => ({
   PRCompositionPhaseExecutor: vi.fn(),
 }));
 
+vi.mock('../src/git/commit.js', () => ({
+  CommitManager: vi.fn().mockImplementation(() => ({
+    isClean: vi.fn().mockResolvedValue(true),
+    getChangedFiles: vi.fn().mockResolvedValue([]),
+    getDiff: vi.fn().mockResolvedValue(''),
+    commit: vi.fn().mockResolvedValue(undefined),
+    push: vi.fn().mockResolvedValue(undefined),
+    squash: vi.fn().mockResolvedValue(undefined),
+    stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 // Mock phase gates so they always pass
 vi.mock('../src/core/phase-gate.js', () => {
   const makeGate = () => ({
@@ -232,7 +244,7 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   function makeWorktree(): WorktreeInfo {
