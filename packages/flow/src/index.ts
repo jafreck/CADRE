@@ -9,9 +9,14 @@ export {
 
 export { fromStep, fromSteps, fromContext } from './refs.js';
 export { FlowRunner } from './runner.js';
+export { validateFlowContracts } from './contracts.js';
 
 export type {
   DataRef,
+  FlowContracts,
+  StepContract,
+  FlowContractIssue,
+  FlowContractValidationResult,
   FlowNode,
   FlowStepNode,
   FlowGateNode,
@@ -26,4 +31,4 @@ export type {
   FlowCheckpointSnapshot,
 } from './types.js';
 
-export { FlowExecutionError, FlowCycleError } from './types.js';
+export { FlowExecutionError, FlowCycleError, FlowContractError } from './types.js';
