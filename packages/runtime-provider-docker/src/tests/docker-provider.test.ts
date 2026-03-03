@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DockerProvider } from '../docker-provider.js';
 import type { DockerRunner } from '../docker-session.js';
-import type { ExecResult, IsolationPolicy } from '@cadre/framework/runtime';
+import type { ExecResult } from '@cadre/framework/runtime';
 
 function makeRunner(results: ExecResult[]): DockerRunner {
   let callIndex = 0;
@@ -207,6 +207,19 @@ describe('DockerProvider', () => {
       await provider.createSession({ envAllowlist: ['HOME', 'MISSING_VAR'] });
       const args = (runner as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
       expect(args.join(' ')).not.toContain('MISSING_VAR');
+    });
+
+    it('uses process.env when hostEnv is not provided', async () => {
+      process.env.CADRE_DOCKER_PROVIDER_TEST_ENV = 'from-process-env';
+      try {
+        const runner = makeSuccessRunner();
+        const provider = new DockerProvider({ image: 'ubuntu:22.04', runner });
+        await provider.createSession({ envAllowlist: ['CADRE_DOCKER_PROVIDER_TEST_ENV'] });
+        const args = (runner as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
+        expect(args).toContain('CADRE_DOCKER_PROVIDER_TEST_ENV=from-process-env');
+      } finally {
+        delete process.env.CADRE_DOCKER_PROVIDER_TEST_ENV;
+      }
     });
 
     it('throws when docker run fails', async () => {

@@ -167,3 +167,59 @@ describe('applyOverrides – provider', () => {
     expect(Object.isFrozen(result)).toBe(true);
   });
 });
+
+describe('applyOverrides – issues and parallelism', () => {
+  it('should set issues.ids from issue when issue is provided', () => {
+    const result = applyOverrides(baseConfig, { issue: 42 });
+    expect(result.issues).toEqual({ ids: [42] });
+  });
+
+  it('should set issues.ids from issueIds when issueIds is non-empty', () => {
+    const result = applyOverrides(baseConfig, { issueIds: [3, 5, 8] });
+    expect(result.issues).toEqual({ ids: [3, 5, 8] });
+  });
+
+  it('should prioritize issueIds over issue when both are provided', () => {
+    const result = applyOverrides(baseConfig, { issue: 99, issueIds: [7, 11] });
+    expect(result.issues).toEqual({ ids: [7, 11] });
+  });
+
+  it('should ignore empty issueIds and keep issue-derived ids', () => {
+    const result = applyOverrides(baseConfig, { issue: 13, issueIds: [] });
+    expect(result.issues).toEqual({ ids: [13] });
+  });
+
+  it('should apply maxParallelIssues override when provided', () => {
+    const result = applyOverrides(baseConfig, { maxParallelIssues: 9 });
+    expect(result.options.maxParallelIssues).toBe(9);
+  });
+
+  it('should allow maxParallelIssues to be 0', () => {
+    const result = applyOverrides(baseConfig, { maxParallelIssues: 0 });
+    expect(result.options.maxParallelIssues).toBe(0);
+  });
+});
+
+describe('applyOverrides – execution flags', () => {
+  it('should set resume to true when override is true', () => {
+    const result = applyOverrides(baseConfig, { resume: true });
+    expect(result.options.resume).toBe(true);
+  });
+
+  it('should set resume to false when override is false', () => {
+    const enabled = applyOverrides(baseConfig, { resume: true });
+    const result = applyOverrides(enabled, { resume: false });
+    expect(result.options.resume).toBe(false);
+  });
+
+  it('should set dryRun to true when override is true', () => {
+    const result = applyOverrides(baseConfig, { dryRun: true });
+    expect(result.options.dryRun).toBe(true);
+  });
+
+  it('should set dryRun to false when override is false', () => {
+    const enabled = applyOverrides(baseConfig, { dryRun: true });
+    const result = applyOverrides(enabled, { dryRun: false });
+    expect(result.options.dryRun).toBe(false);
+  });
+});

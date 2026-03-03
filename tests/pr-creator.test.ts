@@ -118,6 +118,13 @@ describe('PullRequestCreator', () => {
       const result = await creator.exists('cadre/issue-42');
       expect(result).toBeNull();
     });
+
+    it('should return null when listing PRs throws', async () => {
+      mockOctokit.rest.pulls.list.mockRejectedValueOnce(new Error('network error'));
+
+      const result = await creator.exists('cadre/issue-42');
+      expect(result).toBeNull();
+    });
   });
 
   describe('create', () => {

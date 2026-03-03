@@ -1044,6 +1044,10 @@ describe('GitHubProvider – lifecycle', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('GitHubProvider – mergePullRequest', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('should call octokit.rest.pulls.merge with the correct parameters', async () => {
     const mergeMock = vi.fn().mockResolvedValue({ data: { merged: true } });
     const mockOctokit = {
@@ -1108,5 +1112,246 @@ describe('GitHubProvider – mergePullRequest', () => {
 
     await expect(provider.mergePullRequest(5, 'main')).resolves.toBeUndefined();
     expect(mergeMock).toHaveBeenCalled();
+  });
+
+  it('retries merge after retryable status when checks become mergeable', async () => {
+    const mergeError = Object.assign(new Error('conflict'), { status: 409 });
+    const mergeMock = vi
+      .fn()
+      .mockRejectedValueOnce(mergeError)
+      .mockResolvedValueOnce({ data: { merged: true } });
+    const getMock = vi.fn().mockResolvedValue({
+      data: {
+        merged: false,
+        state: 'open',
+        head: { sha: 'abc123' },
+        mergeable: true,
+        mergeable_state: 'clean',
+      },
+    });
+    const updateBranchMock = vi.fn().mockResolvedValue({});
+    const combinedStatusMock = vi.fn().mockResolvedValue({ data: { state: 'success', statuses: [] } });
+    const listForRefMock = vi.fn().mockResolvedValue({
+      data: { check_runs: [{ name: 'ci', status: 'completed', conclusion: 'success' }] },
+    });
+
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock, get: getMock, updateBranch: updateBranchMock },
+        repos: { getCombinedStatusForRef: combinedStatusMock },
+        checks: { listForRef: listForRefMock },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(88, 'main', 'squash')).resolves.toBeUndefined();
+
+    expect(mergeMock).toHaveBeenCalledTimes(2);
+    expect(mergeMock).toHaveBeenLastCalledWith({
+      owner: 'owner',
+      repo: 'repo',
+      pull_number: 88,
+      merge_method: 'squash',
+    });
+    expect(getMock).toHaveBeenCalledTimes(1);
+    expect(combinedStatusMock).toHaveBeenCalledTimes(1);
+    expect(listForRefMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows non-retryable merge errors', async () => {
+    const mergeError = Object.assign(new Error('server exploded'), { status: 500 });
+    const mergeMock = vi.fn().mockRejectedValue(mergeError);
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(11, 'main')).rejects.toBe(mergeError);
+  });
+
+  it('rethrows retryable merge errors when monitoring APIs are unavailable', async () => {
+    const mergeError = Object.assign(new Error('merge not ready'), { status: 409 });
+    const mergeMock = vi.fn().mockRejectedValue(mergeError);
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(12, 'main')).rejects.toBe(mergeError);
+  });
+
+  it('throws when PR closes while waiting for merge readiness', async () => {
+    const mergeMock = vi.fn().mockRejectedValueOnce({ status: 422 });
+    const getMock = vi.fn().mockResolvedValue({
+      data: {
+        merged: false,
+        state: 'closed',
+        head: { sha: 'def456' },
+      },
+    });
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock, get: getMock, updateBranch: vi.fn() },
+        repos: { getCombinedStatusForRef: vi.fn() },
+        checks: { listForRef: vi.fn() },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(13, 'main')).rejects.toThrow(
+      'closed before auto-complete could finish',
+    );
+    expect(mergeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when PR head SHA is missing during monitoring', async () => {
+    const mergeMock = vi.fn().mockRejectedValueOnce({ status: 405 });
+    const getMock = vi.fn().mockResolvedValue({
+      data: {
+        merged: false,
+        state: 'open',
+        head: {},
+      },
+    });
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock, get: getMock, updateBranch: vi.fn() },
+        repos: { getCombinedStatusForRef: vi.fn() },
+        checks: { listForRef: vi.fn() },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(14, 'main')).rejects.toThrow('has no head SHA');
+    expect(mergeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs warning and continues when updateBranch fails for behind PRs', async () => {
+    const mergeMock = vi
+      .fn()
+      .mockRejectedValueOnce({ response: { status: 409 } })
+      .mockResolvedValueOnce({ data: { merged: true } });
+    const getMock = vi.fn().mockResolvedValue({
+      data: {
+        merged: false,
+        state: 'open',
+        head: { sha: 'feedbeef' },
+        mergeable: true,
+        mergeable_state: 'behind',
+      },
+    });
+    const updateBranchMock = vi.fn().mockRejectedValue(new Error('forbidden'));
+
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock, get: getMock, updateBranch: updateBranchMock },
+        repos: { getCombinedStatusForRef: vi.fn().mockResolvedValue({ data: { state: 'success', statuses: [] } }) },
+        checks: {
+          listForRef: vi
+            .fn()
+            .mockResolvedValue({ data: { check_runs: [{ name: 'ci', status: 'completed', conclusion: 'success' }] } }),
+        },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(15, 'main')).resolves.toBeUndefined();
+
+    expect(updateBranchMock).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Could not update PR #15 branch from base'));
+    expect(mergeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws when combined commit statuses are failing with no named contexts', async () => {
+    const mergeMock = vi.fn().mockRejectedValueOnce({ status: 409 });
+    const mockOctokit = {
+      rest: {
+        pulls: {
+          merge: mergeMock,
+          get: vi.fn().mockResolvedValue({
+            data: {
+              merged: false,
+              state: 'open',
+              head: { sha: 'abc999' },
+              mergeable: true,
+              mergeable_state: 'clean',
+            },
+          }),
+          updateBranch: vi.fn(),
+        },
+        repos: { getCombinedStatusForRef: vi.fn().mockResolvedValue({ data: { state: 'failure', statuses: [] } }) },
+        checks: { listForRef: vi.fn().mockResolvedValue({ data: { check_runs: [] } }) },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(16, 'main')).rejects.toThrow('checks failed: commit-status');
+  });
+
+  it('throws when completed check runs finish with failing conclusions', async () => {
+    const mergeMock = vi.fn().mockRejectedValueOnce({ status: 409 });
+    const mockOctokit = {
+      rest: {
+        pulls: {
+          merge: mergeMock,
+          get: vi.fn().mockResolvedValue({
+            data: {
+              merged: false,
+              state: 'open',
+              head: { sha: 'bead1234' },
+              mergeable: true,
+              mergeable_state: 'clean',
+            },
+          }),
+          updateBranch: vi.fn(),
+        },
+        repos: { getCombinedStatusForRef: vi.fn().mockResolvedValue({ data: { state: 'success', statuses: [] } }) },
+        checks: {
+          listForRef: vi.fn().mockResolvedValue({
+            data: {
+              check_runs: [{ name: 'integration', status: 'completed', conclusion: 'cancelled' }],
+            },
+          }),
+        },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(17, 'main')).rejects.toThrow('checks failed: integration');
+  });
+
+  it('throws timeout error when readiness polling deadline is exceeded', async () => {
+    const dateNowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1)
+      .mockReturnValue(2_000_000);
+
+    const mergeMock = vi.fn().mockRejectedValueOnce({ status: 409 });
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock, get: vi.fn(), updateBranch: vi.fn() },
+        repos: { getCombinedStatusForRef: vi.fn() },
+        checks: { listForRef: vi.fn() },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    await expect(provider.mergePullRequest(18, 'main')).rejects.toThrow(
+      'Timed out waiting for PR #18 checks/mergeability',
+    );
+    dateNowSpy.mockRestore();
   });
 });
