@@ -1,6 +1,6 @@
 import type { TokenUsageDetail } from '../agents/types.js';
 import type { CheckpointManager } from './checkpoint.js';
-import type { NotificationManager } from '../notifications/manager.js';
+import type { NotificationManager } from '@cadre/notifications';
 import type { TokenTracker } from '../budget/token-tracker.js';
 
 export class BudgetExceededError extends Error {

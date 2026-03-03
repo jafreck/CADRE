@@ -1,6 +1,6 @@
 import { exec } from '../util/process.js';
 import { exists } from '../util/fs.js';
-import type { PreRunValidator, ValidationResult } from './types.js';
+import type { PreRunValidator, ValidationResult } from '@cadre/validation';
 import type { RuntimeConfig } from '../config/loader.js';
 
 export const agentBackendValidator: PreRunValidator = {

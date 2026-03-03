@@ -2,7 +2,7 @@ import type { RuntimeConfig } from '../config/loader.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { FleetCheckpointManager } from './checkpoint.js';
 import type { PlatformProvider } from '../platform/provider.js';
-import type { Logger } from '../logging/logger.js';
+import type { Logger } from '@cadre/observability';
 
 export class WorktreeLifecycleService {
   constructor(

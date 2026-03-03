@@ -5,7 +5,7 @@ import { AnalysisAmbiguityGate, type GateContext } from './phase-gate.js';
 import { buildGateMap } from './phase-registry.js';
 import type { CheckpointManager } from './checkpoint.js';
 import type { IssueProgressWriter } from './progress.js';
-import type { Logger } from '../logging/logger.js';
+import type { Logger } from '@cadre/observability';
 import { extractCadreJson } from '../util/cadre-json.js';
 
 /** Stateless gates — constructed once and reused across all runGate() calls. */

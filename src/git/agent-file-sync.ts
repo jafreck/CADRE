@@ -1,6 +1,6 @@
 import { join, relative } from 'node:path';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
-import { Logger } from '../logging/logger.js';
+import { Logger } from '@cadre/observability';
 import { exists, ensureDir } from '../util/fs.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 

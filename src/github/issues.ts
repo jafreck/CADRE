@@ -1,6 +1,6 @@
 import { GitHubAPI } from './api.js';
 import type { CadreConfig } from '../config/schema.js';
-import { Logger } from '../logging/logger.js';
+import { Logger } from '@cadre/observability';
 
 export interface IssueComment {
   author: string;

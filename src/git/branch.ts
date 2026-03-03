@@ -1,5 +1,5 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { Logger } from '../logging/logger.js';
+import { Logger } from '@cadre/observability';
 
 /**
  * Manages git branch operations.
