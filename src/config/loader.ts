@@ -63,7 +63,7 @@ export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
   // Resolve relative paths to absolute
   const resolvedRepoPath = isAbsolute(config.repoPath)
     ? config.repoPath
-    : resolve(process.cwd(), config.repoPath);
+    : resolve(configDir, config.repoPath);
 
   // stateDir: all cadre state lives outside the target repo so it never pollutes git
   const resolvedStateDir = config.stateDir
