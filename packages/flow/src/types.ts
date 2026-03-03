@@ -1,9 +1,11 @@
+import type { ZodType } from 'zod';
+
 export type MaybePromise<T> = T | Promise<T>;
 
-export type DataRef =
-  | { kind: 'fromStep'; stepId: string; path?: string }
-  | { kind: 'fromSteps'; stepIds: string[]; path?: string }
-  | { kind: 'fromContext'; path?: string };
+export type DataRef<TValue = unknown> =
+  | ({ kind: 'fromStep'; stepId: string; path?: string } & { readonly __valueType?: TValue })
+  | ({ kind: 'fromSteps'; stepIds: readonly string[]; path?: string } & { readonly __valueType?: TValue })
+  | ({ kind: 'fromContext'; path?: string } & { readonly __valueType?: TValue });
 
 export type InputValue =
   | string
@@ -14,6 +16,35 @@ export type InputValue =
   | DataRef
   | InputValue[]
   | { [key: string]: InputValue };
+
+export type RoutedInput<T> = unknown extends T
+  ? InputValue
+  : T extends string | number | boolean | null | undefined
+    ? T | DataRef<T>
+    : T extends Array<infer TEntry>
+      ? Array<RoutedInput<TEntry>> | DataRef<T>
+      : T extends object
+        ? { [K in keyof T]: RoutedInput<T[K]> } | DataRef<T>
+        : T | DataRef<T>;
+
+export interface StepContract<TInput = unknown, TOutput = unknown> {
+  inputSchema?: ZodType<TInput>;
+  outputSchema?: ZodType<TOutput>;
+}
+
+export type FlowContracts = Record<string, StepContract<unknown, unknown>>;
+
+export interface FlowContractIssue {
+  fromStep: string;
+  toStep: string;
+  fieldPath: string;
+  reason: string;
+}
+
+export interface FlowContractValidationResult {
+  valid: boolean;
+  issues: FlowContractIssue[];
+}
 
 export interface FlowExecutionContext<TContext = Record<string, unknown>> {
   readonly flowId: string;
@@ -28,24 +59,32 @@ export interface FlowExecutionContext<TContext = Record<string, unknown>> {
 export interface FlowNodeBase<TContext = Record<string, unknown>> {
   id: string;
   dependsOn?: string[];
-  input?: InputValue;
+  input?: unknown;
   checkpoint?: boolean;
   metadata?: Record<string, unknown>;
 }
 
-export interface FlowStepNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
+export interface FlowStepNode<TContext = Record<string, unknown>, TInput = unknown, TOutput = unknown>
+  extends FlowNodeBase<TContext> {
   kind: 'step';
-  run: (ctx: FlowExecutionContext<TContext>, input: unknown) => MaybePromise<unknown>;
+  input?: RoutedInput<TInput>;
+  inputSchema?: ZodType<TInput>;
+  outputSchema?: ZodType<TOutput>;
+  run: (ctx: FlowExecutionContext<TContext>, input: TInput) => MaybePromise<TOutput>;
 }
 
-export interface FlowGateNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
+export interface FlowGateNode<TContext = Record<string, unknown>, TInput = unknown> extends FlowNodeBase<TContext> {
   kind: 'gate';
-  evaluate: (ctx: FlowExecutionContext<TContext>, input: unknown) => MaybePromise<boolean>;
+  input?: RoutedInput<TInput>;
+  inputSchema?: ZodType<TInput>;
+  evaluate: (ctx: FlowExecutionContext<TContext>, input: TInput) => MaybePromise<boolean>;
 }
 
-export interface FlowConditionalNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
+export interface FlowConditionalNode<TContext = Record<string, unknown>, TInput = unknown> extends FlowNodeBase<TContext> {
   kind: 'conditional';
-  when: (ctx: FlowExecutionContext<TContext>, input: unknown) => MaybePromise<boolean>;
+  input?: RoutedInput<TInput>;
+  inputSchema?: ZodType<TInput>;
+  when: (ctx: FlowExecutionContext<TContext>, input: TInput) => MaybePromise<boolean>;
   then: FlowNode<TContext>[];
   else?: FlowNode<TContext>[];
 }
@@ -75,6 +114,7 @@ export interface FlowDefinition<TContext = Record<string, unknown>> {
   id: string;
   description?: string;
   nodes: FlowNode<TContext>[];
+  contracts?: FlowContracts;
 }
 
 export type FlowRunStatus = 'completed' | 'failed';
@@ -100,6 +140,7 @@ export interface FlowRunnerOptions<TContext = Record<string, unknown>> {
   concurrency?: number;
   continueOnError?: boolean;
   checkpoint?: FlowCheckpointAdapter<TContext>;
+  contracts?: FlowContracts;
 }
 
 export interface FlowRunResult<TContext = Record<string, unknown>> {
@@ -135,5 +176,35 @@ export class FlowCycleError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'FlowCycleError';
+  }
+}
+
+export class FlowContractError extends FlowExecutionError {
+  readonly fromStep: string;
+  readonly toStep: string;
+  readonly fieldPath: string;
+  readonly reason: string;
+
+  constructor(
+    flowId: string,
+    toStep: string,
+    executionId: string,
+    fromStep: string,
+    fieldPath: string,
+    reason: string,
+    cause?: unknown,
+  ) {
+    super(
+      `Contract mismatch from '${fromStep}' to '${toStep}' at '${fieldPath}': ${reason}`,
+      flowId,
+      toStep,
+      executionId,
+      cause,
+    );
+    this.name = 'FlowContractError';
+    this.fromStep = fromStep;
+    this.toStep = toStep;
+    this.fieldPath = fieldPath;
+    this.reason = reason;
   }
 }
