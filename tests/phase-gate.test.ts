@@ -34,6 +34,12 @@ const VALID_ANALYSIS = `# Analysis
 \`\`\`
 `;
 
+const OPTIONAL_SCOUT_ANALYSIS = `# Analysis
+\`\`\`cadre-json
+{"requirements":["Implement feature X"],"changeType":"feature","scope":"small","scoutPolicy":"optional","affectedAreas":["src/core"],"ambiguities":[]}
+\`\`\`
+`;
+
 const VALID_SCOUT = `# Scout Report
 \`\`\`cadre-json
 {"relevantFiles":[{"path":"src/core/checkpoint.ts","reason":"Core checkpoint logic"},{"path":"src/agents/types.ts","reason":"Agent type definitions"}],"dependencyMap":{},"testFiles":[],"estimatedChanges":[]}
@@ -91,6 +97,15 @@ describe('AnalysisToPlanningGate', () => {
     const result = await gate.validate(makeContext(tempDir));
     expect(result.status).toBe('fail');
     expect(result.errors.some((e) => e.includes('scout-report.md is missing'))).toBe(true);
+  });
+
+  it('should warn (not fail) when scout-report.md is missing and analysis scoutPolicy is optional', async () => {
+    await writeFile(join(tempDir, 'analysis.md'), OPTIONAL_SCOUT_ANALYSIS);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('scout-report.md is missing'))).toBe(true);
   });
 
   it('should fail when analysis.md has no cadre-json block', async () => {

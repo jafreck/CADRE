@@ -12,9 +12,13 @@ Break a GitHub issue into a set of **agent sessions**, each containing an ordere
 
 You will receive:
 - **analysis.md**: Structured output from the issue-analyst agent, containing requirements, change type, scope estimate, affected areas, and ambiguities.
-- **scout-report.md**: Structured output from the codebase-scout agent, containing relevant files, dependency map, test files, and entry points.
+- **scout-report.md** *(optional)*: Structured output from the codebase-scout agent, containing relevant files, dependency map, test files, and entry points.
+- Optional context payload flags:
+  - `scoutAvailable` (boolean): whether `scout-report.md` was provided
+  - `scoutRequired` (boolean): whether scout was required for this issue
+- If scout is not available, `repo-file-tree.txt` may be provided as a fallback repository index.
 
-Read both files carefully before producing the plan. Use the affected areas and relevant files to determine which source files each step should touch.
+Always read `analysis.md`. If `scout-report.md` is available, read it and use it to drive file selection. If scout is unavailable, infer likely files from `analysis.md` + repository structure and keep sessions conservative.
 
 ## Output Contract
 

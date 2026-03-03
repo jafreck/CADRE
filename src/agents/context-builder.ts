@@ -55,7 +55,19 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
   'implementation-planner': {
     phase: 2,
     outputFile: (args) => join(args.progressDir, 'implementation-plan.md'),
-    inputFiles: async (args) => [args.analysisPath!, args.scoutReportPath!],
+    inputFiles: async (args, fileExists) => {
+      const files = [args.analysisPath!];
+      if (args.scoutReportPath && await fileExists(args.scoutReportPath)) {
+        files.push(args.scoutReportPath);
+      } else if (args.fileTreePath && await fileExists(args.fileTreePath)) {
+        files.push(args.fileTreePath);
+      }
+      return files;
+    },
+    payload: (args) => ({
+      scoutAvailable: args.scoutAvailable ?? false,
+      scoutRequired: args.scoutRequired ?? true,
+    }),
     outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
   },
   'adjudicator': {

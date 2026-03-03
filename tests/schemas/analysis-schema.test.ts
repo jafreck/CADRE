@@ -6,6 +6,7 @@ describe('analysisSchema', () => {
     requirements: ['req1', 'req2'],
     changeType: 'feature',
     scope: 'medium',
+    scoutPolicy: 'required',
     affectedAreas: ['src/core'],
     ambiguities: [],
   };
@@ -55,6 +56,23 @@ describe('analysisSchema', () => {
     for (const scope of scopes) {
       const result = analysisSchema.safeParse({ ...valid, scope });
       expect(result.success).toBe(true);
+    }
+  });
+
+  it('should accept all valid scoutPolicy values', () => {
+    const policies = ['required', 'optional', 'skip'];
+    for (const scoutPolicy of policies) {
+      const result = analysisSchema.safeParse({ ...valid, scoutPolicy });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('should default scoutPolicy to required when omitted', () => {
+    const { scoutPolicy: _sp, ...without } = valid;
+    const result = analysisSchema.safeParse(without);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scoutPolicy).toBe('required');
     }
   });
 

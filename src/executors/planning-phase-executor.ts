@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { SessionQueue } from '@cadre/framework/engine';
+import { exists } from '../util/fs.js';
 
 export class PlanningPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 2;
@@ -10,12 +11,25 @@ export class PlanningPhaseExecutor implements PhaseExecutor {
   async execute(ctx: PhaseContext): Promise<string> {
     const analysisPath = join(ctx.io.progressDir, 'analysis.md');
     const scoutReportPath = join(ctx.io.progressDir, 'scout-report.md');
+    const fileTreePath = join(ctx.io.progressDir, 'repo-file-tree.txt');
+    const analysis = await ctx.services.resultParser.parseAnalysis(analysisPath);
+    const scoutRequired = analysis.scoutPolicy === 'required';
+    const scoutAvailable = await exists(scoutReportPath);
+
+    if (scoutRequired && !scoutAvailable) {
+      throw new Error(
+        'scout-report.md is required by issue-analyst scoutPolicy=required but is missing from the progress directory',
+      );
+    }
 
     const plannerContextPath = await ctx.services.contextBuilder.build('implementation-planner', {
       issueNumber: ctx.issue.number,
       worktreePath: ctx.worktree.path,
       analysisPath,
       scoutReportPath,
+      fileTreePath,
+      scoutRequired,
+      scoutAvailable,
       progressDir: ctx.io.progressDir,
     });
 

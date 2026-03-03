@@ -4,6 +4,12 @@ import { PlanningPhaseExecutor } from '../src/executors/planning-phase-executor.
 import type { PhaseContext } from '../src/core/phase-executor.js';
 import type { AgentResult } from '../src/agents/types.js';
 
+vi.mock('../src/util/fs.js', () => ({
+  exists: vi.fn().mockResolvedValue(true),
+}));
+
+import { exists } from '../src/util/fs.js';
+
 function makeSuccessAgentResult(agent: string): AgentResult {
   return {
     agent: agent as AgentResult['agent'],
@@ -45,6 +51,14 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
   };
 
   const resultParser = {
+    parseAnalysis: vi.fn().mockResolvedValue({
+      requirements: ['req'],
+      changeType: 'feature',
+      scope: 'small',
+      scoutPolicy: 'required',
+      affectedAreas: ['src/core'],
+      ambiguities: [],
+    }),
     parseImplementationPlan: vi.fn().mockResolvedValue([
       { id: 'session-001', name: 'Session 1', rationale: 'r', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'd', files: ['src/a.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },
       { id: 'session-002', name: 'Session 2', rationale: 'r', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'd', files: ['src/b.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },
@@ -111,6 +125,7 @@ describe('PlanningPhaseExecutor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(exists).mockResolvedValue(true);
     executor = new PlanningPhaseExecutor();
   });
 
@@ -142,6 +157,9 @@ describe('PlanningPhaseExecutor', () => {
           worktreePath: '/tmp/worktree',
           analysisPath: join('/tmp/progress', 'analysis.md'),
           scoutReportPath: join('/tmp/progress', 'scout-report.md'),
+          fileTreePath: join('/tmp/progress', 'repo-file-tree.txt'),
+          scoutRequired: true,
+          scoutAvailable: true,
           progressDir: '/tmp/progress',
         }),
       );
@@ -225,8 +243,22 @@ describe('PlanningPhaseExecutor', () => {
       await expect(executor.execute(ctx)).rejects.toThrow('Implementation planner failed:');
     });
 
+    it('should throw if scout is required by analysis but scout-report.md is missing', async () => {
+      vi.mocked(exists).mockResolvedValue(false);
+      const ctx = makeCtx();
+      await expect(executor.execute(ctx)).rejects.toThrow('scout-report.md is required');
+    });
+
     it('should throw if parsed plan has zero tasks', async () => {
       const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue({
+          requirements: ['req'],
+          changeType: 'feature',
+          scope: 'small',
+          scoutPolicy: 'required',
+          affectedAreas: ['src/core'],
+          ambiguities: [],
+        }),
         parseImplementationPlan: vi.fn().mockResolvedValue([]),
       };
       const ctx = makeCtx({ services: { resultParser: resultParser } as never });
@@ -235,6 +267,14 @@ describe('PlanningPhaseExecutor', () => {
 
     it('should throw if the dependency graph has a cycle', async () => {
       const resultParser = {
+        parseAnalysis: vi.fn().mockResolvedValue({
+          requirements: ['req'],
+          changeType: 'feature',
+          scope: 'small',
+          scoutPolicy: 'required',
+          affectedAreas: ['src/core'],
+          ambiguities: [],
+        }),
         parseImplementationPlan: vi.fn().mockResolvedValue([
           { id: 'session-001', name: 'Session 1', rationale: 'r', dependencies: ['session-002'], steps: [{ id: 'session-001-step-001', name: 'Step 1', description: 'd', files: ['src/a.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },
           { id: 'session-002', name: 'Session 2', rationale: 'r', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Step 1', description: 'd', files: ['src/b.ts'], complexity: 'simple', acceptanceCriteria: ['ok'] }] },

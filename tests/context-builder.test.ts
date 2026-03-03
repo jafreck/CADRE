@@ -1260,10 +1260,18 @@ describe('ContextBuilder', () => {
       expect(ctx.payload).toBeUndefined();
     });
 
-    it('should not include payload for implementation-planner', async () => {
-      await builder.build('implementation-planner', { issueNumber: 42, worktreePath: '/tmp/worktree', analysisPath: '/tmp/analysis.md', scoutReportPath: '/tmp/scout.md', progressDir: '/tmp/progress' });
+    it('should include scout availability payload for implementation-planner', async () => {
+      await builder.build('implementation-planner', {
+        issueNumber: 42,
+        worktreePath: '/tmp/worktree',
+        analysisPath: '/tmp/analysis.md',
+        scoutReportPath: '/tmp/scout.md',
+        scoutAvailable: true,
+        scoutRequired: false,
+        progressDir: '/tmp/progress',
+      });
       const ctx = captureWrittenContext();
-      expect(ctx.payload).toBeUndefined();
+      expect(ctx.payload).toEqual({ scoutAvailable: true, scoutRequired: false });
     });
   });
 
