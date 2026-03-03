@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { NotificationProvider, NotificationEvent, CadreEvent } from '../../src/notifications/types.js';
+import type {
+  NotificationProvider,
+  NotificationEvent,
+  FrameworkNotificationEvent,
+  CadreSemanticNotificationEvent,
+  CadreNotificationEvent,
+  CadreEvent,
+} from '../../src/notifications/types.js';
 
 describe('NotificationProvider interface', () => {
   it('should be implementable as a class', async () => {
@@ -107,5 +114,33 @@ describe('NotificationEvent type union', () => {
       'budget-exceeded',
     ];
     expect(notificationTypes).toHaveLength(8);
+  });
+
+  it('exposes stratified framework/cadre notification aliases', () => {
+    const frameworkEvent: FrameworkNotificationEvent = {
+      type: 'budget-warning',
+      scope: 'fleet',
+      currentUsage: 1,
+      budget: 10,
+      percentUsed: 10,
+    };
+    const semanticEvent: CadreSemanticNotificationEvent = {
+      type: 'pr-created',
+      issueNumber: 1,
+      prNumber: 2,
+      prUrl: 'https://github.com/o/r/pull/2',
+    };
+    const domainEvent: CadreNotificationEvent = {
+      type: 'issue-completed',
+      issueNumber: 1,
+      issueTitle: 'x',
+      success: true,
+      duration: 10,
+      tokenUsage: 2,
+    };
+
+    expect(frameworkEvent.type).toBe('budget-warning');
+    expect(semanticEvent.type).toBe('pr-created');
+    expect(domainEvent.type).toBe('issue-completed');
   });
 });

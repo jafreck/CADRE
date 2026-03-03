@@ -4,39 +4,41 @@
   "description": "Consolidated framework for CADRE agent orchestration",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./core": {
-      "types": "./src/core/index.ts",
-      "default": "./src/core/index.ts"
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
     },
     "./runtime": {
-      "types": "./src/runtime/index.ts",
-      "default": "./src/runtime/index.ts"
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
     },
     "./engine": {
-      "types": "./src/engine/index.ts",
-      "default": "./src/engine/index.ts"
+      "types": "./dist/engine/index.d.ts",
+      "default": "./dist/engine/index.js"
     },
     "./flow": {
-      "types": "./src/flow/index.ts",
-      "default": "./src/flow/index.ts"
+      "types": "./dist/flow/index.d.ts",
+      "default": "./dist/flow/index.js"
     },
     "./notifications": {
-      "types": "./src/notifications/index.ts",
-      "default": "./src/notifications/index.ts"
+      "types": "./dist/notifications/index.d.ts",
+      "default": "./dist/notifications/index.js"
     }
   },
   "typesVersions": {
     "*": {
-      "core": ["src/core/index.ts"],
-      "runtime": ["src/runtime/index.ts"],
-      "engine": ["src/engine/index.ts"],
-      "flow": ["src/flow/index.ts"],
-      "notifications": ["src/notifications/index.ts"]
+      "core": ["dist/core/index.d.ts"],
+      "runtime": ["dist/runtime/index.d.ts"],
+      "engine": ["dist/engine/index.d.ts"],
+      "flow": ["dist/flow/index.d.ts"],
+      "notifications": ["dist/notifications/index.d.ts"]
     }
   },
   "files": ["dist/"],

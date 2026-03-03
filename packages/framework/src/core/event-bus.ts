@@ -1,7 +1,7 @@
-import type { RuntimeEvent } from './events.js';
+import type { FrameworkBoundaryEvent } from './events.js';
 
 export interface EventDispatcher {
-  dispatch(event: RuntimeEvent): Promise<void>;
+  dispatch(event: FrameworkBoundaryEvent): Promise<void>;
 }
 
 export interface ProgressEventAppender {
@@ -9,7 +9,7 @@ export interface ProgressEventAppender {
 }
 
 export interface EventBusMiddlewareContext {
-  event: RuntimeEvent;
+  event: FrameworkBoundaryEvent;
 }
 
 export interface EventBusMiddlewareHooks {
@@ -78,7 +78,7 @@ export class FleetEventBus {
     await invoke(0);
   }
 
-  private async dispatchEvent(event: RuntimeEvent): Promise<void> {
+  private async dispatchEvent(event: FrameworkBoundaryEvent): Promise<void> {
     await this.runMiddleware({ event }, () => this.notifications.dispatch(event));
   }
 

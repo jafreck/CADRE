@@ -1,33 +1,51 @@
-import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from './backend.js';
+import {
+  ensureValidAgentBackendName,
+  type BackendFactory,
+  type BackendRuntimeConfig,
+  type BackendLoggerLike,
+  type AgentBackend,
+} from './contract.js';
 import { CopilotBackend, ClaudeBackend } from './backend.js';
 
-export type BackendFactory = (config: BackendRuntimeConfig, logger: BackendLoggerLike) => AgentBackend;
+export type { BackendFactory, BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from './contract.js';
+
+export interface AgentBackendRegistration {
+  name: string;
+  factory: BackendFactory;
+}
 
 const backendFactories = new Map<string, BackendFactory>();
 
-function normalizeBackendName(name: string): string {
-  return name.trim().toLowerCase();
-}
-
 function ensureBuiltInBackendsRegistered(): void {
-  if (backendFactories.size > 0) {
-    return;
+  if (!backendFactories.has('copilot')) {
+    registerAgentBackendFactory('copilot', (config, logger) => new CopilotBackend(config, logger));
   }
-  registerAgentBackendFactory('copilot', (config, logger) => new CopilotBackend(config, logger));
-  registerAgentBackendFactory('claude', (config, logger) => new ClaudeBackend(config, logger));
+  if (!backendFactories.has('claude')) {
+    registerAgentBackendFactory('claude', (config, logger) => new ClaudeBackend(config, logger));
+  }
 }
 
 export function registerAgentBackendFactory(name: string, factory: BackendFactory): void {
-  backendFactories.set(normalizeBackendName(name), factory);
+  const normalized = ensureValidAgentBackendName(name, 'registration name');
+  if (typeof factory !== 'function') {
+    throw new Error(`Agent backend factory for "${normalized}" must be a function.`);
+  }
+  backendFactories.set(normalized, factory);
+}
+
+export function registerAgentBackends(registrations: readonly AgentBackendRegistration[]): void {
+  for (const registration of registrations) {
+    registerAgentBackendFactory(registration.name, registration.factory);
+  }
 }
 
 export function unregisterAgentBackendFactory(name: string): void {
-  backendFactories.delete(normalizeBackendName(name));
+  backendFactories.delete(ensureValidAgentBackendName(name, 'unregistration name'));
 }
 
 export function hasAgentBackendFactory(name: string): boolean {
   ensureBuiltInBackendsRegistered();
-  return backendFactories.has(normalizeBackendName(name));
+  return backendFactories.has(ensureValidAgentBackendName(name, 'lookup name'));
 }
 
 export function listAgentBackendFactories(): string[] {
@@ -46,7 +64,7 @@ export function resetAgentBackendFactories(): void {
 export function createAgentBackend(config: BackendRuntimeConfig, logger: BackendLoggerLike): AgentBackend {
   ensureBuiltInBackendsRegistered();
 
-  const backend = normalizeBackendName(config.agent.backend);
+  const backend = ensureValidAgentBackendName(config.agent.backend, 'selection');
   const factory = backendFactories.get(backend);
   if (!factory) {
     const available = listAgentBackendFactories();
