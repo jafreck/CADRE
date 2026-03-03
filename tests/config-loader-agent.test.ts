@@ -17,6 +17,7 @@ const mockReadFile = vi.mocked(readFile);
 
 const BASE_CONFIG = {
   projectName: 'test-project',
+  platform: 'github',
   repository: 'owner/repo',
   repoPath: '/tmp/repo',
   baseBranch: 'main',

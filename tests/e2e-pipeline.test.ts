@@ -232,6 +232,7 @@ const ISSUE: IssueDetail = {
 function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfig {
   return CadreConfigSchema.parse({
     projectName: 'test',
+    platform: 'github',
     repository: 'test/repo',
     repoPath: '/tmp',
     issues: { ids: [1] },
