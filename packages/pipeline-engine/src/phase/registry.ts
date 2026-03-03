@@ -2,7 +2,7 @@
  * Generic phase definitions and registry for multi-phase pipelines.
  */
 
-import type { PhaseExecutor } from '../executor/phase-executor.js';
+import type { PhaseContext, PhaseExecutor } from '../executor/phase-executor.js';
 import type { PhaseGate } from '../gate/phase-gate.js';
 
 export interface PhaseDefinition {
@@ -19,13 +19,13 @@ export interface PhaseDefinition {
 }
 
 /** A single entry in the pipeline manifest, capturing all phase metadata. */
-export interface PhaseManifestEntry {
+export interface PhaseManifestEntry<TContext extends PhaseContext = PhaseContext> {
   /** Phase number (1-based). */
   phaseId: number;
   /** Human-readable phase name. */
   name: string;
   /** Factory that creates the phase executor. */
-  executorFactory: () => PhaseExecutor;
+  executorFactory: () => PhaseExecutor<TContext>;
   /** Gate instance for post-phase validation, or null if no gate. */
   gate: PhaseGate | null;
   /** Whether failure in this phase should abort the issue pipeline. */
@@ -69,16 +69,16 @@ export function isLastPhase(phases: PhaseDefinition[], phaseId: number): boolean
 /**
  * Holds an ordered list of PhaseExecutor instances for the pipeline.
  */
-export class PhaseRegistry {
-  private executors: PhaseExecutor[] = [];
+export class PhaseRegistry<TContext extends PhaseContext = PhaseContext> {
+  private executors: PhaseExecutor<TContext>[] = [];
 
   /** Append an executor to the registry. */
-  register(executor: PhaseExecutor): void {
+  register(executor: PhaseExecutor<TContext>): void {
     this.executors.push(executor);
   }
 
   /** Return all registered executors in registration order. */
-  getAll(): PhaseExecutor[] {
+  getAll(): PhaseExecutor<TContext>[] {
     return this.executors;
   }
 }
@@ -86,8 +86,10 @@ export class PhaseRegistry {
 /**
  * Build a PhaseRegistry populated from a manifest in phase-ID order.
  */
-export function buildRegistry(manifest: readonly PhaseManifestEntry[]): PhaseRegistry {
-  const registry = new PhaseRegistry();
+export function buildRegistry<TContext extends PhaseContext>(
+  manifest: readonly PhaseManifestEntry<TContext>[],
+): PhaseRegistry<TContext> {
+  const registry = new PhaseRegistry<TContext>();
   for (const entry of manifest) {
     registry.register(entry.executorFactory());
   }
@@ -97,7 +99,9 @@ export function buildRegistry(manifest: readonly PhaseManifestEntry[]): PhaseReg
 /**
  * Build a gate map from a manifest, keyed by phase ID.
  */
-export function buildGateMap(manifest: readonly PhaseManifestEntry[]): Record<number, PhaseGate> {
+export function buildGateMap<TContext extends PhaseContext>(
+  manifest: readonly PhaseManifestEntry<TContext>[],
+): Record<number, PhaseGate> {
   const map: Record<number, PhaseGate> = {};
   for (const entry of manifest) {
     if (entry.gate !== null) {

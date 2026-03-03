@@ -6,11 +6,17 @@ import type { GateResult } from '../types.js';
 
 /** Context passed to every gate validator. */
 export interface GateContext {
-  /** Directory containing agent output files (analysis.md, scout-report.md, etc.). */
-  progressDir: string;
-  /** Root path of the worktree. */
-  worktreePath: string;
-  /** Base commit SHA used to compute diff in implementation-to-integration gates. */
+  /** Directory containing phase artifacts (analysis.md, scout-report.md, etc.). */
+  artifactsDir: string;
+  /** Root path of the active workspace. */
+  workspacePath: string;
+  /** Optional baseline revision used to compute diffs in implementation/integration gates. */
+  baselineRef?: string;
+  /** @deprecated Use artifactsDir. */
+  progressDir?: string;
+  /** @deprecated Use workspacePath. */
+  worktreePath?: string;
+  /** @deprecated Use baselineRef. */
   baseCommit?: string;
 }
 
