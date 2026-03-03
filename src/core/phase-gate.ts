@@ -305,20 +305,38 @@ export class IntegrationToPRGate implements PhaseGate {
 
     const report = schemaResult.data;
 
-    if (!report.buildResult.pass) {
-      errors.push(
-        `integration-report.md: build failed (exit code ${report.buildResult.exitCode})`,
-      );
-    }
-
-    if (!report.testResult.pass) {
-      errors.push(
-        `integration-report.md: tests failed (exit code ${report.testResult.exitCode})`,
-      );
-    }
-
+    // Use the regression-aware overallPass flag as the primary success signal.
+    // When overallPass is true, any remaining build/test failures are pre-existing
+    // (baseline) and should not block the pipeline.
     if (report.regressionFailures && report.regressionFailures.length > 0) {
       errors.push('integration-report.md contains new regression failures');
+    }
+
+    if (!report.overallPass) {
+      // overallPass is false — there are regressions or no baseline was used.
+      // Surface the raw build/test results as context for the error.
+      if (!report.buildResult.pass) {
+        errors.push(
+          `integration-report.md: build failed (exit code ${report.buildResult.exitCode})`,
+        );
+      }
+      if (!report.testResult.pass) {
+        errors.push(
+          `integration-report.md: tests failed (exit code ${report.testResult.exitCode})`,
+        );
+      }
+    } else {
+      // overallPass is true — any raw failures are baseline-only, warn but don't block.
+      if (!report.buildResult.pass) {
+        warnings.push(
+          `integration-report.md: build exited non-zero (exit code ${report.buildResult.exitCode}) but all failures are pre-existing`,
+        );
+      }
+      if (!report.testResult.pass) {
+        warnings.push(
+          `integration-report.md: tests exited non-zero (exit code ${report.testResult.exitCode}) but all failures are pre-existing`,
+        );
+      }
     }
 
     if (report.baselineFailures && report.baselineFailures.length > 0) {
