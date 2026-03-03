@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractFailures } from '../../../packages/command-diagnostics/src/parse-failures.js';
+import { extractFailures } from '../../../packages/framework/src/runtime/commands/parse-failures.js';
 
 describe('extractFailures', () => {
   it('should return empty array for empty output', () => {

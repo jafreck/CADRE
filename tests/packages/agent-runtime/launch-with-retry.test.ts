@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../../packages/agent-runtime/src/backend/factory.js', () => ({
+vi.mock('../../../packages/framework/src/runtime/backend/factory.js', () => ({
   createAgentBackend: vi.fn(),
 }));
 
-import { launchWithRetry, type LaunchWithRetryOptions } from '../../../packages/agent-runtime/src/launch-with-retry.js';
-import { AgentLauncher } from '../../../packages/agent-runtime/src/launcher/agent-launcher.js';
-import { TokenTracker } from '../../../packages/agent-runtime/src/budget/token-tracker.js';
-import type { LoggerLike } from '../../../packages/agent-runtime/src/retry/retry.js';
-import type { AgentResult, AgentInvocation } from '../../../packages/agent-runtime/src/context/types.js';
-import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../../../packages/agent-runtime/src/backend/backend.js';
-import { createAgentBackend } from '../../../packages/agent-runtime/src/backend/factory.js';
+import { launchWithRetry, type LaunchWithRetryOptions } from '../../../packages/framework/src/runtime/launch-with-retry.js';
+import { AgentLauncher } from '../../../packages/framework/src/runtime/launcher/agent-launcher.js';
+import { TokenTracker } from '../../../packages/framework/src/runtime/budget/token-tracker.js';
+import type { LoggerLike } from '../../../packages/framework/src/runtime/retry/retry.js';
+import type { AgentResult, AgentInvocation } from '../../../packages/framework/src/runtime/context/types.js';
+import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../../../packages/framework/src/runtime/backend/backend.js';
+import { createAgentBackend } from '../../../packages/framework/src/runtime/backend/factory.js';
 
 const mockCreateAgentBackend = vi.mocked(createAgentBackend);
 

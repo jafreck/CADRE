@@ -1,1 +1,1 @@
-export { extractFailures } from '@cadre/command-diagnostics';
+export { extractFailures } from '@cadre/framework/runtime';

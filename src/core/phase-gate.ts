@@ -7,18 +7,18 @@ import {
   scoutReportSchema,
   integrationReportSchema,
 } from '../agents/schemas/index.js';
-import { SessionQueue } from '@cadre/execution';
+import { SessionQueue } from '@cadre/framework/engine';
 import { extractCadreJson } from '../util/cadre-json.js';
 
 // Re-export generic interfaces from engine
-import type { PhaseGate, GateContext, GatePlugin } from '@cadre/pipeline-engine';
+import type { PhaseGate, GateContext, GatePlugin } from '@cadre/framework/engine';
 export type { PhaseGate, GateContext, GatePlugin };
 export {
   registerGatePlugin,
   unregisterGatePlugin,
   clearGatePlugins,
   listGatePlugins,
-} from '@cadre/pipeline-engine';
+} from '@cadre/framework/engine';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

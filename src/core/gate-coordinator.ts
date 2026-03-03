@@ -6,7 +6,7 @@ import { buildGateMap } from './phase-registry.js';
 import type { PhaseGate } from './phase-gate.js';
 import type { CheckpointManager } from './checkpoint.js';
 import type { IssueProgressWriter } from './progress.js';
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 import { extractCadreJson } from '../util/cadre-json.js';
 
 export interface GateCoordinatorOptions {

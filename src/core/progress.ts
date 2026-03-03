@@ -9,9 +9,9 @@ export {
   phaseNames,
   FleetProgressWriter,
   IssueProgressWriter,
-} from '@cadre/pipeline-engine';
+} from '@cadre/framework/engine';
 
 export type {
   PullRequestRef,
   IssueProgressInfo,
-} from '@cadre/pipeline-engine';
+} from '@cadre/framework/engine';

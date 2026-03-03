@@ -1,6 +1,6 @@
 import { GitHubAPI } from '../github/api.js';
 import type { CadreConfig } from '../config/schema.js';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 import { formatPullRequestTitle } from '../util/title-format.js';
 
 export interface PullRequestInfo {

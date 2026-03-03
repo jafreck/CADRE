@@ -3,7 +3,7 @@ import type { PhaseExecutor, PhaseContext } from './phase-executor.js';
 import type { CheckpointManager } from './checkpoint.js';
 import type { IssueProgressWriter } from './progress.js';
 import type { TokenTracker } from '../budget/token-tracker.js';
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 import type { GateCoordinator } from './gate-coordinator.js';
 import { BudgetExceededError } from './issue-budget-guard.js';
 

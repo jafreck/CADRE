@@ -3,10 +3,14 @@ import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeProcessResult, makeConfig, makeInvocation } from './helpers/backend-fixtures.js';
 import type { AgentInvocation } from '../src/agents/types.js';
 
-vi.mock('@cadre/command-diagnostics', () => ({
+vi.mock('../packages/framework/src/runtime/commands/exec.js', () => ({
   spawnProcess: vi.fn(),
   stripVSCodeEnv: vi.fn((env: Record<string, string | undefined>) => ({ ...env })),
   trackProcess: vi.fn(),
+  killAllTrackedProcesses: vi.fn(),
+  getTrackedProcessCount: vi.fn(() => 0),
+  exec: vi.fn(),
+  execShell: vi.fn(),
 }));
 
 vi.mock('../src/util/fs.js', () => ({
@@ -20,7 +24,7 @@ vi.mock('node:fs/promises', () => ({
   access: vi.fn(),
 }));
 
-import { spawnProcess, trackProcess } from '@cadre/command-diagnostics';
+import { spawnProcess, trackProcess } from '../packages/framework/src/runtime/commands/exec.js';
 import { exists, ensureDir } from '../src/util/fs.js';
 import { writeFile, mkdir, access } from 'node:fs/promises';
 import { AgentBackend, CopilotBackend, ClaudeBackend } from '../src/agents/backend.js';

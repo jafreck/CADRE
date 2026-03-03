@@ -3,6 +3,6 @@ export type {
   VerifyCommandResult,
   RunWithRetryConfig,
   RunWithRetryResult,
-} from '@cadre/command-diagnostics';
+} from '@cadre/framework/runtime';
 
-export { verifyCommand as runWithRetry } from '@cadre/command-diagnostics';
+export { verifyCommand as runWithRetry } from '@cadre/framework/runtime';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import * as pkg from '../../../packages/agent-runtime-provider-docker/src/index.js';
+import * as pkg from '../../../packages/runtime-provider-docker/src/index.js';
 
 describe('@cadre/agent-runtime-provider-docker barrel exports', () => {
   it('should export DockerProvider', () => {

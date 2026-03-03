@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
-import { SessionQueue } from '@cadre/execution';
+import { SessionQueue } from '@cadre/framework/engine';
 
 export class PlanningPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 2;

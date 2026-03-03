@@ -1,1 +1,1 @@
-export { SerialExecutor, type AgentLauncherLike } from '@cadre/execution';
+export { SerialExecutor, type AgentLauncherLike } from '@cadre/framework/engine';

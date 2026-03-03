@@ -6,20 +6,20 @@ import type { WorktreeInfo } from '../git/worktree.js';
 import { CheckpointManager } from './checkpoint.js';
 import { PhaseRegistry, getPhase, buildRegistry, type PhaseDefinition } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
-import { NotificationManager } from '@cadre/notifications';
+import { NotificationManager } from '@cadre/framework/notifications';
 import { IssueProgressWriter } from './progress.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { CommitManager } from '../git/commit.js';
-import { RetryExecutor } from '@cadre/execution';
+import { RetryExecutor } from '@cadre/framework/engine';
 import { TokenTracker } from '../budget/token-tracker.js';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
 import { IssueLifecycleNotifier } from './issue-lifecycle-notifier.js';
-import { FlowRunner, defineFlow, step } from '@cadre/flow';
+import { FlowRunner, defineFlow, step } from '@cadre/framework/flow';
 
 export { BudgetExceededError } from './issue-budget-guard.js';
 

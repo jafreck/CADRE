@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as agentRuntime from '../../../packages/agent-runtime/src/index.js';
+import * as agentRuntime from '../../../packages/framework/src/runtime/index.js';
 
 describe('agent-runtime barrel exports', () => {
   it('should export TokenTracker class', () => {

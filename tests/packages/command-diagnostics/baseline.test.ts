@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ProcessResult } from '../../../packages/command-diagnostics/src/exec.js';
+import type { ProcessResult } from '../../../packages/framework/src/runtime/commands/exec.js';
 
-vi.mock('../../../packages/command-diagnostics/src/exec.js', () => ({
+vi.mock('../../../packages/framework/src/runtime/commands/exec.js', () => ({
   execShell: vi.fn(),
 }));
 
-vi.mock('../../../packages/command-diagnostics/src/parse-failures.js', () => ({
+vi.mock('../../../packages/framework/src/runtime/commands/parse-failures.js', () => ({
   extractFailures: vi.fn(),
 }));
 
-import { execShell } from '../../../packages/command-diagnostics/src/exec.js';
-import { extractFailures } from '../../../packages/command-diagnostics/src/parse-failures.js';
-import { captureBaseline, baselineResultsSchema } from '../../../packages/command-diagnostics/src/baseline.js';
+import { execShell } from '../../../packages/framework/src/runtime/commands/exec.js';
+import { extractFailures } from '../../../packages/framework/src/runtime/commands/parse-failures.js';
+import { captureBaseline, baselineResultsSchema } from '../../../packages/framework/src/runtime/commands/baseline.js';
 
 const mockExecShell = execShell as unknown as ReturnType<typeof vi.fn>;
 const mockExtractFailures = extractFailures as unknown as ReturnType<typeof vi.fn>;

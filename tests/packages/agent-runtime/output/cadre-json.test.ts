@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractCadreJson, extractCadreJsonWithError } from '../../../../packages/agent-runtime/src/output/cadre-json.js';
+import { extractCadreJson, extractCadreJsonWithError } from '../../../../packages/framework/src/runtime/output/cadre-json.js';
 
 function wrap(json: string): string {
   return `\`\`\`cadre-json\n${json}\n\`\`\``;

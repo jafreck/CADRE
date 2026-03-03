@@ -1,1 +1,1 @@
-export { PreRunValidationSuite, diskValidator } from '@cadre/validation';
+export { PreRunValidationSuite, diskValidator } from '@cadre/framework/core';

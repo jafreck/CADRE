@@ -3,14 +3,14 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-vi.mock('../../../../packages/agent-runtime/src/backend/factory.js', () => ({
+vi.mock('../../../../packages/framework/src/runtime/backend/factory.js', () => ({
   createAgentBackend: vi.fn(),
 }));
 
-import { AgentLauncher } from '../../../../packages/agent-runtime/src/launcher/agent-launcher.js';
-import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../../../../packages/agent-runtime/src/backend/backend.js';
-import type { AgentInvocation, AgentResult } from '../../../../packages/agent-runtime/src/context/types.js';
-import { createAgentBackend } from '../../../../packages/agent-runtime/src/backend/factory.js';
+import { AgentLauncher } from '../../../../packages/framework/src/runtime/launcher/agent-launcher.js';
+import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../../../../packages/framework/src/runtime/backend/backend.js';
+import type { AgentInvocation, AgentResult } from '../../../../packages/framework/src/runtime/context/types.js';
+import { createAgentBackend } from '../../../../packages/framework/src/runtime/backend/factory.js';
 
 const mockCreateAgentBackend = vi.mocked(createAgentBackend);
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeRegressions } from '../../../packages/command-diagnostics/src/regression.js';
+import { computeRegressions } from '../../../packages/framework/src/runtime/commands/regression.js';
 
 describe('computeRegressions', () => {
   it('should return empty array when no failures exist', () => {

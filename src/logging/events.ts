@@ -1,1 +1,1 @@
-export * from '@cadre/observability';
+export * from '@cadre/framework/core';

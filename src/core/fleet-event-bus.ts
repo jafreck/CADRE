@@ -1,1 +1,1 @@
-export { FleetEventBus } from '@cadre/observability';
+export { FleetEventBus } from '@cadre/framework/core';

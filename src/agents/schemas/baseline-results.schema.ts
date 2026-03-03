@@ -1,1 +1,1 @@
-export { baselineResultsSchema, type BaselineResults } from '@cadre/command-diagnostics';
+export { baselineResultsSchema, type BaselineResults } from '@cadre/framework/runtime';

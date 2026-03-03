@@ -1,11 +1,11 @@
-export type { ValidationResult } from '@cadre/validation';
-export type { PreRunValidator } from '@cadre/validation';
-export { PreRunValidationSuite } from '@cadre/validation';
+export type { ValidationResult } from '@cadre/framework/core';
+export type { PreRunValidator } from '@cadre/framework/core';
+export { PreRunValidationSuite } from '@cadre/framework/core';
 export { gitValidator } from './git-validator.js';
 export { agentBackendValidator } from './agent-backend-validator.js';
 export { platformValidator } from './platform-validator.js';
 export { commandValidator } from './command-validator.js';
-export { diskValidator } from '@cadre/validation';
+export { diskValidator } from '@cadre/framework/core';
 export { registryCompletenessValidator } from './registry-completeness-validator.js';
 export { checkStaleState, resolveStaleState } from './stale-state-validator.js';
 export type { StaleConflict, StaleConflictKind, StaleStateResult } from './stale-state-validator.js';

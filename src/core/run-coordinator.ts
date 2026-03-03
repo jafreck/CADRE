@@ -7,20 +7,20 @@ import { ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 import { killAllTrackedProcesses } from '../util/process.js';
 import { FleetProgressWriter } from './progress.js';
 import {
   PreRunValidationSuite,
   diskValidator,
-} from '@cadre/validation';
+} from '@cadre/framework/core';
 import { gitValidator } from '../validation/git-validator.js';
 import { agentBackendValidator } from '../validation/agent-backend-validator.js';
 import { platformValidator } from '../validation/platform-validator.js';
 import { commandValidator } from '../validation/command-validator.js';
 import { registryCompletenessValidator } from '../validation/registry-completeness-validator.js';
 import { checkStaleState } from '../validation/stale-state-validator.js';
-import type { NotificationManager } from '@cadre/notifications';
+import type { NotificationManager } from '@cadre/framework/notifications';
 import { DependencyResolver } from './dependency-resolver.js';
 import type { IssueDag } from './issue-dag.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../errors.js';

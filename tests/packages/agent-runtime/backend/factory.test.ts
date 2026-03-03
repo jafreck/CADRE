@@ -5,8 +5,8 @@ import {
   unregisterAgentBackendFactory,
   hasAgentBackendFactory,
   resetAgentBackendFactories,
-} from '../../../../packages/agent-runtime/src/backend/factory.js';
-import { CopilotBackend, ClaudeBackend, type BackendRuntimeConfig, type BackendLoggerLike } from '../../../../packages/agent-runtime/src/backend/backend.js';
+} from '../../../../packages/framework/src/runtime/backend/factory.js';
+import { CopilotBackend, ClaudeBackend, type BackendRuntimeConfig, type BackendLoggerLike } from '../../../../packages/framework/src/runtime/backend/backend.js';
 
 function makeConfig(backend: string = 'copilot'): BackendRuntimeConfig {
   return {

@@ -1,1 +1,1 @@
-export type { ValidationResult, PreRunValidator } from '@cadre/validation';
+export type { ValidationResult, PreRunValidator } from '@cadre/framework/core';

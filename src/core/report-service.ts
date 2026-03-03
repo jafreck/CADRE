@@ -1,7 +1,7 @@
 import type { RuntimeConfig } from '../config/loader.js';
 import { CostEstimator } from '../budget/cost-estimator.js';
 import { ReportWriter } from '../reporting/report-writer.js';
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 
 export class ReportService {
   private readonly cadreDir: string;

@@ -79,8 +79,8 @@ vi.mock('simple-git', () => ({
   simpleGit: vi.fn(() => ({ raw: vi.fn().mockResolvedValue('') })),
 }));
 
-vi.mock('@cadre/validation', async (importActual) => {
-  const actual = await importActual<typeof import('@cadre/validation')>();
+vi.mock('@cadre/framework/core', async (importActual) => {
+  const actual = await importActual<typeof import('@cadre/framework/core')>();
   return {
     ...actual,
     PreRunValidationSuite: vi.fn().mockImplementation(() => ({
@@ -101,7 +101,7 @@ vi.mock('../../src/validation/stale-state-validator.js', () => ({
 import { RunCoordinator } from '../../src/core/run-coordinator.js';
 import { FleetOrchestrator } from '../../src/core/fleet-orchestrator.js';
 import { DependencyResolver } from '../../src/core/dependency-resolver.js';
-import { PreRunValidationSuite } from '@cadre/validation';
+import { PreRunValidationSuite } from '@cadre/framework/core';
 import { checkStaleState } from '../../src/validation/stale-state-validator.js';
 import { ensureDir } from '../../src/util/fs.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../../src/errors.js';

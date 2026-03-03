@@ -1,1 +1,1 @@
-export { Logger, type LoggerOptions } from '@cadre/observability';
+export { Logger, type LoggerOptions } from '@cadre/framework/core';

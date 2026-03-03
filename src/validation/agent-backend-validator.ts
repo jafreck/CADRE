@@ -1,6 +1,6 @@
 import { exec } from '../util/process.js';
 import { exists } from '../util/fs.js';
-import type { PreRunValidator, ValidationResult } from '@cadre/validation';
+import type { PreRunValidator, ValidationResult } from '@cadre/framework/core';
 import type { RuntimeConfig } from '../config/loader.js';
 import { hasAgentBackendFactory, listAgentBackendFactories } from '../agents/backend-factory.js';
 

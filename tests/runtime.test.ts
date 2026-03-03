@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock all heavy dependencies
-vi.mock('@cadre/observability', () => ({
+vi.mock('@cadre/framework/core', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -34,7 +34,7 @@ vi.mock('../src/platform/factory.js', () => ({
   }),
 }));
 
-vi.mock('@cadre/notifications', () => ({
+vi.mock('@cadre/framework/notifications', () => ({
   NotificationManager: vi.fn().mockImplementation(() => ({
     dispatch: vi.fn().mockResolvedValue(undefined),
   })),
@@ -152,8 +152,8 @@ vi.mock('simple-git', () => {
   };
 });
 
-vi.mock('@cadre/validation', async (importActual) => {
-  const actual = await importActual<typeof import('@cadre/validation')>();
+vi.mock('@cadre/framework/core', async (importActual) => {
+  const actual = await importActual<typeof import('@cadre/framework/core')>();
   const passResult = { passed: true, errors: [], warnings: [] as string[] };
   return {
     ...actual,
@@ -188,7 +188,7 @@ vi.mock('../src/reporting/report-writer.js', () => ({
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
-import { NotificationManager } from '@cadre/notifications';
+import { NotificationManager } from '@cadre/framework/notifications';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { FleetProgressWriter } from '../src/core/progress.js';
@@ -198,7 +198,7 @@ import { checkStaleState } from '../src/validation/stale-state-validator.js';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../src/errors.js';
 import { ReportWriter } from '../src/reporting/report-writer.js';
-import { PreRunValidationSuite } from '@cadre/validation';
+import { PreRunValidationSuite } from '@cadre/framework/core';
 import { WorktreeManager } from '../src/git/worktree.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;

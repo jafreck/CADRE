@@ -6,4 +6,4 @@ export {
 	hasAgentBackendFactory,
 	listAgentBackendFactories,
 	resetAgentBackendFactories,
-} from '@cadre/agent-runtime';
+} from '@cadre/framework/runtime';

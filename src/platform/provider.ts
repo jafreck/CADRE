@@ -1,4 +1,4 @@
-import type { Logger } from '@cadre/observability';
+import type { Logger } from '@cadre/framework/core';
 
 /**
  * Comment on an issue or work item.

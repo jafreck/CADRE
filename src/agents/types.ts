@@ -14,9 +14,9 @@ export type {
   GateResult,
   PhaseResult,
   AgentContext as _AgentContextBase,
-} from '@cadre/agent-runtime';
+} from '@cadre/framework/runtime';
 
-import type { AgentInvocation as _AgentInvocationBase, AgentResult as _AgentResultBase, AgentContext as _AgentContextBase, AgentStep, AgentSession, TokenUsageDetail } from '@cadre/agent-runtime';
+import type { AgentInvocation as _AgentInvocationBase, AgentResult as _AgentResultBase, AgentContext as _AgentContextBase, AgentStep, AgentSession, TokenUsageDetail } from '@cadre/framework/runtime';
 import type {
   AnalysisResult,
   ScoutReport,

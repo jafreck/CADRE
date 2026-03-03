@@ -2,7 +2,7 @@ import { appendFile } from 'fs/promises';
 import path from 'path';
 import { homedir } from 'os';
 import type { NotificationProvider } from './types.js';
-import type { CadreEvent } from '@cadre/observability';
+import type { CadreEvent } from '@cadre/framework/core';
 
 export interface LogProviderConfig {
 	logFile?: string;

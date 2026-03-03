@@ -1,0 +1,50 @@
+{
+  "name": "@cadre/framework",
+  "version": "0.1.0",
+  "description": "Consolidated framework for CADRE agent orchestration",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./core": {
+      "types": "./src/core/index.ts",
+      "default": "./src/core/index.ts"
+    },
+    "./runtime": {
+      "types": "./src/runtime/index.ts",
+      "default": "./src/runtime/index.ts"
+    },
+    "./engine": {
+      "types": "./src/engine/index.ts",
+      "default": "./src/engine/index.ts"
+    },
+    "./flow": {
+      "types": "./src/flow/index.ts",
+      "default": "./src/flow/index.ts"
+    },
+    "./notifications": {
+      "types": "./src/notifications/index.ts",
+      "default": "./src/notifications/index.ts"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "core": ["src/core/index.ts"],
+      "runtime": ["src/runtime/index.ts"],
+      "engine": ["src/engine/index.ts"],
+      "flow": ["src/flow/index.ts"],
+      "notifications": ["src/notifications/index.ts"]
+    }
+  },
+  "files": ["dist/"],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "p-limit": "^6",
+    "zod": "^3.23"
+  }
+}

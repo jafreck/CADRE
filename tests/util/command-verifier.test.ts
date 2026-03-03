@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ProcessResult } from '@cadre/command-diagnostics';
+import type { ProcessResult } from '@cadre/framework/runtime';
 
-vi.mock('../../packages/command-diagnostics/src/exec.js', () => ({
+vi.mock('../../packages/framework/src/runtime/commands/exec.js', () => ({
   execShell: vi.fn(),
   stripVSCodeEnv: vi.fn((env: Record<string, string>) => env),
   spawnProcess: vi.fn(),
@@ -11,12 +11,12 @@ vi.mock('../../packages/command-diagnostics/src/exec.js', () => ({
   getTrackedProcessCount: vi.fn(() => 0),
 }));
 
-vi.mock('../../packages/command-diagnostics/src/parse-failures.js', () => ({
+vi.mock('../../packages/framework/src/runtime/commands/parse-failures.js', () => ({
   extractFailures: vi.fn(),
 }));
 
-const { execShell } = await import('../../packages/command-diagnostics/src/exec.js');
-const { extractFailures } = await import('../../packages/command-diagnostics/src/parse-failures.js');
+const { execShell } = await import('../../packages/framework/src/runtime/commands/exec.js');
+const { extractFailures } = await import('../../packages/framework/src/runtime/commands/parse-failures.js');
 import { runWithRetry, type RunWithRetryConfig } from '../../src/util/command-verifier.js';
 
 const mockExecShell = execShell as unknown as ReturnType<typeof vi.fn>;

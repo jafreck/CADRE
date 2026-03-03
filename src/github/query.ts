@@ -1,6 +1,6 @@
 import type { CadreConfig } from '../config/schema.js';
 import { IssueFetcher, type IssueDetail } from './issues.js';
-import { Logger } from '@cadre/observability';
+import { Logger } from '@cadre/framework/core';
 
 /**
  * Resolves issue queries into concrete issue lists.

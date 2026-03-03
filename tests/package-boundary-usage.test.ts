@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { Logger, CostEstimator, FleetEventBus } from '@cadre/observability';
-import { NotificationManager } from '@cadre/notifications';
-import { SessionQueue, ParallelExecutor, RetryExecutor } from '@cadre/execution';
-import { PreRunValidationSuite, diskValidator } from '@cadre/validation';
-import { defineFlow, step, loop, parallel, conditional, gate, FlowRunner, fromStep, fromContext, fromSteps } from '@cadre/flow';
+import { Logger, CostEstimator, FleetEventBus } from '@cadre/framework/core';
+import { NotificationManager } from '@cadre/framework/notifications';
+import { SessionQueue, ParallelExecutor, RetryExecutor } from '@cadre/framework/engine';
+import { PreRunValidationSuite, diskValidator } from '@cadre/framework/core';
+import { defineFlow, step, loop, parallel, conditional, gate, FlowRunner, fromStep, fromContext, fromSteps } from '@cadre/framework/flow';
 
 function walkTsFiles(dir: string): string[] {
   const out: string[] = [];

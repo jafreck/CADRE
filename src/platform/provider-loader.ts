@@ -1,7 +1,7 @@
-import { ProviderRegistry } from '@cadre/agent-runtime';
-import { HostProvider } from '@cadre/agent-runtime-provider-host';
-import { DockerProvider } from '@cadre/agent-runtime-provider-docker';
-import { KataProvider } from '@cadre/agent-runtime-provider-kata';
+import { ProviderRegistry } from '@cadre/framework/runtime';
+import { HostProvider } from '@cadre/framework/runtime';
+import { DockerProvider } from '@cadre/runtime-provider-docker';
+import { KataProvider } from '@cadre/runtime-provider-kata';
 
 export interface ProviderLoaderOptions {
   /** Docker image to use for Docker provider sessions. */
