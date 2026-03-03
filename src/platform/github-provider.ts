@@ -346,6 +346,12 @@ export class GitHubProvider implements PlatformProvider {
           this.logger.warn(`Could not update PR #${prNumber} branch from base: ${String(err)}`);
         }
       }
+      if (mergeableState === 'dirty') {
+        throw new Error(`PR #${prNumber} has merge conflicts (mergeable_state=dirty)`);
+      }
+      if (mergeableState === 'blocked' && pr.mergeable === false) {
+        throw new Error(`PR #${prNumber} is blocked (mergeable_state=blocked)`);
+      }
 
       const checks = await this.getCheckHealth(oct, headSha);
       if (checks.failed.length > 0) {

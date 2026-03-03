@@ -8,6 +8,17 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockGit = {
+  fetch: vi.fn().mockResolvedValue(undefined),
+  merge: vi.fn().mockResolvedValue(undefined),
+  raw: vi.fn().mockResolvedValue(''),
+  add: vi.fn().mockResolvedValue(undefined),
+};
+
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit),
+}));
+
 import { writeFile } from 'node:fs/promises';
 
 function makeSuccessAgentResult(agent: string): AgentResult {
@@ -59,6 +70,9 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     getDiff: vi.fn().mockResolvedValue('diff content'),
     squash: vi.fn().mockResolvedValue(undefined),
     stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+    getChangedFiles: vi.fn().mockResolvedValue([]),
+    isClean: vi.fn().mockResolvedValue(true),
+    commit: vi.fn().mockResolvedValue(''),
     push: vi.fn().mockResolvedValue(undefined),
   };
 
@@ -133,6 +147,10 @@ describe('PRCompositionPhaseExecutor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGit.fetch.mockResolvedValue(undefined);
+    mockGit.merge.mockResolvedValue(undefined);
+    mockGit.raw.mockResolvedValue('');
+    mockGit.add.mockResolvedValue(undefined);
     executor = new PRCompositionPhaseExecutor();
   });
 
@@ -380,6 +398,100 @@ describe('PRCompositionPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(platform.mergePullRequest).toHaveBeenCalledWith(101, 'main', 'squash');
+    });
+
+    it('should auto-resolve dirty merge blockers and retry auto-complete', async () => {
+      const prInfo = { number: 105, url: 'https://github.com/owner/repo/pull/105', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+        mergePullRequest: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('PR #105 has merge conflicts (mergeable_state=dirty)'))
+          .mockResolvedValueOnce(undefined),
+      };
+      mockGit.fetch.mockResolvedValue(undefined);
+      mockGit.merge.mockRejectedValueOnce(new Error('conflict'));
+      mockGit.raw.mockImplementation(async (args: string[]) => {
+        if (args.join(' ').includes('--diff-filter=U')) {
+          return 'packages/api/tests/index.test.ts\n';
+        }
+        return '';
+      });
+
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, autoComplete: true, linkIssue: false, draft: false, labels: [], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+
+      await executor.execute(ctx);
+
+      expect(platform.mergePullRequest).toHaveBeenCalledTimes(2);
+      expect(
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
+      ).toHaveBeenCalledWith(
+        'conflict-resolver',
+        expect.objectContaining({
+          issueNumber: 42,
+          conflictedFiles: ['packages/api/tests/index.test.ts'],
+        }),
+      );
+      expect(mockGit.add).toHaveBeenCalledWith(['-A']);
+    });
+
+    it('should auto-resolve failed checks with fix-surgeon and retry auto-complete', async () => {
+      const prInfo = { number: 106, url: 'https://github.com/owner/repo/pull/106', title: 'Fix' };
+      const platform = {
+        issueLinkSuffix: vi.fn().mockReturnValue(''),
+        createPullRequest: vi.fn().mockResolvedValue(prInfo),
+        updatePullRequest: vi.fn().mockResolvedValue(undefined),
+        findOpenPR: vi.fn().mockResolvedValue(null),
+        mergePullRequest: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('PR #106 checks failed: build'))
+          .mockResolvedValueOnce(undefined),
+      };
+
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3 },
+          pullRequest: { autoCreate: true, autoComplete: true, linkIssue: false, draft: false, labels: [], reviewers: [] },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+        } as never,
+        platform: platform as never,
+      });
+
+      const commitManager = ctx.io.commitManager as never as {
+        getChangedFiles: ReturnType<typeof vi.fn>;
+        isClean: ReturnType<typeof vi.fn>;
+        commit: ReturnType<typeof vi.fn>;
+        push: ReturnType<typeof vi.fn>;
+      };
+      commitManager.getChangedFiles.mockResolvedValue(['packages/api/src/index.ts']);
+      commitManager.isClean.mockResolvedValue(false);
+
+      await executor.execute(ctx);
+
+      expect(platform.mergePullRequest).toHaveBeenCalledTimes(2);
+      expect(
+        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
+      ).toHaveBeenCalledWith(
+        'fix-surgeon',
+        expect.objectContaining({
+          sessionId: 'merge-block-checks-failed',
+          issueType: 'test-failure',
+          phase: 5,
+        }),
+      );
+      expect(commitManager.commit).toHaveBeenCalledWith('address merge blocker', 42, 'fix');
     });
 
     it('should not auto-complete PR when pullRequest.autoComplete is false', async () => {
