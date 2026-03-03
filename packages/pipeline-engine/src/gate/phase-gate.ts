@@ -24,3 +24,34 @@ export interface GateContext {
 export interface PhaseGate {
   validate(context: GateContext): Promise<GateResult>;
 }
+
+export interface GatePlugin {
+  /** Optional plugin identifier used for inspection/removal. */
+  name?: string;
+  /** Phase ID this gate targets. */
+  phaseId: number;
+  /** Gate instance to register for the target phase. */
+  gate: PhaseGate;
+}
+
+const gatePlugins: GatePlugin[] = [];
+
+export function registerGatePlugin(plugin: GatePlugin): void {
+  gatePlugins.push(plugin);
+}
+
+export function unregisterGatePlugin(name: string): void {
+  for (let index = gatePlugins.length - 1; index >= 0; index -= 1) {
+    if (gatePlugins[index].name === name) {
+      gatePlugins.splice(index, 1);
+    }
+  }
+}
+
+export function clearGatePlugins(): void {
+  gatePlugins.length = 0;
+}
+
+export function listGatePlugins(): readonly GatePlugin[] {
+  return gatePlugins;
+}

@@ -1,8 +1,89 @@
 import { isAbsolute, join } from 'node:path';
-import type { NotificationEvent, NotificationProvider, NotificationsConfig } from './types.js';
+import type {
+  NotificationEvent,
+  NotificationProvider,
+  NotificationsConfig,
+  NotificationProviderFactory,
+  ExtensibleNotificationProviderConfig,
+} from './types.js';
 import { WebhookProvider } from './webhook-provider.js';
 import { SlackProvider } from './slack-provider.js';
 import { LogProvider } from './log-provider.js';
+
+const providerFactories = new Map<string, NotificationProviderFactory>();
+
+function normalizeProviderName(type: string): string {
+  return type.trim().toLowerCase();
+}
+
+function ensureDefaultProviderFactoriesRegistered(): void {
+  if (providerFactories.size > 0) {
+    return;
+  }
+
+  registerNotificationProviderFactory('webhook', (config) => {
+    const webhookConfig = config as { url?: string; webhookUrl?: string; events?: string[] };
+    return new WebhookProvider({
+      url: webhookConfig.url ?? webhookConfig.webhookUrl ?? '',
+      events: webhookConfig.events,
+    });
+  });
+
+  registerNotificationProviderFactory('slack', (config) => {
+    const slackConfig = config as { webhookUrl?: string; url?: string; channel?: string; events?: string[] };
+    return new SlackProvider({
+      webhookUrl: slackConfig.webhookUrl ?? slackConfig.url ?? '',
+      channel: slackConfig.channel,
+      events: slackConfig.events,
+    });
+  });
+
+  registerNotificationProviderFactory('log', (config, context) => {
+    const logConfig = config as { logFile?: string; events?: string[] };
+    return new LogProvider({
+      logFile: resolveLogFilePath(logConfig.logFile, context.stateDir),
+      events: logConfig.events,
+    });
+  });
+}
+
+function createProviderFromConfig(
+  config: ExtensibleNotificationProviderConfig,
+  stateDir: string | undefined,
+): NotificationProvider {
+  ensureDefaultProviderFactoriesRegistered();
+  const providerType = normalizeProviderName(config.type);
+  const factory = providerFactories.get(providerType);
+  if (!factory) {
+    throw new Error(
+      `Unknown notification provider type "${config.type}". Registered provider types: ${listNotificationProviderFactories().join(', ') || '(none)'}.`,
+    );
+  }
+  return factory(config, { stateDir });
+}
+
+export function registerNotificationProviderFactory(type: string, factory: NotificationProviderFactory): void {
+  providerFactories.set(normalizeProviderName(type), factory);
+}
+
+export function unregisterNotificationProviderFactory(type: string): void {
+  providerFactories.delete(normalizeProviderName(type));
+}
+
+export function hasNotificationProviderFactory(type: string): boolean {
+  ensureDefaultProviderFactoriesRegistered();
+  return providerFactories.has(normalizeProviderName(type));
+}
+
+export function listNotificationProviderFactories(): string[] {
+  ensureDefaultProviderFactoriesRegistered();
+  return [...providerFactories.keys()].sort();
+}
+
+export function resetNotificationProviderFactories(): void {
+  providerFactories.clear();
+  ensureDefaultProviderFactoriesRegistered();
+}
 
 function resolveLogFilePath(logFile: string | undefined, stateDir: string | undefined): string | undefined {
   if (!logFile) {
@@ -32,19 +113,9 @@ export class NotificationManager {
     }
 
     this.enabled = true;
-    this.providers = config.providers.map((p) => {
-      switch (p.type) {
-        case 'webhook':
-          return new WebhookProvider({ url: p.url ?? p.webhookUrl ?? '', events: p.events });
-        case 'slack':
-          return new SlackProvider({ webhookUrl: p.webhookUrl ?? p.url ?? '', channel: p.channel, events: p.events });
-        case 'log':
-          return new LogProvider({
-            logFile: resolveLogFilePath(p.logFile, stateDir),
-            events: p.events,
-          });
-      }
-    });
+    this.providers = config.providers.map((providerConfig) =>
+      createProviderFromConfig(providerConfig, stateDir),
+    );
   }
 
   addProvider(provider: NotificationProvider): void {

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createAgentBackend } from '../../../../packages/agent-runtime/src/backend/factory.js';
+import {
+  createAgentBackend,
+  registerAgentBackendFactory,
+  unregisterAgentBackendFactory,
+  hasAgentBackendFactory,
+  resetAgentBackendFactories,
+} from '../../../../packages/agent-runtime/src/backend/factory.js';
 import { CopilotBackend, ClaudeBackend, type BackendRuntimeConfig, type BackendLoggerLike } from '../../../../packages/agent-runtime/src/backend/backend.js';
 
 function makeConfig(backend: string = 'copilot'): BackendRuntimeConfig {
@@ -20,6 +26,12 @@ function makeLogger(): BackendLoggerLike {
 }
 
 describe('createAgentBackend', () => {
+  it('resets built-in backend factories', () => {
+    resetAgentBackendFactories();
+    expect(hasAgentBackendFactory('copilot')).toBe(true);
+    expect(hasAgentBackendFactory('claude')).toBe(true);
+  });
+
   it('should return CopilotBackend for backend "copilot"', () => {
     const backend = createAgentBackend(makeConfig('copilot'), makeLogger());
     expect(backend).toBeInstanceOf(CopilotBackend);
@@ -36,5 +48,30 @@ describe('createAgentBackend', () => {
     expect(() => createAgentBackend(makeConfig('unknown'), makeLogger())).toThrow(
       /Unknown agent backend.*"unknown"/,
     );
+  });
+
+  it('should allow registering and unregistering custom backend factories', () => {
+    registerAgentBackendFactory('custom', () => ({
+      name: 'custom',
+      init: async () => {},
+      invoke: async () => ({
+        agent: 'issue-analyst',
+        success: true,
+        exitCode: 0,
+        timedOut: false,
+        duration: 0,
+        stdout: '',
+        stderr: '',
+        tokenUsage: 0,
+        outputPath: '',
+        outputExists: true,
+      }),
+    }));
+
+    expect(hasAgentBackendFactory('custom')).toBe(true);
+    expect(createAgentBackend(makeConfig('custom'), makeLogger()).name).toBe('custom');
+
+    unregisterAgentBackendFactory('custom');
+    expect(hasAgentBackendFactory('custom')).toBe(false);
   });
 });

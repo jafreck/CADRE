@@ -12,7 +12,7 @@ const IsolationConfigSchema = z
     /** Enable isolation for agent invocations. */
     enabled: z.boolean().default(false),
     /** Isolation provider to use. */
-    provider: z.enum(['host', 'docker', 'kata']).default('host'),
+    provider: z.string().min(1).default('host'),
     /** Policy profile name to apply. */
     policyProfile: z.string().default('default'),
     /** Fall back to host execution if the configured provider is unavailable. */
@@ -33,7 +33,7 @@ export type IsolationConfig = z.infer<typeof IsolationConfigSchema>;
 
 const NotificationsProviderSchema = z.object({
   /** Provider type. */
-  type: z.enum(['webhook', 'slack', 'log']),
+  type: z.string().min(1),
   /** Webhook URL (webhook/slack providers). Supports ${ENV_VAR} syntax. */
   url: z.string().optional(),
   /** Webhook URL alias (webhook provider). Supports ${ENV_VAR} syntax. */
@@ -59,7 +59,7 @@ export type NotificationsConfig = z.infer<typeof NotificationsConfigSchema>;
 
 export const AgentConfigSchema = z.object({
   /** Which AI backend to use for agent invocations. */
-  backend: z.enum(['copilot', 'claude']).default('copilot'),
+  backend: z.string().min(1).default('copilot'),
   /** Model identifier to pass to the backend (overrides backend-specific default). */
   model: z.string().default('claude-sonnet-4.6'),
   /** Timeout in milliseconds for agent invocations. */

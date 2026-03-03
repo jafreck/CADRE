@@ -17,6 +17,18 @@ Cadre now publishes generic framework primitives as workspace packages:
 
 Cadre-specific orchestration validators remain under `src/validation` and consume `@cadre/validation` types.
 
+### Extension Model (Plugin APIs)
+
+Cadre now exposes first-class extension points across the runtime:
+
+- **Agent backends**: register backend factories with `registerAgentBackendFactory()` and resolve via `createAgentBackend()`.
+- **Isolation providers**: register instances/factories via `ProviderRegistry`, discover capabilities (`describe()`, `getCapabilities()`), and optionally expose readiness probes via `healthCheck()`.
+- **Checkpoint storage**: `CheckpointManager` / `FleetCheckpointManager` accept a pluggable `CheckpointStore`; default is `FileSystemCheckpointStore`.
+- **Notifications**: register provider factories with `registerNotificationProviderFactory()` (built-ins remain `webhook`, `slack`, `log`).
+- **Phase gates**: register gate plugins with `registerGatePlugin()`; `buildGateMap()` overlays plugin gates by phase.
+- **Agent registry**: `defineAgent()` and registry discovery APIs unify agent definition + context contract lookup.
+- **Event lifecycle hooks**: `FleetEventBus` supports middleware (`use`) and hook-style `beforeDispatch`/`afterDispatch`/`onDispatchError` interception.
+
 ```mermaid
 graph TD
     CLI["CLI<br/>(index.ts · agents.ts · init.ts)"]

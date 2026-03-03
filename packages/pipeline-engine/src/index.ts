@@ -33,7 +33,13 @@ export type {
 } from './executor/phase-executor.js';
 
 // Phase gate
-export type { PhaseGate, GateContext } from './gate/phase-gate.js';
+export type { PhaseGate, GateContext, GatePlugin } from './gate/phase-gate.js';
+export {
+  registerGatePlugin,
+  unregisterGatePlugin,
+  clearGatePlugins,
+  listGatePlugins,
+} from './gate/phase-gate.js';
 
 // Checkpoint
 export type {
@@ -41,8 +47,13 @@ export type {
   CheckpointState,
   FleetIssueStatus,
   FleetCheckpointState,
+  CheckpointStore,
 } from './checkpoint/checkpoint.js';
-export { CheckpointManager, FleetCheckpointManager } from './checkpoint/checkpoint.js';
+export {
+  CheckpointManager,
+  FleetCheckpointManager,
+  FileSystemCheckpointStore,
+} from './checkpoint/checkpoint.js';
 
 // Scheduler
 export { WorkItemDag, IssueDag } from './scheduler/issue-dag.js';
