@@ -325,7 +325,7 @@ describe('PRCompositionPhaseExecutor', () => {
       await executor.execute(ctx);
       expect(
         (ctx.io.commitManager as never as { stripCadreFiles: ReturnType<typeof vi.fn> }).stripCadreFiles,
-      ).toHaveBeenCalledWith('abc123');
+      ).toHaveBeenCalledWith('abc123', expect.any(Function));
     });
 
     it('should call stripCadreFiles even when squashBeforePR is true', async () => {
@@ -340,7 +340,7 @@ describe('PRCompositionPhaseExecutor', () => {
       await executor.execute(ctx);
       expect(
         (ctx.io.commitManager as never as { stripCadreFiles: ReturnType<typeof vi.fn> }).stripCadreFiles,
-      ).toHaveBeenCalledWith('abc123');
+      ).toHaveBeenCalledWith('abc123', expect.any(Function));
     });
 
     it('should use issue title as stripCadreFiles message fallback when PR title is empty', async () => {
@@ -353,7 +353,67 @@ describe('PRCompositionPhaseExecutor', () => {
       await executor.execute(ctx);
       expect(
         (ctx.io.commitManager as never as { stripCadreFiles: ReturnType<typeof vi.fn> }).stripCadreFiles,
-      ).toHaveBeenCalledWith('abc123');
+      ).toHaveBeenCalledWith('abc123', expect.any(Function));
+    });
+
+    it('should launch conflict-resolver when stripCadreFiles reports conflicts', async () => {
+      const stripCadreFiles = vi.fn().mockImplementation(async (_baseCommit: string, resolver: (files: string[], sha: string) => Promise<void>) => {
+        await resolver(['package-lock.json'], 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+      });
+
+      const contextBuilder = {
+        build: vi.fn()
+          .mockResolvedValueOnce('/progress/composer-ctx.json')
+          .mockResolvedValueOnce('/progress/conflict-ctx.json'),
+      };
+
+      const launcher = {
+        launchAgent: vi.fn(async (invocation: { agent: string }) => {
+          if (invocation.agent === 'conflict-resolver') {
+            return makeSuccessAgentResult('conflict-resolver');
+          }
+          return makeSuccessAgentResult('pr-composer');
+        }),
+      };
+
+      const ctx = makeAutoCreateCtx({
+        services: {
+          contextBuilder: contextBuilder as never,
+          launcher: launcher as never,
+        } as never,
+        io: {
+          progressDir: '/tmp/progress',
+          progressWriter: {} as never,
+          checkpoint: {} as never,
+          commitManager: {
+            getDiff: vi.fn().mockResolvedValue('diff content'),
+            squash: vi.fn().mockResolvedValue(undefined),
+            stripCadreFiles,
+            push: vi.fn().mockResolvedValue(undefined),
+          } as never,
+        },
+      });
+
+      await executor.execute(ctx);
+
+      expect(contextBuilder.build).toHaveBeenCalledWith(
+        'conflict-resolver',
+        expect.objectContaining({
+          issueNumber: 42,
+          worktreePath: '/tmp/worktree',
+          conflictedFiles: ['package-lock.json'],
+          progressDir: '/tmp/progress',
+        }),
+      );
+      expect(launcher.launchAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent: 'conflict-resolver',
+          phase: 5,
+          contextPath: '/progress/conflict-ctx.json',
+          outputPath: join('/tmp/progress', 'conflict-resolution-report.md'),
+        }),
+        '/tmp/worktree',
+      );
     });
 
     it('should append issue link suffix when linkIssue is true', async () => {

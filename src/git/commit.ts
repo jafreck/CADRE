@@ -162,7 +162,10 @@ export class CommitManager {
    *
    * This preserves individual commit granularity in the PR, unlike a squash approach.
    */
-  async stripCadreFiles(baseCommit: string): Promise<void> {
+  async stripCadreFiles(
+    baseCommit: string,
+    resolveConflicts?: (conflictedFiles: string[], commitSha: string) => Promise<void>,
+  ): Promise<void> {
     const logOutput = (
       await this.git.raw(['log', '--format=%H', '--reverse', `${baseCommit}..HEAD`])
     ).trim();
@@ -194,7 +197,25 @@ export class CommitManager {
         await this.git.raw(['restore', '--', pattern]).catch(() => {});
       }
 
-      const status = await this.git.status();
+      let status = await this.git.status();
+      const conflictedFiles = this.getConflictedFiles(status);
+      if (conflictedFiles.length > 0) {
+        if (!resolveConflicts) {
+          throw new Error(
+            `stripCadreFiles encountered unresolved merge conflicts while replaying ${sha.slice(0, 8)}: ${conflictedFiles.join(', ')}`,
+          );
+        }
+
+        await resolveConflicts(conflictedFiles, sha);
+        status = await this.git.status();
+        const remainingConflicts = this.getConflictedFiles(status);
+        if (remainingConflicts.length > 0) {
+          throw new Error(
+            `stripCadreFiles conflict resolution incomplete for ${sha.slice(0, 8)}: ${remainingConflicts.join(', ')}`,
+          );
+        }
+      }
+
       if (status.staged.length === 0) {
         // Commit consisted entirely of cadre files — drop it and clean up.
         await this.git.reset(['--hard', 'HEAD']).catch(() => {});
@@ -213,6 +234,21 @@ export class CommitManager {
     this.logger.info(
       `stripCadreFiles: rewrote ${rewritten} commit(s), dropped ${dropped} cadre-only commit(s)`,
     );
+  }
+
+  private getConflictedFiles(status: Awaited<ReturnType<SimpleGit['status']>>): string[] {
+    const fromStatus = Array.isArray(status.conflicted)
+      ? status.conflicted.filter((file): file is string => typeof file === 'string' && file.length > 0)
+      : [];
+
+    const fromFiles = Array.isArray(status.files)
+      ? status.files
+          .filter((file) => file.index === 'U' || file.working_dir === 'U')
+          .map((file) => file.path)
+          .filter((file): file is string => typeof file === 'string' && file.length > 0)
+      : [];
+
+    return [...new Set([...fromStatus, ...fromFiles])];
   }
 
   /**
