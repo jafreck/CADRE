@@ -29,6 +29,10 @@ vi.mock('../src/core/phase-gate.js', () => ({
   AnalysisAmbiguityGate: vi.fn().mockImplementation(() => ({
     validate: mockGate1AmbiguityValidate,
   })),
+  listGatePlugins: vi.fn(() => []),
+  registerGatePlugin: vi.fn(),
+  unregisterGatePlugin: vi.fn(),
+  clearGatePlugins: vi.fn(),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
