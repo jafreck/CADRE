@@ -7,7 +7,7 @@ import {
   scoutReportSchema,
   integrationReportSchema,
 } from '../agents/schemas/index.js';
-import { SessionQueue } from '../execution/task-queue.js';
+import { SessionQueue } from '@cadre/execution';
 import { extractCadreJson } from '../util/cadre-json.js';
 
 // Re-export generic interfaces from engine

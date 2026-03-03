@@ -16,9 +16,9 @@ import type { AgentLauncher } from './agent-launcher.js';
 import type { ContextBuilder } from '../agents/context-builder.js';
 import type { ResultParser } from '../agents/result-parser.js';
 import type { CommitManager } from '../git/commit.js';
-import type { RetryExecutor } from '../execution/retry.js';
+import type { RetryExecutor } from '@cadre/execution';
 import type { TokenTracker } from '../budget/token-tracker.js';
-import type { Logger } from '../logging/logger.js';
+import type { Logger } from '@cadre/observability';
 import type { TokenUsageDetail } from '../agents/types.js';
 
 /** Cross-cutting services used by every phase. */

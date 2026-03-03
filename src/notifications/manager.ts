@@ -1,5 +1,5 @@
 import { isAbsolute, join } from 'node:path';
-import type { CadreEvent } from '../logging/events.js';
+import type { CadreEvent } from '@cadre/observability';
 import type { NotificationsConfig } from '../config/schema.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { NotificationProvider } from './types.js';
@@ -50,10 +50,6 @@ export class NotificationManager {
     });
   }
 
-  /**
-   * Register an additional notification provider at runtime.
-   * Automatically enables dispatching if it was previously disabled.
-   */
   addProvider(provider: NotificationProvider): void {
     this.providers.push(provider);
     this.enabled = true;

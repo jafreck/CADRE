@@ -1,0 +1,24 @@
+{
+  "name": "@cadre/execution",
+  "version": "0.1.0",
+  "description": "Execution primitives for CADRE",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "dependencies": {
+    "@cadre/agent-runtime": "*",
+    "@cadre/observability": "*",
+    "p-limit": "^6"
+  },
+  "scripts": {
+    "build": "tsc"
+  }
+}

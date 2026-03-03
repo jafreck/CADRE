@@ -1,4 +1,4 @@
-import type { Logger } from '../logging/logger.js';
+import type { Logger } from '@cadre/observability';
 
 /**
  * Comment on an issue or work item.

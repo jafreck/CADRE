@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import type { PRComment, PRReview, ReviewThread } from '../platform/provider.js';
-import { Logger } from '../logging/logger.js';
+import { Logger } from '@cadre/observability';
 
 /**
  * Builds a synthetic implementation plan from review threads, PR comments,

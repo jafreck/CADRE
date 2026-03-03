@@ -6,6 +6,17 @@
 
 ## 1. High-Level Component Architecture
 
+### Package Boundaries (Extracted Framework Modules)
+
+Cadre now publishes generic framework primitives as workspace packages:
+
+- `@cadre/notifications`: notification manager and providers (`log`, `slack`, `webhook`)
+- `@cadre/observability`: logger, typed runtime events, fleet event bus, and cost estimator
+- `@cadre/execution`: serial/parallel executors, session queue/task queue, retry facade
+- `@cadre/validation`: pre-run validation suite/types and disk validator
+
+Cadre-specific orchestration validators remain under `src/validation` and consume `@cadre/validation` types.
+
 ```mermaid
 graph TD
     CLI["CLI<br/>(index.ts · agents.ts · init.ts)"]
