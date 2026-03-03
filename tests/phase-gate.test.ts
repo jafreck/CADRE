@@ -489,6 +489,55 @@ describe('IntegrationToPRGate', () => {
     expect(result.errors.some((e) => e.includes('new regression failures'))).toBe(true);
     expect(result.warnings.some((w) => w.includes('pre-existing failures'))).toBe(true);
   });
+
+  it('should pass with warnings when tests fail but overallPass is true (baseline-only failures)', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 0, output: 'Build succeeded.', pass: true },
+      testResult: { command: 'npm test', exitCode: 1, output: '1 test failed (pre-existing).', pass: false },
+      overallPass: true,
+      regressionFailures: [],
+      baselineFailures: ['packages/worker/tests/index.test.ts > Worker > handles jobs'],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('pre-existing'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('tests exited non-zero'))).toBe(true);
+  });
+
+  it('should pass with warnings when build fails but overallPass is true (baseline-only failures)', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 1, output: 'Build failed (pre-existing).', pass: false },
+      testResult: { command: 'npm test', exitCode: 0, output: 'All tests passed.', pass: true },
+      overallPass: true,
+      regressionFailures: [],
+      baselineFailures: ['src/legacy-module.ts: TS2304'],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('warn');
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('build exited non-zero'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('pre-existing'))).toBe(true);
+  });
+
+  it('should fail when overallPass is false even if regressionFailures array is empty', async () => {
+    const report = JSON.stringify({
+      buildResult: { command: 'npm run build', exitCode: 0, output: 'Build ok.', pass: true },
+      testResult: { command: 'npm test', exitCode: 1, output: 'Tests failed.', pass: false },
+      overallPass: false,
+      regressionFailures: [],
+      baselineFailures: [],
+    });
+    await writeFile(join(tempDir, 'integration-report.md'), `\`\`\`cadre-json\n${report}\n\`\`\``);
+
+    const result = await gate.validate(makeContext(tempDir));
+    expect(result.status).toBe('fail');
+    expect(result.errors.some((e) => e.includes('tests failed'))).toBe(true);
+  });
 });
 
 // ── AnalysisAmbiguityGate ─────────────────────────────────────────────────────

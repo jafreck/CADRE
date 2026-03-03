@@ -22,12 +22,14 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     // Read baseline results (null-safe: missing baseline treats all failures as regressions)
     const baselineResultsPath = join(ctx.worktree.path, '.cadre', 'baseline-results.json');
     let baseline: BaselineResults | null = null;
-    try {
-      const raw = await readFile(baselineResultsPath, 'utf-8');
-      const parsed = baselineResultsSchema.safeParse(JSON.parse(raw));
-      if (parsed.success) baseline = parsed.data;
-    } catch {
-      // No baseline file; all current failures will be treated as regressions
+    if (!ctx.config.options.skipBaseline) {
+      try {
+        const raw = await readFile(baselineResultsPath, 'utf-8');
+        const parsed = baselineResultsSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) baseline = parsed.data;
+      } catch {
+        // No baseline file; all current failures will be treated as regressions
+      }
     }
 
     const baselineBuildFailures = new Set<string>(baseline?.buildFailures ?? []);

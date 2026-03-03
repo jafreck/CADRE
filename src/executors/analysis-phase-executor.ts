@@ -69,8 +69,10 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
       throw new Error(`Codebase scout failed: ${scoutResult.error}`);
     }
 
-    // Capture baseline build/test results
-    await this.captureBaseline(ctx);
+    // Capture baseline build/test results (unless opted out)
+    if (!ctx.config.options.skipBaseline) {
+      await this.captureBaseline(ctx);
+    }
 
     return join(ctx.io.progressDir, 'scout-report.md');
   }
