@@ -15,13 +15,13 @@ export interface LogEntry {
   data?: Record<string, unknown>;
 }
 
-export interface FleetStartedEvent {
+export interface RunStartedEvent {
   type: 'fleet-started';
   issueCount: number;
   maxParallel: number;
 }
 
-export interface FleetCompletedEvent {
+export interface RunCompletedEvent {
   type: 'fleet-completed';
   success: boolean;
   prsCreated: number;
@@ -30,20 +30,20 @@ export interface FleetCompletedEvent {
   totalTokens: number;
 }
 
-export interface FleetInterruptedEvent {
+export interface RunInterruptedEvent {
   type: 'fleet-interrupted';
   signal: string;
   issuesInProgress: number[];
 }
 
-export interface IssueStartedEvent {
+export interface WorkUnitStartedEvent {
   type: 'issue-started';
   issueNumber: number;
   issueTitle: string;
   worktreePath: string;
 }
 
-export interface IssueCompletedEvent {
+export interface WorkUnitCompletedEvent {
   type: 'issue-completed';
   issueNumber: number;
   issueTitle: string;
@@ -54,7 +54,7 @@ export interface IssueCompletedEvent {
   tokenUsage: number;
 }
 
-export interface IssueFailedEvent {
+export interface WorkUnitFailedEvent {
   type: 'issue-failed';
   issueNumber: number;
   issueTitle: string;
@@ -64,14 +64,14 @@ export interface IssueFailedEvent {
   failedTask?: string;
 }
 
-export interface PhaseStartedEvent {
+export interface StageStartedEvent {
   type: 'phase-started';
   issueNumber: number;
   phase: number;
   phaseName: string;
 }
 
-export interface PhaseCompletedEvent {
+export interface StageCompletedEvent {
   type: 'phase-completed';
   issueNumber: number;
   phase: number;
@@ -79,7 +79,7 @@ export interface PhaseCompletedEvent {
   duration: number;
 }
 
-export interface PhaseSkippedEvent {
+export interface StageSkippedEvent {
   type: 'phase-skipped';
   issueNumber: number;
   phase: number;
@@ -113,21 +113,21 @@ export interface AgentFailedEvent {
   timedOut: boolean;
 }
 
-export interface TaskStartedEvent {
+export interface WorkStepStartedEvent {
   type: 'task-started';
   issueNumber: number;
   taskId: string;
   taskName: string;
 }
 
-export interface TaskCompletedEvent {
+export interface WorkStepCompletedEvent {
   type: 'task-completed';
   issueNumber: number;
   taskId: string;
   duration: number;
 }
 
-export interface TaskBlockedEvent {
+export interface WorkStepBlockedEvent {
   type: 'task-blocked';
   issueNumber: number;
   taskId: string;
@@ -135,7 +135,7 @@ export interface TaskBlockedEvent {
   retryCount: number;
 }
 
-export interface TaskRetryEvent {
+export interface WorkStepRetryEvent {
   type: 'task-retry';
   issueNumber: number;
   taskId: string;
@@ -209,31 +209,138 @@ export interface BudgetExceededEvent {
   budget: number;
 }
 
-export type RuntimeEvent =
-  | FleetStartedEvent
-  | FleetCompletedEvent
-  | FleetInterruptedEvent
-  | IssueStartedEvent
-  | IssueCompletedEvent
-  | IssueFailedEvent
-  | PhaseStartedEvent
-  | PhaseCompletedEvent
-  | PhaseSkippedEvent
+export type RunLifecycleEvent =
+  | RunStartedEvent
+  | RunCompletedEvent
+  | RunInterruptedEvent;
+
+export type WorkUnitLifecycleEvent =
+  | WorkUnitStartedEvent
+  | WorkUnitCompletedEvent
+  | WorkUnitFailedEvent;
+
+export type StageLifecycleEvent =
+  | StageStartedEvent
+  | StageCompletedEvent
+  | StageSkippedEvent;
+
+export type WorkStepLifecycleEvent =
+  | WorkStepStartedEvent
+  | WorkStepCompletedEvent
+  | WorkStepBlockedEvent
+  | WorkStepRetryEvent;
+
+export type FrameworkLifecycleEvent =
+  | RunLifecycleEvent
+  | WorkUnitLifecycleEvent
+  | StageLifecycleEvent
+  | WorkStepLifecycleEvent
   | AgentLaunchedEvent
   | AgentCompletedEvent
   | AgentFailedEvent
-  | TaskStartedEvent
-  | TaskCompletedEvent
-  | TaskBlockedEvent
-  | TaskRetryEvent
-  | GitCommitEvent
-  | GitPushEvent
-  | PRCreatedEvent
-  | AmbiguityDetectedEvent
-  | BudgetWarningEvent
-  | BudgetExceededEvent
   | IsolationSessionStartedEvent
   | IsolationSessionEndedEvent
   | IsolationCapabilityDowngradeEvent;
 
+export type CadreSemanticEvent =
+  | GitCommitEvent
+  | GitPushEvent
+  | PRCreatedEvent
+  | AmbiguityDetectedEvent;
+
+export type BudgetEvent =
+  | BudgetWarningEvent
+  | BudgetExceededEvent;
+
+export type FrameworkBoundaryEvent =
+  | FrameworkLifecycleEvent
+  | BudgetEvent;
+
+export type RuntimeEvent =
+  | FrameworkBoundaryEvent
+  | CadreSemanticEvent;
+
+/**
+ * @deprecated Use `RuntimeEvent` or one of the stratified unions.
+ */
 export type CadreEvent = RuntimeEvent;
+
+/**
+ * @deprecated Use `RunStartedEvent`.
+ */
+export type FleetStartedEvent = RunStartedEvent;
+/**
+ * @deprecated Use `RunCompletedEvent`.
+ */
+export type FleetCompletedEvent = RunCompletedEvent;
+/**
+ * @deprecated Use `RunInterruptedEvent`.
+ */
+export type FleetInterruptedEvent = RunInterruptedEvent;
+
+/**
+ * @deprecated Use `WorkUnitStartedEvent`.
+ */
+export type IssueStartedEvent = WorkUnitStartedEvent;
+/**
+ * @deprecated Use `WorkUnitCompletedEvent`.
+ */
+export type IssueCompletedEvent = WorkUnitCompletedEvent;
+/**
+ * @deprecated Use `WorkUnitFailedEvent`.
+ */
+export type IssueFailedEvent = WorkUnitFailedEvent;
+
+/**
+ * @deprecated Use `StageStartedEvent`.
+ */
+export type PhaseStartedEvent = StageStartedEvent;
+/**
+ * @deprecated Use `StageCompletedEvent`.
+ */
+export type PhaseCompletedEvent = StageCompletedEvent;
+/**
+ * @deprecated Use `StageSkippedEvent`.
+ */
+export type PhaseSkippedEvent = StageSkippedEvent;
+
+/**
+ * @deprecated Use `WorkStepStartedEvent`.
+ */
+export type TaskStartedEvent = WorkStepStartedEvent;
+/**
+ * @deprecated Use `WorkStepCompletedEvent`.
+ */
+export type TaskCompletedEvent = WorkStepCompletedEvent;
+/**
+ * @deprecated Use `WorkStepBlockedEvent`.
+ */
+export type TaskBlockedEvent = WorkStepBlockedEvent;
+/**
+ * @deprecated Use `WorkStepRetryEvent`.
+ */
+export type TaskRetryEvent = WorkStepRetryEvent;
+
+/**
+ * @deprecated Use `RunLifecycleEvent`.
+ */
+export type FleetLifecycleEvent = RunLifecycleEvent;
+/**
+ * @deprecated Use `WorkUnitLifecycleEvent`.
+ */
+export type CadreIssueLifecycleEvent = WorkUnitLifecycleEvent;
+/**
+ * @deprecated Use `StageLifecycleEvent`.
+ */
+export type CadrePhaseLifecycleEvent = StageLifecycleEvent;
+/**
+ * @deprecated Use `WorkStepLifecycleEvent`.
+ */
+export type CadreTaskLifecycleEvent = WorkStepLifecycleEvent;
+
+export type CadreDomainEvent =
+  | WorkUnitLifecycleEvent
+  | StageLifecycleEvent
+  | WorkStepLifecycleEvent
+  | CadreSemanticEvent
+  | BudgetEvent;

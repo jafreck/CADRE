@@ -9,6 +9,7 @@ export type { AgentContract } from './contract.js';
 export { defineContract } from './contract.js';
 
 export * from './retry/retry.js';
+export * from './backend/contract.js';
 export * from './backend/backend.js';
 export * from './backend/factory.js';
 export * from './launcher/agent-launcher.js';

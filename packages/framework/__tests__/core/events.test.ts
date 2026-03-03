@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import type {
   CadreEvent,
+  RuntimeEvent,
+  FrameworkLifecycleEvent,
+  FrameworkBoundaryEvent,
+  CadreSemanticEvent,
+  CadreDomainEvent,
+  RunStartedEvent,
+  WorkUnitStartedEvent,
+  StageStartedEvent,
+  WorkStepStartedEvent,
   FleetStartedEvent,
   FleetCompletedEvent,
   FleetInterruptedEvent,
@@ -402,6 +411,91 @@ describe('CadreEvent type definitions', () => {
       };
       const narrowed = narrowEvent(event, 'pr-created');
       expect(narrowed?.prNumber).toBe(77);
+    });
+  });
+
+  describe('stratified event unions and neutral aliases', () => {
+    it('supports neutral run/work-unit/stage/work-step aliases', () => {
+      const run: RunStartedEvent = { type: 'fleet-started', issueCount: 1, maxParallel: 1 };
+      const workUnit: WorkUnitStartedEvent = {
+        type: 'issue-started',
+        issueNumber: 42,
+        issueTitle: 'Neutral naming',
+        worktreePath: '/tmp/worktree',
+      };
+      const stage: StageStartedEvent = {
+        type: 'phase-started',
+        issueNumber: 42,
+        phase: 1,
+        phaseName: 'Analysis',
+      };
+      const workStep: WorkStepStartedEvent = {
+        type: 'task-started',
+        issueNumber: 42,
+        taskId: 'task-1',
+        taskName: 'Implement',
+      };
+
+      expect(run.type).toBe('fleet-started');
+      expect(workUnit.type).toBe('issue-started');
+      expect(stage.type).toBe('phase-started');
+      expect(workStep.type).toBe('task-started');
+    });
+
+    it('stratifies framework lifecycle and Cadre semantic events', () => {
+      const lifecycle: FrameworkLifecycleEvent = { type: 'fleet-started', issueCount: 2, maxParallel: 2 };
+      const boundary: FrameworkBoundaryEvent = {
+        type: 'budget-warning',
+        scope: 'fleet',
+        currentUsage: 10,
+        budget: 100,
+        percentUsed: 10,
+      };
+      const semantic: CadreSemanticEvent = {
+        type: 'git-push',
+        issueNumber: 42,
+        branch: 'feature/42',
+      };
+      const domain: CadreDomainEvent = {
+        type: 'issue-started',
+        issueNumber: 42,
+        issueTitle: 'Cadre domain',
+        worktreePath: '/tmp/wt',
+      };
+      const runtime: RuntimeEvent = semantic;
+
+      expect(lifecycle.type).toBe('fleet-started');
+      expect(boundary.type).toBe('budget-warning');
+      expect(domain.type).toBe('issue-started');
+      expect(runtime.type).toBe('git-push');
+    });
+
+    it('keeps deprecated Cadre/Fleet/Issue/Phase/Task aliases compatible', () => {
+      const fleetAlias: FleetStartedEvent = { type: 'fleet-started', issueCount: 1, maxParallel: 1 };
+      const issueAlias: IssueStartedEvent = {
+        type: 'issue-started',
+        issueNumber: 7,
+        issueTitle: 'Alias',
+        worktreePath: '/tmp/alias',
+      };
+      const phaseAlias: PhaseStartedEvent = {
+        type: 'phase-started',
+        issueNumber: 7,
+        phase: 1,
+        phaseName: 'Analysis',
+      };
+      const taskAlias: TaskStartedEvent = {
+        type: 'task-started',
+        issueNumber: 7,
+        taskId: 'task-a',
+        taskName: 'Do thing',
+      };
+      const cadreAlias: CadreEvent = fleetAlias;
+
+      expect(issueAlias.type).toBe('issue-started');
+      expect(phaseAlias.type).toBe('phase-started');
+      expect(taskAlias.type).toBe('task-started');
+      expect(cadreAlias.type).toBe('fleet-started');
     });
   });
 

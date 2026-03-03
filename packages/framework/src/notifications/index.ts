@@ -2,6 +2,10 @@
 
 export type {
   NotificationEvent,
+  FrameworkNotificationEvent,
+  CadreSemanticNotificationEvent,
+  CadreNotificationEvent,
+  CadreEvent,
   NotificationProvider,
   NotificationProviderFactory,
   NotificationProviderFactoryContext,

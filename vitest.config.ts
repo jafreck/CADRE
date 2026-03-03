@@ -1,6 +1,16 @@
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'node:path';
 
 export default defineConfig({
+  resolve: {
+    alias: [
+      { find: /^@cadre\/framework$/, replacement: resolve(__dirname, 'packages/framework/src/index.ts') },
+      {
+        find: /^@cadre\/framework\/(.+)$/,
+        replacement: `${resolve(__dirname, 'packages/framework/src')}/$1/index.ts`,
+      },
+    ],
+  },
   test: {
     exclude: [
       '**/node_modules/**',

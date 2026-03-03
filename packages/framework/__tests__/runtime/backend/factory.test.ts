@@ -1,12 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createAgentBackend,
   registerAgentBackendFactory,
+  registerAgentBackends,
   unregisterAgentBackendFactory,
   hasAgentBackendFactory,
+  listAgentBackendFactories,
   resetAgentBackendFactories,
 } from '../../../src/runtime/backend/factory.js';
-import { CopilotBackend, ClaudeBackend, type BackendRuntimeConfig, type BackendLoggerLike } from '../../../src/runtime/backend/backend.js';
+import { CopilotBackend, ClaudeBackend } from '../../../src/runtime/backend/backend.js';
+import type { BackendRuntimeConfig, BackendLoggerLike } from '../../../src/runtime/backend/contract.js';
 
 function makeConfig(backend: string = 'copilot'): BackendRuntimeConfig {
   return {
@@ -25,10 +28,37 @@ function makeLogger(): BackendLoggerLike {
 }
 
 describe('createAgentBackend', () => {
+  beforeEach(() => {
+    resetAgentBackendFactories();
+  });
+
   it('resets built-in backend factories', () => {
     resetAgentBackendFactories();
     expect(hasAgentBackendFactory('copilot')).toBe(true);
     expect(hasAgentBackendFactory('claude')).toBe(true);
+  });
+
+  it('keeps built-in backends registered when custom backend is registered first', () => {
+    registerAgentBackendFactory('custom-first', () => ({
+      name: 'custom-first',
+      init: async () => {},
+      invoke: async () => ({
+        agent: 'issue-analyst',
+        success: true,
+        exitCode: 0,
+        timedOut: false,
+        duration: 0,
+        stdout: '',
+        stderr: '',
+        tokenUsage: 0,
+        outputPath: '',
+        outputExists: true,
+      }),
+    }));
+
+    expect(hasAgentBackendFactory('copilot')).toBe(true);
+    expect(hasAgentBackendFactory('claude')).toBe(true);
+    expect(hasAgentBackendFactory('custom-first')).toBe(true);
   });
 
   it('should return CopilotBackend for backend "copilot"', () => {
@@ -72,5 +102,95 @@ describe('createAgentBackend', () => {
 
     unregisterAgentBackendFactory('custom');
     expect(hasAgentBackendFactory('custom')).toBe(false);
+  });
+
+  it('supports batch backend registration', () => {
+    registerAgentBackends([
+      {
+        name: 'batch-a',
+        factory: () => ({
+          name: 'batch-a',
+          init: async () => {},
+          invoke: async () => ({
+            agent: 'issue-analyst',
+            success: true,
+            exitCode: 0,
+            timedOut: false,
+            duration: 0,
+            stdout: '',
+            stderr: '',
+            tokenUsage: 0,
+            outputPath: '',
+            outputExists: true,
+          }),
+        }),
+      },
+      {
+        name: 'batch-b',
+        factory: () => ({
+          name: 'batch-b',
+          init: async () => {},
+          invoke: async () => ({
+            agent: 'issue-analyst',
+            success: true,
+            exitCode: 0,
+            timedOut: false,
+            duration: 0,
+            stdout: '',
+            stderr: '',
+            tokenUsage: 0,
+            outputPath: '',
+            outputExists: true,
+          }),
+        }),
+      },
+    ]);
+
+    expect(listAgentBackendFactories()).toEqual(expect.arrayContaining(['batch-a', 'batch-b', 'claude', 'copilot']));
+  });
+
+  it('normalizes backend names for registration and selection', () => {
+    registerAgentBackendFactory('  custom-normalized  ', () => ({
+      name: 'custom-normalized',
+      init: async () => {},
+      invoke: async () => ({
+        agent: 'issue-analyst',
+        success: true,
+        exitCode: 0,
+        timedOut: false,
+        duration: 0,
+        stdout: '',
+        stderr: '',
+        tokenUsage: 0,
+        outputPath: '',
+        outputExists: true,
+      }),
+    }));
+
+    const backend = createAgentBackend(makeConfig('  CUSTOM-NORMALIZED  '), makeLogger());
+    expect(backend.name).toBe('custom-normalized');
+  });
+
+  it('throws for empty backend registration names', () => {
+    expect(() => registerAgentBackendFactory('   ', () => ({
+      name: 'nope',
+      init: async () => {},
+      invoke: async () => ({
+        agent: 'issue-analyst',
+        success: true,
+        exitCode: 0,
+        timedOut: false,
+        duration: 0,
+        stdout: '',
+        stderr: '',
+        tokenUsage: 0,
+        outputPath: '',
+        outputExists: true,
+      }),
+    }))).toThrow(/must be a non-empty string/);
+  });
+
+  it('throws for empty backend selections', () => {
+    expect(() => createAgentBackend(makeConfig('   '), makeLogger())).toThrow(/must be a non-empty string/);
   });
 });
