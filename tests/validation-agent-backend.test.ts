@@ -39,24 +39,26 @@ describe('validation-agent-backend', () => {
     vi.resetAllMocks();
   });
 
-  it('returns passed:false when CLI command is not on PATH', async () => {
+  it('returns passed:true with warning when CLI command is not on PATH', async () => {
     vi.mocked(exec).mockResolvedValue({ ...fail });
     vi.mocked(exists).mockResolvedValue(true);
 
     const result = await agentBackendValidator.validate(makeConfig({ cliCommand: 'missing-cli' }));
 
-    expect(result.passed).toBe(false);
-    expect(result.errors.some((e) => e.includes('missing-cli') && e.includes('PATH'))).toBe(true);
+    expect(result.passed).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('missing-cli') && w.includes('PATH'))).toBe(true);
   });
 
-  it('returns passed:false when agentDir does not exist', async () => {
+  it('returns passed:true with warning when agentDir does not exist', async () => {
     vi.mocked(exec).mockResolvedValue({ ...ok });
     vi.mocked(exists).mockResolvedValue(false);
 
     const result = await agentBackendValidator.validate(makeConfig({ agentDir: '/nonexistent/agents' }));
 
-    expect(result.passed).toBe(false);
-    expect(result.errors.some((e) => e.includes('/nonexistent/agents'))).toBe(true);
+    expect(result.passed).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes('/nonexistent/agents'))).toBe(true);
   });
 
   it('returns passed:true when CLI is found and agentDir exists', async () => {
