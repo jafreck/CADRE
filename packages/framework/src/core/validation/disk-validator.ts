@@ -1,12 +1,26 @@
-import type { RuntimeConfig } from '../../../../../src/config/loader.js';
-import { statOrNull } from '../../../../../src/util/fs.js';
-import { exec } from '../../../../../src/util/process.js';
+import { stat } from 'node:fs/promises';
+import { exec } from '../../runtime/commands/exec.js';
 import type { PreRunValidator, ValidationResult } from './types.js';
 
-export const diskValidator: PreRunValidator<RuntimeConfig> = {
+/** Minimal config shape required by the disk validator. */
+export interface DiskValidatorConfig {
+  repoPath: string;
+  worktreeRoot: string;
+  options: { maxParallelIssues: number };
+}
+
+async function statOrNull(filePath: string): Promise<Awaited<ReturnType<typeof stat>> | null> {
+  try {
+    return await stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+export const diskValidator: PreRunValidator<DiskValidatorConfig> = {
   name: 'disk',
 
-  async validate(config: RuntimeConfig): Promise<ValidationResult> {
+  async validate(config: DiskValidatorConfig): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
 
