@@ -84,7 +84,7 @@ export interface AgentSession {
   dependencies: string[];
   /** Ordered steps to execute within this session. */
   steps: AgentStep[];
-  /** Whether to launch a test-writer for this session. Defaults to true. Set to false for sessions that produce no directly testable logic (e.g., config-only, lockfile, type-definition-only). */
+  /** Whether to launch a test-writer for this session. Defaults to true. Set to false for sessions that produce no directly testable logic (e.g., docs-only, config-only, lockfile, type-definition-only). */
   testable?: boolean;
 }
 
