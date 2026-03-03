@@ -174,6 +174,18 @@ CADRE processes issues through a 5-phase pipeline:
 
 Each issue runs in its own git worktree with full isolation. Multiple issues are processed in parallel up to a configurable concurrency limit.
 
+## Plugin / Extension APIs
+
+Cadre supports runtime extension points without patching core switches:
+
+- `@cadre/agent-runtime`: `registerAgentBackendFactory()` for backend plugins.
+- `@cadre/agent-runtime`: `ProviderRegistry` enhancements (`registerProviders`, `describe`, `getCapabilities`, `healthCheck`).
+- `@cadre/pipeline-engine`: pluggable `CheckpointStore` with default `FileSystemCheckpointStore`.
+- `@cadre/notifications`: `registerNotificationProviderFactory()` for custom notification providers.
+- `@cadre/pipeline-engine`: `registerGatePlugin()` for custom phase gates.
+- `@cadre/observability`: `FleetEventBus.use()` middleware hooks for event lifecycle interception.
+- `src/agents/registry.ts`: `defineAgent()` and registry discovery helpers.
+
 ### Agent Roster
 
 | Agent | Purpose |

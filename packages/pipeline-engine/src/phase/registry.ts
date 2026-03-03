@@ -3,7 +3,7 @@
  */
 
 import type { PhaseContext, PhaseExecutor } from '../executor/phase-executor.js';
-import type { PhaseGate } from '../gate/phase-gate.js';
+import { listGatePlugins, type GatePlugin, type PhaseGate } from '../gate/phase-gate.js';
 
 export interface PhaseDefinition {
   /** Phase number (1-based). */
@@ -101,6 +101,7 @@ export function buildRegistry<TContext extends PhaseContext>(
  */
 export function buildGateMap<TContext extends PhaseContext>(
   manifest: readonly PhaseManifestEntry<TContext>[],
+  plugins: readonly GatePlugin[] = listGatePlugins(),
 ): Record<number, PhaseGate> {
   const map: Record<number, PhaseGate> = {};
   for (const entry of manifest) {
@@ -108,5 +109,10 @@ export function buildGateMap<TContext extends PhaseContext>(
       map[entry.phaseId] = entry.gate;
     }
   }
+
+  for (const plugin of plugins) {
+    map[plugin.phaseId] = plugin.gate;
+  }
+
   return map;
 }

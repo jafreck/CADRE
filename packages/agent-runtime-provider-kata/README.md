@@ -62,6 +62,25 @@ try {
 npm install @cadre/agent-runtime-provider-kata
 ```
 
+## Registering as an isolation plugin
+
+`KataProvider` is designed to plug into the runtime `ProviderRegistry`:
+
+```ts
+import { ProviderRegistry } from "@cadre/agent-runtime";
+import { createKataProvider } from "@cadre/agent-runtime-provider-kata";
+
+const registry = new ProviderRegistry();
+registry.registerFactory("kata", () => createKataProvider());
+
+const provider = registry.resolve(undefined, "kata");
+const capabilities = registry.getCapabilities("kata");
+const health = await registry.healthCheck("kata");
+```
+
+- Use `registry.describe()` to enumerate registered providers and discover loaded capabilities.
+- Implement `healthCheck()` on custom providers when you need runtime readiness checks.
+
 ---
 
 ## Usage

@@ -584,7 +584,7 @@ describe('CadreConfigSchema', () => {
       }
     });
 
-    it('should reject an invalid provider type', () => {
+    it('should accept non-built-in provider types for notification plugins', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
         notifications: {
@@ -592,7 +592,7 @@ describe('CadreConfigSchema', () => {
           providers: [{ type: 'email', url: 'https://example.com' }],
         },
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('NotificationsConfig type alias should satisfy the inferred shape', () => {
@@ -870,12 +870,12 @@ describe('CadreConfigSchema', () => {
       }
     });
 
-    it('should reject an invalid agent backend value', () => {
+    it('should accept non-built-in agent backend identifiers for backend plugins', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
         agent: { backend: 'openai' },
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('should reject a non-integer timeout in agent', () => {
@@ -999,12 +999,12 @@ describe('CadreConfigSchema', () => {
       }
     });
 
-    it('should reject an unknown isolation provider', () => {
+    it('should accept non-built-in isolation providers for provider plugins', () => {
       const result = CadreConfigSchema.safeParse({
         ...validConfig,
         isolation: { provider: 'kubernetes' },
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('should accept isolation with provider: "host" explicitly', () => {
@@ -1072,8 +1072,8 @@ describe('AgentConfigSchema', () => {
     expect(result.copilot.costOverrides).toBeUndefined();
   });
 
-  it('should reject unknown backend values', () => {
+  it('should accept unknown backend values for plugin registration', () => {
     const result = AgentConfigSchema.safeParse({ backend: 'gemini' });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });

@@ -189,7 +189,7 @@ export function applyOverrides(
   }
 
   if (overrides.provider != null) {
-    merged.isolation = { ...merged.isolation, provider: overrides.provider as RuntimeConfig['isolation']['provider'] };
+    merged.isolation = { ...merged.isolation, provider: overrides.provider };
   }
 
   return Object.freeze(merged) as RuntimeConfig;
