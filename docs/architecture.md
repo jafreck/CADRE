@@ -14,6 +14,7 @@ Cadre now publishes generic framework primitives as workspace packages:
 - `@cadre/observability`: logger, typed runtime events, fleet event bus, and cost estimator
 - `@cadre/execution`: serial/parallel executors, session queue/task queue, retry facade
 - `@cadre/validation`: pre-run validation suite/types and disk validator
+- `@cadre/flow`: declarative flow/graph DSL and `FlowRunner` with loops, conditionals, and parallel fan-out/fan-in
 
 Cadre-specific orchestration validators remain under `src/validation` and consume `@cadre/validation` types.
 
