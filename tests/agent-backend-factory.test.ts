@@ -17,7 +17,13 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 import { CopilotBackend, ClaudeBackend } from '../src/agents/backend.js';
-import { createAgentBackend } from '../src/agents/backend-factory.js';
+import {
+  createAgentBackend,
+  registerAgentBackendFactory,
+  unregisterAgentBackendFactory,
+  hasAgentBackendFactory,
+  resetAgentBackendFactories,
+} from '../src/agents/backend-factory.js';
 
 function makeConfig(backend: 'copilot' | 'claude' | string = 'copilot') {
   return makeRuntimeConfig({
@@ -42,6 +48,7 @@ function makeLogger() {
 describe('createAgentBackend', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAgentBackendFactories();
   });
 
   it('returns a CopilotBackend when config.agent.backend is "copilot"', () => {
@@ -71,7 +78,7 @@ describe('createAgentBackend', () => {
 
   it('thrown error for unknown backend mentions valid options', () => {
     const config = makeConfig('gpt4');
-    expect(() => createAgentBackend(config, makeLogger())).toThrow(/copilot.*claude|claude.*copilot/i);
+    expect(() => createAgentBackend(config, makeLogger())).toThrow(/Registered backends: .*copilot.*claude|Registered backends: .*claude.*copilot/i);
   });
 
   it('returned CopilotBackend has name "copilot"', () => {
@@ -91,5 +98,23 @@ describe('createAgentBackend', () => {
     const backend = createAgentBackend(config, makeLogger());
     expect(typeof backend.init).toBe('function');
     expect(typeof backend.invoke).toBe('function');
+  });
+
+  it('supports registering a custom backend factory', () => {
+    const customInit = vi.fn().mockResolvedValue(undefined);
+    const customInvoke = vi.fn();
+
+    registerAgentBackendFactory('custom', () => ({
+      name: 'custom',
+      init: customInit,
+      invoke: customInvoke,
+    }));
+
+    const backend = createAgentBackend(makeConfig('custom'), makeLogger());
+    expect(backend.name).toBe('custom');
+    expect(hasAgentBackendFactory('custom')).toBe(true);
+
+    unregisterAgentBackendFactory('custom');
+    expect(hasAgentBackendFactory('custom')).toBe(false);
   });
 });

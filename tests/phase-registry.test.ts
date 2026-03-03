@@ -12,6 +12,7 @@ import {
   buildGateMap,
 } from '../src/core/phase-registry.js';
 import type { PhaseExecutor } from '../src/core/phase-executor.js';
+import { registerGatePlugin, clearGatePlugins } from '../src/core/phase-gate.js';
 
 describe('PhaseRegistry', () => {
   describe('ISSUE_PHASES', () => {
@@ -249,6 +250,29 @@ describe('buildRegistry', () => {
 });
 
 describe('buildGateMap', () => {
+  it('supports explicit gate plugin overlays', async () => {
+    const pluginGate = {
+      validate: vi.fn().mockResolvedValue({ status: 'pass', errors: [], warnings: [] }),
+    };
+    const map = buildGateMap([{ phaseId: 5, gate: pluginGate }]);
+    await map[5].validate({ artifactsDir: '.', workspacePath: '.' });
+    expect(pluginGate.validate).toHaveBeenCalled();
+  });
+
+  it('applies globally registered gate plugins', async () => {
+    clearGatePlugins();
+    const pluginGate = {
+      validate: vi.fn().mockResolvedValue({ status: 'pass', errors: [], warnings: [] }),
+    };
+    registerGatePlugin({ name: 'phase5-plugin', phaseId: 5, gate: pluginGate });
+
+    const map = buildGateMap();
+    await map[5].validate({ artifactsDir: '.', workspacePath: '.' });
+
+    expect(pluginGate.validate).toHaveBeenCalled();
+    clearGatePlugins();
+  });
+
   it('should return a record with keys 1, 2, 3, 4', () => {
     const gateMap = buildGateMap();
     const keys = Object.keys(gateMap).map(Number).sort((a, b) => a - b);

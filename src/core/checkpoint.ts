@@ -8,6 +8,7 @@
 export {
   CheckpointManager,
   FleetCheckpointManager,
+  FileSystemCheckpointStore,
 } from '@cadre/pipeline-engine';
 
 export type {
@@ -15,4 +16,5 @@ export type {
   CheckpointState,
   FleetIssueStatus,
   FleetCheckpointState,
+  CheckpointStore,
 } from '@cadre/pipeline-engine';

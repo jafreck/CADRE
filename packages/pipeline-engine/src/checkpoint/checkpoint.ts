@@ -6,6 +6,36 @@ import { join } from 'node:path';
 import { atomicWriteJSON, readJSON, exists, ensureDir, copyFile } from '../util/fs.js';
 import type { Logger, GateResult, TokenRecord } from '../types.js';
 
+export interface CheckpointStore {
+  ensureDir(path: string): Promise<void>;
+  exists(path: string): Promise<boolean>;
+  readJSON<T>(path: string): Promise<T>;
+  writeJSON(path: string, data: unknown): Promise<void>;
+  copyFile(source: string, destination: string): Promise<void>;
+}
+
+export class FileSystemCheckpointStore implements CheckpointStore {
+  async ensureDir(path: string): Promise<void> {
+    await ensureDir(path);
+  }
+
+  async exists(path: string): Promise<boolean> {
+    return exists(path);
+  }
+
+  async readJSON<T>(path: string): Promise<T> {
+    return readJSON<T>(path);
+  }
+
+  async writeJSON(path: string, data: unknown): Promise<void> {
+    await atomicWriteJSON(path, data);
+  }
+
+  async copyFile(source: string, destination: string): Promise<void> {
+    await copyFile(source, destination);
+  }
+}
+
 // ── Per-Issue Checkpoint ──
 
 export interface FailedTask {
@@ -75,24 +105,27 @@ export class CheckpointManager {
   private state: CheckpointState | null = null;
   private readonly checkpointPath: string;
   private readonly backupPath: string;
+  private readonly store: CheckpointStore;
 
   constructor(
     private readonly progressDir: string,
     private readonly logger: Logger,
+    store: CheckpointStore = new FileSystemCheckpointStore(),
   ) {
     this.checkpointPath = join(progressDir, 'checkpoint.json');
     this.backupPath = join(progressDir, 'checkpoint.backup.json');
+    this.store = store;
   }
 
   /**
    * Load checkpoint from disk, or initialize a new one.
    */
   async load(issueNumber: string): Promise<CheckpointState> {
-    await ensureDir(this.progressDir);
+    await this.store.ensureDir(this.progressDir);
 
-    if (await exists(this.checkpointPath)) {
+    if (await this.store.exists(this.checkpointPath)) {
       try {
-        this.state = await readJSON<CheckpointState>(this.checkpointPath);
+        this.state = await this.store.readJSON<CheckpointState>(this.checkpointPath);
         this.state.resumeCount += 1;
         this.logger.info(`Loaded checkpoint for issue #${issueNumber}`, {
           issueNumber: Number(issueNumber),
@@ -110,9 +143,9 @@ export class CheckpointManager {
           issueNumber: Number(issueNumber),
         });
         // Try backup
-        if (await exists(this.backupPath)) {
+        if (await this.store.exists(this.backupPath)) {
           try {
-            this.state = await readJSON<CheckpointState>(this.backupPath);
+            this.state = await this.store.readJSON<CheckpointState>(this.backupPath);
             this.state.resumeCount += 1;
             await this.save();
             return this.state;
@@ -390,15 +423,15 @@ export class CheckpointManager {
     this.state.lastCheckpoint = new Date().toISOString();
 
     // Backup current checkpoint before writing new one
-    if (await exists(this.checkpointPath)) {
+    if (await this.store.exists(this.checkpointPath)) {
       try {
-        await copyFile(this.checkpointPath, this.backupPath);
+        await this.store.copyFile(this.checkpointPath, this.backupPath);
       } catch {
         // Best-effort backup
       }
     }
 
-    await atomicWriteJSON(this.checkpointPath, this.state);
+    await this.store.writeJSON(this.checkpointPath, this.state);
   }
 }
 
@@ -408,21 +441,24 @@ export class CheckpointManager {
 export class FleetCheckpointManager {
   private state: FleetCheckpointState | null = null;
   private readonly checkpointPath: string;
+  private readonly store: CheckpointStore;
 
   constructor(
     private readonly cadreDir: string,
     private readonly projectName: string,
     private readonly logger: Logger,
+    store: CheckpointStore = new FileSystemCheckpointStore(),
   ) {
     this.checkpointPath = join(cadreDir, 'fleet-checkpoint.json');
+    this.store = store;
   }
 
   async load(): Promise<FleetCheckpointState> {
-    await ensureDir(this.cadreDir);
+    await this.store.ensureDir(this.cadreDir);
 
-    if (await exists(this.checkpointPath)) {
+    if (await this.store.exists(this.checkpointPath)) {
       try {
-        this.state = await readJSON<FleetCheckpointState>(this.checkpointPath);
+        this.state = await this.store.readJSON<FleetCheckpointState>(this.checkpointPath);
         this.state.resumeCount += 1;
         this.logger.info('Loaded fleet checkpoint', {
           data: {
@@ -515,6 +551,6 @@ export class FleetCheckpointManager {
   private async save(): Promise<void> {
     if (!this.state) return;
     this.state.lastCheckpoint = new Date().toISOString();
-    await atomicWriteJSON(this.checkpointPath, this.state);
+    await this.store.writeJSON(this.checkpointPath, this.state);
   }
 }

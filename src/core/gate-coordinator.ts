@@ -3,13 +3,11 @@ import { join } from 'node:path';
 import type { GateResult, PhaseResult } from '../agents/types.js';
 import { AnalysisAmbiguityGate, type GateContext } from './phase-gate.js';
 import { buildGateMap } from './phase-registry.js';
+import type { PhaseGate } from './phase-gate.js';
 import type { CheckpointManager } from './checkpoint.js';
 import type { IssueProgressWriter } from './progress.js';
 import type { Logger } from '@cadre/observability';
 import { extractCadreJson } from '../util/cadre-json.js';
-
-/** Stateless gates — constructed once and reused across all runGate() calls. */
-const GATE_MAP = buildGateMap();
 
 export interface GateCoordinatorOptions {
   ambiguityThreshold: number;
@@ -20,6 +18,8 @@ export interface GateCoordinatorOptions {
  * Encapsulates gate validation, ambiguity gate merging, and gate result recording.
  */
 export class GateCoordinator {
+  private readonly gateMap: Record<number, PhaseGate>;
+
   constructor(
     private readonly checkpoint: CheckpointManager,
     private readonly progressWriter: IssueProgressWriter,
@@ -29,14 +29,17 @@ export class GateCoordinator {
     private readonly worktreePath: string,
     private readonly baseCommit: string | undefined,
     private readonly issueNumber: number,
-  ) {}
+    gateMap: Record<number, PhaseGate> = buildGateMap(),
+  ) {
+    this.gateMap = gateMap;
+  }
 
   /**
    * Run the gate for a given phase, merge ambiguity gate for phase 1,
    * record the result on the checkpoint, and update the last entry of phases.
    */
   async runGate(phaseId: number, phases: PhaseResult[]): Promise<'pass' | 'warn' | 'fail'> {
-    const gate = GATE_MAP[phaseId];
+    const gate = this.gateMap[phaseId];
     if (!gate) return 'pass';
 
     const context: GateContext = {
