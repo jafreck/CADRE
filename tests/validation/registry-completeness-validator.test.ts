@@ -2,36 +2,44 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeRuntimeConfig } from '../helpers/make-runtime-config.js';
 import type { AgentDefinition } from '../../src/agents/types.js';
 import type { AgentContextDescriptor } from '../../src/agents/types.js';
+import type { RegisteredAgent } from '../../src/agents/registry.js';
 
 // Mock the `exists` helper from util/fs
 vi.mock('../../src/util/fs.js', () => ({
   exists: vi.fn(),
 }));
 
-// Mock AGENT_DEFINITIONS from agents/types
-vi.mock('../../src/agents/types.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../src/agents/types.js')>();
-  return {
-    ...original,
-    AGENT_DEFINITIONS: [] as AgentDefinition[],
-  };
-});
-
 // Mock AGENT_CONTEXT_REGISTRY from agents/context-builder
 vi.mock('../../src/agents/context-builder.js', () => ({
   AGENT_CONTEXT_REGISTRY: {} as Record<string, AgentContextDescriptor>,
 }));
 
+vi.mock('../../src/agents/registry.js', () => ({
+  listRegisteredAgents: vi.fn(() => [] as RegisteredAgent[]),
+}));
+
 import { exists } from '../../src/util/fs.js';
-import { AGENT_DEFINITIONS } from '../../src/agents/types.js';
 import { AGENT_CONTEXT_REGISTRY } from '../../src/agents/context-builder.js';
+import { listRegisteredAgents } from '../../src/agents/registry.js';
 import { registryCompletenessValidator } from '../../src/validation/registry-completeness-validator.js';
 
 const config = makeRuntimeConfig();
 
-function setAgentDefinitions(defs: AgentDefinition[]): void {
-  (AGENT_DEFINITIONS as unknown as AgentDefinition[]).length = 0;
-  (AGENT_DEFINITIONS as unknown as AgentDefinition[]).push(...defs);
+function setRegisteredAgents(defs: AgentDefinition[]): void {
+  const entries = defs.map((definition) => ({
+    name: definition.name,
+    definition,
+    context: {
+      phase: definition.phase,
+      outputFile: () => '',
+      inputFiles: async () => [],
+    },
+    defaults: {
+      phase: definition.phase,
+      templateFile: definition.templateFile,
+    },
+  })) as RegisteredAgent[];
+  vi.mocked(listRegisteredAgents).mockReturnValue(entries);
 }
 
 function setRegistry(entries: Record<string, Partial<AgentContextDescriptor>>): void {
@@ -55,7 +63,7 @@ const fakeAgent = (overrides: Partial<AgentDefinition> = {}): AgentDefinition =>
 describe('registryCompletenessValidator', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    setAgentDefinitions([]);
+    setRegisteredAgents([]);
     setRegistry({});
   });
 
@@ -72,7 +80,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should return passed:true when all agents have templates, registry entries, and schemas', async () => {
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'issue-analyst', hasStructuredOutput: true, templateFile: 'issue-analyst.md' }),
     ]);
     setRegistry({
@@ -92,7 +100,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should return an error when a template file does not exist', async () => {
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'issue-analyst', templateFile: 'missing.md' }),
     ]);
     setRegistry({ 'issue-analyst': { phase: 1, outputFile: () => '', inputFiles: async () => [] } });
@@ -107,7 +115,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should return an error when agent is not in AGENT_CONTEXT_REGISTRY', async () => {
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'codebase-scout', templateFile: 'codebase-scout.md' }),
     ]);
     setRegistry({}); // empty registry
@@ -122,7 +130,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should return an error when hasStructuredOutput is true but outputSchema is missing', async () => {
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'issue-analyst', hasStructuredOutput: true }),
     ]);
     setRegistry({
@@ -140,7 +148,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should not report outputSchema error when hasStructuredOutput is false', async () => {
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'code-writer', hasStructuredOutput: false }),
     ]);
     setRegistry({
@@ -157,7 +165,7 @@ describe('registryCompletenessValidator', () => {
 
   it('should not report outputSchema error when agent is not in registry', async () => {
     // The structured output check is gated on registry membership
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'issue-analyst', hasStructuredOutput: true }),
     ]);
     setRegistry({}); // not in registry
@@ -171,7 +179,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should accumulate multiple errors across different agents', async () => {
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'issue-analyst', templateFile: 'missing.md', hasStructuredOutput: true }),
       fakeAgent({ name: 'codebase-scout', templateFile: 'codebase-scout.md' }),
     ]);
@@ -190,7 +198,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should check exists() with the correct template path', async () => {
-    setAgentDefinitions([
+    setRegisteredAgents([
       fakeAgent({ name: 'issue-analyst', templateFile: 'issue-analyst.md' }),
     ]);
     setRegistry({
@@ -207,7 +215,7 @@ describe('registryCompletenessValidator', () => {
   });
 
   it('should return empty warnings array', async () => {
-    setAgentDefinitions([fakeAgent()]);
+    setRegisteredAgents([fakeAgent()]);
     setRegistry({ 'issue-analyst': { phase: 1, outputFile: () => '', inputFiles: async () => [] } });
     vi.mocked(exists).mockResolvedValue(true);
 

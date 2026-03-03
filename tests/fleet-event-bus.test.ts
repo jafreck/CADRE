@@ -90,4 +90,35 @@ describe('FleetEventBus', () => {
       expect(fleetProgress.appendEvent).toHaveBeenCalledWith('Fleet completed: 0 PRs, 0 failures');
     });
   });
+
+  describe('middleware', () => {
+    it('runs function middleware before notification dispatch', async () => {
+      const calls: string[] = [];
+      bus.use(async (_context, next) => {
+        calls.push('before');
+        await next();
+        calls.push('after');
+      });
+
+      await bus.dispatchFleetStarted(1, 1);
+
+      expect(calls).toEqual(['before', 'after']);
+      expect(notifications.dispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs hook-style middleware and onDispatchError on failure', async () => {
+      const beforeDispatch = vi.fn();
+      const afterDispatch = vi.fn();
+      const onDispatchError = vi.fn();
+
+      bus.use({ beforeDispatch, afterDispatch, onDispatchError });
+      notifications.dispatch.mockRejectedValueOnce(new Error('dispatch failed'));
+
+      await expect(bus.dispatchFleetStarted(2, 1)).rejects.toThrow('dispatch failed');
+
+      expect(beforeDispatch).toHaveBeenCalled();
+      expect(afterDispatch).not.toHaveBeenCalled();
+      expect(onDispatchError).toHaveBeenCalled();
+    });
+  });
 });

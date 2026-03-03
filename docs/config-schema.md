@@ -122,7 +122,7 @@ Optional. Configures workload isolation for agent sessions. **Omitting this bloc
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `provider` | `"kata"` | — | Isolation provider to use. Currently only `"kata"` is supported. |
+| `provider` | `string` | `"host"` | Isolation provider identifier. Built-ins: `"host"`, `"docker"`, `"kata"`. Plugin providers may register additional identifiers. |
 
 ### `isolation.kata`
 
@@ -153,7 +153,7 @@ Advanced agent backend configuration.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `backend` | `"copilot" \| "claude"` | `"copilot"` | AI backend for agent invocations. |
+| `backend` | `string` | `"copilot"` | AI backend identifier. Built-ins: `"copilot"`, `"claude"`. Additional backends can be registered via plugin API. |
 | `model` | `string` | `"claude-sonnet-4.6"` | Model identifier override (takes precedence over backend-specific default). |
 | `timeout` | `number` | `300000` | Timeout in ms override for all agents. |
 | `copilot.cliCommand` | `string` | `"copilot"` | Copilot CLI executable. |
@@ -262,7 +262,7 @@ Out-of-band notifications sent independently of issue comments.
 
 | Field | Type | Description |
 |---|---|---|
-| `type` | `"webhook" \| "slack" \| "log"` | Provider type. |
+| `type` | `string` | Provider type identifier. Built-ins: `"webhook"`, `"slack"`, `"log"`; plugin providers can register additional types. |
 | `url` | `string` | Webhook URL (`webhook` provider). Supports `${ENV_VAR}`. |
 | `webhookUrl` | `string` | Webhook URL (`slack` provider). Supports `${ENV_VAR}`. |
 | `channel` | `string` | Slack channel (`slack` provider). |

@@ -102,6 +102,10 @@ vi.mock('../src/core/phase-gate.js', () => ({
   ImplementationToIntegrationGate: vi.fn(() => ({ validate: mockImplGateValidate })),
   IntegrationToPRGate: vi.fn(() => ({ validate: mockIntegrationGateValidate })),
   AnalysisAmbiguityGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
+  listGatePlugins: vi.fn(() => []),
+  registerGatePlugin: vi.fn(),
+  unregisterGatePlugin: vi.fn(),
+  clearGatePlugins: vi.fn(),
 }));
 
 vi.mock('../src/core/progress.js', () => ({

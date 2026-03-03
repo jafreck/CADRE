@@ -32,7 +32,20 @@ export type NotificationProviderConfig =
   | SlackProviderConfig
   | LogProviderConfig;
 
+export type ExtensibleNotificationProviderConfig =
+  | NotificationProviderConfig
+  | ({ type: string } & Record<string, unknown>);
+
 export interface NotificationsConfig {
   enabled: boolean;
-  providers: NotificationProviderConfig[];
+  providers: ExtensibleNotificationProviderConfig[];
 }
+
+export interface NotificationProviderFactoryContext {
+  stateDir?: string;
+}
+
+export type NotificationProviderFactory = (
+  config: ExtensibleNotificationProviderConfig,
+  context: NotificationProviderFactoryContext,
+) => NotificationProvider;

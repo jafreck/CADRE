@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NotificationManager, createNotificationManager } from '../src/notifications/manager.js';
+import {
+  NotificationManager,
+  createNotificationManager,
+  registerNotificationProviderFactory,
+  hasNotificationProviderFactory,
+  resetNotificationProviderFactories,
+} from '../src/notifications/manager.js';
 import type { CadreEvent } from '../src/notifications/types.js';
 import type { NotificationsConfig } from '../src/config/schema.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
@@ -37,6 +43,7 @@ function makeConfig(overrides: Partial<NotificationsConfig> = {}): Notifications
 describe('NotificationManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetNotificationProviderFactories();
     MockWebhookProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
     MockSlackProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
     MockLogProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
@@ -62,6 +69,12 @@ describe('NotificationManager', () => {
   });
 
   describe('provider instantiation', () => {
+    it('exposes default provider factories', () => {
+      expect(hasNotificationProviderFactory('webhook')).toBe(true);
+      expect(hasNotificationProviderFactory('slack')).toBe(true);
+      expect(hasNotificationProviderFactory('log')).toBe(true);
+    });
+
     it('should instantiate WebhookProvider for type "webhook" using url', () => {
       new NotificationManager(makeConfig({
         providers: [{ type: 'webhook', url: 'https://example.com/hook' }],
@@ -130,6 +143,18 @@ describe('NotificationManager', () => {
       expect(MockWebhookProvider).toHaveBeenCalledOnce();
       expect(MockSlackProvider).toHaveBeenCalledOnce();
       expect(MockLogProvider).toHaveBeenCalledOnce();
+    });
+
+    it('supports custom provider factory registration', async () => {
+      const notify = vi.fn().mockResolvedValue(undefined);
+      registerNotificationProviderFactory('custom', () => ({ notify }));
+
+      const manager = new NotificationManager(makeConfig({
+        providers: [{ type: 'custom' } as never],
+      }));
+
+      await manager.dispatch(sampleEvent);
+      expect(notify).toHaveBeenCalledWith(sampleEvent);
     });
   });
 

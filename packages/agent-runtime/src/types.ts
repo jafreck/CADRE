@@ -62,5 +62,13 @@ export interface IsolationSession {
 export interface IsolationProvider {
   name: string;
   capabilities(): IsolationCapabilities;
+  /** Optional provider-level readiness probe for startup/selection checks. */
+  healthCheck?(): Promise<IsolationProviderHealthCheckResult>;
   createSession(policy: IsolationPolicy): Promise<IsolationSession>;
+}
+
+export interface IsolationProviderHealthCheckResult {
+  healthy: boolean;
+  message?: string;
+  details?: Record<string, unknown>;
 }
