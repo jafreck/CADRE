@@ -220,4 +220,149 @@ describe('PullRequestCompletionQueue', () => {
     expect(logger.warn).not.toHaveBeenCalled();
     expect(queue.getFailures()).toEqual([]);
   });
+
+  describe('merge conflict resolution', () => {
+    it('invokes conflictResolver on dirty merge error and retries merge', async () => {
+      const conflictResolver = vi.fn().mockResolvedValue(true);
+      let callCount = 0;
+      mergePullRequest.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('PR #101 has merge conflicts (mergeable_state=dirty)');
+        }
+      });
+
+      const queue = new PullRequestCompletionQueue(
+        platform,
+        logger,
+        'main',
+        'squash',
+        true,
+        vi.fn().mockResolvedValue(true),
+        1,
+        conflictResolver,
+      );
+
+      queue.enqueue(makeItem({ issueNumber: 60, prNumber: 601 }));
+      await queue.drain();
+
+      expect(conflictResolver).toHaveBeenCalledTimes(1);
+      expect(conflictResolver).toHaveBeenCalledWith(
+        expect.objectContaining({ issueNumber: 60, prNumber: 601 }),
+        expect.stringContaining('merge conflicts'),
+      );
+      expect(mergePullRequest).toHaveBeenCalledTimes(2);
+      expect(queue.getFailures()).toEqual([]);
+    });
+
+    it('records failure when conflictResolver returns false', async () => {
+      const conflictResolver = vi.fn().mockResolvedValue(false);
+      mergePullRequest.mockRejectedValue(
+        new Error('PR #701 has merge conflicts (mergeable_state=dirty)'),
+      );
+
+      const queue = new PullRequestCompletionQueue(
+        platform,
+        logger,
+        'main',
+        'squash',
+        true,
+        vi.fn().mockResolvedValue(true),
+        1,
+        conflictResolver,
+      );
+
+      queue.enqueue(makeItem({ issueNumber: 70, prNumber: 701 }));
+      await queue.drain();
+
+      expect(conflictResolver).toHaveBeenCalledTimes(1);
+      expect(queue.getFailures()).toEqual([
+        expect.objectContaining({
+          issueNumber: 70,
+          prNumber: 701,
+          error: expect.stringContaining('merge conflicts'),
+        }),
+      ]);
+    });
+
+    it('records failure when conflictResolver throws', async () => {
+      const conflictResolver = vi.fn().mockRejectedValue(new Error('resolver crashed'));
+      mergePullRequest.mockRejectedValue(
+        new Error('PR #801 has merge conflicts (mergeable_state=dirty)'),
+      );
+
+      const queue = new PullRequestCompletionQueue(
+        platform,
+        logger,
+        'main',
+        'squash',
+        true,
+        vi.fn().mockResolvedValue(true),
+        1,
+        conflictResolver,
+      );
+
+      queue.enqueue(makeItem({ issueNumber: 80, prNumber: 801 }));
+      await queue.drain();
+
+      expect(conflictResolver).toHaveBeenCalledTimes(1);
+      expect(queue.getFailures()).toEqual([
+        expect.objectContaining({ issueNumber: 80, prNumber: 801 }),
+      ]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Conflict resolver failed for PR #801'),
+        expect.any(Object),
+      );
+    });
+
+    it('does not invoke conflictResolver for non-dirty merge errors', async () => {
+      const conflictResolver = vi.fn().mockResolvedValue(true);
+      mergePullRequest.mockRejectedValue(new Error('some other merge error'));
+
+      const queue = new PullRequestCompletionQueue(
+        platform,
+        logger,
+        'main',
+        'squash',
+        true,
+        vi.fn().mockResolvedValue(true),
+        1,
+        conflictResolver,
+      );
+
+      queue.enqueue(makeItem({ issueNumber: 90, prNumber: 901 }));
+      await queue.drain();
+
+      expect(conflictResolver).not.toHaveBeenCalled();
+      expect(queue.getFailures()).toEqual([
+        expect.objectContaining({ issueNumber: 90, prNumber: 901 }),
+      ]);
+    });
+
+    it('does not attempt conflict resolution without a resolver even on dirty errors', async () => {
+      mergePullRequest.mockRejectedValue(
+        new Error('PR has merge conflicts (mergeable_state=dirty)'),
+      );
+
+      const queue = new PullRequestCompletionQueue(
+        platform,
+        logger,
+        'main',
+        'squash',
+        true,
+        vi.fn().mockResolvedValue(true),
+        1,
+        // no conflictResolver
+      );
+
+      queue.enqueue(makeItem({ issueNumber: 100, prNumber: 1001 }));
+      await queue.drain();
+
+      // Should fail immediately without retry
+      expect(mergePullRequest).toHaveBeenCalledTimes(1);
+      expect(queue.getFailures()).toEqual([
+        expect.objectContaining({ issueNumber: 100, prNumber: 1001 }),
+      ]);
+    });
+  });
 });

@@ -1,4 +1,6 @@
 import { join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { simpleGit } from 'simple-git';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
@@ -16,7 +18,7 @@ import { ensureDir } from '../util/fs.js';
 import type { DependencyMergeConflictContext } from '../git/dependency-branch-merger.js';
 import { FleetReporter } from './fleet-reporter.js';
 import { FleetScheduler } from './fleet-scheduler.js';
-import { PullRequestCompletionQueue, type CompletionFailure } from './pr-completion-queue.js';
+import { PullRequestCompletionQueue, type CompletionFailure, type MergeConflictResolverFn } from './pr-completion-queue.js';
 import type { PullRequestMergeMethod } from '../platform/provider.js';
 
 export interface FleetResult {
@@ -87,6 +89,7 @@ export class FleetOrchestrator {
         return status === 'completed';
       },
       this.config.options.maxParallelIssues,
+      autoComplete.enabled ? this.buildCompletionQueueConflictResolver() : undefined,
     );
   }
 
@@ -182,6 +185,91 @@ export class FleetOrchestrator {
       enabled: autoComplete.enabled ?? false,
       mergeMethod: autoComplete.merge_method ?? 'squash',
     };
+  }
+
+  /**
+   * Build a conflict resolver callback for the PR completion queue.
+   *
+   * When a pre-existing PR cannot merge due to dirty state, this callback
+   * resolves the conflict using the same approach as the PR composition phase:
+   * fetch base, attempt merge, detect conflicted files, launch conflict-resolver
+   * agent, commit, and push.
+   */
+  private buildCompletionQueueConflictResolver(): MergeConflictResolverFn {
+    return async (item, errorDetails) => {
+      const worktreePath = this.worktreeManager.getWorktreePath(item.issueNumber);
+      const progressDir = join(this.cadreDir, 'issues', String(item.issueNumber));
+      await ensureDir(progressDir);
+
+      const git = simpleGit(worktreePath);
+      await git.fetch('origin', this.config.baseBranch);
+
+      try {
+        await git.merge([`origin/${this.config.baseBranch}`, '--no-edit']);
+      } catch {
+        const conflictedFiles = await this.getConflictedFiles(git);
+        if (conflictedFiles.length === 0) {
+          this.logger.warn(
+            `PR #${item.prNumber} reported dirty merge state, but no conflicted files were detected`,
+            { issueNumber: item.issueNumber },
+          );
+          return false;
+        }
+
+        const conflictDetailsPath = join(progressDir, 'merge-conflict-details.txt');
+        await writeFile(conflictDetailsPath, errorDetails, 'utf-8');
+
+        const contextPath = await this.contextBuilder.build('conflict-resolver', {
+          issueNumber: item.issueNumber,
+          worktreePath,
+          conflictedFiles,
+          progressDir,
+        });
+
+        const resolverResult = await this.launcher.launchAgent(
+          {
+            agent: 'conflict-resolver',
+            issueNumber: item.issueNumber,
+            phase: 5,
+            contextPath,
+            outputPath: join(progressDir, 'merge-conflict-resolution-report.md'),
+          },
+          worktreePath,
+        );
+
+        if (!resolverResult.success) {
+          this.logger.warn(
+            `conflict-resolver failed for existing PR #${item.prNumber}`,
+            { issueNumber: item.issueNumber },
+          );
+          return false;
+        }
+
+        await git.add(['-A']);
+        await git.raw(['commit', '--no-edit']);
+      }
+
+      // Push the resolved merge
+      await git.push('origin', item.branch, ['--force-with-lease']);
+      this.logger.info(
+        `Resolved merge conflicts for existing PR #${item.prNumber} and pushed`,
+        { issueNumber: item.issueNumber },
+      );
+      return true;
+    };
+  }
+
+  private async getConflictedFiles(git: ReturnType<typeof simpleGit>): Promise<string[]> {
+    try {
+      const output = await git.raw(['diff', '--name-only', '--diff-filter=U']);
+      return output
+        .trim()
+        .split('\n')
+        .map((file) => file.trim())
+        .filter((file) => file.length > 0);
+    } catch {
+      return [];
+    }
   }
 
   /**
