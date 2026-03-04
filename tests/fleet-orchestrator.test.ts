@@ -189,6 +189,8 @@ function makeMockDeps() {
     findOpenPR: vi.fn().mockResolvedValue(null),
     listPullRequests: vi.fn().mockResolvedValue([]),
     mergePullRequest: vi.fn().mockResolvedValue(undefined),
+    updatePullRequestBranch: vi.fn().mockResolvedValue(false),
+    updatePullRequestBranch: vi.fn().mockResolvedValue(false),
   };
   const logger = {
     info: vi.fn(),

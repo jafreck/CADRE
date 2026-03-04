@@ -519,6 +519,12 @@ export class AzureDevOpsProvider implements PlatformProvider {
     throw new Error(`Timed out waiting for PR #${prNumber} auto-complete`);
   }
 
+  async updatePullRequestBranch(_prNumber: number): Promise<boolean> {
+    // Azure DevOps does not have a direct "update branch" API equivalent.
+    this.logger.debug('updatePullRequestBranch: not supported on Azure DevOps');
+    return false;
+  }
+
   // ── Issue Linking ──
 
   issueLinkSuffix(issueNumber: number): string {

@@ -13,8 +13,11 @@ import { formatPullRequestTitle } from '../util/title-format.js';
 const MAX_ATTEMPTS = 2;
 const MAX_MERGE_RESOLUTION_ATTEMPTS = 3;
 
-/** Delay (ms) after pushing conflict resolution before retrying merge, to let GitHub recalculate mergeable state. */
-const POST_RESOLVE_DELAY_MS = 15_000;
+/** Base delay (ms) after pushing conflict resolution before retrying merge. Increases exponentially per attempt. */
+const BASE_POST_RESOLVE_DELAY_MS = 15_000;
+
+/** Cadre artifact path patterns used to detect cadre-only conflicts. */
+const CADRE_ARTIFACT_PATTERNS = ['.cadre/', 'task-', '.github/agents/', '.claude/agents/'];
 
 type MergeBlockReason = 'dirty' | 'checks-failed' | 'blocked';
 
@@ -140,8 +143,11 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     );
   }
 
-  /** Push and open the pull request. */
+  /** Rebase onto base branch before push, then push and open the pull request. */
   private async createPullRequest(ctx: PhaseContext, prContent: PRContent): Promise<void> {
+    // Fix 1: Rebase onto latest base branch before pushing to eliminate trivial behind-base dirtiness.
+    await this.rebaseOntoBase(ctx);
+
     await ctx.io.commitManager.push(true, ctx.worktree.branch);
 
     const prTitle = formatPullRequestTitle(prContent.title, ctx.issue.title, ctx.issue.number);
@@ -156,7 +162,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     if (existingPR !== null) {
       await ctx.platform.updatePullRequest(existingPR.number, { title: prTitle, body: prBody });
       ctx.callbacks.setPR?.(existingPR);
-      await this.autoCompleteIfEnabled(ctx, existingPR.number);
+      // Fix 2: Do not merge inline — the fleet orchestrator's completion queue handles serial merge.
       return;
     }
 
@@ -170,170 +176,30 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       reviewers: ctx.config.pullRequest.reviewers,
     });
     ctx.callbacks.setPR?.(pr);
-    if (pr?.number != null) {
-      await this.autoCompleteIfEnabled(ctx, pr.number);
-    }
+    // Fix 2: Do not merge inline — the fleet orchestrator's completion queue handles serial merge.
   }
 
-  private async autoCompleteIfEnabled(ctx: PhaseContext, prNumber: number): Promise<void> {
-    const autoComplete = ctx.config.pullRequest.autoComplete;
-    if (autoComplete == null) return;
-
-    const isEnabled =
-      typeof autoComplete === 'boolean'
-        ? autoComplete
-        : (autoComplete.enabled ?? false);
-    if (!isEnabled) return;
-
-    const mergeMethod: PullRequestMergeMethod =
-      typeof autoComplete === 'boolean'
-        ? 'squash'
-        : (autoComplete.merge_method ?? 'squash');
-
-    for (let attempt = 1; attempt <= MAX_MERGE_RESOLUTION_ATTEMPTS; attempt++) {
-      try {
-        await ctx.platform.mergePullRequest(prNumber, ctx.config.baseBranch, mergeMethod);
-        ctx.services.logger.info(
-          `Auto-completed PR #${prNumber} into ${ctx.config.baseBranch} using ${mergeMethod} merge`,
-          { issueNumber: ctx.issue.number },
-        );
-        return;
-      } catch (err) {
-        const reason = this.detectMergeBlockReason(err);
-        if (reason == null || attempt >= MAX_MERGE_RESOLUTION_ATTEMPTS) {
-          ctx.services.logger.warn(
-            `Auto-complete failed for PR #${prNumber}: ${String(err)}`,
-            { issueNumber: ctx.issue.number },
-          );
-          return;
-        }
-
-        ctx.services.logger.info(
-          `PR #${prNumber} merge blocked (${reason}); launching auto-resolution (attempt ${attempt}/${MAX_MERGE_RESOLUTION_ATTEMPTS})`,
-          { issueNumber: ctx.issue.number },
-        );
-        await this.autoResolveMergeBlock(ctx, prNumber, reason, String(err));
-        await new Promise((r) => setTimeout(r, POST_RESOLVE_DELAY_MS));
-      }
-    }
-  }
-
-  private detectMergeBlockReason(err: unknown): MergeBlockReason | null {
-    const message = String(err).toLowerCase();
-    if (
-      message.includes('mergeable_state=dirty')
-      || message.includes('has merge conflicts')
-      || message.includes('merge conflicts')
-    ) {
-      return 'dirty';
-    }
-    if (message.includes('checks failed')) {
-      return 'checks-failed';
-    }
-    if (message.includes('mergeable_state=blocked') || message.includes('blocked')) {
-      return 'blocked';
-    }
-    return null;
-  }
-
-  private async autoResolveMergeBlock(
-    ctx: PhaseContext,
-    prNumber: number,
-    reason: MergeBlockReason,
-    details: string,
-  ): Promise<void> {
-    if (reason === 'dirty') {
-      await this.resolveMergeConflicts(ctx, prNumber, details);
-      return;
-    }
-
-    await this.resolveCheckOrPolicyBlock(ctx, reason, details);
-  }
-
-  private async resolveMergeConflicts(ctx: PhaseContext, prNumber: number, details: string): Promise<void> {
+  /**
+   * Fetch the latest base branch and rebase the worktree onto it.
+   * If the rebase fails (real conflicts), abort gracefully — the PR
+   * will still be created and the completion queue can resolve later.
+   */
+  private async rebaseOntoBase(ctx: PhaseContext): Promise<void> {
     const git = simpleGit(ctx.worktree.path);
-    await git.fetch('origin', ctx.config.baseBranch);
-
     try {
-      await git.merge([`origin/${ctx.config.baseBranch}`, '--no-edit']);
-    } catch {
-      const conflictedFiles = await this.getConflictedFiles(git);
-      if (conflictedFiles.length === 0) {
-        throw new Error(`PR #${prNumber} reported dirty merge state, but no conflicted files were detected`);
-      }
-
-      const conflictDetailsPath = join(ctx.io.progressDir, 'merge-conflict-details.txt');
-      await writeFile(conflictDetailsPath, details, 'utf-8');
-
-      const contextPath = await ctx.services.contextBuilder.build('conflict-resolver', {
-        issueNumber: ctx.issue.number,
-        worktreePath: ctx.worktree.path,
-        conflictedFiles,
-        progressDir: ctx.io.progressDir,
-      });
-
-      const resolverResult = await launchWithRetry(ctx, 'conflict-resolver', {
-        agent: 'conflict-resolver',
-        issueNumber: ctx.issue.number,
-        phase: 5,
-        contextPath,
-        outputPath: join(ctx.io.progressDir, 'merge-conflict-resolution-report.md'),
-      });
-
-      if (!resolverResult.success) {
-        throw new Error(`conflict-resolver failed while resolving PR #${prNumber} merge conflicts`);
-      }
-
-      if (!resolverResult.outputExists) {
-        throw new Error('conflict-resolver completed without producing merge conflict report output');
-      }
-
-      await git.add(['-A']);
-      await git.raw(['commit', '--no-edit']);
-    }
-
-    await ctx.io.commitManager.push(true, ctx.worktree.branch);
-  }
-
-  private async resolveCheckOrPolicyBlock(
-    ctx: PhaseContext,
-    reason: MergeBlockReason,
-    details: string,
-  ): Promise<void> {
-    const feedbackPath = join(ctx.io.progressDir, 'merge-blocker-feedback.txt');
-    await writeFile(
-      feedbackPath,
-      `PR merge blocked: ${reason}\n\n${details}\n`,
-      'utf-8',
-    );
-
-    const changedFiles = await ctx.io.commitManager.getChangedFiles();
-    const contextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
-      issueNumber: ctx.issue.number,
-      worktreePath: ctx.worktree.path,
-      sessionId: `merge-block-${reason}`,
-      feedbackPath,
-      changedFiles: changedFiles.map((f) => join(ctx.worktree.path, f)),
-      progressDir: ctx.io.progressDir,
-      issueType: 'test-failure',
-      phase: 5,
-    });
-
-    const fixResult = await launchWithRetry(ctx, 'fix-surgeon', {
-      agent: 'fix-surgeon',
-      issueNumber: ctx.issue.number,
-      phase: 5,
-      contextPath,
-      outputPath: ctx.worktree.path,
-    });
-
-    if (!fixResult.success) {
-      throw new Error(`fix-surgeon failed while resolving merge blocker (${reason})`);
-    }
-
-    if (!(await ctx.io.commitManager.isClean())) {
-      await ctx.io.commitManager.commit('address merge blocker', ctx.issue.number, 'fix');
-      await ctx.io.commitManager.push(true, ctx.worktree.branch);
+      await git.fetch('origin', ctx.config.baseBranch);
+      await git.rebase([`origin/${ctx.config.baseBranch}`]);
+      ctx.services.logger.info(
+        `Rebased onto origin/${ctx.config.baseBranch} before push`,
+        { issueNumber: ctx.issue.number },
+      );
+    } catch (err) {
+      // Abort the failed rebase so the worktree is back to a clean state.
+      await git.rebase(['--abort']).catch(() => {});
+      ctx.services.logger.warn(
+        `Rebase onto origin/${ctx.config.baseBranch} failed; pushing as-is: ${String(err)}`,
+        { issueNumber: ctx.issue.number },
+      );
     }
   }
 

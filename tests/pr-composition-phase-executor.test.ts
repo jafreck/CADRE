@@ -11,6 +11,7 @@ vi.mock('node:fs/promises', () => ({
 const mockGit = {
   fetch: vi.fn().mockResolvedValue(undefined),
   merge: vi.fn().mockResolvedValue(undefined),
+  rebase: vi.fn().mockResolvedValue(undefined),
   raw: vi.fn().mockResolvedValue(''),
   add: vi.fn().mockResolvedValue(undefined),
 };
@@ -376,7 +377,7 @@ describe('PRCompositionPhaseExecutor', () => {
       ).not.toHaveBeenCalled();
     });
 
-    it('should auto-complete PR with squash merge when pullRequest.autoComplete is true', async () => {
+    it('should create PR without inline merge when pullRequest.autoComplete is true (merge is deferred to completion queue)', async () => {
       const prInfo = { number: 101, url: 'https://github.com/owner/repo/pull/101', title: 'Fix' };
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
@@ -397,29 +398,19 @@ describe('PRCompositionPhaseExecutor', () => {
 
       await executor.execute(ctx);
 
-      expect(platform.mergePullRequest).toHaveBeenCalledWith(101, 'main', 'squash');
+      expect(platform.createPullRequest).toHaveBeenCalled();
+      expect(platform.mergePullRequest).not.toHaveBeenCalled();
     });
 
-    it('should auto-resolve dirty merge blockers and retry auto-complete', { timeout: 20_000 }, async () => {
+    it('should create PR without inline merge even when autoComplete is true (merge deferred to queue)', async () => {
       const prInfo = { number: 105, url: 'https://github.com/owner/repo/pull/105', title: 'Fix' };
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         createPullRequest: vi.fn().mockResolvedValue(prInfo),
         updatePullRequest: vi.fn().mockResolvedValue(undefined),
         findOpenPR: vi.fn().mockResolvedValue(null),
-        mergePullRequest: vi
-          .fn()
-          .mockRejectedValueOnce(new Error('PR #105 has merge conflicts (mergeable_state=dirty)'))
-          .mockResolvedValueOnce(undefined),
+        mergePullRequest: vi.fn().mockResolvedValue(undefined),
       };
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.merge.mockRejectedValueOnce(new Error('conflict'));
-      mockGit.raw.mockImplementation(async (args: string[]) => {
-        if (args.join(' ').includes('--diff-filter=U')) {
-          return 'packages/api/tests/index.test.ts\n';
-        }
-        return '';
-      });
 
       const ctx = makeAutoCreateCtx({
         config: {
@@ -433,30 +424,18 @@ describe('PRCompositionPhaseExecutor', () => {
 
       await executor.execute(ctx);
 
-      expect(platform.mergePullRequest).toHaveBeenCalledTimes(2);
-      expect(
-        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
-      ).toHaveBeenCalledWith(
-        'conflict-resolver',
-        expect.objectContaining({
-          issueNumber: 42,
-          conflictedFiles: ['packages/api/tests/index.test.ts'],
-        }),
-      );
-      expect(mockGit.add).toHaveBeenCalledWith(['-A']);
+      expect(platform.createPullRequest).toHaveBeenCalled();
+      expect(platform.mergePullRequest).not.toHaveBeenCalled();
     });
 
-    it('should auto-resolve failed checks with fix-surgeon and retry auto-complete', { timeout: 20_000 }, async () => {
+    it('should rebase onto base branch before pushing (Fix 1)', async () => {
       const prInfo = { number: 106, url: 'https://github.com/owner/repo/pull/106', title: 'Fix' };
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
         createPullRequest: vi.fn().mockResolvedValue(prInfo),
         updatePullRequest: vi.fn().mockResolvedValue(undefined),
         findOpenPR: vi.fn().mockResolvedValue(null),
-        mergePullRequest: vi
-          .fn()
-          .mockRejectedValueOnce(new Error('PR #106 checks failed: build'))
-          .mockResolvedValueOnce(undefined),
+        mergePullRequest: vi.fn().mockResolvedValue(undefined),
       };
 
       const ctx = makeAutoCreateCtx({
@@ -469,29 +448,10 @@ describe('PRCompositionPhaseExecutor', () => {
         platform: platform as never,
       });
 
-      const commitManager = ctx.io.commitManager as never as {
-        getChangedFiles: ReturnType<typeof vi.fn>;
-        isClean: ReturnType<typeof vi.fn>;
-        commit: ReturnType<typeof vi.fn>;
-        push: ReturnType<typeof vi.fn>;
-      };
-      commitManager.getChangedFiles.mockResolvedValue(['packages/api/src/index.ts']);
-      commitManager.isClean.mockResolvedValue(false);
-
       await executor.execute(ctx);
 
-      expect(platform.mergePullRequest).toHaveBeenCalledTimes(2);
-      expect(
-        (ctx.services.contextBuilder as never as { build: ReturnType<typeof vi.fn> }).build,
-      ).toHaveBeenCalledWith(
-        'fix-surgeon',
-        expect.objectContaining({
-          sessionId: 'merge-block-checks-failed',
-          issueType: 'test-failure',
-          phase: 5,
-        }),
-      );
-      expect(commitManager.commit).toHaveBeenCalledWith('address merge blocker', 42, 'fix');
+      expect(mockGit.fetch).toHaveBeenCalledWith('origin', 'main');
+      expect(mockGit.rebase).toHaveBeenCalledWith(['origin/main']);
     });
 
     it('should not auto-complete PR when pullRequest.autoComplete is false', async () => {
@@ -518,7 +478,7 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(platform.mergePullRequest).not.toHaveBeenCalled();
     });
 
-    it('should use configured autoComplete.merge_method when autoComplete is an object', async () => {
+    it('should create PR regardless of autoComplete config without inline merge', async () => {
       const prInfo = { number: 103, url: 'https://github.com/owner/repo/pull/103', title: 'Fix' };
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
@@ -546,10 +506,11 @@ describe('PRCompositionPhaseExecutor', () => {
 
       await executor.execute(ctx);
 
-      expect(platform.mergePullRequest).toHaveBeenCalledWith(103, 'main', 'rebase');
+      expect(platform.createPullRequest).toHaveBeenCalled();
+      expect(platform.mergePullRequest).not.toHaveBeenCalled();
     });
 
-    it('should not auto-complete when autoComplete object omits enabled', async () => {
+    it('should create PR when autoComplete is false without merging', async () => {
       const prInfo = { number: 104, url: 'https://github.com/owner/repo/pull/104', title: 'Fix' };
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
@@ -563,7 +524,7 @@ describe('PRCompositionPhaseExecutor', () => {
           options: { maxRetriesPerTask: 3 },
           pullRequest: {
             autoCreate: true,
-            autoComplete: { merge_method: 'squash' },
+            autoComplete: false,
             linkIssue: false,
             draft: false,
             labels: [],
@@ -577,6 +538,7 @@ describe('PRCompositionPhaseExecutor', () => {
 
       await executor.execute(ctx);
 
+      expect(platform.createPullRequest).toHaveBeenCalled();
       expect(platform.mergePullRequest).not.toHaveBeenCalled();
     });
 

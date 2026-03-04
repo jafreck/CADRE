@@ -83,7 +83,7 @@ export class FleetOrchestrator {
       this.logger,
       this.config.baseBranch,
       autoComplete.mergeMethod,
-      this.config.options.resume && autoComplete.enabled,
+      autoComplete.enabled,  // Fix 2: Always enabled when auto-complete is on, not just on resume.
       (dependencyIssueNumber) => {
         const status = this.fleetCheckpoint.getIssueStatus(dependencyIssueNumber)?.status;
         return status === 'completed';
@@ -277,6 +277,10 @@ export class FleetOrchestrator {
    * agent, commit, and push.
    */
   private buildCompletionQueueConflictResolver(): MergeConflictResolverFn {
+    /** Cadre artifact path patterns used to detect cadre-only conflicts. */
+    const cadreArtifactPatterns = ['.cadre/', 'task-', '.github/agents/', '.claude/agents/'];
+    const isCadreArtifact = (f: string) => cadreArtifactPatterns.some((p) => f.includes(p));
+
     return async (item, errorDetails) => {
       const worktreePath = this.worktreeManager.getWorktreePath(item.issueNumber);
       const progressDir = join(this.cadreDir, 'issues', String(item.issueNumber));
@@ -297,43 +301,67 @@ export class FleetOrchestrator {
           return false;
         }
 
-        const conflictDetailsPath = join(progressDir, 'merge-conflict-details.txt');
-        await writeFile(conflictDetailsPath, errorDetails, 'utf-8');
-
-        const contextPath = await this.contextBuilder.build('conflict-resolver', {
-          issueNumber: item.issueNumber,
-          worktreePath,
-          conflictedFiles,
-          progressDir,
-        });
-
-        const resolverResult = await this.launcher.launchAgent(
-          {
-            agent: 'conflict-resolver',
-            issueNumber: item.issueNumber,
-            phase: 5,
-            contextPath,
-            outputPath: join(progressDir, 'merge-conflict-resolution-report.md'),
-          },
-          worktreePath,
-        );
-
-        if (!resolverResult.success) {
-          this.logger.warn(
-            `conflict-resolver failed for existing PR #${item.prNumber}`,
+        // Fix 3: If all conflicts are cadre artifacts, auto-resolve without an agent.
+        const realConflicts = conflictedFiles.filter((f) => !isCadreArtifact(f));
+        if (realConflicts.length === 0) {
+          this.logger.info(
+            `All ${conflictedFiles.length} conflicted file(s) for PR #${item.prNumber} are cadre artifacts — auto-resolving`,
             { issueNumber: item.issueNumber },
           );
-          return false;
-        }
+          for (const f of conflictedFiles) {
+            await git.raw(['checkout', '--theirs', f]).catch(() => {});
+          }
+          await git.add(['-A']);
+          await git.raw(['commit', '--no-edit']);
+        } else {
+          const conflictDetailsPath = join(progressDir, 'merge-conflict-details.txt');
+          await writeFile(conflictDetailsPath, errorDetails, 'utf-8');
 
-        await git.add(['-A']);
-        await git.raw(['commit', '--no-edit']);
+          const contextPath = await this.contextBuilder.build('conflict-resolver', {
+            issueNumber: item.issueNumber,
+            worktreePath,
+            conflictedFiles,
+            progressDir,
+          });
+
+          const resolverResult = await this.launcher.launchAgent(
+            {
+              agent: 'conflict-resolver',
+              issueNumber: item.issueNumber,
+              phase: 5,
+              contextPath,
+              outputPath: join(progressDir, 'merge-conflict-resolution-report.md'),
+            },
+            worktreePath,
+          );
+
+          if (!resolverResult.success) {
+            this.logger.warn(
+              `conflict-resolver failed for PR #${item.prNumber}`,
+              { issueNumber: item.issueNumber },
+            );
+            return false;
+          }
+
+          // Fix 4: Check actual conflict state, not output file.
+          const remaining = await this.getConflictedFiles(git);
+          if (remaining.length > 0) {
+            this.logger.warn(
+              `conflict-resolver left ${remaining.length} unresolved file(s) for PR #${item.prNumber}`,
+              { issueNumber: item.issueNumber },
+            );
+            return false;
+          }
+
+          await git.add(['-A']);
+          await git.raw(['commit', '--no-edit']);
+        }
       }
 
       // Push the resolved merge
       await git.push('origin', item.branch, ['--force-with-lease']);
       this.logger.info(
-        `Resolved merge conflicts for existing PR #${item.prNumber} and pushed`,
+        `Resolved merge conflicts for PR #${item.prNumber} and pushed`,
         { issueNumber: item.issueNumber },
       );
       return true;
@@ -624,6 +652,21 @@ export class FleetOrchestrator {
         issue.title,
         result.error,
       );
+
+      // Fix 2: Enqueue newly-created PRs into the serial completion queue.
+      // Previously each issue merged inline during Phase 5, causing parallel
+      // merge races.  Now all merges go through the completion queue which
+      // processes them serially in DAG order.
+      if (result.pr?.number != null && result.success) {
+        this.prCompletionQueue.enqueue({
+          issueNumber: issue.number,
+          issueTitle: issue.title,
+          prNumber: result.pr.number,
+          prUrl: result.pr.url,
+          branch: worktree.branch,
+          dependencyIssueNumbers: dag ? dag.getDirectDeps(issue.number) : [],
+        });
+      }
 
       // 8. Record token usage
       if (result.tokenUsage !== null) {

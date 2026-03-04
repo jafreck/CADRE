@@ -215,8 +215,7 @@ describe('CommitManager', () => {
   });
 
   describe('stripCadreFiles', () => {
-    it('should hard-reset to base, cherry-pick each commit, strip cadre files, and recommit with original metadata', async () => {
-      // First raw call is git log; subsequent are cherry-pick, restores, commit -C
+    it('should soft-reset to base, strip cadre files, and create a single squash commit', async () => {
       mockGit.raw
         .mockResolvedValueOnce('deadbeef\n') // git log --format=%H --reverse
         .mockResolvedValue('');              // all subsequent raw calls
@@ -229,15 +228,10 @@ describe('CommitManager', () => {
 
       await manager.stripCadreFiles('base123');
 
-      expect(mockGit.reset).toHaveBeenCalledWith(['--hard', 'base123']);
+      // Fix 7: uses soft reset (squash approach) instead of hard reset
+      expect(mockGit.reset).toHaveBeenCalledWith(['--soft', 'base123']);
 
       const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
-      const cherryPickCall = rawCalls.find(
-        ([args]) => args.includes('cherry-pick') && args.includes('--no-commit'),
-      );
-      expect(cherryPickCall).toBeDefined();
-      expect(cherryPickCall![0]).toContain('deadbeef');
-
       const commitCall = rawCalls.find(
         ([args]) => args[0] === 'commit' && args.includes('-C'),
       );
@@ -266,7 +260,6 @@ describe('CommitManager', () => {
 
       await managerWithAgents.stripCadreFiles('base123');
 
-      // Each pattern is its own restore call — collect all patterns from --staged calls.
       const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
       const allPatterns: string[] = rawCalls
         .filter(([args]) => args.includes('restore') && args.includes('--staged'))
@@ -274,70 +267,11 @@ describe('CommitManager', () => {
       expect(allPatterns).toContain('.github/agents/code-writer.agent.md');
     });
 
-    it('should not strip .github/agents changes absent from syncedAgentFiles', async () => {
-      // Manager has no syncedAgentFiles — tracked agent files should not be touched
-      mockGit.raw
-        .mockResolvedValueOnce('deadbeef\n') // git log
-        .mockResolvedValue('');              // all subsequent raw calls
-
-      mockGit.status.mockResolvedValue({
-        isClean: () => false,
-        staged: ['.github/agents/some.agent.md'],
-        files: [{ path: '.github/agents/some.agent.md' }],
-      });
-
-      await manager.stripCadreFiles('base123');
-
-      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
-      const allPatterns: string[] = rawCalls
-        .filter(([args]) => args.includes('restore') && args.includes('--staged'))
-        .flatMap(([args]) => args.slice(args.indexOf('--') + 1));
-
-      // The tracked agent file path is not in syncedAgentFiles — must not be restored
-      expect(allPatterns).not.toContain('.github/agents/some.agent.md');
-      // Commit -C should have been called because stages remain
-      const commitCall = rawCalls.find(([args]) => args[0] === 'commit' && args.includes('-C'));
-      expect(commitCall).toBeDefined();
-    });
-
-    it('should strip only paths listed in syncedAgentFiles', async () => {
-      const agentFiles = ['.github/agents/synced.agent.md'];
-      const managerWithAgents = new CommitManager(
-        '/tmp/worktree',
-        { conventional: false, sign: false, commitPerPhase: false, squashBeforePR: false } as CadreConfig['commits'],
-        mockLogger,
-        agentFiles,
-      );
-
+    it('should drop all commits when everything is cadre-only after stripping', async () => {
       mockGit.raw
         .mockResolvedValueOnce('deadbeef\n')
         .mockResolvedValue('');
 
-      mockGit.status.mockResolvedValue({
-        isClean: () => false,
-        staged: ['src/index.ts'],
-        files: [{ path: 'src/index.ts' }],
-      });
-
-      await managerWithAgents.stripCadreFiles('base123');
-
-      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
-      const allPatterns: string[] = rawCalls
-        .filter(([args]) => args.includes('restore') && args.includes('--staged'))
-        .flatMap(([args]) => args.slice(args.indexOf('--') + 1));
-
-      // Only the explicitly listed path should be restored
-      expect(allPatterns).toContain('.github/agents/synced.agent.md');
-      // An unrelated tracked agent file must NOT be included
-      expect(allPatterns).not.toContain('.github/agents/other.agent.md');
-    });
-
-    it('should drop a cadre-only commit and not call commit -C for it', async () => {
-      mockGit.raw
-        .mockResolvedValueOnce('deadbeef\n')
-        .mockResolvedValue('');
-
-      // Nothing staged after stripping — commit was cadre-only
       mockGit.status.mockResolvedValue({
         isClean: () => true,
         staged: [],
@@ -346,17 +280,7 @@ describe('CommitManager', () => {
 
       await manager.stripCadreFiles('base123');
 
-      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
-      const commitCall = rawCalls.find(
-        ([args]) => args[0] === 'commit' && args.includes('-C'),
-      );
-      expect(commitCall).toBeUndefined();
-
-      // Should have called cherry-pick --quit to clean up CHERRY_PICK_HEAD
-      const quitCall = rawCalls.find(
-        ([args]) => args.includes('cherry-pick') && args.includes('--quit'),
-      );
-      expect(quitCall).toBeDefined();
+      expect(mockGit.reset).toHaveBeenCalledWith(['--hard', 'base123']);
     });
 
     it('should return early without resetting when there are no commits to rewrite', async () => {
@@ -367,10 +291,9 @@ describe('CommitManager', () => {
       expect(mockGit.reset).not.toHaveBeenCalled();
     });
 
-    it('should not throw when cherry-pick or restore fail', async () => {
+    it('should use last commit sha for commit -C in squash mode', async () => {
       mockGit.raw
-        .mockResolvedValueOnce('deadbeef\n')
-        .mockRejectedValueOnce(new Error('cherry-pick conflict')) // cherry-pick
+        .mockResolvedValueOnce('aaa111\nbbb222\nccc333\n')
         .mockResolvedValue('');
 
       mockGit.status.mockResolvedValue({
@@ -379,48 +302,14 @@ describe('CommitManager', () => {
         files: [{ path: 'src/index.ts' }],
       });
 
-      await expect(manager.stripCadreFiles('base123')).resolves.toBeUndefined();
-    });
+      await manager.stripCadreFiles('base123');
 
-    it('should call resolveConflicts callback when strip replay detects unmerged files', async () => {
-      mockGit.raw
-        .mockResolvedValueOnce('deadbeef\n')
-        .mockResolvedValue('');
-
-      mockGit.status
-        .mockResolvedValueOnce({
-          isClean: () => false,
-          staged: ['src/index.ts'],
-          conflicted: ['package-lock.json'],
-          files: [{ path: 'package-lock.json', index: 'U', working_dir: 'U' }],
-        })
-        .mockResolvedValueOnce({
-          isClean: () => false,
-          staged: ['src/index.ts'],
-          conflicted: [],
-          files: [{ path: 'src/index.ts' }],
-        });
-
-      const resolveConflicts = vi.fn().mockResolvedValue(undefined);
-
-      await manager.stripCadreFiles('base123', resolveConflicts);
-
-      expect(resolveConflicts).toHaveBeenCalledWith(['package-lock.json'], 'deadbeef');
-    });
-
-    it('should throw when unmerged files exist and no resolver callback is provided', async () => {
-      mockGit.raw
-        .mockResolvedValueOnce('deadbeef\n')
-        .mockResolvedValue('');
-
-      mockGit.status.mockResolvedValue({
-        isClean: () => false,
-        staged: ['src/index.ts'],
-        conflicted: ['package-lock.json'],
-        files: [{ path: 'package-lock.json', index: 'U', working_dir: 'U' }],
-      });
-
-      await expect(manager.stripCadreFiles('base123')).rejects.toThrow(/unresolved merge conflicts/);
+      const rawCalls = (mockGit.raw as ReturnType<typeof vi.fn>).mock.calls as string[][][];
+      const commitCall = rawCalls.find(
+        ([args]) => args[0] === 'commit' && args.includes('-C'),
+      );
+      expect(commitCall).toBeDefined();
+      expect(commitCall![0]).toContain('ccc333');
     });
   });
 

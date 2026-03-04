@@ -211,6 +211,22 @@ export class GitHubProvider implements PlatformProvider {
     });
   }
 
+  async updatePullRequestBranch(prNumber: number): Promise<boolean> {
+    const oct = this.octokit ?? new Octokit({ auth: process.env.GITHUB_TOKEN });
+    try {
+      await oct.rest.pulls.updateBranch({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+      });
+      this.logger.info(`Queued server-side branch update for PR #${prNumber}`);
+      return true;
+    } catch (err) {
+      this.logger.warn(`Could not update PR #${prNumber} branch from base: ${String(err)}`);
+      return false;
+    }
+  }
+
   // ── Labels ──
 
   async ensureLabel(labelName: string, color?: string): Promise<void> {
