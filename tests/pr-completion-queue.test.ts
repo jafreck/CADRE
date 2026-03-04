@@ -35,7 +35,7 @@ describe('PullRequestCompletionQueue', () => {
     } as unknown as Logger;
 
     mergePullRequest = vi.fn().mockResolvedValue(undefined);
-    platform = { mergePullRequest } as unknown as PlatformProvider;
+    platform = { mergePullRequest, updatePullRequestBranch: vi.fn().mockResolvedValue(false) } as unknown as PlatformProvider;
   });
 
   it('skips enqueue and drain work when disabled', async () => {
@@ -189,7 +189,7 @@ describe('PullRequestCompletionQueue', () => {
       }),
     ]);
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Auto-complete failed for existing PR #501'),
+      expect.stringContaining('Auto-complete failed for PR #501'),
       expect.any(Object),
     );
     expect(logger.warn).toHaveBeenCalledWith(
@@ -217,7 +217,7 @@ describe('PullRequestCompletionQueue', () => {
         true,
         vi.fn().mockResolvedValue(true),
         conflictResolver,
-        0,
+        0, 0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 60, prNumber: 601 }));
@@ -246,7 +246,7 @@ describe('PullRequestCompletionQueue', () => {
         true,
         vi.fn().mockResolvedValue(true),
         conflictResolver,
-        0,
+        0, 0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 70, prNumber: 701 }));
@@ -276,7 +276,7 @@ describe('PullRequestCompletionQueue', () => {
         true,
         vi.fn().mockResolvedValue(true),
         conflictResolver,
-        0,
+        0, 0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 80, prNumber: 801 }));
@@ -304,7 +304,7 @@ describe('PullRequestCompletionQueue', () => {
         true,
         vi.fn().mockResolvedValue(true),
         conflictResolver,
-        0,
+        0, 0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 90, prNumber: 901 }));

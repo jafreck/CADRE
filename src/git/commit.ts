@@ -149,22 +149,27 @@ export class CommitManager {
   }
 
   /**
-   * Replay every commit between `baseCommit` and HEAD, removing cadre-internal
-   * artifact files from each one, while preserving the original commit message,
-   * author, and timestamps.
+   * Remove cadre-internal artifact files from all commits between `baseCommit` and HEAD.
    *
-   * Algorithm per commit:
-   *   1. `cherry-pick --no-commit <sha>` — stage that commit's diff without advancing HEAD.
-   *   2. `restore --staged` + `restore` — drop cadre artefacts from index and working tree.
-   *   3a. If nothing remains staged the commit consisted purely of cadre files — drop it.
-   *   3b. Otherwise `commit -C <sha>` — create a new commit reusing the original
-   *       author name, email, date, and message verbatim.
+   * Uses a single-diff squash approach rather than per-commit cherry-pick replay.
+   * This eliminates the class of sequential replay conflicts that occur when
+   * cadre artifacts are interleaved across multiple commits touching the same files.
    *
-   * This preserves individual commit granularity in the PR, unlike a squash approach.
+   * Algorithm:
+   *   1. Compute the full diff `baseCommit..HEAD`.
+   *   2. Soft-reset to `baseCommit` (keeps all changes staged).
+   *   3. Unstage cadre artifact files from the index.
+   *   4. Remove cadre artifacts from the working tree.
+   *   5. Create a single commit with the remaining changes, using the last
+   *      commit's message.
+   *
+   * Trade-off: individual commit granularity is lost, but since these PRs are
+   * squash-merged anyway the individual commits don't survive.  The benefit is
+   * zero cherry-pick conflicts.
    */
   async stripCadreFiles(
     baseCommit: string,
-    resolveConflicts?: (conflictedFiles: string[], commitSha: string) => Promise<void>,
+    _resolveConflicts?: (conflictedFiles: string[], commitSha: string) => Promise<void>,
   ): Promise<void> {
     const logOutput = (
       await this.git.raw(['log', '--format=%H', '--reverse', `${baseCommit}..HEAD`])
@@ -176,63 +181,37 @@ export class CommitManager {
     }
 
     const shas = logOutput.split('\n').filter(Boolean);
+    const lastSha = shas[shas.length - 1];
     const cadrePatterns = ['.cadre/', 'task-*.md', ...this.syncedAgentFiles];
 
-    // Hard-reset to the branch point; commits will be replayed one by one.
-    await this.git.reset(['--hard', baseCommit]);
+    // Soft-reset to the branch point — all file changes remain staged.
+    await this.git.reset(['--soft', baseCommit]);
 
-    let rewritten = 0;
-    let dropped = 0;
-
-    for (const sha of shas) {
-      // Stage this commit's diff without advancing HEAD.
-      // Ignore exit code: conflicts are acceptable since we remove the offending files next.
-      await this.git.raw(['cherry-pick', '--no-commit', sha]).catch(() => {});
-
-      // Remove cadre artefacts from index and working tree.
-      // Run each pattern individually — a pathspec miss on one (e.g. no
-      // task-*.md files in this commit) must not abort the whole restore.
-      for (const pattern of cadrePatterns) {
-        await this.git.raw(['restore', '--staged', '--', pattern]).catch(() => {});
-        await this.git.raw(['restore', '--', pattern]).catch(() => {});
-      }
-
-      let status = await this.git.status();
-      const conflictedFiles = this.getConflictedFiles(status);
-      if (conflictedFiles.length > 0) {
-        if (!resolveConflicts) {
-          throw new Error(
-            `stripCadreFiles encountered unresolved merge conflicts while replaying ${sha.slice(0, 8)}: ${conflictedFiles.join(', ')}`,
-          );
-        }
-
-        await resolveConflicts(conflictedFiles, sha);
-        status = await this.git.status();
-        const remainingConflicts = this.getConflictedFiles(status);
-        if (remainingConflicts.length > 0) {
-          throw new Error(
-            `stripCadreFiles conflict resolution incomplete for ${sha.slice(0, 8)}: ${remainingConflicts.join(', ')}`,
-          );
-        }
-      }
-
-      if (status.staged.length === 0) {
-        // Commit consisted entirely of cadre files — drop it and clean up.
-        await this.git.reset(['--hard', 'HEAD']).catch(() => {});
-        // --quit removes CHERRY_PICK_HEAD without reverting index/working tree.
-        await this.git.raw(['cherry-pick', '--quit']).catch(() => {});
-        dropped++;
-        this.logger.debug(`stripCadreFiles: dropped cadre-only commit ${sha.slice(0, 8)}`);
-        continue;
-      }
-
-      // -C reuses the original commit's author name, email, timestamp, and message.
-      await this.git.raw(['commit', '-C', sha]);
-      rewritten++;
+    // Unstage and remove cadre artifact files.
+    for (const pattern of cadrePatterns) {
+      await this.git.raw(['restore', '--staged', '--', pattern]).catch(() => {});
+      await this.git.raw(['checkout', 'HEAD', '--', pattern]).catch(() => {});
+    }
+    // Also clean up any untracked cadre files from the working tree.
+    for (const pattern of cadrePatterns) {
+      await this.git.raw(['clean', '-fd', '--', pattern]).catch(() => {});
     }
 
+    const status = await this.git.status();
+    if (status.staged.length === 0) {
+      // All changes were cadre-only — hard-reset back to base.
+      await this.git.reset(['--hard', baseCommit]);
+      this.logger.info(
+        `stripCadreFiles: all ${shas.length} commit(s) were cadre-only — dropped`,
+      );
+      return;
+    }
+
+    // Create a single commit reusing the last original commit's metadata.
+    await this.git.raw(['commit', '-C', lastSha]);
+
     this.logger.info(
-      `stripCadreFiles: rewrote ${rewritten} commit(s), dropped ${dropped} cadre-only commit(s)`,
+      `stripCadreFiles: squashed ${shas.length} commit(s) into 1, stripping cadre artifacts`,
     );
   }
 

@@ -191,6 +191,14 @@ export interface PlatformProvider {
   /** Merge a pull request into the given base branch. */
   mergePullRequest(prNumber: number, baseBranch: string, mergeMethod?: PullRequestMergeMethod): Promise<void>;
 
+  /**
+   * Request a server-side branch update for a pull request.
+   * On GitHub this calls `pulls.updateBranch` which creates a merge commit
+   * bringing the PR branch up-to-date with the base branch.
+   * Returns true if the update was accepted, false if not supported or unnecessary.
+   */
+  updatePullRequestBranch(prNumber: number): Promise<boolean>;
+
   // ── Issue Linking ──
 
   /**

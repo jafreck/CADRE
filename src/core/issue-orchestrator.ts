@@ -422,46 +422,9 @@ export class IssueOrchestrator {
   // ── Helper Methods ──
 
   private async stripCadreFilesAfterIntegration(): Promise<void> {
-    await this.commitManager.stripCadreFiles(
-      this.worktree.baseCommit,
-      async (conflictedFiles: string[], commitSha: string) => {
-        this.logger.warn(
-          `stripCadreFiles encountered merge conflicts while replaying ${commitSha.slice(0, 8)}; launching conflict-resolver`,
-          {
-            issueNumber: this.issue.number,
-            data: { conflictedFiles },
-          },
-        );
-
-        const contextPath = await this.contextBuilder.build('conflict-resolver', {
-          issueNumber: this.issue.number,
-          worktreePath: this.worktree.path,
-          conflictedFiles,
-          progressDir: this.progressDir,
-        });
-
-        const resolverResult = await launchWithRetry(this.ctx, 'conflict-resolver', {
-          agent: 'conflict-resolver',
-          issueNumber: this.issue.number,
-          phase: 4,
-          contextPath,
-          outputPath: join(this.progressDir, 'conflict-resolution-report.md'),
-        });
-
-        if (!resolverResult.success) {
-          const detail = resolverResult.timedOut
-            ? `timed out after ${resolverResult.duration}ms`
-            : `exit ${resolverResult.exitCode}`;
-          throw new Error(`Conflict-resolver agent failed during phase 4 strip (${detail})`);
-        }
-
-        if (!resolverResult.outputExists) {
-          throw new Error(
-            `Conflict-resolver agent exited successfully but produced no output at ${resolverResult.outputPath}`,
-          );
-        }
-      },
-    );
+    // Fix 7: stripCadreFiles now uses a squash approach that doesn't produce
+    // cherry-pick conflicts, so no conflict resolver callback is needed.
+    await this.commitManager.stripCadreFiles(this.worktree.baseCommit);
   }
 
   private async commitPhase(phase: PhaseDefinition): Promise<void> {
