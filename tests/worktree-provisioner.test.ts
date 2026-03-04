@@ -238,9 +238,12 @@ describe('WorktreeProvisioner', () => {
       expect(result.exists).toBe(true);
     });
 
-    it('throws RemoteBranchMissingError when resume=true and remote branch is absent', async () => {
+    it('falls through to fresh provisioning when resume=true and remote branch is absent', async () => {
       (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
-      await expect(provisioner.provision(42, 'my issue', true)).rejects.toThrow(RemoteBranchMissingError);
+      const result = await provisioner.provision(42, 'my issue', true);
+      expect(result.issueNumber).toBe(42);
+      expect(result.exists).toBe(true);
+      expect(result.branch).toBe('cadre/issue-42');
     });
 
     it('fetches and creates worktree when resume=true and remote branch exists', async () => {
