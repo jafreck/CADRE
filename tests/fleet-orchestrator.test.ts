@@ -1657,6 +1657,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
       load: vi.fn().mockResolvedValue(undefined),
       isIssueCompleted: vi.fn().mockReturnValue(false),
       setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      clearIssueStatus: vi.fn().mockResolvedValue(undefined),
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
       getIssueStatus: vi.fn().mockReturnValue(null),
       setDag: vi.fn().mockResolvedValue(undefined),
@@ -2420,6 +2421,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
       load: vi.fn().mockResolvedValue(undefined),
       isIssueCompleted: vi.fn().mockReturnValue(false),
       setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      clearIssueStatus: vi.fn().mockResolvedValue(undefined),
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
       getIssueStatus: vi.fn().mockReturnValue(null),
       setDag: vi.fn().mockResolvedValue(undefined),
@@ -2622,16 +2624,34 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     expect(reconcileLogCalls).toHaveLength(0);
   });
 
-  it('skips dep-blocked issues in reconciliation (no branch to check)', async () => {
+  it('clears dep-blocked issues when all dependencies are now completed', async () => {
     const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const clearIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const isIssueCompleted = vi.fn().mockImplementation((num: number) => num === 16);
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
       setIssueStatus,
+      clearIssueStatus,
+      isIssueCompleted,
       getAllIssueStatuses: vi.fn().mockReturnValue([
+        [16, { status: 'completed', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
         [17, { status: 'dep-blocked', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 17' }],
       ]),
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 17,
+        issueTitle: 'Issue 17',
+        success: true,
+        codeComplete: false,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 500,
+      }),
+    }));
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -2662,13 +2682,175 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     const issue17 = makeIssue(17);
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
     const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
-
-    // listPullRequests should NOT be called for dep-blocked issues with no branch
     (platform as any).listPullRequests = vi.fn().mockResolvedValue([]);
 
+    // Provide dagDepMap so reconciliation knows issue 17 depends on 16
     const fleet = new FleetOrchestrator(
       config,
       [issue17],
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+      undefined, // no DAG object
+      { 17: [16] }, // dagDepMap
+    );
+
+    await fleet.run();
+
+    // Should have cleared the dep-blocked status for issue 17
+    expect(clearIssueStatus).toHaveBeenCalledWith(17);
+
+    // Should have logged the clearing
+    const clearLogCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('clearing dep-blocked'),
+    );
+    expect(clearLogCalls).toHaveLength(1);
+  });
+
+  it('does not clear dep-blocked when dependencies are still unresolved', async () => {
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
+    const clearIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const isIssueCompleted = vi.fn().mockReturnValue(false); // dep 16 NOT completed
+    const mockCheckpoint = makeMockFleetCheckpointForReconcile({
+      clearIssueStatus,
+      isIssueCompleted,
+      getAllIssueStatuses: vi.fn().mockReturnValue([
+        [16, { status: 'dep-merge-conflict', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
+        [17, { status: 'dep-blocked', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 17' }],
+      ]),
+    });
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+
+    const config = makeRuntimeConfig({
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [16, 17] },
+      commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+      pullRequest: { autoCreate: true, autoComplete: false, draft: true, labels: [], reviewers: [], linkIssue: true },
+      options: {
+        maxParallelIssues: 3,
+        maxParallelAgents: 3,
+        maxRetriesPerTask: 3,
+        dryRun: false,
+        resume: true,
+        invocationDelayMs: 0,
+        buildVerification: false,
+        testVerification: false,
+        perTaskBuildCheck: true,
+        maxBuildFixRounds: 2,
+        skipValidation: false,
+        maxIntegrationFixRounds: 1,
+        ambiguityThreshold: 5,
+        haltOnAmbiguity: false,
+        respondToReviews: false,
+        maxWholePrReviewRetries: 1,
+        postCostComment: false,
+      },
+    });
+
+    const issue16 = makeIssue(16);
+    const issue17 = makeIssue(17);
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+    (platform as any).listPullRequests = vi.fn().mockResolvedValue([]);
+    (platform as any).mergePullRequest = vi.fn().mockRejectedValue(new Error('merge conflict'));
+
+    const fleet = new FleetOrchestrator(
+      config,
+      [issue16, issue17],
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+      undefined,
+      { 17: [16] },
+    );
+
+    await fleet.run();
+
+    // dep-blocked should NOT have been cleared (dep 16 is still not completed)
+    expect(clearIssueStatus).not.toHaveBeenCalledWith(17);
+  });
+
+  it('retries merge for dep-merge-conflict issues with open PRs during reconciliation', async () => {
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
+    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const isIssueCompleted = vi.fn().mockReturnValue(false);
+    const mockCheckpoint = makeMockFleetCheckpointForReconcile({
+      setIssueStatus,
+      isIssueCompleted,
+      getAllIssueStatuses: vi.fn().mockReturnValue([
+        [16, { status: 'dep-merge-conflict', branchName: 'cadre/issue-16', worktreePath: '/tmp/wt/16', lastPhase: 5, issueTitle: 'Issue 16' }],
+      ]),
+    });
+    // After merge retry succeeds in Phase 2, isIssueCompleted should return true on re-check
+    isIssueCompleted.mockImplementation((num: number) => {
+      const calls = setIssueStatus.mock.calls;
+      return calls.some(([n, s]: [number, string]) => n === num && s === 'completed');
+    });
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 16,
+        issueTitle: 'Issue 16',
+        success: true,
+        codeComplete: false,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 500,
+      }),
+    }));
+
+    const config = makeRuntimeConfig({
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [16] },
+      commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+      pullRequest: { autoCreate: true, autoComplete: false, draft: true, labels: [], reviewers: [], linkIssue: true },
+      options: {
+        maxParallelIssues: 3,
+        maxParallelAgents: 3,
+        maxRetriesPerTask: 3,
+        dryRun: false,
+        resume: true,
+        invocationDelayMs: 0,
+        buildVerification: false,
+        testVerification: false,
+        perTaskBuildCheck: true,
+        maxBuildFixRounds: 2,
+        skipValidation: false,
+        maxIntegrationFixRounds: 1,
+        ambiguityThreshold: 5,
+        haltOnAmbiguity: false,
+        respondToReviews: false,
+        maxWholePrReviewRetries: 1,
+        postCostComment: false,
+      },
+    });
+
+    const issue16 = makeIssue(16);
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    // Phase 1: no merged PR found
+    // Phase 2: open PR found, merge succeeds
+    (platform as any).listPullRequests = vi.fn()
+      // Phase 1 call (state: 'all') — no merged PR
+      .mockResolvedValueOnce([
+        { number: 49, url: 'https://github.com/owner/repo/pull/49', title: 'PR 49', headBranch: 'cadre/issue-16', baseBranch: 'main', state: 'open' },
+      ])
+      // Phase 2 call (state: 'open') — open PR for merge retry
+      .mockResolvedValueOnce([
+        { number: 49, url: 'https://github.com/owner/repo/pull/49', title: 'PR 49', headBranch: 'cadre/issue-16', baseBranch: 'main', state: 'open' },
+      ]);
+    (platform as any).mergePullRequest = vi.fn().mockResolvedValue(undefined);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      [issue16],
       worktreeManager as any,
       launcher as any,
       platform as any,
@@ -2678,13 +2860,20 @@ describe('FleetOrchestrator — resume reconciliation', () => {
 
     await fleet.run();
 
-    // listPullRequests should not have been called during reconciliation
-    // (dep-blocked has no branch, and it's not in the reconcilable statuses set)
-    // Any calls would be from processIssue's merged-PR check, not from reconciliation
-    const reconcileLogCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls.filter(
-      ([msg]: [string]) => typeof msg === 'string' && msg.includes('Resume reconciliation: checking'),
+    // Should have attempted to merge the PR during reconciliation
+    expect((platform as any).mergePullRequest).toHaveBeenCalledWith(49, 'main', undefined);
+
+    // Should have promoted to completed
+    const promotionCall = setIssueStatus.mock.calls.find(
+      ([num, status]: [number, string]) => num === 16 && status === 'completed',
     );
-    expect(reconcileLogCalls).toHaveLength(0);
+    expect(promotionCall).toBeDefined();
+
+    // Should have logged the merge retry
+    const retryLogCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([msg]: [string]) => typeof msg === 'string' && msg.includes('retrying merge'),
+    );
+    expect(retryLogCalls).toHaveLength(1);
   });
 
   it('processIssue detects already-merged PRs and skips re-processing', async () => {

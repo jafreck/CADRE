@@ -558,6 +558,18 @@ export class FleetCheckpointManager {
     // resolved since the last run, so the scheduler must re-evaluate.
   }
 
+  /**
+   * Remove an issue's checkpoint entry entirely so it will be scheduled for
+   * fresh processing on the next run.  Used during reconciliation to clear
+   * transient failure states (e.g. dep-blocked) when their blockers have been
+   * resolved.
+   */
+  async clearIssueStatus(issueNumber: number): Promise<void> {
+    if (!this.state) throw new Error('Fleet checkpoint not loaded');
+    delete this.state.issues[issueNumber];
+    await this.save();
+  }
+
   private async save(): Promise<void> {
     if (!this.state) return;
     this.state.lastCheckpoint = new Date().toISOString();

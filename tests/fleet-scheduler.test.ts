@@ -225,7 +225,7 @@ describe('FleetScheduler', () => {
 
       const processIssue: ProcessIssueFn = vi.fn().mockResolvedValue({
         ...makeResult(1),
-        pr: { number: 10, url: 'https://github.com/pull/10', title: 'PR 10', branch: 'cadre/issue-1' },
+        pr: { number: 10, url: 'https://github.com/pull/10', title: 'PR 10', headBranch: 'cadre/issue-1', baseBranch: 'main', state: 'open' },
       });
       const markDepBlocked: MarkDepBlockedFn = vi.fn();
 
@@ -238,7 +238,7 @@ describe('FleetScheduler', () => {
       const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 
       expect(fleetCheckpoint.setIssueStatus).toHaveBeenCalledWith(
-        1, 'dep-merge-conflict', '', '', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
+        1, 'dep-merge-conflict', '', 'cadre/issue-1', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
       );
       expect(results).toHaveLength(1);
     });
@@ -335,9 +335,9 @@ describe('FleetScheduler', () => {
         // 3 attempts total (first + 2 retries)
         expect(platform.mergePullRequest).toHaveBeenCalledTimes(3);
         expect(platform.updatePullRequestBranch).toHaveBeenCalledTimes(2);
-        // Should record dep-merge-conflict
+        // Should record dep-merge-conflict (with preserved branchName)
         expect(fleetCheckpoint.setIssueStatus).toHaveBeenCalledWith(
-          1, 'dep-merge-conflict', '', '', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
+          1, 'dep-merge-conflict', '', 'cadre/issue-1', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
         );
       } finally {
         vi.useRealTimers();
