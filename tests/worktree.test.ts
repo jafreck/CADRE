@@ -248,10 +248,13 @@ describe('WorktreeManager', () => {
       expect(result.branch).toBe('cadre/issue-42');
     });
 
-    it('should throw RemoteBranchMissingError when resume=true and remote branch is absent', async () => {
+    it('should fall through to fresh provisioning when resume=true and remote branch is absent', async () => {
       vi.mocked(fsUtils.exists).mockResolvedValue(false);
       (mockGit.raw as ReturnType<typeof vi.fn>).mockResolvedValue('');
-      await expect(manager.provision(42, 'my issue', true)).rejects.toThrow(RemoteBranchMissingError);
+      const result = await manager.provision(42, 'my issue', true);
+      expect(result.issueNumber).toBe(42);
+      expect(result.exists).toBe(true);
+      expect(result.branch).toBe('cadre/issue-42');
     });
 
     it('should fetch and create worktree when resume=true and remote branch exists', async () => {
