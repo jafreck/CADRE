@@ -35,7 +35,11 @@ describe('PullRequestCompletionQueue', () => {
     } as unknown as Logger;
 
     mergePullRequest = vi.fn().mockResolvedValue(undefined);
-    platform = { mergePullRequest, updatePullRequestBranch: vi.fn().mockResolvedValue(false) } as unknown as PlatformProvider;
+    platform = {
+      mergePullRequest,
+      updatePullRequestBranch: vi.fn().mockResolvedValue(false),
+      getPullRequest: vi.fn().mockResolvedValue({ mergeableState: 'clean' }),
+    } as unknown as PlatformProvider;
   });
 
   it('skips enqueue and drain work when disabled', async () => {
