@@ -704,11 +704,11 @@ describe('FleetCheckpointManager', () => {
     expect(depBlocked.status).toBe('dep-blocked');
   });
 
-  it('isIssueCompleted should return true for dep-blocked status', async () => {
+  it('isIssueCompleted should return false for dep-blocked status (allows re-evaluation on resume)', async () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     await manager.load();
     await manager.setIssueStatus(50, 'dep-blocked', '/path', 'branch', 0, 'Dep blocked issue');
-    expect(manager.isIssueCompleted(50)).toBe(true);
+    expect(manager.isIssueCompleted(50)).toBe(false);
   });
 
   it('isIssueCompleted should return false for dep-failed status', async () => {
@@ -746,5 +746,25 @@ describe('FleetCheckpointManager', () => {
     await manager.markWaveComplete(0);
     await manager.markWaveComplete(0);
     expect(manager.getState().completedWaves).toEqual([0]);
+  });
+
+  it('getAllIssueStatuses returns all issue entries as [number, status] pairs', async () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    await manager.load();
+    await manager.setIssueStatus(1, 'completed', '/a', 'b1', 5, 'Issue 1');
+    await manager.setIssueStatus(2, 'dep-merge-conflict', '/c', 'b2', 0, 'Issue 2', 'conflict');
+    await manager.setIssueStatus(3, 'dep-blocked', '', '', 0, 'Issue 3');
+
+    const statuses = manager.getAllIssueStatuses();
+    expect(statuses).toHaveLength(3);
+    const statusMap = new Map(statuses);
+    expect(statusMap.get(1)?.status).toBe('completed');
+    expect(statusMap.get(2)?.status).toBe('dep-merge-conflict');
+    expect(statusMap.get(3)?.status).toBe('dep-blocked');
+  });
+
+  it('getAllIssueStatuses returns empty array before load', () => {
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    expect(manager.getAllIssueStatuses()).toEqual([]);
   });
 });

@@ -542,10 +542,20 @@ export class FleetCheckpointManager {
     return this.state?.issues[issueNumber];
   }
 
+  /** Return all issue statuses as [issueNumber, status] pairs. */
+  getAllIssueStatuses(): Array<[number, FleetIssueStatus]> {
+    if (!this.state) return [];
+    return Object.entries(this.state.issues).map(
+      ([num, status]) => [Number(num), status] as [number, FleetIssueStatus],
+    );
+  }
+
   isIssueCompleted(issueNumber: number): boolean {
     const status = this.state?.issues[issueNumber]?.status;
-    return status === 'completed' || status === 'budget-exceeded' || status === 'dep-blocked';
+    return status === 'completed' || status === 'budget-exceeded';
     // Note: 'code-complete' intentionally returns false — the issue still needs a PR.
+    // Note: 'dep-blocked' intentionally returns false — the dependency may have been
+    // resolved since the last run, so the scheduler must re-evaluate.
   }
 
   private async save(): Promise<void> {

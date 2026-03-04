@@ -102,6 +102,13 @@ export class FleetOrchestrator {
     // Load fleet checkpoint
     await this.fleetCheckpoint.load();
 
+    // On resume, reconcile stale checkpoint entries against actual PR state.
+    // Issues whose PRs merged since the last run are promoted to 'completed'
+    // so the scheduler doesn't re-process them or block their dependents.
+    if (this.config.options.resume) {
+      await this.reconcileCheckpoint();
+    }
+
     const eventBus = new FleetEventBus(this.notifications, this.fleetProgress);
     const reporter = new FleetReporter(
       this.config, this.issues, this.fleetCheckpoint, this.fleetProgress, this.tokenTracker, this.logger,
@@ -184,6 +191,77 @@ export class FleetOrchestrator {
       enabled: autoComplete.enabled ?? false,
       mergeMethod: autoComplete.merge_method ?? 'squash',
     };
+  }
+
+  /**
+   * Reconcile stale checkpoint statuses against the actual platform state.
+   *
+   * On resume, the checkpoint may contain failure statuses (dep-merge-conflict,
+   * dep-blocked, failed, etc.) that are no longer accurate — for example, a PR
+   * may have been merged manually, or a retry succeeded after the checkpoint was
+   * written.  This method queries the platform for each such issue and promotes
+   * it to 'completed' when a merged PR is found, so that the scheduler doesn't
+   * re-process the issue or incorrectly block its dependents.
+   *
+   * Issues with `dep-blocked` status are left as-is since they have no branch
+   * or PR; the scheduler will naturally re-evaluate them once their dependencies
+   * are resolved (dep-blocked is no longer treated as "completed" in
+   * {@link FleetCheckpointManager.isIssueCompleted}).
+   */
+  private async reconcileCheckpoint(): Promise<void> {
+    const reconcilableStatuses = new Set([
+      'dep-merge-conflict',
+      'dep-failed',
+      'dep-build-broken',
+      'failed',
+    ]);
+
+    const toReconcile = this.fleetCheckpoint.getAllIssueStatuses().filter(
+      ([_, s]) => reconcilableStatuses.has(s.status) && s.branchName,
+    );
+
+    if (toReconcile.length === 0) return;
+
+    this.logger.info(
+      `Resume reconciliation: checking ${toReconcile.length} failed issues against actual PR state`,
+    );
+
+    let promoted = 0;
+    for (const [issueNumber, issueStatus] of toReconcile) {
+      try {
+        const prs = await this.platform.listPullRequests({
+          head: issueStatus.branchName,
+          state: 'all',
+        });
+        const merged = prs.find((pr) => pr.state === 'merged');
+        if (merged) {
+          this.logger.info(
+            `Reconciliation: issue #${issueNumber} has merged PR #${merged.number} — promoting '${issueStatus.status}' → 'completed'`,
+            { issueNumber },
+          );
+          await this.fleetCheckpoint.setIssueStatus(
+            issueNumber,
+            'completed',
+            issueStatus.worktreePath,
+            issueStatus.branchName,
+            issueStatus.lastPhase,
+            issueStatus.issueTitle,
+          );
+          promoted++;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Reconciliation: could not check PR state for issue #${issueNumber}: ${err}`,
+          { issueNumber },
+        );
+      }
+    }
+
+    if (promoted > 0) {
+      this.logger.info(
+        `Resume reconciliation complete: promoted ${promoted}/${toReconcile.length} issues to 'completed'`,
+      );
+    }
   }
 
   /**
@@ -384,6 +462,34 @@ export class FleetOrchestrator {
             success: true,
             codeComplete: false,
             pr: existingPR,
+            phases: [],
+            totalDuration: 0,
+            tokenUsage: 0,
+          };
+        }
+
+        // 1b. Check for an already-merged PR (e.g. merged since the last run)
+        const allPRs = await this.platform.listPullRequests({ head: branchName, state: 'all' });
+        const mergedPR = allPRs.find((pr) => pr.state === 'merged');
+        if (mergedPR) {
+          this.logger.info(
+            `Skipping issue #${issue.number}: PR #${mergedPR.number} is already merged`,
+            { issueNumber: issue.number },
+          );
+          await this.fleetCheckpoint.setIssueStatus(
+            issue.number,
+            'completed',
+            '',
+            branchName,
+            0,
+            issue.title,
+          );
+          return {
+            issueNumber: issue.number,
+            issueTitle: issue.title,
+            success: true,
+            codeComplete: false,
+            pr: mergedPR,
             phases: [],
             totalDuration: 0,
             tokenUsage: 0,
