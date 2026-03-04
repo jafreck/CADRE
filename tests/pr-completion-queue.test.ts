@@ -241,6 +241,7 @@ describe('PullRequestCompletionQueue', () => {
         vi.fn().mockResolvedValue(true),
         1,
         conflictResolver,
+        0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 60, prNumber: 601 }));
@@ -270,6 +271,7 @@ describe('PullRequestCompletionQueue', () => {
         vi.fn().mockResolvedValue(true),
         1,
         conflictResolver,
+        0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 70, prNumber: 701 }));
@@ -300,6 +302,7 @@ describe('PullRequestCompletionQueue', () => {
         vi.fn().mockResolvedValue(true),
         1,
         conflictResolver,
+        0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 80, prNumber: 801 }));
@@ -328,6 +331,7 @@ describe('PullRequestCompletionQueue', () => {
         vi.fn().mockResolvedValue(true),
         1,
         conflictResolver,
+        0,
       );
 
       queue.enqueue(makeItem({ issueNumber: 90, prNumber: 901 }));
