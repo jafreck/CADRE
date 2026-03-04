@@ -5,12 +5,7 @@ import type { WorkItemDag, FleetCheckpointManager } from '@cadre/framework/engin
 import type { PlatformProvider } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import { Logger } from '@cadre/framework/core';
-
-/** Maximum merge + retry attempts for DAG auto-merge when encountering dirty state. */
-const DAG_MERGE_MAX_ATTEMPTS = 3;
-
-/** Base delay (ms) after requesting a branch update before retrying merge. Doubled per attempt. */
-const DAG_MERGE_BASE_DELAY_MS = 15_000;
+import { MergeRetryHelper } from './merge-retry.js';
 
 /** Callback type for processing a single issue. */
 export type ProcessIssueFn = (issue: IssueDetail, dag?: WorkItemDag<IssueDetail>) => Promise<IssueResult>;
@@ -180,63 +175,34 @@ export class FleetScheduler {
   }
 
   /**
-   * Attempt to merge a PR with retries, using server-side branch update +
-   * exponential backoff when the PR has merge conflicts (dirty state).
-   *
-   * Mirrors the retry strategy used in PullRequestCompletionQueue.drain()
-   * so that DAG auto-merge gets the same conflict-resolution treatment.
+   * Attempt to merge a PR with retries, using the shared {@link MergeRetryHelper}
+   * for server-side branch update + exponential backoff on dirty state.
    */
   private async tryMergeWithRetry(
     pr: PullRequestInfo,
     issueNumber: number,
     issueTitle: string,
   ): Promise<boolean> {
-    const maxAttempts = DAG_MERGE_MAX_ATTEMPTS;
+    const helper = new MergeRetryHelper(this.platform, this.logger, this.config.baseBranch);
+    const merged = await helper.mergeWithRetry({
+      prNumber: pr.number,
+      prUrl: pr.url,
+      branch: pr.headBranch,
+      issueNumber,
+    });
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        await this.platform.mergePullRequest(pr.number, this.config.baseBranch);
-        return true;
-      } catch (err) {
-        const error = String(err);
-        const isDirty = error.toLowerCase().includes('mergeable_state=dirty')
-          || error.toLowerCase().includes('merge conflicts');
-
-        if (isDirty && attempt < maxAttempts) {
-          this.logger.info(
-            `PR #${pr.number} merge blocked (dirty); requesting branch update (attempt ${attempt}/${maxAttempts})`,
-            { issueNumber, data: { prUrl: pr.url, branch: pr.headBranch } },
-          );
-
-          const updated = await this.platform.updatePullRequestBranch(pr.number).catch(() => false);
-          if (updated) {
-            const delay = DAG_MERGE_BASE_DELAY_MS * Math.pow(2, attempt - 1);
-            this.logger.info(
-              `Branch update requested for PR #${pr.number}; waiting ${delay / 1000}s before retry`,
-              { issueNumber },
-            );
-            await new Promise((r) => setTimeout(r, delay));
-            continue;
-          }
-        }
-
-        // Final attempt failed or non-dirty error — record failure
-        this.logger.warn(
-          `Failed to merge PR #${pr.number} for issue #${issueNumber}: ${err}`,
-          { issueNumber },
-        );
-        await this.fleetCheckpoint.setIssueStatus(
-          issueNumber,
-          'dep-merge-conflict',
-          '',
-          '',
-          0,
-          issueTitle,
-          String(err),
-        );
-        return false;
-      }
+    if (!merged) {
+      await this.fleetCheckpoint.setIssueStatus(
+        issueNumber,
+        'dep-merge-conflict',
+        '',
+        '',
+        0,
+        issueTitle,
+        `Merge failed after retries for PR #${pr.number}`,
+      );
     }
-    return false;
+
+    return merged;
   }
 }
