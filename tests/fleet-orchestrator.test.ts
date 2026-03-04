@@ -39,7 +39,9 @@ vi.mock('../src/git/worktree.js', () => {
     }
   }
   return {
-    WorktreeManager: vi.fn(),
+    WorktreeManager: vi.fn().mockImplementation(() => ({
+      buildAgentCache: vi.fn().mockResolvedValue(undefined),
+    })),
     RemoteBranchMissingError,
   };
 });
@@ -2166,7 +2168,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
     await fleet.run();
 
-    expect((platform as any).mergePullRequest).toHaveBeenCalledWith(42, 'main');
+    expect((platform as any).mergePullRequest).toHaveBeenCalledWith(42, 'main', undefined);
   });
 
   it('marks issue as dep-merge-conflict and propagates dep-blocked when autoMerge PR fails', async () => {
