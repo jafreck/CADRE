@@ -14,7 +14,7 @@ import { NotificationManager } from '@cadre/framework/notifications';
 import { ReviewResponseOrchestrator } from './review-response-orchestrator.js';
 import { DependencyMergeConflictError } from '../errors.js';
 import { ContextBuilder } from '../agents/context-builder.js';
-import { ensureDir } from '../util/fs.js';
+import { ensureDir, exists } from '../util/fs.js';
 import type { DependencyMergeConflictContext } from '../git/dependency-branch-merger.js';
 import { FleetReporter } from './fleet-reporter.js';
 import { FleetScheduler } from './fleet-scheduler.js';
@@ -282,9 +282,20 @@ export class FleetOrchestrator {
     const isCadreArtifact = (f: string) => cadreArtifactPatterns.some((p) => f.includes(p));
 
     return async (item, errorDetails) => {
-      const worktreePath = this.worktreeManager.getWorktreePath(item.issueNumber);
+      let worktreePath = this.worktreeManager.getWorktreePath(item.issueNumber);
       const progressDir = join(this.cadreDir, 'issues', String(item.issueNumber));
       await ensureDir(progressDir);
+
+      // For existing-PR issues, no worktree was provisioned during the run.
+      // Provision one from the branch so we can perform local conflict resolution.
+      if (!(await exists(worktreePath))) {
+        this.logger.info(
+          `Provisioning worktree for conflict resolution on PR #${item.prNumber} (issue #${item.issueNumber})`,
+          { issueNumber: item.issueNumber },
+        );
+        const wtInfo = await this.worktreeManager.provisionFromBranch(item.issueNumber, item.branch);
+        worktreePath = wtInfo.path;
+      }
 
       const git = simpleGit(worktreePath);
       await git.fetch('origin', this.config.baseBranch);
