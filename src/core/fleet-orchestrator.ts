@@ -484,7 +484,12 @@ export class FleetOrchestrator {
             return false;
           }
 
-          // Fix 4: Check actual conflict state, not output file.
+          // Stage the files the agent edited — the agent resolves conflict
+          // markers in the working tree but may not `git add` them, so git
+          // still reports them as "Unmerged".  Staging first lets the
+          // remaining-conflicts check (--diff-filter=U) see the true state.
+          await git.add(conflictedFiles);
+
           const remaining = await this.getConflictedFiles(git);
           if (remaining.length > 0) {
             this.logger.warn(
