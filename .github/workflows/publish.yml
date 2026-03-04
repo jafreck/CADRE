@@ -1,0 +1,32 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+      # Trusted publishing: OIDC auth, no NPM_TOKEN needed.
+      # Provenance attestations are generated automatically.
+      # Configure at: npmjs.com → @jafreck/cadre → Settings → Trusted Publisher
+      #   Organization/user: jafreck
+      #   Repository: CADRE
+      #   Workflow filename: publish.yml
+      - run: npm publish --access public
