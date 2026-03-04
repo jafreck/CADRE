@@ -195,12 +195,14 @@ export class FleetScheduler {
     });
 
     if (!merged) {
+      // Preserve the branch name so reconciliation can find the PR on next resume
+      const existing = this.fleetCheckpoint.getIssueStatus(issueNumber);
       await this.fleetCheckpoint.setIssueStatus(
         issueNumber,
         'dep-merge-conflict',
-        '',
-        '',
-        0,
+        existing?.worktreePath ?? '',
+        pr.headBranch,
+        existing?.lastPhase ?? 0,
         issueTitle,
         `Merge failed after retries for PR #${pr.number}`,
       );
