@@ -11,7 +11,10 @@ import { formatPullRequestTitle } from '../util/title-format.js';
 
 /** Maximum total invocations (initial + retries) when pr-content.md fails to parse. */
 const MAX_ATTEMPTS = 2;
-const MAX_MERGE_RESOLUTION_ATTEMPTS = 2;
+const MAX_MERGE_RESOLUTION_ATTEMPTS = 3;
+
+/** Delay (ms) after pushing conflict resolution before retrying merge, to let GitHub recalculate mergeable state. */
+const POST_RESOLVE_DELAY_MS = 15_000;
 
 type MergeBlockReason = 'dirty' | 'checks-failed' | 'blocked';
 
@@ -210,6 +213,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
           { issueNumber: ctx.issue.number },
         );
         await this.autoResolveMergeBlock(ctx, prNumber, reason, String(err));
+        await new Promise((r) => setTimeout(r, POST_RESOLVE_DELAY_MS));
       }
     }
   }

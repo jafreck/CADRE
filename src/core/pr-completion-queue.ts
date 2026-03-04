@@ -32,7 +32,10 @@ export interface CompletionFailure {
 }
 
 /** Maximum merge + resolve attempts per PR when a conflict resolver is provided. */
-const MAX_MERGE_RESOLUTION_ATTEMPTS = 2;
+const MAX_MERGE_RESOLUTION_ATTEMPTS = 3;
+
+/** Delay (ms) after pushing conflict resolution before retrying merge, to let GitHub recalculate mergeable state. */
+const POST_RESOLVE_DELAY_MS = 15_000;
 
 /**
  * Dedicated subsystem that queues and processes PR auto-completion work.
@@ -59,6 +62,7 @@ export class PullRequestCompletionQueue {
     private readonly isDependencySatisfied: DependencySatisfiedFn,
     concurrency: number,
     private readonly conflictResolver?: MergeConflictResolverFn,
+    private readonly postResolveDelayMs: number = POST_RESOLVE_DELAY_MS,
   ) {
     this.limit = pLimit(Math.max(1, concurrency));
   }
@@ -158,7 +162,10 @@ export class PullRequestCompletionQueue {
 
             try {
               const resolved = await this.conflictResolver(item, error);
-              if (resolved) continue;
+              if (resolved) {
+                await new Promise((r) => setTimeout(r, this.postResolveDelayMs));
+                continue;
+              }
             } catch (resolveErr) {
               this.logger.warn(
                 `Conflict resolver failed for PR #${item.prNumber}: ${String(resolveErr)}`,

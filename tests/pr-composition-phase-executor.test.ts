@@ -400,7 +400,7 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(platform.mergePullRequest).toHaveBeenCalledWith(101, 'main', 'squash');
     });
 
-    it('should auto-resolve dirty merge blockers and retry auto-complete', async () => {
+    it('should auto-resolve dirty merge blockers and retry auto-complete', { timeout: 20_000 }, async () => {
       const prInfo = { number: 105, url: 'https://github.com/owner/repo/pull/105', title: 'Fix' };
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
@@ -446,7 +446,7 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(mockGit.add).toHaveBeenCalledWith(['-A']);
     });
 
-    it('should auto-resolve failed checks with fix-surgeon and retry auto-complete', async () => {
+    it('should auto-resolve failed checks with fix-surgeon and retry auto-complete', { timeout: 20_000 }, async () => {
       const prInfo = { number: 106, url: 'https://github.com/owner/repo/pull/106', title: 'Fix' };
       const platform = {
         issueLinkSuffix: vi.fn().mockReturnValue(''),
