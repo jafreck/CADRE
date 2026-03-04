@@ -71,8 +71,8 @@ export class WorktreeProvisioner {
    * Create a worktree for an issue.
    * If the worktree already exists, validate and return info.
    * When `resume` is true and the worktree is absent, check the remote branch and
-   * recreate the worktree from it; throws `RemoteBranchMissingError` if the remote
-   * branch does not exist.
+   * recreate the worktree from it; if the remote branch does not exist, fall through
+   * to fresh provisioning (the issue simply hasn't been started yet).
    */
   async provision(issueNumber: number, issueTitle: string, resume?: boolean): Promise<WorktreeInfo> {
     const branch = this.resolveBranchName(issueNumber, issueTitle);
@@ -97,37 +97,42 @@ export class WorktreeProvisioner {
       };
     }
 
-    // Resume path: worktree is absent, re-create from remote branch
+    // Resume path: worktree is absent, try to re-create from remote branch.
+    // If the remote branch doesn't exist, fall through to fresh provisioning —
+    // this issue simply hasn't been started yet.
     if (resume) {
       const remoteRef = `refs/heads/${branch}`;
       const lsRemoteOutput = await this.git.raw(['ls-remote', 'origin', remoteRef]);
 
-      if (!lsRemoteOutput.trim()) {
-        throw new RemoteBranchMissingError(branch);
+      if (lsRemoteOutput.trim()) {
+        // Fetch the remote branch and create the worktree tracking it
+        await this.git.fetch('origin', branch);
+        await ensureDir(this.worktreeRoot);
+        await this.git.raw(['worktree', 'add', worktreePath, branch]);
+
+        await this.agentFileSync.initCadreDir(worktreePath, issueNumber);
+        const syncedAgentFiles = await this.agentFileSync.syncAgentFiles(worktreePath, issueNumber);
+
+        const baseCommit = await this.getBaseCommit(worktreePath);
+        this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
+          issueNumber,
+          data: { path: worktreePath, branch },
+        });
+
+        return {
+          issueNumber,
+          path: worktreePath,
+          branch,
+          exists: true,
+          baseCommit,
+          syncedAgentFiles,
+        };
       }
 
-      // Fetch the remote branch and create the worktree tracking it
-      await this.git.fetch('origin', branch);
-      await ensureDir(this.worktreeRoot);
-      await this.git.raw(['worktree', 'add', worktreePath, branch]);
-
-      await this.agentFileSync.initCadreDir(worktreePath, issueNumber);
-      const syncedAgentFiles = await this.agentFileSync.syncAgentFiles(worktreePath, issueNumber);
-
-      const baseCommit = await this.getBaseCommit(worktreePath);
-      this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
-        issueNumber,
-        data: { path: worktreePath, branch },
-      });
-
-      return {
-        issueNumber,
-        path: worktreePath,
-        branch,
-        exists: true,
-        baseCommit,
-        syncedAgentFiles,
-      };
+      this.logger.info(
+        `No remote branch found for issue #${issueNumber} on resume; provisioning fresh`,
+        { issueNumber, data: { branch } },
+      );
     }
 
     // 1. Get the base commit SHA
