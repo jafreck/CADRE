@@ -13,6 +13,15 @@ interface QueueItem {
 
 type DependencySatisfiedFn = (dependencyIssueNumber: number) => boolean | Promise<boolean>;
 
+/**
+ * Callback invoked when a PR merge fails due to conflicts (dirty state).
+ * Should attempt to resolve the conflicts and return `true` if resolved.
+ */
+export type MergeConflictResolverFn = (
+  item: QueueItem,
+  errorDetails: string,
+) => Promise<boolean>;
+
 export interface CompletionFailure {
   issueNumber: number;
   issueTitle: string;
@@ -21,6 +30,9 @@ export interface CompletionFailure {
   branch: string;
   error: string;
 }
+
+/** Maximum merge + resolve attempts per PR when a conflict resolver is provided. */
+const MAX_MERGE_RESOLUTION_ATTEMPTS = 2;
 
 /**
  * Dedicated subsystem that queues and processes PR auto-completion work.
@@ -46,6 +58,7 @@ export class PullRequestCompletionQueue {
     private readonly enabled: boolean,
     private readonly isDependencySatisfied: DependencySatisfiedFn,
     concurrency: number,
+    private readonly conflictResolver?: MergeConflictResolverFn,
   ) {
     this.limit = pLimit(Math.max(1, concurrency));
   }
@@ -117,28 +130,65 @@ export class PullRequestCompletionQueue {
     }
 
     await this.limit(async () => {
-      try {
-        await this.platform.mergePullRequest(item.prNumber, this.baseBranch, this.mergeMethod);
-        this.logger.info(
-          `Auto-completed existing PR #${item.prNumber} into ${this.baseBranch} using ${this.mergeMethod} merge`,
-          {
-            issueNumber: item.issueNumber,
-            data: { prUrl: item.prUrl, branch: item.branch },
-          },
-        );
-      } catch (err) {
-        const error = String(err);
-        this.failedIssueNumbers.add(item.issueNumber);
-        this.failures.push({ ...item, error });
-        this.logger.warn(
-          `Auto-complete failed for existing PR #${item.prNumber}: ${error}`,
-          {
-            issueNumber: item.issueNumber,
-            data: { prUrl: item.prUrl, branch: item.branch },
-          },
-        );
+      const maxAttempts = this.conflictResolver ? MAX_MERGE_RESOLUTION_ATTEMPTS : 1;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          await this.platform.mergePullRequest(item.prNumber, this.baseBranch, this.mergeMethod);
+          this.logger.info(
+            `Auto-completed existing PR #${item.prNumber} into ${this.baseBranch} using ${this.mergeMethod} merge`,
+            {
+              issueNumber: item.issueNumber,
+              data: { prUrl: item.prUrl, branch: item.branch },
+            },
+          );
+          return;
+        } catch (err) {
+          const error = String(err);
+          const isDirty = this.isMergeConflict(error);
+
+          if (isDirty && this.conflictResolver && attempt < maxAttempts) {
+            this.logger.info(
+              `PR #${item.prNumber} merge blocked (dirty); launching auto-resolution (attempt ${attempt}/${maxAttempts})`,
+              {
+                issueNumber: item.issueNumber,
+                data: { prUrl: item.prUrl, branch: item.branch },
+              },
+            );
+
+            try {
+              const resolved = await this.conflictResolver(item, error);
+              if (resolved) continue;
+            } catch (resolveErr) {
+              this.logger.warn(
+                `Conflict resolver failed for PR #${item.prNumber}: ${String(resolveErr)}`,
+                { issueNumber: item.issueNumber },
+              );
+            }
+          }
+
+          this.failedIssueNumbers.add(item.issueNumber);
+          this.failures.push({ ...item, error });
+          this.logger.warn(
+            `Auto-complete failed for existing PR #${item.prNumber}: ${error}`,
+            {
+              issueNumber: item.issueNumber,
+              data: { prUrl: item.prUrl, branch: item.branch },
+            },
+          );
+          return;
+        }
       }
     });
+  }
+
+  private isMergeConflict(message: string): boolean {
+    const lower = message.toLowerCase();
+    return (
+      lower.includes('mergeable_state=dirty')
+      || lower.includes('has merge conflicts')
+      || lower.includes('merge conflicts')
+    );
   }
 
   private recordDependencyBlockedFailure(item: QueueItem, dependencyIssueNumber: number): void {
