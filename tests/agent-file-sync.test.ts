@@ -8,6 +8,9 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
   readFile: vi.fn().mockResolvedValue('agent body content'),
   readdir: vi.fn().mockResolvedValue([]),
+  symlink: vi.fn().mockResolvedValue(undefined),
+  unlink: vi.fn().mockResolvedValue(undefined),
+  lstat: vi.fn().mockRejectedValue(new Error('ENOENT')),
 }));
 
 const { mockRaw } = vi.hoisted(() => ({
@@ -50,16 +53,67 @@ describe('AgentFileSync', () => {
     } as unknown as Logger;
   });
 
+  describe('buildAgentCache', () => {
+    it('is a no-op when agentDir is undefined', async () => {
+      const sync = new AgentFileSync(undefined, 'copilot', mockLogger, '/tmp/state');
+      await sync.buildAgentCache();
+      expect(fsp.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when stateDir is undefined', async () => {
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
+      await sync.buildAgentCache();
+      expect(fsp.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when agentDir does not exist', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValueOnce(false);
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
+      await sync.buildAgentCache();
+      expect(fsp.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('generates .agent.md files with frontmatter into cache for copilot', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
+      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
+
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
+      await sync.buildAgentCache();
+
+      expect(fsUtils.ensureDir).toHaveBeenCalledWith('/tmp/state/agents-cache-copilot');
+      const writeCall = vi.mocked(fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(writeCall[0]).toBe('/tmp/state/agents-cache-copilot/code-writer.agent.md');
+      expect(writeCall[1]).toContain('tools: ["read", "edit", "search", "execute"]');
+      expect(writeCall[1]).toContain('body');
+    });
+
+    it('generates .md files with frontmatter into cache for claude', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
+      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
+
+      const sync = new AgentFileSync('/tmp/agents', 'claude', mockLogger, '/tmp/state');
+      await sync.buildAgentCache();
+
+      expect(fsUtils.ensureDir).toHaveBeenCalledWith('/tmp/state/agents-cache-claude');
+      const writeCall = vi.mocked(fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(writeCall[0]).toBe('/tmp/state/agents-cache-claude/code-writer.md');
+      expect(writeCall[1]).not.toContain('tools:');
+      expect(writeCall[1]).toContain('body');
+    });
+  });
+
   describe('syncAgentFiles', () => {
-    it('returns [] when agentDir is undefined', async () => {
-      const sync = new AgentFileSync(undefined, 'copilot', mockLogger);
+    it('returns [] when stateDir/cacheDir is undefined', async () => {
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
       const result = await sync.syncAgentFiles('/tmp/worktree', 1);
       expect(result).toEqual([]);
     });
 
-    it('returns [] and logs when agentDir does not exist on disk', async () => {
+    it('returns [] when cache dir does not exist', async () => {
       vi.mocked(fsUtils.exists).mockResolvedValueOnce(false);
-      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
       const result = await sync.syncAgentFiles('/tmp/worktree', 1);
       expect(result).toEqual([]);
       expect(mockLogger.debug).toHaveBeenCalledWith(
@@ -68,52 +122,80 @@ describe('AgentFileSync', () => {
       );
     });
 
-    it('syncs .agent.md files for copilot backend', async () => {
+    it('creates symlinks for copilot backend', async () => {
       vi.mocked(fsUtils.exists).mockResolvedValue(true);
-      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
-      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
-      // Simulate untracked: git ls-files returns empty string
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.agent.md']);
+      vi.mocked(fsp.lstat as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ENOENT'));
       mockRaw.mockResolvedValueOnce('');
 
-      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
       const result = await sync.syncAgentFiles('/tmp/worktree', 1);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('.github/agents/code-writer.agent.md');
-      const writeCall = vi.mocked(fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(writeCall[0]).toContain('.github/agents/code-writer.agent.md');
-      expect(writeCall[1]).toContain('tools: ["read", "edit", "search", "execute"]');
+      expect(fsp.symlink).toHaveBeenCalledWith(
+        '/tmp/state/agents-cache-copilot/code-writer.agent.md',
+        expect.stringContaining('.github/agents/code-writer.agent.md'),
+      );
+      expect(fsp.writeFile).not.toHaveBeenCalled();
     });
 
-    it('syncs .md files for claude backend', async () => {
+    it('creates symlinks for claude backend', async () => {
       vi.mocked(fsUtils.exists).mockResolvedValue(true);
       vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
-      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
-      // Simulate untracked: git ls-files returns empty string
+      vi.mocked(fsp.lstat as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ENOENT'));
       mockRaw.mockResolvedValueOnce('');
 
-      const sync = new AgentFileSync('/tmp/agents', 'claude', mockLogger);
+      const sync = new AgentFileSync('/tmp/agents', 'claude', mockLogger, '/tmp/state');
       const result = await sync.syncAgentFiles('/tmp/worktree', 1);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('.claude/agents/code-writer.md');
-      const writeCall = vi.mocked(fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(writeCall[0]).toContain('.claude/agents/code-writer.md');
-      // Claude frontmatter should NOT include tools line
-      expect(writeCall[1]).not.toContain('tools:');
+      expect(fsp.symlink).toHaveBeenCalledWith(
+        '/tmp/state/agents-cache-claude/code-writer.md',
+        expect.stringContaining('.claude/agents/code-writer.md'),
+      );
+    });
+
+    it('replaces existing symlinks', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.agent.md']);
+      vi.mocked(fsp.lstat as ReturnType<typeof vi.fn>).mockResolvedValue({
+        isSymbolicLink: () => true,
+      } as any);
+      mockRaw.mockResolvedValueOnce('');
+
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
+      await sync.syncAgentFiles('/tmp/worktree', 1);
+
+      expect(fsp.unlink).toHaveBeenCalled();
+      expect(fsp.symlink).toHaveBeenCalled();
+    });
+
+    it('skips regular files (target repo may own them)', async () => {
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.agent.md']);
+      vi.mocked(fsp.lstat as ReturnType<typeof vi.fn>).mockResolvedValue({
+        isSymbolicLink: () => false,
+      } as any);
+
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
+      const result = await sync.syncAgentFiles('/tmp/worktree', 1);
+
+      expect(result).toEqual([]);
+      expect(fsp.symlink).not.toHaveBeenCalled();
     });
 
     it('excludes already-tracked destination paths from syncedRelPaths', async () => {
       vi.mocked(fsUtils.exists).mockResolvedValue(true);
-      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
-      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
-      // Simulate tracked: git ls-files returns the file path (non-empty)
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.agent.md']);
+      vi.mocked(fsp.lstat as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ENOENT'));
       mockRaw.mockResolvedValueOnce('.github/agents/code-writer.agent.md');
 
-      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger);
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
       const result = await sync.syncAgentFiles('/tmp/worktree', 1);
 
-      // Already-tracked file must not be in the returned paths
+      expect(fsp.symlink).toHaveBeenCalled();
       expect(result).toHaveLength(0);
     });
   });
@@ -154,7 +236,6 @@ describe('AgentFileSync', () => {
       } as any);
 
       const sync = new AgentFileSync(undefined, 'copilot', mockLogger);
-      // Should not throw
       await expect(sync.initCadreDir('/tmp/worktree', 1)).resolves.toBeUndefined();
       expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.stringContaining('Could not write worktree git exclude'),
