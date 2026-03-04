@@ -136,6 +136,10 @@ export class FleetOrchestrator {
     // Pre-fetch remote refs once before any per-issue pipeline starts
     await this.worktreeManager.prefetch();
 
+    // Build (or refresh) the shared agent-file cache so worktree provision
+    // creates symlinks instead of copying files into every worktree.
+    await this.worktreeManager.buildAgentCache();
+
     const results = await scheduler.schedule(
       issuesToProcess,
       (issue, dag) => this.processIssue(issue, dag),

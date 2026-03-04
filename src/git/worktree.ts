@@ -33,6 +33,10 @@ export class WorktreeManager {
     );
   }
 
+  async buildAgentCache() {
+    return this.provisioner.buildAgentCache();
+  }
+
   async provision(...args: Parameters<WorktreeProvisioner['provision']>) {
     return this.provisioner.provision(...args);
   }

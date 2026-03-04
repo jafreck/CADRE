@@ -1,5 +1,5 @@
 import { join, relative } from 'node:path';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, symlink, unlink, lstat } from 'node:fs/promises';
 import { Logger } from '@cadre/framework/core';
 import { exists, ensureDir } from '../util/fs.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
@@ -7,13 +7,27 @@ import { AGENT_DEFINITIONS } from '../agents/types.js';
 /**
  * Manages syncing agent instruction files into a worktree and bootstrapping
  * the `.cadre/` directory.
+ *
+ * Agent files are **not** copied into each worktree.  Instead, frontmatter-
+ * enriched versions are generated once into a shared cache directory
+ * (`{stateDir}/agents-cache-{backend}/`) and each worktree receives symlinks
+ * pointing to the cache.  This means N concurrent worktrees share a single
+ * set of enriched agent files with zero duplication.
  */
 export class AgentFileSync {
+  /** Absolute path to the shared agent-file cache for this backend. */
+  private readonly cacheDir: string | undefined;
+
   constructor(
     private readonly agentDir: string | undefined,
     private readonly backend: string,
     private readonly logger: Logger,
-  ) {}
+    stateDir?: string,
+  ) {
+    this.cacheDir = stateDir
+      ? join(stateDir, `agents-cache-${backend}`)
+      : undefined;
+  }
 
   /**
    * Bootstrap the worktree's `.cadre/` directory and add both `.cadre/` and
@@ -73,41 +87,28 @@ export class AgentFileSync {
   }
 
   /**
-   * Copy agent files from agentDir into the worktree's agent directory.
-   * Source files in agentDir are always plain `{name}.md` with no frontmatter.
+   * Build (or refresh) the shared agent-file cache.  For each plain
+   * `{name}.md` in `agentDir`, generate the backend-specific enriched
+   * version (with YAML frontmatter) and write it once to `cacheDir`.
    *
-   * - **Copilot**: reads `{name}.md`, injects YAML frontmatter, writes
-   *   `{name}.agent.md` into `.github/agents/` (the format Copilot CLI expects).
-   * - **Claude**: reads `{name}.md`, injects YAML frontmatter, writes
-   *   `{name}.md` into `.claude/agents/` (the format Claude CLI expects).
+   * Subsequent worktree syncs create symlinks to these cached files
+   * instead of duplicating them.
    *
-   * No-op if agentDir is not configured or does not exist.
+   * No-op when `agentDir` or `cacheDir` is unset, or the source dir
+   * does not exist on disk.
    */
-  async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<string[]> {
-    if (!this.agentDir) return [];
+  async buildAgentCache(): Promise<void> {
+    if (!this.agentDir || !this.cacheDir) return;
+    if (!(await exists(this.agentDir))) return;
 
-    if (!(await exists(this.agentDir))) {
-      this.logger.debug(`agentDir ${this.agentDir} does not exist — skipping agent sync`, { issueNumber });
-      return [];
-    }
-
-    const destDir =
-      this.backend === 'claude'
-        ? join(worktreePath, '.claude', 'agents')
-        : join(worktreePath, '.github', 'agents');
-    await ensureDir(destDir);
+    await ensureDir(this.cacheDir);
 
     const entries = await readdir(this.agentDir);
     const sourceFiles = entries.filter((f) => f.endsWith('.md') && !f.endsWith('.agent.md'));
-    // Track only untracked (ephemeral) paths written so CommitManager can precisely unstage them.
-    const syncedRelPaths: string[] = [];
-
-    const { simpleGit: makeGit } = await import('simple-git');
-    const git = makeGit(worktreePath);
 
     for (const file of sourceFiles) {
       const agentName = file.replace(/\.md$/, '');
-      const srcPath = join(this.agentDir!, file);
+      const srcPath = join(this.agentDir, file);
 
       const definition = AGENT_DEFINITIONS.find((d) => d.name === agentName);
       const displayName = agentName
@@ -117,9 +118,10 @@ export class AgentFileSync {
       const description = definition?.description ?? displayName;
       const body = await readFile(srcPath, 'utf-8');
 
-      let destAbsPath: string;
+      let destFileName: string;
+      let content: string;
+
       if (this.backend === 'claude') {
-        // Claude expects {name}.md with YAML frontmatter
         const frontmatter = [
           '---',
           `name: ${displayName}`,
@@ -127,10 +129,9 @@ export class AgentFileSync {
           '---',
           '',
         ].join('\n');
-        destAbsPath = join(destDir, file);
-        await writeFile(destAbsPath, frontmatter + body, 'utf-8');
+        destFileName = file;
+        content = frontmatter + body;
       } else {
-        // Copilot expects {name}.agent.md with YAML frontmatter
         const frontmatter = [
           '---',
           `name: ${displayName}`,
@@ -139,13 +140,87 @@ export class AgentFileSync {
           '---',
           '',
         ].join('\n');
-        destAbsPath = join(destDir, `${agentName}.agent.md`);
-        await writeFile(destAbsPath, frontmatter + body, 'utf-8');
+        destFileName = `${agentName}.agent.md`;
+        content = frontmatter + body;
       }
 
-      const destRelPath = relative(worktreePath, destAbsPath);
-      // Only include the path when it is not already tracked in git.
-      // `git ls-files <path>` returns the path when tracked, empty string when untracked.
+      await writeFile(join(this.cacheDir, destFileName), content, 'utf-8');
+    }
+
+    this.logger.debug(
+      `Built agent cache (${sourceFiles.length} file(s)) in ${this.cacheDir}`,
+    );
+  }
+
+  /**
+   * Symlink cached agent files into the worktree's backend-specific agent
+   * directory.  Source files live in the shared cache (`buildAgentCache`
+   * must be called first).
+   *
+   * - **Copilot**: `.github/agents/{name}.agent.md` → cache
+   * - **Claude**: `.claude/agents/{name}.md` → cache
+   *
+   * Existing symlinks are replaced; regular files that collide with a
+   * cache entry are left untouched (the target repo may have its own agent
+   * files) and will not appear in the returned list.
+   *
+   * Returns worktree-relative paths of untracked symlinks created, matching
+   * the contract expected by `CommitManager.unstageArtifacts`.
+   *
+   * No-op if cacheDir is not configured or does not exist.
+   */
+  async syncAgentFiles(worktreePath: string, issueNumber: number): Promise<string[]> {
+    if (!this.cacheDir) {
+      return [];
+    }
+
+    if (!(await exists(this.cacheDir))) {
+      this.logger.debug(
+        `Agent cache ${this.cacheDir} does not exist — skipping agent sync (run buildAgentCache first)`,
+        { issueNumber },
+      );
+      return [];
+    }
+
+    const destDir =
+      this.backend === 'claude'
+        ? join(worktreePath, '.claude', 'agents')
+        : join(worktreePath, '.github', 'agents');
+    await ensureDir(destDir);
+
+    const cacheFiles = await readdir(this.cacheDir);
+    const syncedRelPaths: string[] = [];
+
+    const { simpleGit: makeGit } = await import('simple-git');
+    const git = makeGit(worktreePath);
+
+    for (const fileName of cacheFiles) {
+      if (!fileName.endsWith('.md')) continue;
+
+      const target = join(this.cacheDir, fileName);
+      const linkPath = join(destDir, fileName);
+
+      // If a non-symlink (regular file) already exists at the destination
+      // the target repo may own it — leave it alone.
+      let existingIsSymlink = false;
+      try {
+        const st = await lstat(linkPath);
+        if (st.isSymbolicLink()) {
+          existingIsSymlink = true;
+        } else {
+          continue;
+        }
+      } catch {
+        // Doesn't exist yet — good, we'll create it.
+      }
+
+      if (existingIsSymlink) {
+        await unlink(linkPath);
+      }
+
+      await symlink(target, linkPath);
+
+      const destRelPath = relative(worktreePath, linkPath);
       const lsOutput = await git.raw(['ls-files', destRelPath]);
       if (lsOutput.trim() === '') {
         syncedRelPaths.push(destRelPath);
@@ -154,7 +229,7 @@ export class AgentFileSync {
 
     if (syncedRelPaths.length > 0) {
       this.logger.debug(
-        `Synced ${syncedRelPaths.length} agent file(s) from ${this.agentDir} → ${destDir}`,
+        `Symlinked ${syncedRelPaths.length} agent file(s) from cache → ${destDir}`,
         { issueNumber },
       );
     }

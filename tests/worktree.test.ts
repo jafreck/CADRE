@@ -11,6 +11,9 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
   readFile: vi.fn().mockResolvedValue(''),
   readdir: vi.fn().mockResolvedValue([]),
+  symlink: vi.fn().mockResolvedValue(undefined),
+  unlink: vi.fn().mockResolvedValue(undefined),
+  lstat: vi.fn().mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })),
 }));
 
 // Mock simple-git
@@ -535,6 +538,8 @@ describe('WorktreeManager', () => {
         'cadre/issue-{issue}',
         mockLogger,
         '/tmp/agents',
+        'copilot',
+        '/tmp/state',
       );
 
       // agentDir exists and contains an agent file
@@ -543,10 +548,14 @@ describe('WorktreeManager', () => {
         if (p === '/tmp/worktrees/issue-42') return false;
         // agentDir exists
         if (p === '/tmp/agents') return true;
+        // cacheDir exists after build
+        if (p === '/tmp/state/agents-cache-copilot') return true;
         return false;
       });
       vi.mocked(fsp.readdir).mockResolvedValue(['code-writer.md'] as unknown as Awaited<ReturnType<typeof fsp.readdir>>);
       vi.mocked(fsp.readFile).mockResolvedValue('agent body content' as unknown as Buffer);
+
+      await managerWithAgentDir.buildAgentCache();
 
       const result = await managerWithAgentDir.provision(42, 'my issue');
 

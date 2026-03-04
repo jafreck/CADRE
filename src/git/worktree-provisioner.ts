@@ -56,7 +56,7 @@ export class WorktreeProvisioner {
     private readonly stateDir: string = join(homedir(), '.cadre'),
   ) {
     this.git = simpleGit(repoPath);
-    this.agentFileSync = new AgentFileSync(agentDir, backend, logger);
+    this.agentFileSync = new AgentFileSync(agentDir, backend, logger, stateDir);
     this.worktreeCleaner = new WorktreeCleaner(this.git, worktreeRoot, logger);
     this.dependencyBranchMerger = new DependencyBranchMerger(
       this.git,
@@ -65,6 +65,15 @@ export class WorktreeProvisioner {
       this.resolveBranchName.bind(this),
       this.stateDir,
     );
+  }
+
+  /**
+   * Build (or refresh) the shared agent-file cache.
+   * Must be called once before any worktree provision calls so that
+   * `syncAgentFiles` (which creates symlinks) has cached files to target.
+   */
+  async buildAgentCache(): Promise<void> {
+    return this.agentFileSync.buildAgentCache();
   }
 
   /**

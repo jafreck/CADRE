@@ -158,6 +158,7 @@ function makeIssue(number = 1): IssueDetail {
 function makeMockDeps() {
   const worktreeManager = {
     prefetch: vi.fn().mockResolvedValue(undefined),
+    buildAgentCache: vi.fn().mockResolvedValue(undefined),
     provision: vi.fn().mockResolvedValue({
       path: '/tmp/worktree/1',
       branch: 'cadre/issue-1',
