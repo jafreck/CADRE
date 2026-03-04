@@ -37,6 +37,8 @@ export interface PullRequestInfo {
   baseBranch: string;
   /** Lifecycle state of the PR. */
   state: 'open' | 'closed' | 'merged';
+  /** GitHub mergeable state (only populated by getPullRequest). */
+  mergeableState?: 'clean' | 'dirty' | 'behind' | 'blocked' | 'unknown' | 'unstable';
 }
 
 /**

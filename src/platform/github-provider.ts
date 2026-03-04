@@ -135,6 +135,10 @@ export class GitHubProvider implements PlatformProvider {
     const result = await this.getAPI().getPullRequest(prNumber);
     const ghState = asString(result.state);
     const merged = !!(result.merged || result.merged_at);
+    const rawMergeableState = asString((result as Record<string, unknown>).mergeable_state);
+    const mergeableState = (['clean', 'dirty', 'behind', 'blocked', 'unstable'].includes(rawMergeableState)
+      ? rawMergeableState
+      : 'unknown') as PullRequestInfo['mergeableState'];
     return {
       number: asNumber(result.number),
       url: asString(result.html_url) || asString(result.url),
@@ -142,6 +146,7 @@ export class GitHubProvider implements PlatformProvider {
       headBranch: asString(asRecord(result.head).ref),
       baseBranch: asString(asRecord(result.base).ref),
       state: merged ? 'merged' : ghState === 'closed' ? 'closed' : 'open',
+      mergeableState,
     };
   }
 

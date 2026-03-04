@@ -178,6 +178,8 @@ export class PullRequestCompletionQueue {
         baseDelayMs: this.basePostResolveDelayMs,
         mergeMethod: this.mergeMethod,
         conflictResolver: conflictResolverCb,
+        // When basePostResolveDelayMs is 0 (tests), skip polling too.
+        mergeablePollTimeoutMs: this.basePostResolveDelayMs === 0 ? 0 : undefined,
       },
     );
 
