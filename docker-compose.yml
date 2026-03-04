@@ -1,0 +1,21 @@
+services:
+  cadre:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/workspace
+      - ./cadre.config.json:/config/cadre.config.json:ro
+      - cadre-state:/state
+      # Uncomment for Docker-in-Docker (isolation.provider: "docker"):
+      # - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+
+volumes:
+  cadre-state:
