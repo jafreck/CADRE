@@ -46,7 +46,6 @@ describe('PullRequestCompletionQueue', () => {
       'squash',
       false,
       vi.fn().mockResolvedValue(true),
-      2,
     );
 
     queue.enqueue(makeItem());
@@ -67,7 +66,6 @@ describe('PullRequestCompletionQueue', () => {
       'squash',
       true,
       vi.fn().mockResolvedValue(true),
-      2,
     );
 
     queue.enqueue(makeItem({ issueNumber: 10, prNumber: 210 }));
@@ -88,7 +86,6 @@ describe('PullRequestCompletionQueue', () => {
       'squash',
       true,
       vi.fn().mockResolvedValue(true),
-      1,
     );
 
     queue.enqueue(makeItem({ issueNumber: 20, prNumber: 220 }));
@@ -114,7 +111,6 @@ describe('PullRequestCompletionQueue', () => {
       'merge',
       true,
       vi.fn().mockResolvedValue(true),
-      3,
     );
 
     queue.enqueue(makeItem({ issueNumber: 30, prNumber: 301, dependencyIssueNumbers: [] }));
@@ -173,7 +169,6 @@ describe('PullRequestCompletionQueue', () => {
       'squash',
       true,
       vi.fn().mockResolvedValue(true),
-      2,
     );
 
     queue.enqueue(makeItem({ issueNumber: 50, prNumber: 501, dependencyIssueNumbers: [] }));
@@ -211,7 +206,6 @@ describe('PullRequestCompletionQueue', () => {
       'squash',
       true,
       vi.fn().mockResolvedValue(true),
-      1,
     );
 
     await (queue as unknown as { executeItem: (issueNumber: number) => Promise<void> }).executeItem(99999);
@@ -239,7 +233,6 @@ describe('PullRequestCompletionQueue', () => {
         'squash',
         true,
         vi.fn().mockResolvedValue(true),
-        1,
         conflictResolver,
         0,
       );
@@ -269,7 +262,6 @@ describe('PullRequestCompletionQueue', () => {
         'squash',
         true,
         vi.fn().mockResolvedValue(true),
-        1,
         conflictResolver,
         0,
       );
@@ -300,7 +292,6 @@ describe('PullRequestCompletionQueue', () => {
         'squash',
         true,
         vi.fn().mockResolvedValue(true),
-        1,
         conflictResolver,
         0,
       );
@@ -329,7 +320,6 @@ describe('PullRequestCompletionQueue', () => {
         'squash',
         true,
         vi.fn().mockResolvedValue(true),
-        1,
         conflictResolver,
         0,
       );
@@ -355,7 +345,6 @@ describe('PullRequestCompletionQueue', () => {
         'squash',
         true,
         vi.fn().mockResolvedValue(true),
-        1,
         // no conflictResolver
       );
 

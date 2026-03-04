@@ -43,6 +43,10 @@ const POST_RESOLVE_DELAY_MS = 15_000;
  * This lets FleetOrchestrator enqueue many existing open PRs (e.g. on resume)
  * without blocking per-issue scheduling, while still awaiting completion before
  * final fleet reporting.
+ *
+ * Merges are always serial (concurrency 1) because each merge into the base
+ * branch changes it, and subsequent PRs need the updated base to avoid
+ * cascading conflicts.
  */
 export class PullRequestCompletionQueue {
   private readonly limit: ReturnType<typeof pLimit>;
@@ -60,11 +64,12 @@ export class PullRequestCompletionQueue {
     private readonly mergeMethod: PullRequestMergeMethod,
     private readonly enabled: boolean,
     private readonly isDependencySatisfied: DependencySatisfiedFn,
-    concurrency: number,
     private readonly conflictResolver?: MergeConflictResolverFn,
     private readonly postResolveDelayMs: number = POST_RESOLVE_DELAY_MS,
   ) {
-    this.limit = pLimit(Math.max(1, concurrency));
+    // Always serial — merging into base must be sequential so each PR
+    // sees the updated base after the previous merge.
+    this.limit = pLimit(1);
   }
 
   enqueue(item: QueueItem): void {

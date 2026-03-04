@@ -88,7 +88,6 @@ export class FleetOrchestrator {
         const status = this.fleetCheckpoint.getIssueStatus(dependencyIssueNumber)?.status;
         return status === 'completed';
       },
-      this.config.options.maxParallelIssues,
       autoComplete.enabled ? this.buildCompletionQueueConflictResolver() : undefined,
     );
   }
