@@ -174,7 +174,38 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       draft: ctx.config.pullRequest.draft,
       labels,
       reviewers: ctx.config.pullRequest.reviewers,
+    }).catch((err: Error) => {
+      // "No commits between base and head" means the branch content was
+      // already merged into the base (e.g. via squash-merge of earlier PRs
+      // that included the same dependency commits).  Check for a merged PR.
+      if (err.message?.includes('No commits between')) {
+        ctx.services.logger.warn(
+          `PR creation failed (no unique commits) for issue #${ctx.issue.number}; checking for already-merged PR`,
+          { issueNumber: ctx.issue.number },
+        );
+        return null;
+      }
+      throw err;
     });
+
+    if (pr === null) {
+      // Branch has no unique commits — look for a merged PR that covers it.
+      const allPRs = await ctx.platform.listPullRequests({ head: ctx.worktree.branch, state: 'all' });
+      const mergedPR = allPRs.find((p) => p.state === 'merged');
+      if (mergedPR) {
+        ctx.services.logger.info(
+          `Issue #${ctx.issue.number} branch already merged via PR #${mergedPR.number}`,
+          { issueNumber: ctx.issue.number },
+        );
+        ctx.callbacks.setPR?.(mergedPR);
+        return;
+      }
+      // No merged PR found — the branch genuinely has no changes.
+      throw new Error(
+        `No commits between ${ctx.config.baseBranch} and ${ctx.worktree.branch} and no merged PR found`,
+      );
+    }
+
     ctx.callbacks.setPR?.(pr);
     // Fix 2: Do not merge inline — the fleet orchestrator's completion queue handles serial merge.
   }
