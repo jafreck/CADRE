@@ -1,5 +1,6 @@
 import type { Logger } from '@cadre/framework/core';
 import type { PlatformProvider, PullRequestMergeMethod } from '../platform/provider.js';
+import { MergeRetryHelper, MERGE_MAX_ATTEMPTS, MERGE_BASE_DELAY_MS, type ConflictResolverCallback, type MergeAttemptContext } from './merge-retry.js';
 
 interface QueueItem {
   issueNumber: number;
@@ -9,8 +10,6 @@ interface QueueItem {
   branch: string;
   dependencyIssueNumbers: number[];
 }
-
-type DependencySatisfiedFn = (dependencyIssueNumber: number) => boolean | Promise<boolean>;
 
 /**
  * Callback invoked when a PR merge fails due to conflicts (dirty state).
@@ -31,10 +30,12 @@ export interface CompletionFailure {
 }
 
 /** Maximum merge + resolve attempts per PR when a conflict resolver is provided. */
-const MAX_MERGE_RESOLUTION_ATTEMPTS = 3;
+const MAX_MERGE_RESOLUTION_ATTEMPTS = MERGE_MAX_ATTEMPTS;
 
 /** Base delay (ms) after pushing conflict resolution before retrying merge. Multiplied by attempt number for exponential backoff. */
-const BASE_POST_RESOLVE_DELAY_MS = 15_000;
+const BASE_POST_RESOLVE_DELAY_MS = MERGE_BASE_DELAY_MS;
+
+type DependencySatisfiedFn = (dependencyIssueNumber: number) => boolean | Promise<boolean>;
 
 /** Delay (ms) after pre-drain branch updates to let GitHub propagate mergeable state. */
 const PRE_DRAIN_SETTLE_MS = 20_000;
@@ -56,6 +57,7 @@ export class PullRequestCompletionQueue {
   private readonly completedIssueNumbers = new Set<number>();
   private readonly failedIssueNumbers = new Set<number>();
   private readonly failures: CompletionFailure[] = [];
+  private readonly mergeRetry: MergeRetryHelper;
 
   constructor(
     private readonly platform: PlatformProvider,
@@ -67,7 +69,9 @@ export class PullRequestCompletionQueue {
     private readonly conflictResolver?: MergeConflictResolverFn,
     private readonly basePostResolveDelayMs: number = BASE_POST_RESOLVE_DELAY_MS,
     private readonly preDrainSettleMs: number = PRE_DRAIN_SETTLE_MS,
-  ) {}
+  ) {
+    this.mergeRetry = new MergeRetryHelper(platform, logger, baseBranch);
+  }
 
   enqueue(item: QueueItem): void {
     if (!this.enabled) return;
@@ -152,83 +156,47 @@ export class PullRequestCompletionQueue {
       }
     }
 
-    // Attempt merge with conflict resolution retry loop
-    const maxAttempts = this.conflictResolver ? MAX_MERGE_RESOLUTION_ATTEMPTS : 1;
+    // Attempt merge via shared retry helper
+    const resolver = this.conflictResolver;
+    const conflictResolverCb: ConflictResolverCallback | undefined = resolver
+      ? async (ctx: MergeAttemptContext, errorDetails: string) => resolver(item, errorDetails)
+      : undefined;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        await this.platform.mergePullRequest(item.prNumber, this.baseBranch, this.mergeMethod);
-        this.completedIssueNumbers.add(item.issueNumber);
-        this.logger.info(
-          `Auto-completed PR #${item.prNumber} into ${this.baseBranch} using ${this.mergeMethod} merge`,
-          {
-            issueNumber: item.issueNumber,
-            data: { prUrl: item.prUrl, branch: item.branch },
-          },
-        );
-        return;
-      } catch (err) {
-        const error = String(err);
-        const isDirty = this.isMergeConflict(error);
-
-        if (isDirty && attempt < maxAttempts) {
-          // Fix 5: Try server-side branch update first — faster and more reliable than agent.
-          this.logger.info(
-            `PR #${item.prNumber} merge blocked (dirty); trying updateBranch first (attempt ${attempt}/${maxAttempts})`,
-            {
-              issueNumber: item.issueNumber,
-              data: { prUrl: item.prUrl, branch: item.branch },
-            },
-          );
-
-          const updated = await this.platform.updatePullRequestBranch(item.prNumber).catch(() => false);
-          if (updated) {
-            // Fix 6: Exponential backoff — 15s, 30s, 60s.
-            const delay = this.basePostResolveDelayMs * Math.pow(2, attempt - 1);
-            await new Promise((r) => setTimeout(r, delay));
-            continue;
-          }
-
-          // Server-side update didn't help — try the conflict resolver agent.
-          if (this.conflictResolver) {
-            try {
-              const resolved = await this.conflictResolver(item, error);
-              if (resolved) {
-                // Fix 6: Exponential backoff.
-                const delay = this.basePostResolveDelayMs * Math.pow(2, attempt - 1);
-                await new Promise((r) => setTimeout(r, delay));
-                continue;
-              }
-            } catch (resolveErr) {
-              this.logger.warn(
-                `Conflict resolver failed for PR #${item.prNumber}: ${String(resolveErr)}`,
-                { issueNumber: item.issueNumber },
-              );
-            }
-          }
-        }
-
-        this.failedIssueNumbers.add(item.issueNumber);
-        this.failures.push({ ...item, error });
-        this.logger.warn(
-          `Auto-complete failed for PR #${item.prNumber}: ${error}`,
-          {
-            issueNumber: item.issueNumber,
-            data: { prUrl: item.prUrl, branch: item.branch },
-          },
-        );
-        return;
-      }
-    }
-  }
-
-  private isMergeConflict(message: string): boolean {
-    const lower = message.toLowerCase();
-    return (
-      lower.includes('mergeable_state=dirty')
-      || lower.includes('has merge conflicts')
-      || lower.includes('merge conflicts')
+    const merged = await this.mergeRetry.mergeWithRetry(
+      {
+        prNumber: item.prNumber,
+        prUrl: item.prUrl,
+        branch: item.branch,
+        issueNumber: item.issueNumber,
+      },
+      {
+        maxAttempts: this.conflictResolver ? MAX_MERGE_RESOLUTION_ATTEMPTS : 1,
+        baseDelayMs: this.basePostResolveDelayMs,
+        mergeMethod: this.mergeMethod,
+        conflictResolver: conflictResolverCb,
+      },
     );
+
+    if (merged) {
+      this.completedIssueNumbers.add(item.issueNumber);
+      this.logger.info(
+        `Auto-completed PR #${item.prNumber} into ${this.baseBranch} using ${this.mergeMethod} merge`,
+        {
+          issueNumber: item.issueNumber,
+          data: { prUrl: item.prUrl, branch: item.branch },
+        },
+      );
+    } else {
+      this.failedIssueNumbers.add(item.issueNumber);
+      this.failures.push({ ...item, error: `Merge failed after retries for PR #${item.prNumber}` });
+      this.logger.warn(
+        `Auto-complete failed for PR #${item.prNumber}`,
+        {
+          issueNumber: item.issueNumber,
+          data: { prUrl: item.prUrl, branch: item.branch },
+        },
+      );
+    }
   }
 
   private recordDependencyBlockedFailure(item: QueueItem, dependencyIssueNumber: number): void {

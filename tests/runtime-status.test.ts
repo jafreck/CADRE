@@ -42,7 +42,12 @@ vi.mock('../src/core/fleet-orchestrator.js', () => ({
   })),
 }));
 
-vi.mock('../src/git/worktree.js', () => ({ WorktreeManager: vi.fn() }));
+vi.mock('../src/git/worktree.js', () => ({
+
+  WorktreeManager: vi.fn().mockImplementation(() => ({
+    buildAgentCache: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 vi.mock('../src/core/agent-launcher.js', () => ({
   AgentLauncher: vi.fn().mockImplementation(() => ({ init: vi.fn().mockResolvedValue(undefined) })),

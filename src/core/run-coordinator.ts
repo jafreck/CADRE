@@ -149,6 +149,10 @@ export class RunCoordinator {
     const launcher = new AgentLauncher(this.config, this.logger);
     await launcher.init();
 
+    // Build (or refresh) the shared agent-file cache so DAG resolution
+    // (and later worktree provision) can symlink agent files correctly.
+    await worktreeManager.buildAgentCache();
+
     // 3b. Optionally resolve issue dependency graph (DAG mode)
     let dag: WorkItemDag<IssueDetail> | undefined;
     if (this.config.dag?.enabled) {

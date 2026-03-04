@@ -5,6 +5,7 @@ import type { WorkItemDag, FleetCheckpointManager } from '@cadre/framework/engin
 import type { PlatformProvider } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import { Logger } from '@cadre/framework/core';
+import { MergeRetryHelper } from './merge-retry.js';
 
 /** Callback type for processing a single issue. */
 export type ProcessIssueFn = (issue: IssueDetail, dag?: WorkItemDag<IssueDetail>) => Promise<IssueResult>;
@@ -157,22 +158,8 @@ export class FleetScheduler {
         failed.add(num);
       } else {
         if (this.config.dag?.autoMerge && result.success && result.pr) {
-          try {
-            await this.platform.mergePullRequest(result.pr.number, this.config.baseBranch);
-          } catch (err) {
-            this.logger.warn(
-              `Failed to merge PR #${result.pr.number} for issue #${num}: ${err}`,
-              { issueNumber: num },
-            );
-            await this.fleetCheckpoint.setIssueStatus(
-              num,
-              'dep-merge-conflict',
-              '',
-              '',
-              0,
-              issue.title,
-              String(err),
-            );
+          const merged = await this.tryMergeWithRetry(result.pr, num, issue.title);
+          if (!merged) {
             failed.add(num);
             scheduleReady();
             return;
@@ -185,5 +172,37 @@ export class FleetScheduler {
       failed.add(num);
     }
     scheduleReady();
+  }
+
+  /**
+   * Attempt to merge a PR with retries, using the shared {@link MergeRetryHelper}
+   * for server-side branch update + exponential backoff on dirty state.
+   */
+  private async tryMergeWithRetry(
+    pr: PullRequestInfo,
+    issueNumber: number,
+    issueTitle: string,
+  ): Promise<boolean> {
+    const helper = new MergeRetryHelper(this.platform, this.logger, this.config.baseBranch);
+    const merged = await helper.mergeWithRetry({
+      prNumber: pr.number,
+      prUrl: pr.url,
+      branch: pr.headBranch,
+      issueNumber,
+    });
+
+    if (!merged) {
+      await this.fleetCheckpoint.setIssueStatus(
+        issueNumber,
+        'dep-merge-conflict',
+        '',
+        '',
+        0,
+        issueTitle,
+        `Merge failed after retries for PR #${pr.number}`,
+      );
+    }
+
+    return merged;
   }
 }

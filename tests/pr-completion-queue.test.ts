@@ -180,7 +180,7 @@ describe('PullRequestCompletionQueue', () => {
       expect.objectContaining({
         issueNumber: 50,
         prNumber: 501,
-        error: 'Error: merge API unavailable',
+        error: expect.stringContaining('Merge failed after retries for PR #501'),
       }),
       expect.objectContaining({
         issueNumber: 51,
@@ -257,7 +257,7 @@ describe('PullRequestCompletionQueue', () => {
         expect.objectContaining({
           issueNumber: 70,
           prNumber: 701,
-          error: expect.stringContaining('merge conflicts'),
+          error: expect.stringContaining('Merge failed after retries for PR #701'),
         }),
       ]);
     });

@@ -74,7 +74,9 @@ vi.mock('../src/core/dependency-resolver.js', () => ({
 }));
 
 vi.mock('../src/git/worktree.js', () => ({
-  WorktreeManager: vi.fn(),
+  WorktreeManager: vi.fn().mockImplementation(() => ({
+    buildAgentCache: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 vi.mock('../src/core/agent-launcher.js', () => ({
@@ -1534,6 +1536,9 @@ describe('CadreRuntime — resolveIssues() error handling', () => {
     vi.clearAllMocks();
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
+    MockWorktreeManager.mockImplementation(() => ({
+      buildAgentCache: vi.fn().mockResolvedValue(undefined),
+    }));
     MockFleetOrchestrator.mockImplementation(() => ({
       run: vi.fn().mockResolvedValue({
         success: true,
