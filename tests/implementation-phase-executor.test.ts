@@ -1469,7 +1469,7 @@ describe('ImplementationPhaseExecutor', () => {
       );
     });
 
-    it('needs-fixes → fix-surgeon → exits after successful fix (no re-review)', async () => {
+    it('needs-fixes → fix-surgeon → re-review passes after successful fix', async () => {
       vi.mocked(exists).mockResolvedValue(true);
 
       const launcher = {
@@ -1478,22 +1478,24 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer'))  // attempt 0: needs-fixes
-          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon')),       // fix succeeds → done
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))        // fix succeeds
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')), // attempt 1: re-review passes
       };
 
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn()
           .mockResolvedValueOnce({ verdict: 'pass' })         // per-session code-reviewer
-          .mockResolvedValueOnce({ verdict: 'needs-fixes' }), // whole-PR: needs-fixes
+          .mockResolvedValueOnce({ verdict: 'needs-fixes' })  // whole-PR attempt 0: needs-fixes
+          .mockResolvedValueOnce({ verdict: 'pass' }),         // whole-PR attempt 1: pass after fix
       };
 
       const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });
       await executor.execute(ctx);
 
       const agents = launcher.launchAgent.mock.calls.map((c: [{ agent: string }]) => c[0].agent);
-      // A successful fix exits immediately — whole-pr-reviewer should only be called once
-      expect(agents.filter((a: string) => a === 'whole-pr-reviewer')).toHaveLength(1);
+      // After fix, the loop re-reviews — whole-pr-reviewer called twice
+      expect(agents.filter((a: string) => a === 'whole-pr-reviewer')).toHaveLength(2);
       expect(agents).toContain('fix-surgeon');
     });
 
@@ -1506,14 +1508,16 @@ describe('ImplementationPhaseExecutor', () => {
           .mockResolvedValueOnce(makeSuccessAgentResult('test-writer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('code-reviewer'))
           .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer'))
-          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon')),
+          .mockResolvedValueOnce(makeSuccessAgentResult('fix-surgeon'))
+          .mockResolvedValueOnce(makeSuccessAgentResult('whole-pr-reviewer')), // re-review after fix
       };
 
       const resultParser = {
         parseImplementationPlan: vi.fn().mockResolvedValue([makeSession('session-001')]),
         parseReview: vi.fn()
           .mockResolvedValueOnce({ verdict: 'pass' })
-          .mockResolvedValueOnce({ verdict: 'needs-fixes' }),
+          .mockResolvedValueOnce({ verdict: 'needs-fixes' })
+          .mockResolvedValueOnce({ verdict: 'pass' }),  // re-review passes
       };
 
       const ctx = makeWholePrCtx({ services: { launcher: launcher, resultParser: resultParser } as never });

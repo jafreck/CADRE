@@ -36,6 +36,8 @@ export function makeRuntimeConfig(overrides: Partial<RuntimeConfig> = {}): Runti
       ambiguityThreshold: 5,
       haltOnAmbiguity: false,
       respondToReviews: false,
+      maxWholePrReviewRetries: 2,
+      maxGateRetries: 1,
       postCostComment: false,
     },
     commands: {},

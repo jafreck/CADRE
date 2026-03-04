@@ -17,7 +17,7 @@ import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
 import { IssueLifecycleNotifier } from './issue-lifecycle-notifier.js';
-import { FlowRunner, defineFlow, step } from '@cadre/framework/flow';
+import { FlowRunner, defineFlow, step, loop, gate } from '@cadre/framework/flow';
 import { launchWithRetry } from '../executors/helpers.js';
 
 export { BudgetExceededError } from './issue-budget-guard.js';
@@ -368,13 +368,17 @@ export class IssueOrchestrator {
     }
 
     if (executor.phaseId >= 1 && executor.phaseId <= 4) {
-      const gateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
-      if (gateStatus === 'fail') {
-        this.logger.warn(`Gate failed for phase ${executor.phaseId}; retrying`, {
-          issueNumber: this.issue.number,
-          phase: executor.phaseId,
-        });
-        await this.progressWriter.appendEvent(`Phase ${executor.phaseId} gate failed; retrying phase`);
+      const maxGateRetries = this.config.options.maxGateRetries ?? 1;
+      let gateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
+
+      for (let gateAttempt = 0; gateAttempt < maxGateRetries && gateStatus === 'fail'; gateAttempt++) {
+        this.logger.warn(
+          `Gate failed for phase ${executor.phaseId} (attempt ${gateAttempt + 1}/${maxGateRetries}); retrying`,
+          { issueNumber: this.issue.number, phase: executor.phaseId },
+        );
+        await this.progressWriter.appendEvent(
+          `Phase ${executor.phaseId} gate failed; retrying phase (attempt ${gateAttempt + 1}/${maxGateRetries})`,
+        );
 
         const retryResult = await this.executePhase(executor);
         this.phases[this.phases.length - 1] = retryResult;
@@ -389,21 +393,22 @@ export class IssueOrchestrator {
         }
 
         await this.checkpoint.completePhase(executor.phaseId, retryResult.outputPath ?? '');
-        const retryGateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
-        if (retryGateStatus === 'fail') {
-          this.logger.error(`Gate still failing for phase ${executor.phaseId} after retry; aborting`, {
-            issueNumber: this.issue.number,
-            phase: executor.phaseId,
-          });
-          await this.progressWriter.appendEvent(
-            `Pipeline aborted: gate still failing for phase ${executor.phaseId} after retry`,
-          );
-          throw new PipelineHaltError(
-            `Gate validation failed for phase ${executor.phaseId} after retry`,
-            executor.phaseId,
-            executor.name,
-          );
-        }
+        gateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
+      }
+
+      if (gateStatus === 'fail') {
+        this.logger.error(
+          `Gate still failing for phase ${executor.phaseId} after ${maxGateRetries} retries; aborting`,
+          { issueNumber: this.issue.number, phase: executor.phaseId },
+        );
+        await this.progressWriter.appendEvent(
+          `Pipeline aborted: gate still failing for phase ${executor.phaseId} after ${maxGateRetries} retries`,
+        );
+        throw new PipelineHaltError(
+          `Gate validation failed for phase ${executor.phaseId} after retry`,
+          executor.phaseId,
+          executor.name,
+        );
       }
     }
 
