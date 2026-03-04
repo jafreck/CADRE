@@ -395,5 +395,66 @@ describe('FleetScheduler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('rejected');
     });
+
+    it('should NOT auto-merge pre-existing PRs (codeComplete=false)', async () => {
+      const issue1 = makeIssue(1);
+      const issues = [issue1];
+      const { fleetCheckpoint, platform, logger } = makeDeps();
+      const config = makeConfig();
+      config.dag = { autoMerge: true };
+      const scheduler = new FleetScheduler(
+        config, issues, fleetCheckpoint as any, platform as any, logger as any,
+      );
+
+      // Simulate an existing PR result: success=true but codeComplete=false
+      const processIssue: ProcessIssueFn = vi.fn().mockResolvedValue({
+        ...makeResult(1),
+        codeComplete: false,
+        pr: { number: 10, url: 'https://github.com/pull/10', title: 'PR 10', branch: 'cadre/issue-1' },
+      });
+      const markDepBlocked: MarkDepBlockedFn = vi.fn();
+
+      const dag = {
+        getWaves: () => [[issue1]],
+        getDirectDeps: vi.fn().mockReturnValue([]),
+        getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
+      } as unknown as WorkItemDag<IssueDetail>;
+
+      const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
+
+      // Should NOT attempt merge — existing PRs are handled by the completion queue
+      expect(platform.mergePullRequest).not.toHaveBeenCalled();
+      expect(results).toHaveLength(1);
+      expect((results[0] as PromiseFulfilledResult<IssueResult>).value.success).toBe(true);
+    });
+
+    it('should still auto-merge cadre-produced PRs (codeComplete=true)', async () => {
+      const issue1 = makeIssue(1);
+      const issues = [issue1];
+      const { fleetCheckpoint, platform, logger } = makeDeps();
+      const config = makeConfig();
+      config.dag = { autoMerge: true };
+      const scheduler = new FleetScheduler(
+        config, issues, fleetCheckpoint as any, platform as any, logger as any,
+      );
+
+      const processIssue: ProcessIssueFn = vi.fn().mockResolvedValue({
+        ...makeResult(1),
+        codeComplete: true,
+        pr: { number: 10, url: 'https://github.com/pull/10', title: 'PR 10', branch: 'cadre/issue-1' },
+      });
+      const markDepBlocked: MarkDepBlockedFn = vi.fn();
+
+      const dag = {
+        getWaves: () => [[issue1]],
+        getDirectDeps: vi.fn().mockReturnValue([]),
+        getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
+      } as unknown as WorkItemDag<IssueDetail>;
+
+      await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
+
+      // SHOULD attempt merge for cadre-produced PRs
+      expect(platform.mergePullRequest).toHaveBeenCalledWith(10, 'main', undefined);
+    });
   });
 });

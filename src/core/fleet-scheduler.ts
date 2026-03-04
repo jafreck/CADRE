@@ -157,7 +157,10 @@ export class FleetScheduler {
       if (isFailure) {
         failed.add(num);
       } else {
-        if (this.config.dag?.autoMerge && result.success && result.pr) {
+        // Only autoMerge PRs that cadre actually produced (codeComplete).
+        // Pre-existing open PRs (codeComplete=false) are handled by the
+        // PR completion queue which has a full conflict-resolver callback.
+        if (this.config.dag?.autoMerge && result.success && result.codeComplete && result.pr) {
           const merged = await this.tryMergeWithRetry(result.pr, num, issue.title);
           if (!merged) {
             failed.add(num);
