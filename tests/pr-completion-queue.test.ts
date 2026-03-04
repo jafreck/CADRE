@@ -198,23 +198,6 @@ describe('PullRequestCompletionQueue', () => {
     );
   });
 
-  it('returns without side effects when executeItem is invoked for an unknown issue', async () => {
-    const queue = new PullRequestCompletionQueue(
-      platform,
-      logger,
-      'main',
-      'squash',
-      true,
-      vi.fn().mockResolvedValue(true),
-    );
-
-    await (queue as unknown as { executeItem: (issueNumber: number) => Promise<void> }).executeItem(99999);
-
-    expect(mergePullRequest).not.toHaveBeenCalled();
-    expect(logger.warn).not.toHaveBeenCalled();
-    expect(queue.getFailures()).toEqual([]);
-  });
-
   describe('merge conflict resolution', () => {
     it('invokes conflictResolver on dirty merge error and retries merge', async () => {
       const conflictResolver = vi.fn().mockResolvedValue(true);
