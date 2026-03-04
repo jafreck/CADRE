@@ -48,6 +48,7 @@ function makeDeps() {
   };
   const platform = {
     mergePullRequest: vi.fn().mockResolvedValue(undefined),
+    updatePullRequestBranch: vi.fn().mockResolvedValue(false),
   };
   const logger = {
     info: vi.fn(),
@@ -241,6 +242,87 @@ describe('FleetScheduler', () => {
       );
       expect(results).toHaveLength(1);
     });
+
+    it('should retry merge with updateBranch when dirty state detected', async () => {
+      const issue1 = makeIssue(1);
+      const issues = [issue1];
+      const { fleetCheckpoint, platform, logger } = makeDeps();
+      const config = makeConfig();
+      config.dag = { autoMerge: true };
+
+      // First call: dirty error, second call: success
+      platform.mergePullRequest
+        .mockRejectedValueOnce(new Error('PR has merge conflicts (mergeable_state=dirty)'))
+        .mockResolvedValueOnce(undefined);
+      platform.updatePullRequestBranch.mockResolvedValue(true);
+
+      const scheduler = new FleetScheduler(
+        config, issues, fleetCheckpoint as any, platform as any, logger as any,
+      );
+
+      const processIssue: ProcessIssueFn = vi.fn().mockResolvedValue({
+        ...makeResult(1),
+        pr: { number: 10, url: 'https://github.com/pull/10', title: 'PR 10', headBranch: 'cadre/issue-1', baseBranch: 'main', state: 'open' },
+      });
+      const markDepBlocked: MarkDepBlockedFn = vi.fn();
+
+      const dag = {
+        getWaves: () => [[issue1]],
+        getDirectDeps: vi.fn().mockReturnValue([]),
+        getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
+      } as unknown as WorkItemDag<IssueDetail>;
+
+      const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
+
+      // Should have attempted merge twice
+      expect(platform.mergePullRequest).toHaveBeenCalledTimes(2);
+      // Should have requested branch update
+      expect(platform.updatePullRequestBranch).toHaveBeenCalledWith(10);
+      // Should not have recorded failure
+      expect(fleetCheckpoint.setIssueStatus).not.toHaveBeenCalled();
+      expect(results).toHaveLength(1);
+      expect((results[0] as PromiseFulfilledResult<IssueResult>).value.success).toBe(true);
+    }, 60_000);
+
+    it('should fail after exhausting merge retries on persistent dirty state', async () => {
+      const issue1 = makeIssue(1);
+      const issues = [issue1];
+      const { fleetCheckpoint, platform, logger } = makeDeps();
+      const config = makeConfig();
+      config.dag = { autoMerge: true };
+
+      // All attempts fail with dirty
+      platform.mergePullRequest.mockRejectedValue(
+        new Error('PR has merge conflicts (mergeable_state=dirty)'),
+      );
+      platform.updatePullRequestBranch.mockResolvedValue(true);
+
+      const scheduler = new FleetScheduler(
+        config, issues, fleetCheckpoint as any, platform as any, logger as any,
+      );
+
+      const processIssue: ProcessIssueFn = vi.fn().mockResolvedValue({
+        ...makeResult(1),
+        pr: { number: 10, url: 'https://github.com/pull/10', title: 'PR 10', headBranch: 'cadre/issue-1', baseBranch: 'main', state: 'open' },
+      });
+      const markDepBlocked: MarkDepBlockedFn = vi.fn();
+
+      const dag = {
+        getWaves: () => [[issue1]],
+        getDirectDeps: vi.fn().mockReturnValue([]),
+        getTransitiveDepsOrdered: vi.fn().mockReturnValue([]),
+      } as unknown as WorkItemDag<IssueDetail>;
+
+      const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
+
+      // 3 attempts total (first + 2 retries)
+      expect(platform.mergePullRequest).toHaveBeenCalledTimes(3);
+      expect(platform.updatePullRequestBranch).toHaveBeenCalledTimes(2);
+      // Should record dep-merge-conflict
+      expect(fleetCheckpoint.setIssueStatus).toHaveBeenCalledWith(
+        1, 'dep-merge-conflict', '', '', 0, 'Issue 1', expect.stringContaining('dirty'),
+      );
+    }, 120_000);
 
     it('should skip already-completed issues on resume', async () => {
       const issue1 = makeIssue(1);
