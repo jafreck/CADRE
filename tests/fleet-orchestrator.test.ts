@@ -2876,6 +2876,96 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     expect(retryLogCalls).toHaveLength(1);
   });
 
+  it('derives branchName from worktreeManager when checkpoint has empty branchName', async () => {
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
+    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const mockCheckpoint = makeMockFleetCheckpointForReconcile({
+      setIssueStatus,
+      getAllIssueStatuses: vi.fn().mockReturnValue([
+        // branchName is empty — simulates pre-fix checkpoint data
+        [20, { status: 'dep-merge-conflict', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 20' }],
+      ]),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+    });
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+
+    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 20,
+        issueTitle: 'Issue 20',
+        success: true,
+        codeComplete: false,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 500,
+      }),
+    }));
+
+    const config = makeRuntimeConfig({
+      branchTemplate: 'cadre/issue-{issue}',
+      issues: { ids: [20] },
+      commits: { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false },
+      pullRequest: { autoCreate: true, autoComplete: false, draft: true, labels: [], reviewers: [], linkIssue: true },
+      options: {
+        maxParallelIssues: 3,
+        maxParallelAgents: 3,
+        maxRetriesPerTask: 3,
+        dryRun: false,
+        resume: true,
+        invocationDelayMs: 0,
+        buildVerification: false,
+        testVerification: false,
+        perTaskBuildCheck: true,
+        maxBuildFixRounds: 2,
+        skipValidation: false,
+        maxIntegrationFixRounds: 1,
+        ambiguityThreshold: 5,
+        haltOnAmbiguity: false,
+        respondToReviews: false,
+        maxWholePrReviewRetries: 1,
+        postCostComment: false,
+      },
+    });
+
+    const issue20 = makeIssue(20);
+    const { worktreeManager, launcher, platform, logger } = makeMockDeps();
+    const notifications = { dispatch: vi.fn().mockResolvedValue(undefined) } as any;
+
+    // worktreeManager.resolveBranchName should derive the branch
+    (worktreeManager.resolveBranchName as ReturnType<typeof vi.fn>).mockImplementation(
+      (num: number, title?: string) => `cadre/issue-${num}-issue-${num}`,
+    );
+
+    // Phase 1 call (state: 'all') — merged PR found via derived branch
+    (platform as any).listPullRequests = vi.fn().mockResolvedValue([
+      { number: 61, url: 'https://github.com/owner/repo/pull/61', title: 'PR 61', headBranch: 'cadre/issue-20-issue-20', baseBranch: 'main', state: 'merged' },
+    ]);
+
+    const fleet = new FleetOrchestrator(
+      config,
+      [issue20],
+      worktreeManager as any,
+      launcher as any,
+      platform as any,
+      logger as any,
+      notifications,
+    );
+
+    await fleet.run();
+
+    // Should have used resolveBranchName to derive the branch
+    expect(worktreeManager.resolveBranchName).toHaveBeenCalledWith(20, 'Issue 20');
+
+    // Should have promoted #20 to completed using the derived branchName
+    const promotionCall = setIssueStatus.mock.calls.find(
+      ([num, status]: [number, string]) => num === 20 && status === 'completed',
+    );
+    expect(promotionCall).toBeDefined();
+    // The branchName in the setIssueStatus call should be the derived one
+    expect(promotionCall![3]).toBe('cadre/issue-20-issue-20');
+  });
+
   it('processIssue detects already-merged PRs and skips re-processing', async () => {
     const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatus = vi.fn().mockResolvedValue(undefined);

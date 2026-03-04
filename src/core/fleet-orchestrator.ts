@@ -227,8 +227,16 @@ export class FleetOrchestrator {
 
     const allStatuses = this.fleetCheckpoint.getAllIssueStatuses();
 
+    // Helper: resolve branchName from checkpoint or derive from issue metadata
+    const issueMap = new Map(this.issues.map((i) => [i.number, i]));
+    const resolveBranch = (issueNumber: number, stored: string): string => {
+      if (stored) return stored;
+      const issue = issueMap.get(issueNumber);
+      return this.worktreeManager.resolveBranchName(issueNumber, issue?.title);
+    };
+
     const toReconcile = allStatuses.filter(
-      ([_, s]) => reconcilableStatuses.has(s.status) && s.branchName,
+      ([num, s]) => reconcilableStatuses.has(s.status) && resolveBranch(num, s.branchName),
     );
 
     // ── Phase 1: Promote issues whose PRs have been merged ──
@@ -239,9 +247,10 @@ export class FleetOrchestrator {
       );
 
       for (const [issueNumber, issueStatus] of toReconcile) {
+        const branch = resolveBranch(issueNumber, issueStatus.branchName);
         try {
           const prs = await this.platform.listPullRequests({
-            head: issueStatus.branchName,
+            head: branch,
             state: 'all',
           });
           const merged = prs.find((pr) => pr.state === 'merged');
@@ -254,7 +263,7 @@ export class FleetOrchestrator {
               issueNumber,
               'completed',
               issueStatus.worktreePath,
-              issueStatus.branchName,
+              branch,
               issueStatus.lastPhase,
               issueStatus.issueTitle,
             );
@@ -271,15 +280,16 @@ export class FleetOrchestrator {
 
     // ── Phase 2: Retry merge for dep-merge-conflict issues with open PRs ──
     const conflictIssues = allStatuses.filter(
-      ([_, s]) => s.status === 'dep-merge-conflict' && s.branchName,
+      ([num, s]) => s.status === 'dep-merge-conflict' && resolveBranch(num, s.branchName),
     );
     let mergeRetried = 0;
     for (const [issueNumber, issueStatus] of conflictIssues) {
       // Skip if already promoted in Phase 1
       if (this.fleetCheckpoint.isIssueCompleted(issueNumber)) continue;
+      const branch = resolveBranch(issueNumber, issueStatus.branchName);
       try {
         const prs = await this.platform.listPullRequests({
-          head: issueStatus.branchName,
+          head: branch,
           state: 'open',
         });
         const openPR = prs[0];
@@ -293,7 +303,7 @@ export class FleetOrchestrator {
         const merged = await helper.mergeWithRetry({
           prNumber: openPR.number,
           prUrl: openPR.url,
-          branch: issueStatus.branchName,
+          branch,
           issueNumber,
         });
         if (merged) {
@@ -305,7 +315,7 @@ export class FleetOrchestrator {
             issueNumber,
             'completed',
             issueStatus.worktreePath,
-            issueStatus.branchName,
+            branch,
             issueStatus.lastPhase,
             issueStatus.issueTitle,
           );
@@ -316,6 +326,18 @@ export class FleetOrchestrator {
             `Reconciliation: merge still failing for issue #${issueNumber} PR #${openPR.number}; will re-process`,
             { issueNumber },
           );
+          // Backfill the resolved branchName into the checkpoint so future
+          // reconciliation cycles don't need to re-derive it.
+          if (!issueStatus.branchName && branch) {
+            await this.fleetCheckpoint.setIssueStatus(
+              issueNumber,
+              issueStatus.status,
+              issueStatus.worktreePath,
+              branch,
+              issueStatus.lastPhase,
+              issueStatus.issueTitle,
+            );
+          }
         }
       } catch (err) {
         this.logger.warn(
