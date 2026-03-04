@@ -1067,7 +1067,7 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
     expect(infoCall).toBeDefined();
   });
 
-  it('records the issue as completed in the fleet checkpoint when skipping', async () => {
+  it('records the issue as code-complete in the fleet checkpoint when skipping (PR not yet merged)', async () => {
     const { FleetCheckpointManager } = await import('@cadre/framework/engine');
     const setIssueStatusMock = vi.fn().mockResolvedValue(undefined);
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
@@ -1098,10 +1098,16 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
 
     await fleet.run();
 
+    // Should be code-complete, not completed — the PR hasn't been merged yet
+    const codeCompleteCall = setIssueStatusMock.mock.calls.find(
+      (args: unknown[]) => args[0] === 1 && args[1] === 'code-complete',
+    );
+    expect(codeCompleteCall).toBeDefined();
+    // Should NOT have been marked completed
     const completedCall = setIssueStatusMock.mock.calls.find(
       (args: unknown[]) => args[0] === 1 && args[1] === 'completed',
     );
-    expect(completedCall).toBeDefined();
+    expect(completedCall).toBeUndefined();
   });
 
   it('proceeds normally (provisions worktree) when findOpenPR() throws an error', async () => {
@@ -1203,7 +1209,27 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
     expect(result.failedIssues).toHaveLength(0);
   });
 
-  it('on resume, queues and auto-completes existing open PRs', async () => {
+  it('on resume, queues and auto-completes existing open PRs and promotes to completed', async () => {
+    const { FleetCheckpointManager } = await import('@cadre/framework/engine');
+    const setIssueStatusMock = vi.fn().mockResolvedValue(undefined);
+    const issueStatuses: Record<number, any> = {};
+    // Track setIssueStatus calls to feed back into getIssueStatus
+    setIssueStatusMock.mockImplementation(async (num: number, status: string, wt: string, branch: string, phase: number, title: string) => {
+      issueStatuses[num] = { status, worktreePath: wt, branchName: branch, lastPhase: phase, issueTitle: title };
+    });
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      load: vi.fn().mockResolvedValue(undefined),
+      isIssueCompleted: vi.fn().mockReturnValue(false),
+      setIssueStatus: setIssueStatusMock,
+      clearIssueStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      getIssueStatus: vi.fn().mockImplementation((num: number) => issueStatuses[num] ?? null),
+      setDag: vi.fn().mockResolvedValue(undefined),
+      markWaveComplete: vi.fn().mockResolvedValue(undefined),
+      getState: vi.fn().mockReturnValue({ completedWaves: [] }),
+      getAllIssueStatuses: vi.fn().mockReturnValue([]),
+    }));
+
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
       issues: { ids: [1, 2, 3] },
@@ -1258,11 +1284,24 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
 
     await fleet.run();
 
+    // PRs should have been merged
     expect(platform.mergePullRequest).toHaveBeenCalledTimes(3);
     expect(platform.mergePullRequest).toHaveBeenCalledWith(201, config.baseBranch, 'squash');
     expect(platform.mergePullRequest).toHaveBeenCalledWith(202, config.baseBranch, 'squash');
     expect(platform.mergePullRequest).toHaveBeenCalledWith(203, config.baseBranch, 'squash');
     expect(worktreeManager.provision).not.toHaveBeenCalled();
+
+    // All three issues should first be set to code-complete, then promoted to completed
+    for (const issueNum of [1, 2, 3]) {
+      const codeCompleteCall = setIssueStatusMock.mock.calls.find(
+        (args: unknown[]) => args[0] === issueNum && args[1] === 'code-complete',
+      );
+      expect(codeCompleteCall).toBeDefined();
+      const completedCall = setIssueStatusMock.mock.calls.find(
+        (args: unknown[]) => args[0] === issueNum && args[1] === 'completed',
+      );
+      expect(completedCall).toBeDefined();
+    }
   });
 
   it('does not auto-complete existing open PRs when not resuming', async () => {

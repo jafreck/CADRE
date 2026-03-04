@@ -59,6 +59,7 @@ export class FleetOrchestrator {
   private eventBus!: FleetEventBus;
   private reporter!: FleetReporter;
   private readonly prCompletionQueue: PullRequestCompletionQueue;
+  private readonly autoCompleteEnabled: boolean;
 
   constructor(
     private readonly config: RuntimeConfig,
@@ -79,6 +80,7 @@ export class FleetOrchestrator {
     this.contextBuilder = new ContextBuilder(config, logger);
 
     const autoComplete = this.resolveAutoCompleteConfig();
+    this.autoCompleteEnabled = autoComplete.enabled;
     this.prCompletionQueue = new PullRequestCompletionQueue(
       this.platform,
       this.logger,
@@ -155,6 +157,28 @@ export class FleetOrchestrator {
       this.logger.info(
         `PR completion subsystem finished: ${this.prCompletionQueue.getQueuedCount()} queued, ${completionFailures.length} failed`,
       );
+    }
+
+    // Promote issues whose PRs were successfully merged by the completion queue
+    // from 'code-complete' to 'completed'.  Issues whose merges failed stay as
+    // 'code-complete' so the next resume run can retry them.
+    const mergedIssueNumbers = this.prCompletionQueue.getCompletedIssueNumbers();
+    for (const issueNumber of mergedIssueNumbers) {
+      const current = this.fleetCheckpoint.getIssueStatus(issueNumber);
+      if (current && current.status === 'code-complete') {
+        await this.fleetCheckpoint.setIssueStatus(
+          issueNumber,
+          'completed',
+          current.worktreePath,
+          current.branchName,
+          current.lastPhase,
+          current.issueTitle,
+        );
+        this.logger.info(
+          `Promoted issue #${issueNumber} from code-complete to completed after PR merge`,
+          { issueNumber },
+        );
+      }
     }
 
     // Aggregate results
@@ -597,9 +621,13 @@ export class FleetOrchestrator {
             branch: branchName,
             dependencyIssueNumbers: dag ? dag.getDirectDeps(issue.number) : [],
           });
+          // Mark code-complete (not completed) — the completion queue will
+          // promote to 'completed' only after the PR is actually merged.
+          // If auto-complete is disabled the queue is a no-op and the PR
+          // stays open, so code-complete is still the correct status.
           await this.fleetCheckpoint.setIssueStatus(
             issue.number,
-            'completed',
+            'code-complete',
             '',
             branchName,
             0,
@@ -753,10 +781,14 @@ export class FleetOrchestrator {
       const result = await issueOrchestrator.run();
 
       // 7. Update fleet checkpoint
+      // When auto-complete is enabled and a PR was created, mark 'code-complete'
+      // instead of 'completed' — the completion queue promotes to 'completed'
+      // only after the PR is actually merged.
+      const willEnqueueForCompletion = this.autoCompleteEnabled && result.pr?.number != null && result.success;
       const status = result.budgetExceeded
         ? 'budget-exceeded'
         : result.success
-          ? 'completed'
+          ? (willEnqueueForCompletion ? 'code-complete' : 'completed')
           : result.codeComplete
             ? 'code-complete'
             : 'failed';

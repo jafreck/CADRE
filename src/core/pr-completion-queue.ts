@@ -133,6 +133,10 @@ export class PullRequestCompletionQueue {
     return this.queued.size;
   }
 
+  getCompletedIssueNumbers(): ReadonlySet<number> {
+    return this.completedIssueNumbers;
+  }
+
   getFailures(): CompletionFailure[] {
     return [...this.failures];
   }
