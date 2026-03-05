@@ -68,74 +68,23 @@ import { ImplementationPhaseExecutor } from '../src/executors/implementation-pha
 import { IntegrationPhaseExecutor } from '../src/executors/integration-phase-executor.js';
 import { PRCompositionPhaseExecutor } from '../src/executors/pr-composition-phase-executor.js';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
-import type { AgentLauncher } from '../src/core/agent-launcher.js';
-import type { PlatformProvider } from '../src/platform/provider.js';
-import type { Logger } from '@cadre/framework/core';
-import type { CadreConfig } from '../src/config/schema.js';
-import type { IssueDetail, WorktreeInfo } from '../src/platform/provider.js';
 import type { PhaseContext } from '../src/core/phase-executor.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
+import { makeMockLogger } from './helpers/make-mock-logger.js';
+import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
+import { makeMockIssue } from './helpers/make-mock-issue.js';
+import { makeMockWorktree } from './helpers/make-mock-worktree.js';
 
 // ── Helpers ──
 
-function makeLogger(): Logger {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as Logger;
-}
-
-function makeCpState(worktreePath: string) {
-  return {
-    issueNumber: 42,
-    version: 1,
-    currentPhase: 0,
-    currentTask: null,
-    completedPhases: [],
-    completedTasks: [],
-    failedTasks: [],
-    blockedTasks: [],
-    phaseOutputs: {},
-    tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-    worktreePath,
-    branchName: 'cadre/issue-42',
-    baseCommit: 'abc123',
-    startedAt: new Date().toISOString(),
-    lastCheckpoint: new Date().toISOString(),
-    resumeCount: 0,
-  };
-}
-
-function makeCheckpoint(worktreePath: string, overrides: Partial<CheckpointManager> = {}): CheckpointManager {
-  const state = makeCpState(worktreePath);
-  return {
-    getState: vi.fn(() => state),
-    getResumePoint: vi.fn(() => ({ phase: 1, taskId: null })),
-    isPhaseCompleted: vi.fn(() => false),
-    isTaskCompleted: vi.fn(() => false),
-    startPhase: vi.fn(async () => {}),
-    completePhase: vi.fn(async () => {}),
-    startTask: vi.fn(async () => {}),
-    completeTask: vi.fn(async () => {}),
-    blockTask: vi.fn(async () => {}),
-    failTask: vi.fn(async () => {}),
-    recordTokenUsage: vi.fn(async () => {}),
-    recordGateResult: vi.fn(async () => {}),
-    ...overrides,
-  } as unknown as CheckpointManager;
-}
-
-function makePlatform(): PlatformProvider {
+function makePlatform() {
   return {
     issueLinkSuffix: vi.fn(() => 'Closes #42'),
     createPullRequest: vi.fn(async () => ({ number: 1, url: 'https://github.com/test/pr/1' })),
-  } as unknown as PlatformProvider;
+  } as any;
 }
 
-function makeLauncher(): AgentLauncher {
+function makeLauncher() {
   return {
     launchAgent: vi.fn(async () => ({
       agent: 'test-agent',
@@ -149,19 +98,12 @@ function makeLauncher(): AgentLauncher {
       outputPath: '',
       outputExists: false,
     })),
-  } as unknown as AgentLauncher;
+  } as any;
 }
 
-function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfig {
-  return {
-    projectName: 'test-project',
-    platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    stateDir: '/tmp/.cadre/test-project',
-    baseBranch: 'main',
+function makeConfig(overrides: Record<string, unknown> = {}) {
+  return makeRuntimeConfig({
     issues: { ids: [42] },
-    branchTemplate: 'cadre/issue-{issue}',
     commits: {
       conventional: true,
       sign: false,
@@ -170,6 +112,7 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfi
     },
     pullRequest: {
       autoCreate: false,
+      autoComplete: false,
       draft: true,
       labels: [],
       reviewers: [],
@@ -179,40 +122,14 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfi
       maxParallelIssues: 1,
       maxParallelAgents: 1,
       maxRetriesPerTask: 1,
-      tokenBudget: undefined,
       dryRun: false,
       resume: false,
       invocationDelayMs: 0,
       buildVerification: false,
       testVerification: false,
       ...overrides,
-    },
-    commands: {},
-    copilot: {
-      cliCommand: 'copilot',
-      model: 'claude-sonnet-4.6',
-      agentDir: '.github/agents',
-      timeout: 300000,
-    },
-    environment: {
-      inheritShellPath: true,
-      extraPath: [],
-    },
-  } as CadreConfig;
-}
-
-function makeIssue(): IssueDetail {
-  return {
-    number: 42,
-    title: 'Test issue',
-    body: 'Test body',
-    labels: [],
-    assignees: [],
-    state: 'open',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    url: 'https://github.com/owner/repo/issues/42',
-  };
+    } as any,
+  });
 }
 
 /** Build a mock PhaseExecutor with a given phaseId that resolves successfully. */
@@ -248,13 +165,8 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
     vi.clearAllMocks();
   });
 
-  function makeWorktree(): WorktreeInfo {
-    return {
-      path: worktreePath,
-      branch: 'cadre/issue-42',
-      baseCommit: 'abc123',
-      issueNumber: 42,
-    } as unknown as WorktreeInfo;
+  function makeWorktree() {
+    return makeMockWorktree({ path: worktreePath });
   }
 
   function setupExecutorMocks(executors: ReturnType<typeof makeExecutorMock>[]) {
@@ -279,12 +191,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       expect(AnalysisPhaseExecutor).toHaveBeenCalledTimes(1);
@@ -310,12 +222,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
@@ -340,18 +252,18 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
       ];
       setupExecutorMocks(execs);
 
-      const checkpoint = makeCheckpoint(worktreePath, {
+      const checkpoint = makeMockCheckpoint([], {
         isPhaseCompleted: vi.fn(() => true),
       });
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
         checkpoint,
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       await orchestrator.run();
@@ -377,12 +289,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig({ dryRun: true }),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
@@ -412,17 +324,17 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
       setupExecutorMocks(execs);
 
       const config = makeConfig();
-      const issue = makeIssue();
+      const issue = makeMockIssue();
       const worktree = makeWorktree();
 
       const orchestrator = new IssueOrchestrator(
         config,
         issue,
         worktree,
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       await orchestrator.run();
@@ -459,12 +371,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
@@ -488,12 +400,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
@@ -516,12 +428,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
@@ -547,12 +459,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
@@ -580,12 +492,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
@@ -609,12 +521,12 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
       const orchestrator = new IssueOrchestrator(
         makeConfig(),
-        makeIssue(),
+        makeMockIssue(),
         makeWorktree(),
-        makeCheckpoint(worktreePath),
+        makeMockCheckpoint(),
         makeLauncher(),
         makePlatform(),
-        makeLogger(),
+        makeMockLogger(),
       );
 
       const result = await orchestrator.run();
