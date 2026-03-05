@@ -231,6 +231,58 @@ export class CommitManager {
   }
 
   /**
+   * Defence-in-depth pre-push check: verify the diff between `baseCommit` and
+   * HEAD contains no cadre artifact files.  If any are found, unstage them and
+   * amend the commit so they are never pushed to the remote.
+   *
+   * This catches artifacts that survive `stripCadreFiles` — for example when a
+   * rebase onto a base branch that already contains `.cadre/` re-introduces the
+   * files, or when an agent independently commits them.
+   */
+  async ensureNoCadreArtifactsInDiff(baseCommit: string): Promise<void> {
+    const cadrePatterns = ['.cadre/', 'task-', ...this.syncedAgentFiles];
+    const isCadreArtifact = (f: string) =>
+      cadrePatterns.some((p) => {
+        if (p.includes('*')) {
+          // Simple glob: 'task-*.md' → startsWith('task-')
+          const prefix = p.split('*')[0];
+          return f.startsWith(prefix) || f.includes(`/${prefix}`);
+        }
+        return f.startsWith(p) || f.includes(`/${p}`);
+      });
+
+    const diffOutput = await this.git.diff(['--name-only', `${baseCommit}..HEAD`]);
+    const changedFiles = diffOutput.trim().split('\n').filter(Boolean);
+    const artifacts = changedFiles.filter(isCadreArtifact);
+
+    if (artifacts.length === 0) return;
+
+    this.logger.warn(
+      `Pre-push guard: found ${artifacts.length} cadre artifact(s) in diff — stripping: ${artifacts.join(', ')}`,
+    );
+
+    // Restore these files to their state at baseCommit (removes them from the
+    // diff) and amend the current commit.
+    for (const file of artifacts) {
+      // Try to restore the file to its baseCommit version.  If the file didn't
+      // exist at baseCommit, remove it from the index entirely.
+      await this.git.raw(['checkout', baseCommit, '--', file]).catch(async () => {
+        await this.git.raw(['rm', '--cached', '--force', '--', file]).catch(() => {});
+      });
+    }
+    // Also clean artifacts from the working tree so they don't get re-staged.
+    for (const pattern of ['.cadre/', 'task-*.md', ...this.syncedAgentFiles]) {
+      await this.git.raw(['clean', '-fd', '--', pattern]).catch(() => {});
+    }
+
+    await this.git.raw(['commit', '--amend', '--no-edit']).catch(() => {
+      // If nothing changed (e.g. all artifacts were already at base state), that's fine.
+    });
+
+    this.logger.info('Pre-push guard: cadre artifacts removed from diff');
+  }
+
+  /**
    * Get the list of changed files (staged + unstaged).
    */
   async getChangedFiles(): Promise<string[]> {

@@ -148,6 +148,11 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     // Fix 1: Rebase onto latest base branch before pushing to eliminate trivial behind-base dirtiness.
     await this.rebaseOntoBase(ctx);
 
+    // Defence-in-depth: ensure no cadre artifacts leaked into the diff
+    // (e.g. from rebase carrying forward artifacts already on the base branch,
+    // or from an agent independently committing .cadre/ files).
+    await ctx.io.commitManager.ensureNoCadreArtifactsInDiff(ctx.worktree.baseCommit);
+
     await ctx.io.commitManager.push(true, ctx.worktree.branch);
 
     const prTitle = formatPullRequestTitle(prContent.title, ctx.issue.title, ctx.issue.number);
