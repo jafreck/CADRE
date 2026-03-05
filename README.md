@@ -1,8 +1,8 @@
 # CADRE — Coordinated Agent Development Runtime Engine
 
 [![CI](https://github.com/jafreck/cadre/actions/workflows/ci.yml/badge.svg)](https://github.com/jafreck/cadre/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/cadre)](https://www.npmjs.com/package/cadre)
-[![npm downloads](https://img.shields.io/npm/dw/cadre)](https://www.npmjs.com/package/cadre)
+[![npm version](https://img.shields.io/npm/v/@jafreck/cadre)](https://www.npmjs.com/package/@jafreck/cadre)
+[![npm downloads](https://img.shields.io/npm/dw/@jafreck/cadre)](https://www.npmjs.com/package/@jafreck/cadre)
 [![Coverage](https://img.shields.io/codecov/c/github/jafreck/cadre)](https://codecov.io/gh/jafreck/cadre)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -11,20 +11,19 @@ CADRE is a framework for **parallel agent-based software development** against a
 ## Quick Start
 
 ```bash
-npm install
-npm run build
+npm install -g @jafreck/cadre
 
 # Create a cadre.config.json in your repo
-npx cadre run -c path/to/cadre.config.json
+cadre run -c path/to/cadre.config.json
 
 # Resume from last checkpoint
-npx cadre run -c path/to/cadre.config.json --resume
+cadre run -c path/to/cadre.config.json --resume
 
 # Check progress
-npx cadre status -c path/to/cadre.config.json
+cadre status -c path/to/cadre.config.json
 
 # List active worktrees
-npx cadre worktrees -c path/to/cadre.config.json
+cadre worktrees -c path/to/cadre.config.json
 ```
 
 ## Configuration
@@ -207,6 +206,8 @@ Cadre supports runtime extension points without patching core switches:
 - `cadre status` — Show fleet and issue progress
 - `cadre reset` — Reset fleet or issue state
 - `cadre worktrees` — List or manage active worktrees
+
+When installed globally (`npm install -g @jafreck/cadre`), the `cadre` command is available directly. You can also use `npx @jafreck/cadre` without installing.
 
 ## Key Design Principles
 
