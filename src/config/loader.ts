@@ -65,12 +65,15 @@ export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
     ? config.repoPath
     : resolve(configDir, config.repoPath);
 
-  // stateDir: all cadre state lives outside the target repo so it never pollutes git
+  // stateDir: all cadre state lives outside the target repo so it never pollutes git.
+  // When no stateDir is specified, default to ~/.cadre/{projectName} so each
+  // project gets its own checkpoint, logs, and worktree directories — preventing
+  // concurrent runs from clobbering each other's state.
   const resolvedStateDir = config.stateDir
     ? isAbsolute(config.stateDir)
       ? config.stateDir
       : resolve(configDir, config.stateDir)
-    : join(homedir(), '.cadre');
+    : join(homedir(), '.cadre', config.projectName);
 
   const resolvedWorktreeRoot = config.worktreeRoot
     ? isAbsolute(config.worktreeRoot)

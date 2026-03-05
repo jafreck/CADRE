@@ -3,7 +3,7 @@ import { mkdir, writeFile, readFile, access, rename, readdir, stat, rm } from 'n
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { CheckpointManager, FleetCheckpointManager } from '../../../src/engine/checkpoint/checkpoint.js';
-import type { CheckpointState, FleetIssueStatus } from '../../../src/engine/checkpoint/checkpoint.js';
+import type { CheckpointState, FleetCheckpointState, FleetIssueStatus } from '../../../src/engine/checkpoint/checkpoint.js';
 import type { CheckpointStore } from '../../../src/engine/checkpoint/checkpoint.js';
 import { Logger } from '../../../src/core/logger.js';
 import type { GateResult } from '../../../src/engine/types.js';
@@ -766,5 +766,76 @@ describe('FleetCheckpointManager', () => {
   it('getAllIssueStatuses returns empty array before load', () => {
     const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
     expect(manager.getAllIssueStatuses()).toEqual([]);
+  });
+
+  it('should migrate a legacy checkpoint from the parent directory when projectName matches', async () => {
+    // Write a legacy checkpoint at the parent directory (old unsegmented path)
+    const parentDir = join(tempDir, '..');
+    const legacyPath = join(parentDir, 'fleet-checkpoint.json');
+    const legacyState: FleetCheckpointState = {
+      projectName: 'my-project',
+      version: 1,
+      issues: {
+        42: {
+          status: 'completed',
+          issueTitle: 'Legacy issue',
+          worktreePath: '/old/path',
+          branchName: 'cadre/issue-42',
+          lastPhase: 5,
+        },
+      },
+      tokenUsage: { total: 1000, byIssue: { 42: 1000 } },
+      startedAt: '2026-01-01T00:00:00.000Z',
+      lastCheckpoint: '2026-01-01T01:00:00.000Z',
+      resumeCount: 3,
+    };
+    await writeFile(legacyPath, JSON.stringify(legacyState));
+
+    // Load from the namespaced directory — should discover and migrate the legacy file
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+
+    expect(state.projectName).toBe('my-project');
+    expect(state.issues[42]?.status).toBe('completed');
+    expect(state.issues[42]?.issueTitle).toBe('Legacy issue');
+    expect(state.resumeCount).toBe(4); // incremented from 3
+
+    // Clean up
+    await rm(legacyPath, { force: true });
+  });
+
+  it('should NOT migrate a legacy checkpoint when projectName does not match', async () => {
+    // Write a legacy checkpoint at the parent directory with a different project name
+    const parentDir = join(tempDir, '..');
+    const legacyPath = join(parentDir, 'fleet-checkpoint.json');
+    const legacyState: FleetCheckpointState = {
+      projectName: 'other-project',
+      version: 1,
+      issues: {
+        99: {
+          status: 'completed',
+          issueTitle: 'Other project issue',
+          worktreePath: '/other/path',
+          branchName: 'cadre/issue-99',
+          lastPhase: 5,
+        },
+      },
+      tokenUsage: { total: 500, byIssue: { 99: 500 } },
+      startedAt: '2026-01-01T00:00:00.000Z',
+      lastCheckpoint: '2026-01-01T01:00:00.000Z',
+      resumeCount: 1,
+    };
+    await writeFile(legacyPath, JSON.stringify(legacyState));
+
+    // Load from the namespaced directory — should NOT migrate the mismatched file
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+
+    expect(state.projectName).toBe('my-project');
+    expect(state.issues).toEqual({});
+    expect(state.resumeCount).toBe(0);
+
+    // Clean up
+    await rm(legacyPath, { force: true });
   });
 });
