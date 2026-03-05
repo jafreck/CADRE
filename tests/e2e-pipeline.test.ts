@@ -234,6 +234,7 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfi
     projectName: 'test',
     repository: 'test/repo',
     repoPath: '/tmp',
+    stateDir: '/tmp/.cadre/e2e-test',
     commits: {
       conventional: true,
       sign: false,
@@ -278,8 +279,10 @@ function makeWorktree(worktreePath: string): WorktreeInfo {
 }
 
 /** Returns the progressDir that IssueOrchestrator will compute internally. */
-function progressDirFor(worktreePath: string): string {
-  return join(worktreePath, '.cadre', 'issues', String(ISSUE.number));
+function progressDirFor(_worktreePath: string, config?: CadreConfig): string {
+  // progressDir is now under stateDir, not inside the worktree
+  const stateDir = (config as any)?.stateDir ?? '/tmp/.cadre/e2e-test';
+  return join(stateDir, 'issues', String(ISSUE.number));
 }
 
 async function buildOrchestrator(
@@ -288,8 +291,9 @@ async function buildOrchestrator(
   configOverrides: Partial<CadreConfig['options']> = {},
 ): Promise<{ orchestrator: IssueOrchestrator; checkpoint: CheckpointManager }> {
   const config = makeConfig(configOverrides);
-  const logger = makeLogger(join(worktreePath, '.cadre', 'logs'));
-  const progressDir = progressDirFor(worktreePath);
+  const stateDir = (config as any).stateDir ?? join(worktreePath, '.cadre');
+  const logger = makeLogger(join(stateDir, 'logs'));
+  const progressDir = progressDirFor(worktreePath, config);
   const checkpoint = new CheckpointManager(progressDir, logger);
   await checkpoint.load(String(ISSUE.number));
 
@@ -319,6 +323,8 @@ describe('e2e pipeline', () => {
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true });
+    // Clean up stateDir-based progress files (no longer inside the worktree)
+    await rm('/tmp/.cadre/e2e-test', { recursive: true, force: true });
   });
 
   it('happy path: all 5 phases succeed and pr-content.md is written', async () => {
