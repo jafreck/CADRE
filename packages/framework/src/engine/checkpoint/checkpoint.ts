@@ -2,7 +2,7 @@
  * Checkpoint management for per-issue and fleet-level pipeline state.
  */
 
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { atomicWriteJSON, readJSON, exists, ensureDir, copyFile } from '../util/fs.js';
 import type { Logger, GateResult, TokenRecord } from '../types.js';
 
@@ -470,6 +470,27 @@ export class FleetCheckpointManager {
         return this.state;
       } catch {
         this.logger.warn('Failed to load fleet checkpoint, starting fresh');
+      }
+    }
+
+    // Migration: check for a legacy checkpoint at the parent directory
+    // (before stateDir was namespaced by projectName). If it exists and
+    // belongs to this project, copy it to the new location.
+    const legacyPath = join(dirname(this.cadreDir), 'fleet-checkpoint.json');
+    if (legacyPath !== this.checkpointPath && (await this.store.exists(legacyPath))) {
+      try {
+        const legacy = await this.store.readJSON<FleetCheckpointState>(legacyPath);
+        if (legacy.projectName === this.projectName) {
+          this.logger.info(
+            `Migrating legacy fleet checkpoint from ${legacyPath} to ${this.checkpointPath}`,
+          );
+          this.state = legacy;
+          this.state.resumeCount += 1;
+          await this.save();
+          return this.state;
+        }
+      } catch {
+        // Legacy file is unreadable — ignore and start fresh
       }
     }
 

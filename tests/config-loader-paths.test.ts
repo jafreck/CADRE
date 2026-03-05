@@ -164,14 +164,14 @@ describe('loadConfig – stateDir resolution', () => {
     vi.clearAllMocks();
   });
 
-  it('defaults stateDir to ~/.cadre when absent from config', async () => {
+  it('defaults stateDir to ~/.cadre/{projectName} when absent from config', async () => {
     const cfg = makeConfig();
     // Remove stateDir
     delete (cfg as Record<string, unknown>).stateDir;
     setupFs(cfg);
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    const expected = join(homedir(), '.cadre');
+    const expected = join(homedir(), '.cadre', 'test-project');
     expect(config.stateDir).toBe(expected);
   });
 
@@ -226,7 +226,7 @@ describe('loadConfig – worktreeRoot resolution', () => {
     setupFs(cfg);
 
     const config = await loadConfig('/tmp/cadre.config.json');
-    const expectedStateDir = join(homedir(), '.cadre');
+    const expectedStateDir = join(homedir(), '.cadre', 'test-project');
     expect(config.worktreeRoot).toBe(join(expectedStateDir, 'worktrees'));
   });
 });
