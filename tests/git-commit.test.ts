@@ -528,4 +528,84 @@ describe('CommitManager', () => {
       expect(result).toBe('unstaged diff');
     });
   });
+
+  describe('ensureNoCadreArtifactsInDiff', () => {
+    it('should do nothing when diff contains no cadre artifacts', async () => {
+      mockGit.diff.mockResolvedValueOnce('src/index.ts\nsrc/utils.ts\n');
+
+      await manager.ensureNoCadreArtifactsInDiff('base123');
+
+      expect(mockGit.diff).toHaveBeenCalledWith(['--name-only', 'base123..HEAD']);
+      expect(mockGit.raw).not.toHaveBeenCalledWith(expect.arrayContaining(['checkout', 'base123', '--']));
+      expect(mockGit.raw).not.toHaveBeenCalledWith(expect.arrayContaining(['commit', '--amend', '--no-edit']));
+    });
+
+    it('should strip .cadre/ files from diff and amend commit', async () => {
+      mockGit.diff.mockResolvedValueOnce('src/index.ts\n.cadre/progress.md\n.cadre/issues/1/progress.md\n');
+      mockGit.raw.mockImplementation((args: string[]) => {
+        // Default success for all raw calls
+        return Promise.resolve('');
+      });
+
+      await manager.ensureNoCadreArtifactsInDiff('base123');
+
+      // Should have checked out the .cadre files from base
+      expect(mockGit.raw).toHaveBeenCalledWith(['checkout', 'base123', '--', '.cadre/progress.md']);
+      expect(mockGit.raw).toHaveBeenCalledWith(['checkout', 'base123', '--', '.cadre/issues/1/progress.md']);
+      // Should have amended the commit
+      expect(mockGit.raw).toHaveBeenCalledWith(['commit', '--amend', '--no-edit']);
+    });
+
+    it('should remove file from index if it did not exist at base commit', async () => {
+      mockGit.diff.mockResolvedValueOnce('.cadre/progress.md\n');
+      let rmCalled = false;
+      mockGit.raw.mockImplementation((args: string[]) => {
+        if (args[0] === 'checkout' && args[1] === 'base123') {
+          return Promise.reject(new Error('pathspec did not match'));
+        }
+        if (args[0] === 'rm' && args.includes('.cadre/progress.md')) {
+          rmCalled = true;
+        }
+        return Promise.resolve('');
+      });
+
+      await manager.ensureNoCadreArtifactsInDiff('base123');
+
+      expect(rmCalled).toBe(true);
+    });
+
+    it('should strip task-*.md files from diff', async () => {
+      mockGit.diff.mockResolvedValueOnce('src/app.ts\ntask-42.md\n');
+      mockGit.raw.mockResolvedValue('');
+
+      await manager.ensureNoCadreArtifactsInDiff('base123');
+
+      expect(mockGit.raw).toHaveBeenCalledWith(['checkout', 'base123', '--', 'task-42.md']);
+      expect(mockGit.raw).toHaveBeenCalledWith(['commit', '--amend', '--no-edit']);
+    });
+
+    it('should strip synced agent files from diff', async () => {
+      const managerWithAgents = new CommitManager(
+        '/tmp/worktree',
+        { conventional: true, sign: false, commitPerPhase: true, squashBeforePR: false } as CadreConfig['commits'],
+        mockLogger,
+        ['.github/agents/code-writer.agent.md'],
+      );
+      mockGit.diff.mockResolvedValueOnce('.github/agents/code-writer.agent.md\nsrc/app.ts\n');
+      mockGit.raw.mockResolvedValue('');
+
+      await managerWithAgents.ensureNoCadreArtifactsInDiff('base123');
+
+      expect(mockGit.raw).toHaveBeenCalledWith(['checkout', 'base123', '--', '.github/agents/code-writer.agent.md']);
+      expect(mockGit.raw).toHaveBeenCalledWith(['commit', '--amend', '--no-edit']);
+    });
+
+    it('should not amend commit when diff is empty', async () => {
+      mockGit.diff.mockResolvedValueOnce('');
+
+      await manager.ensureNoCadreArtifactsInDiff('base123');
+
+      expect(mockGit.raw).not.toHaveBeenCalledWith(expect.arrayContaining(['commit', '--amend']));
+    });
+  });
 });

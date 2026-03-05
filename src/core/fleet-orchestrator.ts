@@ -453,6 +453,10 @@ export class FleetOrchestrator {
             await git.raw(['checkout', '--theirs', f]).catch(() => {});
           }
           await git.add(['-A']);
+          // Unstage cadre artifacts so they are never committed/pushed.
+          for (const p of cadreArtifactPatterns) {
+            await git.raw(['restore', '--staged', '--', p]).catch(() => {});
+          }
           await git.raw(['commit', '--no-edit']);
         } else {
           const conflictDetailsPath = join(progressDir, 'merge-conflict-details.txt');
@@ -500,6 +504,10 @@ export class FleetOrchestrator {
           }
 
           await git.add(['-A']);
+          // Unstage cadre artifacts so they are never committed/pushed.
+          for (const p of cadreArtifactPatterns) {
+            await git.raw(['restore', '--staged', '--', p]).catch(() => {});
+          }
           await git.raw(['commit', '--no-edit']);
         }
       }
