@@ -77,6 +77,15 @@ export class WorktreeProvisioner {
   }
 
   /**
+   * Re-sync agent files into an existing worktree.  Used after
+   * `stripCadreFiles` removes agent symlinks so that subsequent
+   * phases (e.g. PR Composition) can still invoke agents.
+   */
+  async resyncAgentFiles(worktreePath: string, issueNumber: number): Promise<string[]> {
+    return this.agentFileSync.syncAgentFiles(worktreePath, issueNumber);
+  }
+
+  /**
    * Create a worktree for an issue.
    * If the worktree already exists, validate and return info.
    * When `resume` is true and the worktree is absent, check the remote branch and

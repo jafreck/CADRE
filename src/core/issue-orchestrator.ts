@@ -72,6 +72,7 @@ export class IssueOrchestrator {
     private readonly platform: PlatformProvider,
     private readonly logger: Logger,
     notificationManager?: NotificationManager,
+    private readonly resyncAgentFiles?: () => Promise<void>,
   ) {
     this.progressDir = join(
       worktree.path,
@@ -430,6 +431,12 @@ export class IssueOrchestrator {
     // Fix 7: stripCadreFiles now uses a squash approach that doesn't produce
     // cherry-pick conflicts, so no conflict resolver callback is needed.
     await this.commitManager.stripCadreFiles(this.worktree.baseCommit);
+
+    // Re-sync agent symlinks: stripCadreFiles removes them (they're cadre
+    // artifacts), but Phase 5 (PR Composition) still needs to invoke agents.
+    if (this.resyncAgentFiles) {
+      await this.resyncAgentFiles();
+    }
   }
 
   private async commitPhase(phase: PhaseDefinition): Promise<void> {
