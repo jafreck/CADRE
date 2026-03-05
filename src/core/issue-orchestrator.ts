@@ -74,9 +74,11 @@ export class IssueOrchestrator {
     notificationManager?: NotificationManager,
     private readonly resyncAgentFiles?: () => Promise<void>,
   ) {
+    // Per-issue working files live under stateDir, not inside the target repo's
+    // worktree.  This prevents .cadre/ artifacts from ever appearing in git and
+    // removes the need to strip them before PR creation.
     this.progressDir = join(
-      worktree.path,
-      '.cadre',
+      config.stateDir,
       'issues',
       String(issue.number),
     );
@@ -421,6 +423,13 @@ export class IssueOrchestrator {
       await this.commitPhase(phaseDef);
     }
 
+    // Re-sync agent symlinks AFTER the Phase 4 commit so they don't leak into
+    // git history.  stripCadreFiles removes them (they're cadre artifacts) but
+    // Phase 5 (PR Composition) still needs to invoke agents.
+    if (executor.phaseId === 4 && this.resyncAgentFiles) {
+      await this.resyncAgentFiles();
+    }
+
     await this.updateProgress();
     await lifecycleNotifier.notifyPhaseCompleted(executor.phaseId, executor.name, phaseResult.duration);
   }
@@ -428,15 +437,10 @@ export class IssueOrchestrator {
   // ── Helper Methods ──
 
   private async stripCadreFilesAfterIntegration(): Promise<void> {
-    // Fix 7: stripCadreFiles now uses a squash approach that doesn't produce
-    // cherry-pick conflicts, so no conflict resolver callback is needed.
+    // stripCadreFiles squashes all commits into one, removing .cadre/ and agent
+    // symlinks from git history.  Agent resync happens after commitPerPhase so
+    // the resynced files are never staged.
     await this.commitManager.stripCadreFiles(this.worktree.baseCommit);
-
-    // Re-sync agent symlinks: stripCadreFiles removes them (they're cadre
-    // artifacts), but Phase 5 (PR Composition) still needs to invoke agents.
-    if (this.resyncAgentFiles) {
-      await this.resyncAgentFiles();
-    }
   }
 
   private async commitPhase(phase: PhaseDefinition): Promise<void> {
