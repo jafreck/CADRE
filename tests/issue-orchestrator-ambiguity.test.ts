@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
+import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
+import { makeMockIssue } from './helpers/make-mock-issue.js';
+import { makeMockWorktree } from './helpers/make-mock-worktree.js';
+import { makeMockLogger } from './helpers/make-mock-logger.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
-import type { PlatformProvider, IssueDetail } from '../src/platform/provider.js';
-import type { WorktreeInfo } from '../src/git/worktree.js';
+import type { PlatformProvider } from '../src/platform/provider.js';
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
@@ -199,64 +201,11 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function makeIssue(): IssueDetail {
-  return {
-    number: 42,
-    title: 'Test Issue',
-    body: 'Test body',
-    labels: [],
-    assignees: [],
-    comments: [],
-    state: 'open',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    linkedPRs: [],
-  };
-}
-
-function makeWorktree(): WorktreeInfo {
-  return {
-    issueNumber: 42,
-    path: '/tmp/worktree-42',
-    branch: 'cadre/issue-42',
-    exists: true,
-    baseCommit: 'abc123',
-    syncedAgentFiles: [],
-  };
-}
+const makeIssue = () => makeMockIssue();
+const makeWorktree = () => makeMockWorktree();
 
 /** Checkpoint where phases 2–5 are already complete so only phase 1 runs. */
-function makeCheckpointPhase1Only(): CheckpointManager {
-  const completedPhaseIds = [2, 3, 4, 5];
-  return {
-    load: vi.fn().mockResolvedValue({}),
-    getState: vi.fn().mockReturnValue({
-      issueNumber: 42,
-      currentPhase: 1,
-      completedPhases: completedPhaseIds,
-      completedTasks: [],
-      blockedTasks: [],
-      failedTasks: [],
-      phaseOutputs: {},
-      gateResults: {},
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-      worktreePath: '/tmp/worktree-42',
-      branchName: 'cadre/issue-42',
-      baseCommit: 'abc123',
-    }),
-    getResumePoint: vi.fn().mockReturnValue({ phase: 1, task: null }),
-    isPhaseCompleted: vi.fn().mockImplementation((id: number) => completedPhaseIds.includes(id)),
-    startPhase: vi.fn().mockResolvedValue(undefined),
-    completePhase: vi.fn().mockResolvedValue(undefined),
-    isTaskCompleted: vi.fn().mockReturnValue(false),
-    startTask: vi.fn().mockResolvedValue(undefined),
-    completeTask: vi.fn().mockResolvedValue(undefined),
-    failTask: vi.fn().mockResolvedValue(undefined),
-    blockTask: vi.fn().mockResolvedValue(undefined),
-    recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-    recordGateResult: vi.fn().mockResolvedValue(undefined),
-  } as unknown as CheckpointManager;
-}
+const makeCheckpointPhase1Only = () => makeMockCheckpoint([2, 3, 4, 5]);
 
 function makeMockLauncher(): AgentLauncher {
   return {
@@ -284,14 +233,7 @@ function makeMockPlatform(): PlatformProvider {
   } as unknown as PlatformProvider;
 }
 
-function makeLogger() {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  };
-}
+const makeLogger = () => makeMockLogger();
 
 function makeOrchestrator(configOverrides: Record<string, unknown> = {}, logger = makeLogger()) {
   return new IssueOrchestrator(

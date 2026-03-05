@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ZodError } from 'zod';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
+import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
+import { makeMockIssue } from './helpers/make-mock-issue.js';
+import { makeMockWorktree } from './helpers/make-mock-worktree.js';
+import { makeMockLogger } from './helpers/make-mock-logger.js';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
-import type { PlatformProvider, IssueDetail } from '../src/platform/provider.js';
-import type { WorktreeInfo } from '../src/git/worktree.js';
-import type { Logger } from '@cadre/framework/core';
+import type { PlatformProvider } from '../src/platform/provider.js';
 
 // ── Hoisted mock functions ────────────────────────────────────────────────────
 
@@ -259,72 +260,8 @@ function makeConfig() {
   });
 }
 
-function makeIssue(): IssueDetail {
-  return {
-    number: 42,
-    title: 'Test Issue',
-    body: 'Test body',
-    labels: [],
-    assignees: [],
-    comments: [],
-    state: 'open',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    linkedPRs: [],
-  } as unknown as IssueDetail;
-}
-
-function makeWorktree(): WorktreeInfo {
-  return {
-    issueNumber: 42,
-    path: '/tmp/worktree-42',
-    branch: 'cadre/issue-42',
-    exists: true,
-    baseCommit: 'abc123',
-    syncedAgentFiles: [],
-  } as unknown as WorktreeInfo;
-}
-
-function makeMockCheckpoint(completedPhaseIds: number[] = []): CheckpointManager {
-  return {
-    load: vi.fn().mockResolvedValue({}),
-    getState: vi.fn().mockReturnValue({
-      issueNumber: 42,
-      currentPhase: 1,
-      completedPhases: completedPhaseIds,
-      completedTasks: [],
-      blockedTasks: [],
-      failedTasks: [],
-      phaseOutputs: {},
-      gateResults: {},
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-      worktreePath: '/tmp/worktree-42',
-      branchName: 'cadre/issue-42',
-      baseCommit: 'abc123',
-    }),
-    getResumePoint: vi.fn().mockReturnValue({ phase: 1, task: null }),
-    isPhaseCompleted: vi.fn().mockImplementation((phaseId: number) =>
-      completedPhaseIds.includes(phaseId),
-    ),
-    startPhase: vi.fn().mockResolvedValue(undefined),
-    completePhase: vi.fn().mockResolvedValue(undefined),
-    isTaskCompleted: vi.fn().mockReturnValue(false),
-    startTask: vi.fn().mockResolvedValue(undefined),
-    completeTask: vi.fn().mockResolvedValue(undefined),
-    failTask: vi.fn().mockResolvedValue(undefined),
-    blockTask: vi.fn().mockResolvedValue(undefined),
-    recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-    recordGateResult: vi.fn().mockResolvedValue(undefined),
-    startSubTask: vi.fn().mockResolvedValue(undefined),
-    ...(() => {
-      const completedSubTasks = new Set<string>();
-      return {
-        completeSubTask: vi.fn(async (id: string) => { completedSubTasks.add(id); }),
-        isSubTaskCompleted: vi.fn((id: string) => completedSubTasks.has(id)),
-      };
-    })(),
-  } as unknown as CheckpointManager;
-}
+const makeIssue = () => makeMockIssue();
+const makeWorktree = () => makeMockWorktree();
 
 function makeMockLauncher(): AgentLauncher {
   return {
@@ -352,20 +289,7 @@ function makeMockPlatform(): PlatformProvider {
   } as unknown as PlatformProvider;
 }
 
-function makeMockLogger(): Logger {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnValue({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    }),
-  } as unknown as Logger;
-}
+const makeLogger = () => makeMockLogger();
 
 /** Single session returned from parseImplementationPlan */
 const SAMPLE_TASK = {
@@ -417,7 +341,7 @@ describe('IssueOrchestrator – ZodError retry handling in executeTask', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    logger = makeMockLogger();
+    logger = makeLogger();
 
     // Gates all pass by default
     mockAnalysisGateValidate.mockResolvedValue({ status: 'pass', warnings: [], errors: [] });

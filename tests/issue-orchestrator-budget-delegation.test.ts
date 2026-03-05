@@ -84,74 +84,23 @@ import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
 import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue-budget-guard.js';
 import { IssueNotifier } from '../src/core/issue-notifier.js';
 import { CommitManager } from '../src/git/commit.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
-import type { AgentLauncher } from '../src/core/agent-launcher.js';
-import type { PlatformProvider } from '../src/platform/provider.js';
-import type { Logger } from '@cadre/framework/core';
-import type { CadreConfig } from '../src/config/schema.js';
-import type { IssueDetail, WorktreeInfo } from '../src/platform/provider.js';
 import type { PhaseContext } from '../src/core/phase-executor.js';
+import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
+import { makeMockLogger } from './helpers/make-mock-logger.js';
+import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
+import { makeMockIssue } from './helpers/make-mock-issue.js';
+import { makeMockWorktree } from './helpers/make-mock-worktree.js';
 
 // ── Helpers ──
 
-function makeLogger(): Logger {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as Logger;
-}
-
-function makeCpState(worktreePath: string) {
-  return {
-    issueNumber: 42,
-    version: 1,
-    currentPhase: 0,
-    currentTask: null,
-    completedPhases: [],
-    completedTasks: [],
-    failedTasks: [],
-    blockedTasks: [],
-    phaseOutputs: {},
-    tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-    worktreePath,
-    branchName: 'cadre/issue-42',
-    baseCommit: 'abc123',
-    startedAt: new Date().toISOString(),
-    lastCheckpoint: new Date().toISOString(),
-    resumeCount: 0,
-  };
-}
-
-function makeCheckpoint(worktreePath: string, overrides: Partial<CheckpointManager> = {}): CheckpointManager {
-  const state = makeCpState(worktreePath);
-  return {
-    getState: vi.fn(() => state),
-    getResumePoint: vi.fn(() => ({ phase: 1, taskId: null })),
-    isPhaseCompleted: vi.fn(() => false),
-    isTaskCompleted: vi.fn(() => false),
-    startPhase: vi.fn(async () => {}),
-    completePhase: vi.fn(async () => {}),
-    startTask: vi.fn(async () => {}),
-    completeTask: vi.fn(async () => {}),
-    blockTask: vi.fn(async () => {}),
-    failTask: vi.fn(async () => {}),
-    recordTokenUsage: vi.fn(async () => {}),
-    recordGateResult: vi.fn(async () => {}),
-    ...overrides,
-  } as unknown as CheckpointManager;
-}
-
-function makePlatform(): PlatformProvider {
+function makePlatform() {
   return {
     issueLinkSuffix: vi.fn(() => 'Closes #42'),
     createPullRequest: vi.fn(async () => ({ number: 1, url: 'https://github.com/test/pr/1' })),
-  } as unknown as PlatformProvider;
+  } as any;
 }
 
-function makeLauncher(): AgentLauncher {
+function makeLauncher() {
   return {
     launchAgent: vi.fn(async () => ({
       agent: 'test-agent',
@@ -165,19 +114,15 @@ function makeLauncher(): AgentLauncher {
       outputPath: '',
       outputExists: false,
     })),
-  } as unknown as AgentLauncher;
+  } as any;
 }
 
-function makeConfig(overrides: Partial<CadreConfig['options']> = {}, commitOverrides: Partial<CadreConfig['commits']> = {}): CadreConfig {
-  return {
-    projectName: 'test-project',
-    platform: 'github',
-    repository: 'owner/repo',
-    repoPath: '/tmp/repo',
-    stateDir: '/tmp/.cadre/test-project',
-    baseBranch: 'main',
+function makeConfig(
+  overrides: Record<string, unknown> = {},
+  commitOverrides: Record<string, unknown> = {},
+) {
+  return makeRuntimeConfig({
     issues: { ids: [42] },
-    branchTemplate: 'cadre/issue-{issue}',
     commits: {
       conventional: true,
       sign: false,
@@ -187,6 +132,7 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}, commitOverr
     },
     pullRequest: {
       autoCreate: false,
+      autoComplete: false,
       draft: true,
       labels: [],
       reviewers: [],
@@ -196,7 +142,6 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}, commitOverr
       maxParallelIssues: 1,
       maxParallelAgents: 1,
       maxRetriesPerTask: 1,
-      tokenBudget: undefined,
       dryRun: false,
       resume: false,
       invocationDelayMs: 0,
@@ -205,33 +150,8 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}, commitOverr
       ambiguityThreshold: 5,
       haltOnAmbiguity: false,
       ...overrides,
-    },
-    commands: {},
-    copilot: {
-      cliCommand: 'copilot',
-      model: 'claude-sonnet-4.6',
-      agentDir: '.github/agents',
-      timeout: 300000,
-    },
-    environment: {
-      inheritShellPath: true,
-      extraPath: [],
-    },
-  } as CadreConfig;
-}
-
-function makeIssue(): IssueDetail {
-  return {
-    number: 42,
-    title: 'Test issue',
-    body: 'Test body',
-    labels: [],
-    assignees: [],
-    state: 'open',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    url: 'https://github.com/owner/repo/issues/42',
-  };
+    } as any,
+  });
 }
 
 function makeExecutorMock(phaseId: number, name: string) {
@@ -294,13 +214,8 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
     vi.restoreAllMocks();
   });
 
-  function makeWorktree(): WorktreeInfo {
-    return {
-      path: worktreePath,
-      branch: 'cadre/issue-42',
-      baseCommit: 'abc123',
-      issueNumber: 42,
-    } as unknown as WorktreeInfo;
+  function makeWorktree() {
+    return makeMockWorktree({ path: worktreePath });
   }
 
   it('should construct IssueBudgetGuard with the configured tokenBudget', async () => {
@@ -316,12 +231,12 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
     const config = makeConfig({ tokenBudget: 50_000 });
     const orchestrator = new IssueOrchestrator(
       config,
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
-      makeCheckpoint(worktreePath),
+      makeMockCheckpoint(),
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     await orchestrator.run();
@@ -353,12 +268,12 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
 
     const orchestrator = new IssueOrchestrator(
       makeConfig(),
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
-      makeCheckpoint(worktreePath),
+      makeMockCheckpoint(),
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     await orchestrator.run();
@@ -388,12 +303,12 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
 
     const orchestrator = new IssueOrchestrator(
       makeConfig(),
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
-      makeCheckpoint(worktreePath),
+      makeMockCheckpoint(),
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     await orchestrator.run();
@@ -416,16 +331,16 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
     ];
     setupExecutorMocks(execs);
 
-    const checkpoint = makeCheckpoint(worktreePath);
+    const checkpoint = makeMockCheckpoint();
 
     const orchestrator = new IssueOrchestrator(
       makeConfig({ tokenBudget: 100 }),
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
       checkpoint,
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     const result = await orchestrator.run();
@@ -450,21 +365,22 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
     ];
     setupExecutorMocks(execs);
 
-    const checkpoint = makeCheckpoint(worktreePath);
+    const checkpoint = makeMockCheckpoint();
     // Ensure budgetExceeded flag can be set in checkpoint state
     (checkpoint.getState as ReturnType<typeof vi.fn>).mockReturnValue({
-      ...makeCpState(worktreePath),
+      ...checkpoint.getState(),
+      worktreePath,
       budgetExceeded: false,
     });
 
     const orchestrator = new IssueOrchestrator(
       makeConfig({ tokenBudget: 100 }),
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
       checkpoint,
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     await orchestrator.run();
@@ -505,13 +421,8 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
     vi.restoreAllMocks();
   });
 
-  function makeWorktree(): WorktreeInfo {
-    return {
-      path: worktreePath,
-      branch: 'cadre/issue-42',
-      baseCommit: 'abc123',
-      issueNumber: 42,
-    } as unknown as WorktreeInfo;
+  function makeWorktree() {
+    return makeMockWorktree({ path: worktreePath });
   }
 
   it('should call CommitManager.commit after each phase when commitPerPhase is true', async () => {
@@ -537,12 +448,12 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
 
     const orchestrator = new IssueOrchestrator(
       makeConfig({}, { commitPerPhase: true }),
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
-      makeCheckpoint(worktreePath),
+      makeMockCheckpoint(),
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     await orchestrator.run();
@@ -574,12 +485,12 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
 
     const orchestrator = new IssueOrchestrator(
       makeConfig({}, { commitPerPhase: false }),
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
-      makeCheckpoint(worktreePath),
+      makeMockCheckpoint(),
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     await orchestrator.run();
@@ -610,12 +521,12 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
 
     const orchestrator = new IssueOrchestrator(
       makeConfig({}, { commitPerPhase: true }),
-      makeIssue(),
+      makeMockIssue(),
       makeWorktree(),
-      makeCheckpoint(worktreePath),
+      makeMockCheckpoint(),
       makeLauncher(),
       makePlatform(),
-      makeLogger(),
+      makeMockLogger(),
     );
 
     await orchestrator.run();

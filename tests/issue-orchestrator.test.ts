@@ -7,8 +7,10 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
-import type { IssueDetail } from '../src/platform/provider.js';
-import type { WorktreeInfo } from '../src/git/worktree.js';
+import { makeMockIssue } from './helpers/make-mock-issue.js';
+import { makeMockWorktree } from './helpers/make-mock-worktree.js';
+import { makeMockLogger } from './helpers/make-mock-logger.js';
+import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
 import type { CheckpointManager } from '@cadre/framework/engine';
 import type { AgentLauncher } from '../src/agents/types.js';
 import type { Logger } from '@cadre/framework/core';
@@ -136,30 +138,12 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 });
 
 // Default checkpoint mock – all phases are pre-completed so the phase loop skips everything.
-const makeCheckpointMock = (overrides: Record<string, unknown> = {}) => ({
-  getResumePoint: vi.fn().mockReturnValue({ phase: 6, task: null }),
-  isPhaseCompleted: vi.fn().mockReturnValue(true),
-  isTaskCompleted: vi.fn().mockReturnValue(false),
-  startPhase: vi.fn().mockResolvedValue(undefined),
-  completePhase: vi.fn().mockResolvedValue(undefined),
-  startTask: vi.fn().mockResolvedValue(undefined),
-  completeTask: vi.fn().mockResolvedValue(undefined),
-  blockTask: vi.fn().mockResolvedValue(undefined),
-  getState: vi.fn().mockReturnValue({
-    issueNumber: 42,
-    currentPhase: 5,
-    completedPhases: [1, 2, 3, 4, 5],
-    completedTasks: [],
-    blockedTasks: [],
-    resumeCount: 0,
-    currentTask: null,
-    tokenUsage: {},
-  }),
-  recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-  recordGateResult: vi.fn().mockResolvedValue(undefined),
-  setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
-  ...overrides,
-});
+const makeCheckpointMock = (overrides: Record<string, unknown> = {}) =>
+  makeMockCheckpoint([1, 2, 3, 4, 5], {
+    getResumePoint: vi.fn().mockReturnValue({ phase: 6, task: null }),
+    isPhaseCompleted: vi.fn().mockReturnValue(true),
+    ...overrides,
+  });
 
 // Alias used by notifier integration tests
 function makeCheckpoint(overrides: Record<string, unknown> = {}): CheckpointManager {
@@ -211,40 +195,9 @@ function makeConfig(tokenBudget?: number) {
   });
 }
 
-function makeIssue(): IssueDetail {
-  return {
-    number: 42,
-    title: 'Test Issue',
-    body: 'Test body',
-    labels: [],
-    assignees: [],
-    url: 'https://github.com/owner/repo/issues/42',
-  } as unknown as IssueDetail;
-}
-
-function makeWorktree(): WorktreeInfo {
-  return {
-    path: '/tmp/worktree-42',
-    branch: 'cadre/issue-42',
-    baseCommit: 'abc123',
-    issueNumber: 42,
-  } as unknown as WorktreeInfo;
-}
-
-function makeLogger(): Logger {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnValue({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    }),
-  } as unknown as Logger;
-}
+const makeIssue = () => makeMockIssue({ url: 'https://github.com/owner/repo/issues/42' });
+const makeWorktree = () => makeMockWorktree();
+const makeLogger = () => makeMockLogger();
 
 function makePlatform() {
   return {
@@ -259,8 +212,8 @@ function makeLauncher() {
 
 describe('IssueOrchestrator – notification dispatch', () => {
   let config: ReturnType<typeof makeConfig>;
-  let issue: IssueDetail;
-  let worktree: WorktreeInfo;
+  let issue: ReturnType<typeof makeIssue>;
+  let worktree: ReturnType<typeof makeWorktree>;
   let logger: Logger;
   let platform: ReturnType<typeof makePlatform>;
   let launcher: ReturnType<typeof makeLauncher>;
@@ -606,13 +559,8 @@ describe('IssueOrchestrator notifier integration', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  function makeWorktree(): WorktreeInfo {
-    return {
-      path: worktreePath,
-      branch: 'cadre/issue-42',
-      baseCommit: 'abc123',
-      issueNumber: 42,
-    } as unknown as WorktreeInfo;
+  function makeLocalWorktree() {
+    return makeMockWorktree({ path: worktreePath });
   }
 
   function makeOrchestrator(
@@ -624,7 +572,7 @@ describe('IssueOrchestrator notifier integration', () => {
     return new IssueOrchestrator(
       config,
       makeIssue(),
-      makeWorktree(),
+      makeLocalWorktree(),
       checkpoint,
       launcher,
       makePlatform(),
