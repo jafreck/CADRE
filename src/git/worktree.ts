@@ -37,6 +37,10 @@ export class WorktreeManager {
     return this.provisioner.buildAgentCache();
   }
 
+  async resyncAgentFiles(...args: Parameters<WorktreeProvisioner['resyncAgentFiles']>) {
+    return this.provisioner.resyncAgentFiles(...args);
+  }
+
   async provision(...args: Parameters<WorktreeProvisioner['provision']>) {
     return this.provisioner.provision(...args);
   }
