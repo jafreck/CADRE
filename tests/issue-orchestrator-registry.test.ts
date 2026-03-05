@@ -158,6 +158,7 @@ function makeConfig(overrides: Partial<CadreConfig['options']> = {}): CadreConfi
     platform: 'github',
     repository: 'owner/repo',
     repoPath: '/tmp/repo',
+    stateDir: '/tmp/.cadre/test-project',
     baseBranch: 'main',
     issues: { ids: [42] },
     branchTemplate: 'cadre/issue-{issue}',
