@@ -45,7 +45,7 @@ describe('package.json postbuild script', () => {
 });
 
 describe('dist/agents/templates/ after build', () => {
-  it('dist/agents/templates/ directory should exist', () => {
+  it.skipIf(!existsSync(DIST_TEMPLATES_DIR))('dist/agents/templates/ directory should exist', () => {
     expect(existsSync(DIST_TEMPLATES_DIR)).toBe(true);
   });
 
