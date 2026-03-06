@@ -7,7 +7,7 @@ import type { BaselineResults } from '../agents/schemas/index.js';
 import { verifyCommand } from '@cadre-dev/framework/runtime';
 
 export class IntegrationPhaseExecutor implements PhaseExecutor {
-  readonly phaseId = 4;
+  readonly id = 4;
   readonly name = 'Integration Verification';
 
   /**
@@ -29,7 +29,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     if (lintResult.exitCode !== 0) {
       ctx.services.logger.warn(
         `Completed phase 4 no longer passes lint; resetting phases 3-4`,
-        { issueNumber: ctx.issue.number, phase: this.phaseId },
+        { issueNumber: ctx.issue.number, phase: this.id },
       );
       await ctx.callbacks.resetPhases?.([3, 4]);
       return false;

@@ -180,8 +180,8 @@ export class IssueOrchestrator {
 
     const executorMap = new Map(
       this.registry.getAll()
-        .filter((executor) => !(this.config.options.dryRun && executor.phaseId > 2))
-        .map((e) => [e.phaseId, e]),
+        .filter((executor) => !(this.config.options.dryRun && executor.id > 2))
+        .map((e) => [e.id, e]),
     );
 
     const actions = createPhaseActions({
@@ -265,7 +265,7 @@ export class IssueOrchestrator {
         issueNumber: this.issue.number,
         issueTitle: this.issue.title,
         error: message,
-        phase: haltError?.phaseId ?? this.checkpoint.getState().currentPhase,
+        phase: haltError?.id ?? this.checkpoint.getState().currentPhase,
         phaseName: haltError?.phaseName,
       });
       return this.buildResult(false, message, startTime);
@@ -307,21 +307,21 @@ export class IssueOrchestrator {
    */
   private async executePhase(executor: PhaseExecutor): Promise<PhaseResult> {
     const phaseStart = Date.now();
-    await this.checkpoint.startPhase(executor.phaseId);
-    await this.progressWriter.appendEvent(`Phase ${executor.phaseId} started: ${executor.name}`);
+    await this.checkpoint.startPhase(executor.id);
+    await this.progressWriter.appendEvent(`Phase ${executor.id} started: ${executor.name}`);
 
-    this.logger.info(`Phase ${executor.phaseId}: ${executor.name}`, {
+    this.logger.info(`Phase ${executor.id}: ${executor.name}`, {
       issueNumber: this.issue.number,
-      phase: executor.phaseId,
+      phase: executor.id,
     });
 
     try {
       const outputPath = await executor.execute(this.ctx);
       const duration = Date.now() - phaseStart;
-      await this.progressWriter.appendEvent(`Phase ${executor.phaseId} completed in ${duration}ms`);
+      await this.progressWriter.appendEvent(`Phase ${executor.id} completed in ${duration}ms`);
 
       return {
-        phase: executor.phaseId,
+        phase: executor.id,
         phaseName: executor.name,
         success: true,
         duration,
@@ -332,10 +332,10 @@ export class IssueOrchestrator {
       if (err instanceof BudgetExceededError) throw err;
       const duration = Date.now() - phaseStart;
       const error = String(err);
-      await this.progressWriter.appendEvent(`Phase ${executor.phaseId} failed: ${error}`);
+      await this.progressWriter.appendEvent(`Phase ${executor.id} failed: ${error}`);
 
       return {
-        phase: executor.phaseId,
+        phase: executor.id,
         phaseName: executor.name,
         success: false,
         duration,

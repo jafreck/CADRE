@@ -23,7 +23,7 @@ export interface GatePlugin {
   /** Optional plugin identifier used for inspection/removal. */
   name?: string;
   /** Phase ID this gate targets. */
-  phaseId: number;
+  id: number;
   /** Gate instance to register for the target phase. */
   gate: PhaseGate;
 }

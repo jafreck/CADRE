@@ -118,8 +118,8 @@ describe('PhaseRegistry', () => {
   });
 });
 
-function makeExecutor(phaseId: number, name: string): PhaseExecutor {
-  return { phaseId, name, execute: vi.fn().mockResolvedValue(`/output/${phaseId}.md`) };
+function makeExecutor(id: number, name: string): PhaseExecutor {
+  return { id, name, execute: vi.fn().mockResolvedValue(`/output/${id}.md`) };
 }
 
 describe('PhaseRegistry class', () => {
@@ -180,7 +180,7 @@ describe('PHASE_MANIFEST', () => {
   });
 
   it('should have phaseIds 1 through 5 in order', () => {
-    expect(PHASE_MANIFEST.map((e) => e.phaseId)).toEqual([1, 2, 3, 4, 5]);
+    expect(PHASE_MANIFEST.map((e) => e.id)).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('should have the correct names matching ISSUE_PHASES', () => {
@@ -232,7 +232,7 @@ describe('buildRegistry', () => {
 
   it('should return executors in phase-ID order (1 to 5)', () => {
     const registry = buildRegistry();
-    const ids = registry.getAll().map((e) => e.phaseId);
+    const ids = registry.getAll().map((e) => e.id);
     expect(ids).toEqual([1, 2, 3, 4, 5]);
   });
 
@@ -254,7 +254,7 @@ describe('buildGateMap', () => {
     const pluginGate = {
       validate: vi.fn().mockResolvedValue({ status: 'pass', errors: [], warnings: [] }),
     };
-    const map = buildGateMap([{ phaseId: 5, gate: pluginGate }]);
+    const map = buildGateMap([{ id: 5, gate: pluginGate }]);
     await map[5].validate({ artifactsDir: '.', workspacePath: '.' });
     expect(pluginGate.validate).toHaveBeenCalled();
   });
@@ -264,7 +264,7 @@ describe('buildGateMap', () => {
     const pluginGate = {
       validate: vi.fn().mockResolvedValue({ status: 'pass', errors: [], warnings: [] }),
     };
-    registerGatePlugin({ name: 'phase5-plugin', phaseId: 5, gate: pluginGate });
+    registerGatePlugin({ name: 'phase5-plugin', id: 5, gate: pluginGate });
 
     const map = buildGateMap();
     await map[5].validate({ artifactsDir: '.', workspacePath: '.' });

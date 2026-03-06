@@ -71,7 +71,7 @@ export type PhaseContext<
  */
 export interface PhaseExecutor<TContext extends PhaseContext = PhaseContext> {
   /** Pipeline phase number (1-based). */
-  phaseId: number;
+  id: number;
   /** Human-readable phase name. */
   name: string;
   /** Execute the phase and return the path to the primary output file. */

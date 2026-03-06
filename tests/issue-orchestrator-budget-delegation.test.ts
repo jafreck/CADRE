@@ -154,11 +154,11 @@ function makeConfig(
   });
 }
 
-function makeExecutorMock(phaseId: number, name: string) {
+function makeExecutorMock(id: number, name: string) {
   return {
-    phaseId,
+    id,
     name,
-    execute: vi.fn(async (_ctx: PhaseContext) => `/output/phase-${phaseId}.md`),
+    execute: vi.fn(async (_ctx: PhaseContext) => `/output/phase-${id}.md`),
   };
 }
 

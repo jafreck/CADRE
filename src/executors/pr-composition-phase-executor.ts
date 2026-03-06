@@ -23,7 +23,7 @@ const CADRE_ARTIFACT_PATTERNS = ['.cadre/', 'task-', '.github/agents/', '.claude
 type MergeBlockReason = 'dirty' | 'checks-failed' | 'blocked';
 
 export class PRCompositionPhaseExecutor implements PhaseExecutor {
-  readonly phaseId = 5;
+  readonly id = 5;
   readonly name = 'PR Composition';
 
   async execute(ctx: PhaseContext): Promise<string> {

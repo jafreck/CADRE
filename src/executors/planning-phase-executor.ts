@@ -5,7 +5,7 @@ import { SessionQueue } from '@cadre-dev/framework/engine';
 import { exists } from '../util/fs.js';
 
 export class PlanningPhaseExecutor implements PhaseExecutor {
-  readonly phaseId = 2;
+  readonly id = 2;
   readonly name = 'Planning';
 
   async execute(ctx: PhaseContext): Promise<string> {

@@ -108,7 +108,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
 
   function skipResult(executor: PhaseExecutor): PhaseResult & { skipped: boolean } {
     return {
-      phase: executor.phaseId,
+      phase: executor.id,
       phaseName: executor.name,
       success: true,
       duration: 0,
@@ -135,7 +135,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
   return {
     gated: (executor, phaseCtx, gateCoordinator, executePhase) => ({
       shouldExecute: async (ctx) => {
-        const pid = executor.phaseId;
+        const pid = executor.id;
         if (ctx.context.gatesPassed[pid]) return false;
 
         if (deps.checkpoint.isPhaseCompleted(pid)) {
@@ -151,7 +151,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
       },
 
       onSkip: async (_ctx) => {
-        const pid = executor.phaseId;
+        const pid = executor.id;
         deps.logger.info(`Skipping completed phase ${pid}: ${executor.name}`, {
           issueNumber: deps.issue.number, phase: pid,
         });
@@ -160,7 +160,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
       },
 
       run: async (ctx) => {
-        const pid = executor.phaseId;
+        const pid = executor.id;
         const isRetry = (ctx.context.gateAttempts[pid] ?? 0) > 0;
         const phaseResult = await executePhase(executor);
 
@@ -186,7 +186,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
       },
 
       evaluate: async (ctx) => {
-        const pid = executor.phaseId;
+        const pid = executor.id;
         if (ctx.context.gatesPassed[pid]) return true;
 
         const maxGateRetries = deps.config.options.maxGateRetries ?? 1;
@@ -225,7 +225,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
     }),
 
     ungated: (executor, phaseCtx, executePhase) => async (_ctx) => {
-      const pid = executor.phaseId;
+      const pid = executor.id;
 
       // Checkpoint skip
       if (deps.checkpoint.isPhaseCompleted(pid)) {
@@ -279,7 +279,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
     },
 
     finalize: (executor) => async (_ctx) => {
-      const pid = executor.phaseId;
+      const pid = executor.id;
       const phaseDef = getPhase(pid)!;
 
       // Skip hooks for checkpoint-skipped phases
@@ -344,10 +344,10 @@ export function buildPipelineTopology(opts: PipelineTopologyOpts): FlowNode<Pipe
   let prevId: string | undefined;
 
   for (const entry of PHASE_MANIFEST) {
-    const executor = executorMap.get(entry.phaseId);
+    const executor = executorMap.get(entry.id);
     if (!executor) continue;
 
-    const phaseNodeId = `phase-${entry.phaseId}`;
+    const phaseNodeId = `phase-${entry.id}`;
     const innerNodes: FlowNode<PipelineFlowContext>[] = [];
 
     if (entry.gate !== null) {
@@ -359,7 +359,7 @@ export function buildPipelineTopology(opts: PipelineTopologyOpts): FlowNode<Pipe
         }),
       );
       // Phase 1: ambiguity gate after the gated execution
-      if (entry.phaseId === 1) {
+      if (entry.id === 1) {
         innerNodes.push(
           gate({ id: 'ambiguity-check', name: 'Check for ambiguities', evaluate: actions.checkAmbiguities(gateCoordinator) }),
         );

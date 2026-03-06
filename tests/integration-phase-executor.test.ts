@@ -141,8 +141,8 @@ describe('IntegrationPhaseExecutor', () => {
   });
 
   describe('PhaseExecutor contract', () => {
-    it('should have phaseId of 4', () => {
-      expect(executor.phaseId).toBe(4);
+    it('should have id of 4', () => {
+      expect(executor.id).toBe(4);
     });
 
     it('should have name "Integration Verification"', () => {

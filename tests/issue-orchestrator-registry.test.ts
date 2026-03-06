@@ -3,8 +3,8 @@
  *
  * These tests verify that:
  *  - All five executor classes are registered and dispatched via PhaseRegistry.
- *  - run() iterates registry.getAll() in order (phaseId 1 → 5).
- *  - Dry-run mode stops after phase 2 (executor.phaseId > 2).
+ *  - run() iterates registry.getAll() in order (id 1 → 5).
+ *  - Dry-run mode stops after phase 2 (executor.id > 2).
  *  - executePhase() calls executor.execute() with a complete PhaseContext.
  *  - Critical phase failure aborts the pipeline.
  *  - Non-critical phase failure does NOT abort the pipeline.
@@ -132,12 +132,12 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
   });
 }
 
-/** Build a mock PhaseExecutor with a given phaseId that resolves successfully. */
-function makeExecutorMock(phaseId: number, name: string) {
+/** Build a mock PhaseExecutor with a given id that resolves successfully. */
+function makeExecutorMock(id: number, name: string) {
   return {
-    phaseId,
+    id,
     name,
-    execute: vi.fn(async (_ctx: PhaseContext) => `/output/phase-${phaseId}.md`),
+    execute: vi.fn(async (_ctx: PhaseContext) => `/output/phase-${id}.md`),
   };
 }
 
@@ -361,7 +361,7 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
   describe('run() – critical phase failure', () => {
     it('should abort the pipeline when a critical phase (1) fails', async () => {
       const execs = [
-        { phaseId: 1, name: 'Analysis & Scouting', execute: vi.fn().mockRejectedValue(new Error('analysis failed')) },
+        { id: 1, name: 'Analysis & Scouting', execute: vi.fn().mockRejectedValue(new Error('analysis failed')) },
         makeExecutorMock(2, 'Planning'),
         makeExecutorMock(3, 'Implementation'),
         makeExecutorMock(4, 'Integration Verification'),
@@ -392,7 +392,7 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
       const execs = [
         makeExecutorMock(1, 'Analysis & Scouting'),
         makeExecutorMock(2, 'Planning'),
-        { phaseId: 3, name: 'Implementation', execute: vi.fn().mockRejectedValue(new Error('implementation failed')) },
+        { id: 3, name: 'Implementation', execute: vi.fn().mockRejectedValue(new Error('implementation failed')) },
         makeExecutorMock(4, 'Integration Verification'),
         makeExecutorMock(5, 'PR Composition'),
       ];
@@ -422,7 +422,7 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
         makeExecutorMock(2, 'Planning'),
         makeExecutorMock(3, 'Implementation'),
         makeExecutorMock(4, 'Integration Verification'),
-        { phaseId: 5, name: 'PR Composition', execute: vi.fn().mockRejectedValue(new Error('pr failed')) },
+        { id: 5, name: 'PR Composition', execute: vi.fn().mockRejectedValue(new Error('pr failed')) },
       ];
       setupExecutorMocks(execs);
 
@@ -452,7 +452,7 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
         makeExecutorMock(1, 'Analysis & Scouting'),
         makeExecutorMock(2, 'Planning'),
         makeExecutorMock(3, 'Implementation'),
-        { phaseId: 4, name: 'Integration Verification', execute: vi.fn().mockRejectedValue(new Error('integration failed')) },
+        { id: 4, name: 'Integration Verification', execute: vi.fn().mockRejectedValue(new Error('integration failed')) },
         makeExecutorMock(5, 'PR Composition'),
       ];
       setupExecutorMocks(execs);
@@ -511,7 +511,7 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
     it('should return a PhaseResult with error string when executor throws', async () => {
       const execs = [
-        { phaseId: 1, name: 'Analysis & Scouting', execute: vi.fn().mockRejectedValue(new Error('boom')) },
+        { id: 1, name: 'Analysis & Scouting', execute: vi.fn().mockRejectedValue(new Error('boom')) },
         makeExecutorMock(2, 'Planning'),
         makeExecutorMock(3, 'Implementation'),
         makeExecutorMock(4, 'Integration Verification'),

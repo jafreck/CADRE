@@ -48,7 +48,7 @@ function makeLogger(): Logger {
 
 function makeExecutor(overrides: Partial<PhaseExecutor> = {}): PhaseExecutor {
   return {
-    phaseId: 1,
+    id: 1,
     name: 'Analysis & Scouting',
     execute: vi.fn().mockResolvedValue('/tmp/output/analysis.md'),
     ...overrides,
@@ -132,7 +132,7 @@ describe('PhaseRunner', () => {
     it('does not run gate for phase 5 (out of 1-4 range)', async () => {
       const gateCoordinator = makeGateCoordinator('pass');
       const runner = makePhaseRunner(gateCoordinator);
-      const executor = makeExecutor({ phaseId: 5, name: 'PR Composition' });
+      const executor = makeExecutor({ id: 5, name: 'PR Composition' });
 
       await runner.runPhase(executor, MOCK_CTX, []);
 

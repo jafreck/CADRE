@@ -37,7 +37,7 @@ export { PhaseRegistry };
 /** Single source of truth for all pipeline phase metadata. */
 export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
   {
-    phaseId: 1,
+    id: 1,
     name: 'Analysis & Scouting',
     executorFactory: () => new AnalysisPhaseExecutor(),
     gate: new AnalysisToPlanningGate(),
@@ -47,7 +47,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: false,
   },
   {
-    phaseId: 2,
+    id: 2,
     name: 'Planning',
     executorFactory: () => new PlanningPhaseExecutor(),
     gate: new PlanningToImplementationGate(),
@@ -57,7 +57,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: false,
   },
   {
-    phaseId: 3,
+    id: 3,
     name: 'Implementation',
     executorFactory: () => new ImplementationPhaseExecutor(),
     gate: new ImplementationToIntegrationGate(),
@@ -67,7 +67,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: true,
   },
   {
-    phaseId: 4,
+    id: 4,
     name: 'Integration Verification',
     executorFactory: () => new IntegrationPhaseExecutor(),
     gate: new IntegrationToPRGate(),
@@ -77,7 +77,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: true,
   },
   {
-    phaseId: 5,
+    id: 5,
     name: 'PR Composition',
     executorFactory: () => new PRCompositionPhaseExecutor(),
     gate: null,
@@ -90,7 +90,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
 
 /** Derived from PHASE_MANIFEST — thin view used by helpers and reporting. */
 export const ISSUE_PHASES: PhaseDefinition[] = PHASE_MANIFEST.map((e) => ({
-  id: e.phaseId,
+  id: e.id,
   name: e.name,
   critical: e.critical,
   commitType: e.commitType,
@@ -100,7 +100,7 @@ export const ISSUE_PHASES: PhaseDefinition[] = PHASE_MANIFEST.map((e) => ({
 /** Phase IDs used by the review-response pipeline (implementation, integration-verification, PR composition). */
 export const REVIEW_RESPONSE_PHASES: readonly number[] = PHASE_MANIFEST
   .filter((e) => e.includeInReviewResponse)
-  .map((e) => e.phaseId);
+  .map((e) => e.id);
 
 /**
  * Get a subset of phase definitions by ID, returned in phase-ID order.

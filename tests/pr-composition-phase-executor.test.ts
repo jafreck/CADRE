@@ -163,8 +163,8 @@ describe('PRCompositionPhaseExecutor', () => {
   });
 
   describe('PhaseExecutor contract', () => {
-    it('should have phaseId of 5', () => {
-      expect(executor.phaseId).toBe(5);
+    it('should have id of 5', () => {
+      expect(executor.id).toBe(5);
     });
 
     it('should have name "PR Composition"', () => {

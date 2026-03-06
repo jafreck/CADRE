@@ -9,7 +9,7 @@ import { verifyCommand } from '@cadre-dev/framework/runtime';
 import { FlowRunner, defineFlow, step, loop } from '@cadre-dev/framework/flow';
 
 export class ImplementationPhaseExecutor implements PhaseExecutor {
-  readonly phaseId = 3;
+  readonly id = 3;
   readonly name = 'Implementation';
 
   async execute(ctx: PhaseContext): Promise<string> {

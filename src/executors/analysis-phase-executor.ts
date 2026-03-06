@@ -8,7 +8,7 @@ import { extractCadreJson, type BaselineResults } from '@cadre-dev/framework/run
 import type { AgentResult } from '../agents/types.js';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
-  readonly phaseId = 1;
+  readonly id = 1;
   readonly name = 'Analysis & Scouting';
 
   async execute(ctx: PhaseContext): Promise<string> {

@@ -130,8 +130,8 @@ describe('PlanningPhaseExecutor', () => {
   });
 
   describe('PhaseExecutor contract', () => {
-    it('should have phaseId of 2', () => {
-      expect(executor.phaseId).toBe(2);
+    it('should have id of 2', () => {
+      expect(executor.id).toBe(2);
     });
 
     it('should have name "Planning"', () => {

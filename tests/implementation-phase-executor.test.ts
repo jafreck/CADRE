@@ -190,8 +190,8 @@ describe('ImplementationPhaseExecutor', () => {
   });
 
   describe('PhaseExecutor contract', () => {
-    it('should have phaseId of 3', () => {
-      expect(executor.phaseId).toBe(3);
+    it('should have id of 3', () => {
+      expect(executor.id).toBe(3);
     });
 
     it('should have name "Implementation"', () => {

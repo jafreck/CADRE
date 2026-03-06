@@ -21,7 +21,7 @@ export interface PhaseDefinition {
 /** A single entry in the pipeline manifest, capturing all phase metadata. */
 export interface PhaseManifestEntry<TContext extends PhaseContext = PhaseContext> {
   /** Phase number (1-based). */
-  phaseId: number;
+  id: number;
   /** Human-readable phase name. */
   name: string;
   /** Factory that creates the phase executor. */
@@ -106,12 +106,12 @@ export function buildGateMap<TContext extends PhaseContext>(
   const map: Record<number, PhaseGate> = {};
   for (const entry of manifest) {
     if (entry.gate !== null) {
-      map[entry.phaseId] = entry.gate;
+      map[entry.id] = entry.gate;
     }
   }
 
   for (const plugin of plugins) {
-    map[plugin.phaseId] = plugin.gate;
+    map[plugin.id] = plugin.gate;
   }
 
   return map;

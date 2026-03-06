@@ -33,40 +33,40 @@ export class PhaseRunner {
       return phaseResult;
     }
 
-    await this.checkpoint.completePhase(executor.phaseId, phaseResult.outputPath ?? '');
+    await this.checkpoint.completePhase(executor.id, phaseResult.outputPath ?? '');
 
     // Run gate validators after phases 1–4
-    if (executor.phaseId >= 1 && executor.phaseId <= 4) {
-      const gateStatus = await this.gateCoordinator.runGate(executor.phaseId, phases);
+    if (executor.id >= 1 && executor.id <= 4) {
+      const gateStatus = await this.gateCoordinator.runGate(executor.id, phases);
       if (gateStatus === 'fail') {
-        this.logger.warn(`Gate failed for phase ${executor.phaseId}; retrying`, {
+        this.logger.warn(`Gate failed for phase ${executor.id}; retrying`, {
           issueNumber: this.issueNumber,
-          phase: executor.phaseId,
+          phase: executor.id,
         });
-        await this.progressWriter.appendEvent(`Phase ${executor.phaseId} gate failed; retrying phase`);
+        await this.progressWriter.appendEvent(`Phase ${executor.id} gate failed; retrying phase`);
 
         const retryResult = await this.executePhase(executor, ctx);
         phases[phases.length - 1] = retryResult;
 
         if (!retryResult.success) {
-          await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} retry failed`);
+          await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.id} retry failed`);
           return retryResult;
         }
 
-        await this.checkpoint.completePhase(executor.phaseId, retryResult.outputPath ?? '');
-        const retryGateStatus = await this.gateCoordinator.runGate(executor.phaseId, phases);
+        await this.checkpoint.completePhase(executor.id, retryResult.outputPath ?? '');
+        const retryGateStatus = await this.gateCoordinator.runGate(executor.id, phases);
         if (retryGateStatus === 'fail') {
-          this.logger.error(`Gate still failing for phase ${executor.phaseId} after retry; aborting`, {
+          this.logger.error(`Gate still failing for phase ${executor.id} after retry; aborting`, {
             issueNumber: this.issueNumber,
-            phase: executor.phaseId,
+            phase: executor.id,
           });
           await this.progressWriter.appendEvent(
-            `Pipeline aborted: gate still failing for phase ${executor.phaseId} after retry`,
+            `Pipeline aborted: gate still failing for phase ${executor.id} after retry`,
           );
           return {
             ...retryResult,
             success: false,
-            error: `Gate validation failed for phase ${executor.phaseId} after retry`,
+            error: `Gate validation failed for phase ${executor.id} after retry`,
           };
         }
 
@@ -82,22 +82,22 @@ export class PhaseRunner {
    */
   private async executePhase(executor: PhaseExecutor, ctx: PhaseContext): Promise<PhaseResult> {
     const phaseStart = Date.now();
-    await this.checkpoint.startPhase(executor.phaseId);
-    await this.progressWriter.appendEvent(`Phase ${executor.phaseId} started: ${executor.name}`);
+    await this.checkpoint.startPhase(executor.id);
+    await this.progressWriter.appendEvent(`Phase ${executor.id} started: ${executor.name}`);
 
-    this.logger.info(`Phase ${executor.phaseId}: ${executor.name}`, {
+    this.logger.info(`Phase ${executor.id}: ${executor.name}`, {
       issueNumber: this.issueNumber,
-      phase: executor.phaseId,
+      phase: executor.id,
     });
 
     try {
       const outputPath = await executor.execute(ctx);
 
       const duration = Date.now() - phaseStart;
-      await this.progressWriter.appendEvent(`Phase ${executor.phaseId} completed in ${duration}ms`);
+      await this.progressWriter.appendEvent(`Phase ${executor.id} completed in ${duration}ms`);
 
       return {
-        phase: executor.phaseId,
+        phase: executor.id,
         phaseName: executor.name,
         success: true,
         duration,
@@ -108,10 +108,10 @@ export class PhaseRunner {
       if (err instanceof BudgetExceededError) throw err;
       const duration = Date.now() - phaseStart;
       const error = String(err);
-      await this.progressWriter.appendEvent(`Phase ${executor.phaseId} failed: ${error}`);
+      await this.progressWriter.appendEvent(`Phase ${executor.id} failed: ${error}`);
 
       return {
-        phase: executor.phaseId,
+        phase: executor.id,
         phaseName: executor.name,
         success: false,
         duration,
