@@ -17,9 +17,9 @@ import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
 import { IssueLifecycleNotifier } from './issue-lifecycle-notifier.js';
-import { FlowRunner, defineFlow } from '@cadre-dev/framework/flow';
-import { PhaseFlowBuilder, PipelineHaltError } from './phase-flow-builder.js';
-import type { PipelineFlowContext } from './phase-flow-builder.js';
+import { FlowRunner, defineFlow, step, loop, gate, sequence } from '@cadre-dev/framework/flow';
+import { createPhaseActions, PipelineHaltError } from './phase-actions.js';
+import type { PipelineFlowContext } from './phase-actions.js';
 
 export { BudgetExceededError } from './issue-budget-guard.js';
 
@@ -39,10 +39,11 @@ export interface IssueResult {
 /**
  * Runs the 5-phase pipeline for a single issue within its worktree.
  *
- * Pipeline topology is delegated to {@link PhaseFlowBuilder} which constructs
- * a declarative flow graph using `step()`, `gate()`, and `loop()` DSL
- * primitives.  This class handles service wiring, error categorization, and
- * result assembly.
+ * The pipeline topology is declared inline in `run()` using flow DSL
+ * primitives (`sequence`, `loop`, `step`, `gate`).  Callback logic lives
+ * in {@link createPhaseActions} — small, named factories that return the
+ * function for each DSL node.  Lifecycle hooks on the FlowRunner handle
+ * cross-cutting concerns (progress updates, notifications).
  */
 export class IssueOrchestrator {
   private readonly progressDir: string;
@@ -105,6 +106,10 @@ export class IssueOrchestrator {
 
   /**
    * Run the full 5-phase pipeline.
+   *
+   * The flow graph is declared inline so the pipeline topology is visible:
+   * each phase is a `sequence` of `loop(execute + gate)` → optional
+   * `ambiguity gate` → `finalize`.
    */
   async run(): Promise<IssueResult> {
     const startTime = Date.now();
@@ -176,29 +181,98 @@ export class IssueOrchestrator {
     const executors = this.registry.getAll()
       .filter((executor) => !(this.config.options.dryRun && executor.phaseId > 2));
 
-    const builder = new PhaseFlowBuilder(
-      {
-        config: this.config,
-        issue: this.issue,
-        worktree: this.worktree,
-        checkpoint: this.checkpoint,
-        logger: this.logger,
-        progressWriter: this.progressWriter,
-        notificationManager: this.notificationManager,
-        commitManager: this.commitManager,
-        resyncAgentFiles: this.resyncAgentFiles,
-        getTokenUsage: () => this.tokenTracker.getTotal(),
-      },
-      this.phases,
-    );
+    const actions = createPhaseActions({
+      config: this.config,
+      issue: this.issue,
+      worktree: this.worktree,
+      checkpoint: this.checkpoint,
+      logger: this.logger,
+      progressWriter: this.progressWriter,
+      notificationManager: this.notificationManager,
+      commitManager: this.commitManager,
+      resyncAgentFiles: this.resyncAgentFiles,
+      phases: this.phases,
+    });
 
-    const flowNodes = builder.build(
-      executors,
-      gateCoordinator,
-      lifecycleNotifier,
-      this.ctx,
-      (executor) => this.executePhase(executor),
-    );
+    const maxGateRetries = this.config.options.maxGateRetries ?? 1;
+    const exec = (executor: PhaseExecutor) => this.executePhase(executor);
+
+    // ── Declarative pipeline topology ──
+    // Each phase is a sequence of: execute-with-gate-retries → ambiguity check → finalize → notify.
+    // The topology is readable here; callback logic lives in phase-actions.ts.
+    const flowNodes = executors.map((executor, index) => {
+      const pid = executor.phaseId;
+      const hasGate = pid >= 1 && pid <= 4;
+      const previousPhaseId = index > 0 ? executors[index - 1].phaseId : undefined;
+
+      return sequence<PipelineFlowContext>(
+        {
+          id: `phase-${pid}`,
+          name: executor.name,
+          dependsOn: previousPhaseId != null ? [`phase-${previousPhaseId}`] : undefined,
+        },
+        [
+          // Phase execution with gate retry loop (phases 1-4) or plain step (phase 5)
+          ...(hasGate ? [
+            loop<PipelineFlowContext>({
+              id: `execute-with-gate`,
+              name: `Execute ${executor.name} with gate retries`,
+              maxIterations: maxGateRetries + 1,
+              while: actions.shouldExecute(executor, this.ctx),
+              onSkip: actions.onPhaseSkip(executor),
+              do: [
+                step<PipelineFlowContext>({
+                  id: 'execute',
+                  name: `Run ${executor.name}`,
+                  run: actions.execute(executor, exec),
+                }),
+                gate<PipelineFlowContext>({
+                  id: 'validate',
+                  name: `Gate check for ${executor.name}`,
+                  evaluate: actions.evaluateGate(executor, gateCoordinator),
+                }),
+              ],
+            }),
+          ] : [
+            step<PipelineFlowContext>({
+              id: 'execute',
+              name: `Run ${executor.name}`,
+              run: actions.executeUngated(executor, this.ctx, exec),
+            }),
+          ]),
+
+          // Ambiguity check (phase 1 only)
+          ...(pid === 1 ? [
+            gate<PipelineFlowContext>({
+              id: 'ambiguity-check',
+              name: 'Check for ambiguities',
+              evaluate: actions.checkAmbiguities(gateCoordinator),
+            }),
+          ] : []),
+
+          // Post-phase hooks: commit, strip cadre files, resync agents
+          step<PipelineFlowContext>({
+            id: 'finalize',
+            name: `Finalize ${executor.name}`,
+            run: actions.finalize(executor),
+          }),
+
+          // Progress update + lifecycle notification
+          step<PipelineFlowContext>({
+            id: 'notify',
+            name: `Report ${executor.name} progress`,
+            run: async () => {
+              const lastPhase = this.phases[this.phases.length - 1] as PhaseResult & { skipped?: boolean };
+              if (lastPhase && !lastPhase.skipped && lastPhase.duration > 0) {
+                await this.updateProgress();
+                await lifecycleNotifier.notifyPhaseCompleted(pid, executor.name, lastPhase.duration);
+              }
+              return { notified: true };
+            },
+          }),
+        ],
+      );
+    });
 
     try {
       await new FlowRunner<PipelineFlowContext>().run(

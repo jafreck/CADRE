@@ -25,7 +25,7 @@ interface RunnerState<TContext> {
   hadError: boolean;
   lastError?: FlowExecutionError;
   startedAt: string;
-  options: Required<Pick<FlowRunnerOptions<TContext>, 'concurrency' | 'continueOnError'>> & Pick<FlowRunnerOptions<TContext>, 'checkpoint'>;
+  options: Required<Pick<FlowRunnerOptions<TContext>, 'concurrency' | 'continueOnError'>> & Pick<FlowRunnerOptions<TContext>, 'checkpoint' | 'hooks'>;
 }
 
 export class FlowRunner<TContext = Record<string, unknown>> {
@@ -36,6 +36,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       concurrency: options.concurrency ?? this.defaults.concurrency ?? Number.POSITIVE_INFINITY,
       continueOnError: options.continueOnError ?? this.defaults.continueOnError ?? false,
       checkpoint: options.checkpoint ?? this.defaults.checkpoint,
+      hooks: options.hooks ?? this.defaults.hooks,
     };
 
     const startedAt = new Date().toISOString();
@@ -170,6 +171,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       for (const node of ready) {
         const executionId = `${executionPath.join('/')}/${node.id}`;
         if (state.completedExecutionIds.has(executionId)) {
+          await state.options.hooks?.onNodeSkip?.(node.id, node);
           localResolved.add(node.id);
           localOutputs[node.id] = state.executionOutputs[executionId];
           const index = pending.findIndex((candidate) => candidate.id === node.id);
@@ -178,12 +180,14 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         }
 
         try {
+          await state.options.hooks?.onNodeStart?.(node.id, node);
           const output = await this.executeNode(state, node, [...executionPath, node.id], executionId);
           state.outputs[node.id] = output;
           state.executionOutputs[executionId] = output;
           state.completedExecutionIds.add(executionId);
           localOutputs[node.id] = output;
           localResolved.add(node.id);
+          await state.options.hooks?.onNodeComplete?.(node.id, node, output);
           await this.persistCheckpoint(state, 'completed');
         } catch (error) {
           const wrapped = this.wrapError(state.flow.id, node.id, executionId, error);
@@ -260,7 +264,27 @@ export class FlowRunner<TContext = Record<string, unknown>> {
           }
         }
 
+        // Fire onSkip when the loop ran 0 iterations
+        if (iterations === 0 && node.onSkip) {
+          const skipCtx = this.buildExecutionContext(state, executionPath);
+          const skipOutput = await node.onSkip(skipCtx);
+          return { iterations: 0, outputs: [], skipped: true, skipOutput };
+        }
+
         return { iterations, outputs };
+      }
+      case 'sequence': {
+        // Expand sequence: auto-wire dependsOn to previous sibling
+        const wiredNodes = node.nodes.map((child, index) => {
+          if (index === 0) return child;
+          const prev = node.nodes[index - 1];
+          return {
+            ...child,
+            dependsOn: child.dependsOn ?? [prev.id],
+          };
+        });
+        const seqOutputs = await this.executeNodeList(state, wiredNodes, executionPath);
+        return seqOutputs;
       }
       case 'parallel': {
         const entries = Object.entries(node.branches);
@@ -279,8 +303,8 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         return branchResults;
       }
       default: {
-        const exhaustive: never = node;
-        throw new Error(`Unsupported node kind ${(exhaustive as { kind?: string }).kind ?? 'unknown'}`);
+        const _exhaustive: never = node;
+        throw new Error(`Unsupported node kind ${(_exhaustive as { kind?: string }).kind ?? 'unknown'}`);
       }
     }
   }
@@ -481,6 +505,9 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         }
         if (node.kind === 'loop') {
           visit(node.do);
+        }
+        if (node.kind === 'sequence') {
+          visit(node.nodes);
         }
         if (node.kind === 'parallel') {
           for (const branch of Object.values(node.branches)) {

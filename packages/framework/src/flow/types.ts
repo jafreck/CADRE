@@ -58,6 +58,10 @@ export interface FlowExecutionContext<TContext = Record<string, unknown>> {
 
 export interface FlowNodeBase<TContext = Record<string, unknown>> {
   id: string;
+  /** Human-readable label for visualization and logging. */
+  name?: string;
+  /** Longer description of what this node does. */
+  description?: string;
   dependsOn?: string[];
   input?: unknown;
   checkpoint?: boolean;
@@ -95,6 +99,8 @@ export interface FlowLoopNode<TContext = Record<string, unknown>> extends FlowNo
   maxIterations: number;
   while?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<boolean>;
   until?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<boolean>;
+  /** Called when the loop runs 0 iterations (e.g. `while` returns false immediately). */
+  onSkip?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<unknown>;
 }
 
 export interface FlowParallelNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
@@ -103,12 +109,18 @@ export interface FlowParallelNode<TContext = Record<string, unknown>> extends Fl
   concurrency?: number;
 }
 
+export interface FlowSequenceNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
+  kind: 'sequence';
+  nodes: FlowNode<TContext>[];
+}
+
 export type FlowNode<TContext = Record<string, unknown>> =
   | FlowStepNode<TContext>
   | FlowGateNode<TContext>
   | FlowConditionalNode<TContext>
   | FlowLoopNode<TContext>
-  | FlowParallelNode<TContext>;
+  | FlowParallelNode<TContext>
+  | FlowSequenceNode<TContext>;
 
 export interface FlowDefinition<TContext = Record<string, unknown>> {
   id: string;
@@ -136,11 +148,22 @@ export interface FlowCheckpointAdapter<TContext = Record<string, unknown>> {
   save(snapshot: FlowCheckpointSnapshot<TContext>): MaybePromise<void>;
 }
 
+/** Lifecycle hooks called by FlowRunner during execution. */
+export interface FlowLifecycleHooks<TContext = Record<string, unknown>> {
+  /** Called before a node starts executing. */
+  onNodeStart?: (nodeId: string, node: FlowNode<TContext>) => MaybePromise<void>;
+  /** Called after a node completes successfully. */
+  onNodeComplete?: (nodeId: string, node: FlowNode<TContext>, output: unknown) => MaybePromise<void>;
+  /** Called when a node is skipped (checkpoint resume or loop skip). */
+  onNodeSkip?: (nodeId: string, node: FlowNode<TContext>) => MaybePromise<void>;
+}
+
 export interface FlowRunnerOptions<TContext = Record<string, unknown>> {
   concurrency?: number;
   continueOnError?: boolean;
   checkpoint?: FlowCheckpointAdapter<TContext>;
   contracts?: FlowContracts;
+  hooks?: FlowLifecycleHooks<TContext>;
 }
 
 export interface FlowRunResult<TContext = Record<string, unknown>> {

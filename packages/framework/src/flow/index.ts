@@ -7,6 +7,7 @@ export {
   conditional,
   loop,
   parallel,
+  sequence,
 } from './dsl.js';
 
 export { fromStep, fromSteps, fromContext } from './refs.js';
@@ -25,12 +26,14 @@ export type {
   FlowLoopNode,
   FlowParallelNode,
   FlowConditionalNode,
+  FlowSequenceNode,
   FlowDefinition,
   FlowExecutionContext,
   FlowRunResult,
   FlowRunnerOptions,
   FlowCheckpointAdapter,
   FlowCheckpointSnapshot,
+  FlowLifecycleHooks,
 } from './types.js';
 
 export { FlowExecutionError, FlowCycleError, FlowContractError } from './types.js';

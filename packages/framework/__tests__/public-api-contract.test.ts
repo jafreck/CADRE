@@ -163,6 +163,7 @@ describe('framework package contract', () => {
       'registerNotificationProviderFactory',
       'resetAgentBackendFactories',
       'resetNotificationProviderFactories',
+      'sequence',
       'spawnProcess',
       'step',
       'stripVSCodeEnv',
@@ -262,6 +263,7 @@ describe('framework package contract', () => {
       'gate',
       'loop',
       'parallel',
+      'sequence',
       'step',
       'validateFlowContracts',
     ]);

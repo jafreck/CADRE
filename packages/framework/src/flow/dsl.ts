@@ -5,6 +5,7 @@ import type {
   FlowLoopNode,
   FlowNode,
   FlowParallelNode,
+  FlowSequenceNode,
   FlowStepNode,
 } from './types.js';
 
@@ -44,4 +45,19 @@ export function parallel<TContext = Record<string, unknown>>(
   config: Omit<FlowParallelNode<TContext>, 'kind'>,
 ): FlowParallelNode<TContext> {
   return { kind: 'parallel', ...config };
+}
+
+/**
+ * Create a sequence of nodes that auto-wire `dependsOn` to the previous sibling.
+ *
+ * The first node in the sequence inherits `dependsOn` from the sequence config.
+ * Subsequent nodes automatically depend on the previous sibling's id.
+ * The outer sequence node itself is transparent to FlowRunner — it expands
+ * into the inner nodes with correct wiring.
+ */
+export function sequence<TContext = Record<string, unknown>>(
+  config: { id: string; name?: string; description?: string; dependsOn?: string[] },
+  nodes: FlowNode<TContext>[],
+): FlowSequenceNode<TContext> {
+  return { kind: 'sequence', ...config, nodes };
 }
