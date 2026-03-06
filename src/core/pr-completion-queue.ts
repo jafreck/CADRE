@@ -137,6 +137,15 @@ export class PullRequestCompletionQueue {
     return this.completedIssueNumbers;
   }
 
+  /**
+   * Check whether a specific issue has been completed within this queue's
+   * drain cycle.  Used by the isDependencySatisfied callback to see intra-drain
+   * completions that haven't yet been promoted in the fleet checkpoint.
+   */
+  isIssueCompleted(issueNumber: number): boolean {
+    return this.completedIssueNumbers.has(issueNumber);
+  }
+
   getFailures(): CompletionFailure[] {
     return [...this.failures];
   }

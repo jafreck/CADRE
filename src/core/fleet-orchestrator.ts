@@ -88,8 +88,14 @@ export class FleetOrchestrator {
       autoComplete.mergeMethod,
       autoComplete.enabled,  // Fix 2: Always enabled when auto-complete is on, not just on resume.
       (dependencyIssueNumber) => {
+        // Check both the fleet checkpoint AND the completion queue's own
+        // completedIssueNumbers set.  During drain(), items merged earlier in
+        // the same cycle are not yet promoted to 'completed' in the fleet
+        // checkpoint, so without this combined check, Wave-1 PRs would be
+        // incorrectly blocked when Wave-0 PRs merged in the same drain.
         const status = this.fleetCheckpoint.getIssueStatus(dependencyIssueNumber)?.status;
-        return status === 'completed';
+        if (status === 'completed') return true;
+        return this.prCompletionQueue.isIssueCompleted(dependencyIssueNumber);
       },
       autoComplete.enabled ? this.buildCompletionQueueConflictResolver() : undefined,
     );
@@ -263,14 +269,21 @@ export class FleetOrchestrator {
       ([num, s]) => reconcilableStatuses.has(s.status) && resolveBranch(num, s.branchName),
     );
 
+    // Also include code-complete issues that have an error — these are stuck
+    // and need reconciliation against actual PR state.
+    const codeCompleteWithError = allStatuses.filter(
+      ([num, s]) => s.status === 'code-complete' && s.error && resolveBranch(num, s.branchName),
+    );
+
     // ── Phase 1: Promote issues whose PRs have been merged ──
     let promoted = 0;
-    if (toReconcile.length > 0) {
+    const allReconcilable = [...toReconcile, ...codeCompleteWithError];
+    if (allReconcilable.length > 0) {
       this.logger.info(
-        `Resume reconciliation: checking ${toReconcile.length} failed issues against actual PR state`,
+        `Resume reconciliation: checking ${allReconcilable.length} issues against actual PR state`,
       );
 
-      for (const [issueNumber, issueStatus] of toReconcile) {
+      for (const [issueNumber, issueStatus] of allReconcilable) {
         const branch = resolveBranch(issueNumber, issueStatus.branchName);
         try {
           const prs = await this.platform.listPullRequests({
@@ -391,9 +404,91 @@ export class FleetOrchestrator {
       }
     }
 
-    if (promoted > 0 || cleared > 0) {
+    // ── Phase 4: Reconcile code-complete issues with errors ──
+    // For code-complete issues with errors, check actual PR state:
+    //   - If merged → promote to 'completed'
+    //   - If open PR exists → re-enqueue to completion queue
+    //   - If no PR exists → clear fleet status + reset per-issue checkpoint phase 5
+    let codeCompleteReconciled = 0;
+    for (const [issueNumber, issueStatus] of codeCompleteWithError) {
+      // Skip if already promoted in Phase 1
+      if (this.fleetCheckpoint.isIssueCompleted(issueNumber)) continue;
+      const branch = resolveBranch(issueNumber, issueStatus.branchName);
+      try {
+        const prs = await this.platform.listPullRequests({ head: branch, state: 'all' });
+        const merged = prs.find((pr) => pr.state === 'merged');
+        if (merged) {
+          // Already promoted in Phase 1 — skip
+          continue;
+        }
+
+        const openPR = prs.find((pr) => pr.state === 'open');
+        if (openPR) {
+          // Re-enqueue to completion queue for merge
+          this.logger.info(
+            `Reconciliation: re-enqueuing code-complete issue #${issueNumber} (PR #${openPR.number}) to completion queue`,
+            { issueNumber },
+          );
+          this.prCompletionQueue.enqueue({
+            issueNumber,
+            issueTitle: issueStatus.issueTitle,
+            prNumber: openPR.number,
+            prUrl: openPR.url,
+            branch,
+            dependencyIssueNumbers: this.dagDepMap?.[issueNumber] ?? [],
+          });
+          // Clear the error so it won't be re-reconciled
+          await this.fleetCheckpoint.setIssueStatus(
+            issueNumber,
+            'code-complete',
+            issueStatus.worktreePath,
+            branch,
+            issueStatus.lastPhase,
+            issueStatus.issueTitle,
+          );
+          codeCompleteReconciled++;
+        } else {
+          // No PR exists — clear fleet status and reset per-issue phase 5
+          // so the pipeline re-runs PR creation on the next resume.
+          this.logger.info(
+            `Reconciliation: no PR found for code-complete issue #${issueNumber}; clearing for re-entry`,
+            { issueNumber },
+          );
+          await this.fleetCheckpoint.clearIssueStatus(issueNumber);
+
+          // Also reset per-issue checkpoint phase 5 if the progress dir exists
+          const progressDir = issueStatus.worktreePath
+            ? join(issueStatus.worktreePath, '.cadre', 'issues', String(issueNumber))
+            : join(this.cadreDir, 'issues', String(issueNumber));
+          if (await exists(progressDir)) {
+            try {
+              const issueCheckpoint = new CheckpointManager(progressDir, this.logger);
+              await issueCheckpoint.load(String(issueNumber));
+              await issueCheckpoint.resetPhases([5]);
+              this.logger.info(
+                `Reconciliation: reset phase 5 for issue #${issueNumber}`,
+                { issueNumber },
+              );
+            } catch (cpErr) {
+              this.logger.warn(
+                `Reconciliation: could not reset per-issue checkpoint for issue #${issueNumber}: ${cpErr}`,
+                { issueNumber },
+              );
+            }
+          }
+          codeCompleteReconciled++;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Reconciliation: could not reconcile code-complete issue #${issueNumber}: ${err}`,
+          { issueNumber },
+        );
+      }
+    }
+
+    if (promoted > 0 || cleared > 0 || codeCompleteReconciled > 0) {
       this.logger.info(
-        `Resume reconciliation complete: promoted ${promoted} issues to 'completed'${mergeRetried > 0 ? ` (${mergeRetried} via merge retry)` : ''}, cleared ${cleared} dep-blocked`,
+        `Resume reconciliation complete: promoted ${promoted} issues to 'completed'${mergeRetried > 0 ? ` (${mergeRetried} via merge retry)` : ''}, cleared ${cleared} dep-blocked, reconciled ${codeCompleteReconciled} code-complete`,
       );
     }
   }

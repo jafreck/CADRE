@@ -8,6 +8,7 @@ import type { AgentResult, PRContent } from '../agents/types.js';
 import { extractCadreJson, execShell } from '@cadre-dev/framework/runtime';
 import type { PullRequestMergeMethod } from '../platform/provider.js';
 import { formatPullRequestTitle } from '../util/title-format.js';
+import { RebaseConflictError } from '../errors.js';
 
 /** Maximum total invocations (initial + retries) when pr-content.md fails to parse. */
 const MAX_ATTEMPTS = 2;
@@ -317,8 +318,10 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
 
   /**
    * Fetch the latest base branch and rebase the worktree onto it.
-   * If the rebase fails (real conflicts), abort gracefully — the PR
-   * will still be created and the completion queue can resolve later.
+   * If the rebase fails (real conflicts), abort the rebase and request a
+   * checkpoint reset of phases 3-4-5 so that implementation re-runs against
+   * the fresh base on the next resume.  Throws {@link RebaseConflictError}
+   * to halt the pipeline.
    */
   private async rebaseOntoBase(ctx: PhaseContext): Promise<void> {
     const git = simpleGit(ctx.worktree.path);
@@ -332,9 +335,23 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     } catch (err) {
       // Abort the failed rebase so the worktree is back to a clean state.
       await git.rebase(['--abort']).catch(() => {});
-      ctx.services.logger.warn(
-        `Rebase onto origin/${ctx.config.baseBranch} failed; pushing as-is: ${String(err)}`,
-        { issueNumber: ctx.issue.number },
+
+      // Request checkpoint invalidation so phases 3-4-5 re-run on next resume.
+      if (ctx.callbacks.resetPhases) {
+        ctx.services.logger.warn(
+          `Rebase onto origin/${ctx.config.baseBranch} failed; resetting phases 3-4-5 for fresh implementation: ${String(err)}`,
+          { issueNumber: ctx.issue.number },
+        );
+        await ctx.callbacks.resetPhases([3, 4, 5]);
+      } else {
+        ctx.services.logger.warn(
+          `Rebase onto origin/${ctx.config.baseBranch} failed; no resetPhases callback available: ${String(err)}`,
+          { issueNumber: ctx.issue.number },
+        );
+      }
+
+      throw new RebaseConflictError(
+        `Rebase onto origin/${ctx.config.baseBranch} failed for issue #${ctx.issue.number}: ${String(err)}`,
       );
     }
   }
