@@ -16,9 +16,9 @@ import { Logger } from '@cadre-dev/framework/core';
 import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
-import { FlowRunner, defineFlow, step, gate, sequence, gatedStep } from '@cadre-dev/framework/flow';
+import { FlowRunner, defineFlow } from '@cadre-dev/framework/flow';
 import type { FlowLifecycleHooks } from '@cadre-dev/framework/flow';
-import { createPhaseActions, PipelineHaltError } from './phase-actions.js';
+import { createPhaseActions, buildPipelineTopology, PipelineHaltError } from './phase-actions.js';
 import type { PipelineFlowContext } from './phase-actions.js';
 
 export { BudgetExceededError } from './issue-budget-guard.js';
@@ -217,94 +217,20 @@ export class IssueOrchestrator {
       },
     };
 
-    // ── Declarative pipeline topology ────────────────────────────────────
+    // ── Build pipeline topology from PHASE_MANIFEST ──────────────────────
     //
-    //   Phase 1: Analysis & Scouting      → gatedStep → ambiguity check → finalize
-    //   Phase 2: Planning                 → gatedStep → finalize
-    //   Phase 3: Implementation           → gatedStep → finalize
-    //   Phase 4: Integration Verification → gatedStep → finalize
-    //   Phase 5: PR Composition           → execute   → finalize
+    // Each manifest entry becomes a sequence: gatedStep + finalize (or
+    // step + finalize for ungated phases).  Phase 1 additionally gets
+    // an ambiguity gate.  Phases chain via dependsOn in manifest order.
     //
-    // gatedStep = loop(run + gate) with retry and checkpoint-skip.
-    // Lifecycle hooks handle progress updates and notifications.
-    // ─────────────────────────────────────────────────────────────────────
-
-    const phase1 = executorMap.get(1)!;
-    const phase5 = executorMap.get(5);
-
-    const flowNodes = [
-
-      // ── Phase 1: Analysis & Scouting ──
-      // Unique: includes an ambiguity gate after the gated execution.
-      sequence<PipelineFlowContext>(
-        { id: 'phase-1', name: 'Analysis & Scouting' },
-        [
-          gatedStep<PipelineFlowContext>({
-            id: 'analysis', name: 'Analysis',
-            maxRetries: maxGateRetries,
-            ...actions.gated(phase1, this.ctx, gateCoordinator, exec),
-          }),
-          gate({ id: 'ambiguity-check', name: 'Check for ambiguities', evaluate: actions.checkAmbiguities(gateCoordinator) }),
-          step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(phase1) }),
-        ],
-      ),
-
-      // ── Phase 2: Planning ──
-      sequence<PipelineFlowContext>(
-        { id: 'phase-2', name: 'Planning', dependsOn: ['phase-1'] },
-        [
-          gatedStep<PipelineFlowContext>({
-            id: 'planning', name: 'Planning',
-            maxRetries: maxGateRetries,
-            ...actions.gated(executorMap.get(2)!, this.ctx, gateCoordinator, exec),
-          }),
-          step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(2)!) }),
-        ],
-      ),
-
-      // ── Phase 3: Implementation ──
-      ...(executorMap.has(3) ? [
-        sequence<PipelineFlowContext>(
-          { id: 'phase-3', name: 'Implementation', dependsOn: ['phase-2'] },
-          [
-            gatedStep<PipelineFlowContext>({
-              id: 'implementation', name: 'Implementation',
-              maxRetries: maxGateRetries,
-              ...actions.gated(executorMap.get(3)!, this.ctx, gateCoordinator, exec),
-            }),
-            step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(3)!) }),
-          ],
-        ),
-      ] : []),
-
-      // ── Phase 4: Integration Verification ──
-      ...(executorMap.has(4) ? [
-        sequence<PipelineFlowContext>(
-          { id: 'phase-4', name: 'Integration Verification', dependsOn: ['phase-3'] },
-          [
-            gatedStep<PipelineFlowContext>({
-              id: 'integration', name: 'Integration Verification',
-              maxRetries: maxGateRetries,
-              ...actions.gated(executorMap.get(4)!, this.ctx, gateCoordinator, exec),
-            }),
-            step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(4)!) }),
-          ],
-        ),
-      ] : []),
-
-      // ── Phase 5: PR Composition ──
-      // No gate — just execute and finalize.
-      ...(phase5 ? [
-        sequence<PipelineFlowContext>(
-          { id: 'phase-5', name: 'PR Composition', dependsOn: ['phase-4'] },
-          [
-            step({ id: 'execute', name: 'Compose PR', run: actions.ungated(phase5, this.ctx, exec) }),
-            step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(phase5) }),
-          ],
-        ),
-      ] : []),
-
-    ].filter(Boolean);
+    const flowNodes = buildPipelineTopology({
+      executorMap,
+      actions,
+      gateCoordinator,
+      phaseCtx: this.ctx,
+      executePhase: exec,
+      maxGateRetries,
+    });
 
     try {
       await new FlowRunner<PipelineFlowContext>().run(
