@@ -218,7 +218,9 @@ export interface ContextBuildArgs {
   sessionPlanPaths?: string[];
   sessionSummaries?: SessionReviewSummary[];
   feedbackPath?: string;
-  issueType?: 'review' | 'test-failure' | 'build';
+  issueType?: 'review' | 'test-failure' | 'build' | 'lint';
+  /** Raw error output to pass directly to the agent (alternative to feedbackPath). */
+  errorOutput?: string;
   phase?: number;
   planPath?: string;
   integrationReportPath?: string;

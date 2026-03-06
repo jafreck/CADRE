@@ -8,6 +8,12 @@ vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockExecShell = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+vi.mock('@cadre/framework/runtime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre/framework/runtime')>();
+  return { ...actual, execShell: (...args: unknown[]) => mockExecShell(...args) };
+});
+
 const mockGit = {
   fetch: vi.fn().mockResolvedValue(undefined),
   merge: vi.fn().mockResolvedValue(undefined),
@@ -129,7 +135,7 @@ function makeCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
     },
     worktree: { path: '/tmp/worktree', branch: 'cadre/issue-42', baseCommit: 'abc123', issueNumber: 42 } as never,
     config: {
-      options: { maxRetriesPerTask: 3 },
+      options: { maxRetriesPerTask: 3, maxBuildFixRounds: 2 },
       pullRequest: { autoCreate: false, linkIssue: false, draft: false },
       commits: { squashBeforePR: false },
       baseBranch: 'main',
@@ -272,7 +278,7 @@ describe('PRCompositionPhaseExecutor', () => {
     function makeAutoCreateCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
       return makeCtx({
         config: {
-          options: { maxRetriesPerTask: 3 },
+          options: { maxRetriesPerTask: 3, maxBuildFixRounds: 2 },
           pullRequest: { autoCreate: true, linkIssue: false, draft: false },
           commits: { squashBeforePR: false },
           baseBranch: 'main',
@@ -1022,7 +1028,7 @@ describe('PRCompositionPhaseExecutor', () => {
     function makeAutoCreateCtx(overrides: Partial<PhaseContext> = {}): PhaseContext {
       return makeCtx({
         config: {
-          options: { maxRetriesPerTask: 3 },
+          options: { maxRetriesPerTask: 3, maxBuildFixRounds: 2 },
           pullRequest: { autoCreate: true, linkIssue: false, draft: false },
           commits: { squashBeforePR: false },
           baseBranch: 'main',
@@ -1052,6 +1058,118 @@ describe('PRCompositionPhaseExecutor', () => {
       await executor.execute(ctx);
 
       expect(push).toHaveBeenCalledWith(true, 'cadre/issue-42');
+    });
+
+    it('should run lint before pushing and retry via fix-surgeon when lint fails', async () => {
+      // Lint fails first time, passes second time
+      mockExecShell
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error TS2339: Property does not exist' })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+      const push = vi.fn().mockResolvedValue(undefined);
+      const launchAgent = vi.fn().mockResolvedValue(makeSuccessAgentResult('fix-surgeon'));
+      const contextBuild = vi.fn().mockResolvedValue('/progress/fix-ctx.json');
+
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3, maxBuildFixRounds: 2 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+          commands: { lint: 'npm run lint' },
+        } as never,
+        io: {
+          progressDir: '/tmp/progress',
+          progressWriter: {} as never,
+          checkpoint: {} as never,
+          commitManager: {
+            getDiff: vi.fn().mockResolvedValue('diff'),
+            ensureNoCadreArtifactsInDiff: vi.fn().mockResolvedValue(undefined),
+            push,
+            isClean: vi.fn().mockResolvedValue(false),
+            commit: vi.fn().mockResolvedValue(''),
+          } as never,
+        },
+        services: {
+          launcher: { launchAgent } as never,
+          contextBuilder: { build: contextBuild } as never,
+        } as never,
+      });
+
+      await executor.execute(ctx);
+
+      // fix-surgeon invoked with issueType 'lint' and errorOutput
+      expect(contextBuild).toHaveBeenCalledWith(
+        'fix-surgeon',
+        expect.objectContaining({
+          issueType: 'lint',
+          errorOutput: expect.stringContaining('error TS2339'),
+        }),
+      );
+      // push only called once (after lint passed on round 2)
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it('should propagate push errors without retrying', async () => {
+      const push = vi.fn()
+        .mockRejectedValue(new Error('fatal: could not read from remote repository'));
+
+      const ctx = makeAutoCreateCtx({
+        io: {
+          progressDir: '/tmp/progress',
+          progressWriter: {} as never,
+          checkpoint: {} as never,
+          commitManager: {
+            getDiff: vi.fn().mockResolvedValue('diff'),
+            ensureNoCadreArtifactsInDiff: vi.fn().mockResolvedValue(undefined),
+            push,
+          } as never,
+        },
+      });
+
+      await expect(executor.execute(ctx)).rejects.toThrow('could not read from remote');
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw after exhausting maxBuildFixRounds for lint failures', async () => {
+      // Lint always fails
+      mockExecShell.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'tsc --noEmit failed' });
+      const push = vi.fn();
+      const launchAgent = vi.fn().mockResolvedValue(makeSuccessAgentResult('fix-surgeon'));
+
+      const ctx = makeAutoCreateCtx({
+        config: {
+          options: { maxRetriesPerTask: 3, maxBuildFixRounds: 1 },
+          pullRequest: { autoCreate: true, linkIssue: false, draft: false },
+          commits: { squashBeforePR: false },
+          baseBranch: 'main',
+          commands: { lint: 'npm run lint' },
+        } as never,
+        io: {
+          progressDir: '/tmp/progress',
+          progressWriter: {} as never,
+          checkpoint: {} as never,
+          commitManager: {
+            getDiff: vi.fn().mockResolvedValue('diff'),
+            ensureNoCadreArtifactsInDiff: vi.fn().mockResolvedValue(undefined),
+            push,
+            isClean: vi.fn().mockResolvedValue(true),
+            commit: vi.fn().mockResolvedValue(''),
+          } as never,
+        },
+        services: {
+          launcher: { launchAgent } as never,
+          contextBuilder: { build: vi.fn().mockResolvedValue('/ctx.json') } as never,
+        } as never,
+      });
+
+      await expect(executor.execute(ctx)).rejects.toThrow('Lint failed after 1 fix-surgeon rounds');
+      // push never called — lint always failed
+      expect(push).not.toHaveBeenCalled();
+      // fix-surgeon called for pr-composer + lint fix
+      expect(launchAgent).toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'fix-surgeon' }),
+        expect.any(String),
+      );
     });
   });
 

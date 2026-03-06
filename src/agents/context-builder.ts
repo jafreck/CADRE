@@ -163,7 +163,16 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
     sessionId: (args) => args.sessionId,
     outputFile: (args) => join(args.worktreePath, '.cadre', 'tasks'),
     inputFiles: async (args, fileExists) => {
-      const files = [args.feedbackPath!, ...(args.changedFiles ?? [])];
+      const files: string[] = [];
+      // feedbackPath is the file-based error source (used by build/test retries).
+      // When errorOutput is provided instead, the error goes in the payload and
+      // feedbackPath may be omitted.
+      if (args.feedbackPath) {
+        files.push(args.feedbackPath);
+      }
+      if (args.changedFiles) {
+        files.push(...args.changedFiles);
+      }
       const phase = args.phase ?? 3;
       const planFile = phase === 3
         ? join(args.progressDir, `session-${args.sessionId}.md`)
@@ -179,9 +188,15 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       }
       return files;
     },
-    payload: (args) => ({
-      sessionId: args.sessionId!,
+    payload: (args, helpers) => ({
+      ...(args.sessionId ? { sessionId: args.sessionId } : {}),
       issueType: args.issueType!,
+      ...(args.errorOutput ? { errorOutput: args.errorOutput } : {}),
+      commands: {
+        ...(helpers.commands.build ? { build: helpers.commands.build } : {}),
+        ...(helpers.commands.lint ? { lint: helpers.commands.lint } : {}),
+        ...(helpers.commands.test ? { test: helpers.commands.test } : {}),
+      },
     }),
   },
   'integration-checker': {

@@ -336,8 +336,10 @@ export class GitHubProvider implements PlatformProvider {
 
   private async waitForMergeReadiness(oct: Octokit, prNumber: number): Promise<void> {
     const deadline = Date.now() + MERGE_POLL_TIMEOUT_MS;
+    let pollCount = 0;
 
     while (Date.now() < deadline) {
+      pollCount++;
       const { data: pr } = await oct.rest.pulls.get({
         owner: this.owner,
         repo: this.repo,
@@ -384,6 +386,13 @@ export class GitHubProvider implements PlatformProvider {
         return;
       }
 
+      // Log every 4th poll (~60s) to provide visibility without flooding
+      if (pollCount % 4 === 0) {
+        this.logger.info(
+          `PR #${prNumber} not ready yet (poll ${pollCount}): mergeable=${pr.mergeable}, mergeableState=${mergeableState}, checksPending=${checks.pending}`,
+        );
+      }
+
       await sleep(MERGE_POLL_INTERVAL_MS);
     }
 
@@ -402,9 +411,18 @@ export class GitHubProvider implements PlatformProvider {
       repo: this.repo,
       ref: headSha,
     });
-    if (combined.data.state === 'pending') pending = true;
+
+    // GitHub returns state='pending' when there are zero commit statuses.
+    // Only treat it as pending if there are actual statuses in pending state;
+    // repos that use only check runs (GitHub Actions) have no commit statuses.
+    const statuses = combined.data.statuses ?? [];
+    if (combined.data.state === 'pending' && statuses.length > 0) {
+      const hasPendingStatus = statuses.some(
+        (s: { state: string }) => s.state === 'pending',
+      );
+      if (hasPendingStatus) pending = true;
+    }
     if (combined.data.state === 'failure' || combined.data.state === 'error') {
-      const statuses = combined.data.statuses ?? [];
       for (const status of statuses) {
         if (status.state === 'failure' || status.state === 'error') {
           failed.push(status.context || 'commit-status');
