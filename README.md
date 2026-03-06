@@ -1,8 +1,8 @@
 # CADRE — Coordinated Agent Development Runtime Engine
 
 [![CI](https://github.com/jafreck/cadre/actions/workflows/ci.yml/badge.svg)](https://github.com/jafreck/cadre/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/@jafreck/cadre)](https://www.npmjs.com/package/@jafreck/cadre)
-[![npm downloads](https://img.shields.io/npm/dw/@jafreck/cadre)](https://www.npmjs.com/package/@jafreck/cadre)
+[![npm version](https://img.shields.io/npm/v/@cadre-dev/cadre)](https://www.npmjs.com/package/@cadre-dev/cadre)
+[![npm downloads](https://img.shields.io/npm/dw/@cadre-dev/cadre)](https://www.npmjs.com/package/@cadre-dev/cadre)
 [![Coverage](https://img.shields.io/codecov/c/github/jafreck/cadre)](https://codecov.io/gh/jafreck/cadre)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -11,7 +11,7 @@ CADRE is a framework for **parallel agent-based software development** against a
 ## Quick Start
 
 ```bash
-npm install -g @jafreck/cadre
+npm install -g @cadre-dev/cadre
 
 # Create a cadre.config.json in your repo
 cadre run -c path/to/cadre.config.json
@@ -177,12 +177,12 @@ Each issue runs in its own git worktree with full isolation. Multiple issues are
 
 Cadre supports runtime extension points without patching core switches:
 
-- `@cadre/agent-runtime`: `registerAgentBackendFactory()` for backend plugins.
-- `@cadre/agent-runtime`: `ProviderRegistry` enhancements (`registerProviders`, `describe`, `getCapabilities`, `healthCheck`).
-- `@cadre/pipeline-engine`: pluggable `CheckpointStore` with default `FileSystemCheckpointStore`.
-- `@cadre/notifications`: `registerNotificationProviderFactory()` for custom notification providers.
-- `@cadre/pipeline-engine`: `registerGatePlugin()` for custom phase gates.
-- `@cadre/observability`: `FleetEventBus.use()` middleware hooks for event lifecycle interception.
+- `@cadre-dev/framework/runtime`: `registerAgentBackendFactory()` for backend plugins.
+- `@cadre-dev/framework/runtime`: `ProviderRegistry` enhancements (`registerProviders`, `describe`, `getCapabilities`, `healthCheck`).
+- `@cadre-dev/framework/engine`: pluggable `CheckpointStore` with default `FileSystemCheckpointStore`.
+- `@cadre-dev/framework/notifications`: `registerNotificationProviderFactory()` for custom notification providers.
+- `@cadre-dev/framework/engine`: `registerGatePlugin()` for custom phase gates.
+- `@cadre-dev/framework/core`: `FleetEventBus.use()` middleware hooks for event lifecycle interception.
 - `src/agents/registry.ts`: `defineAgent()` and registry discovery helpers.
 
 ### Agent Roster
@@ -207,7 +207,7 @@ Cadre supports runtime extension points without patching core switches:
 - `cadre reset` — Reset fleet or issue state
 - `cadre worktrees` — List or manage active worktrees
 
-When installed globally (`npm install -g @jafreck/cadre`), the `cadre` command is available directly. You can also use `npx @jafreck/cadre` without installing.
+When installed globally (`npm install -g @cadre-dev/cadre`), the `cadre` command is available directly. You can also use `npx @cadre-dev/cadre` without installing.
 
 ## Key Design Principles
 
@@ -218,7 +218,7 @@ When installed globally (`npm install -g @jafreck/cadre`), the `cadre` command i
 5. **Git operations are the runtime's job** — Agents write files; the runtime handles git.
 6. **MCP-native GitHub access** — GitHub interactions use the MCP protocol, not CLI wrappers.
 
-## Flow DSL Package (`@cadre/flow`)
+## Flow DSL Package (`@cadre-dev/framework/flow`)
 
 Cadre now includes a framework package for declarative pipeline orchestration graphs.
 This package is additive and does not replace the existing app orchestrators yet.
@@ -235,7 +235,7 @@ import {
   conditional,
   fromStep,
   fromContext,
-} from '@cadre/flow';
+} from '@cadre-dev/framework/flow';
 
 const flow = defineFlow('example', [
   step({
