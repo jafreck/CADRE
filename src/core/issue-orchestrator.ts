@@ -18,10 +18,23 @@ import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
 import { IssueLifecycleNotifier } from './issue-lifecycle-notifier.js';
-import { FlowRunner, defineFlow, step, loop, gate } from '@cadre-dev/framework/flow';
+import { FlowRunner, defineFlow, step, loop, gate, conditional } from '@cadre-dev/framework/flow';
+import type { FlowNode } from '@cadre-dev/framework/flow';
 import { launchWithRetry } from '../executors/helpers.js';
 
 export { BudgetExceededError } from './issue-budget-guard.js';
+
+/**
+ * Pipeline-level flow context shared across all DSL nodes.
+ */
+interface PipelineFlowContext {
+  /** Tracks which phases have passed their gate within the current flow run. */
+  gatesPassed: Record<number, boolean>;
+  /** Tracks gate retry attempts per phase. */
+  gateAttempts: Record<number, number>;
+  /** Phases that were checkpoint-skipped (already completed on resume). */
+  skippedPhases: Set<number>;
+}
 
 class PipelineHaltError extends Error {
   constructor(
@@ -118,7 +131,13 @@ export class IssueOrchestrator {
   }
 
   /**
-   * Run the full 5-phase pipeline.
+   * Run the full 5-phase pipeline using flow DSL primitives.
+   *
+   * The pipeline topology is fully declarative: each phase is expressed as a
+   * `loop()` of `step()` + `gate()` for gate retries, with `conditional()`
+   * nodes for ambiguity halting and post-phase hooks (strip cadre files,
+   * commit-per-phase, agent resync).  FlowRunner handles checkpoint/resume
+   * at the flow level.
    */
   async run(): Promise<IssueResult> {
     const startTime = Date.now();
@@ -191,21 +210,20 @@ export class IssueOrchestrator {
 
     const executors = this.registry.getAll()
       .filter((executor) => !(this.config.options.dryRun && executor.phaseId > 2));
-    const flowNodes = executors.map((executor, index) =>
-      step({
-        id: `phase-${executor.phaseId}`,
-        dependsOn: index > 0 ? [`phase-${executors[index - 1].phaseId}`] : undefined,
-        run: async () => {
-          await this.runPipelinePhase(executor, gateCoordinator, lifecycleNotifier);
-          return { phaseId: executor.phaseId };
-        },
-      }),
-    );
+
+    // Build the declarative flow graph — each phase becomes a sequence of DSL
+    // nodes: checkpoint-skip check, phase execution + gate retry loop,
+    // ambiguity gate (phase 1), post-phase hooks, and lifecycle notification.
+    const flowNodes = this.buildFlowNodes(executors, gateCoordinator, lifecycleNotifier);
 
     try {
-      await new FlowRunner().run(
-        defineFlow(`cadre-issue-${this.issue.number}`, flowNodes, 'Cadre issue execution pipeline'),
-        {},
+      await new FlowRunner<PipelineFlowContext>().run(
+        defineFlow<PipelineFlowContext>(
+          `cadre-issue-${this.issue.number}`,
+          flowNodes,
+          'Cadre issue execution pipeline',
+        ),
+        { gatesPassed: {}, gateAttempts: {}, skippedPhases: new Set() },
       );
     } catch (err) {
       if (this.isBudgetExceededError(err)) {
@@ -241,6 +259,332 @@ export class IssueOrchestrator {
     return successResult;
   }
 
+  // ── Flow Graph Construction ──
+
+  /**
+   * Build the declarative flow graph for the full pipeline.
+   *
+   * For each phase executor, produces a sequence of DSL nodes:
+   *   1. `conditional` — checkpoint skip (already-completed phases)
+   *   2. `loop` — phase execution + gate validation with retries
+   *   3. `conditional` — ambiguity halting (phase 1 only)
+   *   4. `step` — post-phase hooks (strip cadre files, commit, resync)
+   *   5. `step` — lifecycle notification + progress update
+   *
+   * All nodes for a given phase depend on the previous phase's final node,
+   * forming a sequential pipeline that FlowRunner can checkpoint and resume.
+   */
+  private buildFlowNodes(
+    executors: PhaseExecutor[],
+    gateCoordinator: GateCoordinator,
+    lifecycleNotifier: IssueLifecycleNotifier,
+  ): FlowNode<PipelineFlowContext>[] {
+    const allNodes: FlowNode<PipelineFlowContext>[] = [];
+    let previousNodeId: string | undefined;
+
+    for (const executor of executors) {
+      const pid = executor.phaseId;
+      const phaseDef = getPhase(pid)!;
+      const maxGateRetries = this.config.options.maxGateRetries ?? 1;
+      const hasGate = pid >= 1 && pid <= 4;
+
+      // ── Node 1: Checkpoint skip ──
+      // If this phase is already completed, push a skip result into phases[]
+      // and set gatesPassed so the gate loop exits immediately.
+      const skipNodeId = `phase-${pid}-checkpoint-skip`;
+      allNodes.push(
+        step<PipelineFlowContext>({
+          id: skipNodeId,
+          dependsOn: previousNodeId ? [previousNodeId] : undefined,
+          run: async (ctx) => {
+            if (!this.checkpoint.isPhaseCompleted(pid)) {
+              return { skipped: false };
+            }
+
+            // Defence-in-depth for phase 4: re-run lint to verify validity
+            if (
+              pid === 4
+              && this.config.options.buildVerification
+              && this.config.commands?.lint
+            ) {
+              const lintResult = await execShell(this.config.commands.lint, {
+                cwd: this.worktree.path,
+                timeout: 300_000,
+              });
+              if (lintResult.exitCode !== 0) {
+                this.logger.warn(
+                  `Completed phase 4 no longer passes lint; resetting phases 3-4`,
+                  { issueNumber: this.issue.number, phase: pid },
+                );
+                await this.checkpoint.resetPhases([3, 4]);
+                return { skipped: false };
+              }
+            }
+
+            this.logger.info(`Skipping completed phase ${pid}: ${executor.name}`, {
+              issueNumber: this.issue.number,
+              phase: pid,
+            });
+            this.phases.push({
+              phase: pid,
+              phaseName: executor.name,
+              success: true,
+              duration: 0,
+              tokenUsage: 0,
+            });
+            // Mark gate as passed so the gate-retry loop exits on first check
+            ctx.context.gatesPassed[pid] = true;
+            ctx.context.skippedPhases.add(pid);
+            return { skipped: true };
+          },
+        }),
+      );
+
+      // ── Node 2: Phase execution + gate retry loop ──
+      // Uses loop() to wrap step(executePhase) + gate(runGate).
+      // The loop continues while the gate hasn't passed and retries remain.
+      if (hasGate) {
+        const loopNodeId = `phase-${pid}-with-gate`;
+        allNodes.push(
+          loop<PipelineFlowContext>({
+            id: loopNodeId,
+            dependsOn: [skipNodeId],
+            maxIterations: maxGateRetries + 1,
+            while: (ctx) => !ctx.context.gatesPassed[pid],
+            do: [
+              step<PipelineFlowContext>({
+                id: `phase-${pid}-execute`,
+                run: async (ctx) => {
+                  const phaseResult = await this.executePhase(executor);
+                  const isRetry = (ctx.context.gateAttempts[pid] ?? 0) > 0;
+
+                  if (isRetry) {
+                    // Replace last phase result on retry
+                    this.phases[this.phases.length - 1] = phaseResult;
+                  } else {
+                    this.phases.push(phaseResult);
+                  }
+
+                  if (!phaseResult.success) {
+                    if (isRetry) {
+                      await this.progressWriter.appendEvent(
+                        `Pipeline aborted: phase ${pid} retry failed`,
+                      );
+                    }
+                    if (phaseDef.critical) {
+                      this.logger.error(`Critical phase ${pid} failed, aborting pipeline`, {
+                        issueNumber: this.issue.number,
+                        phase: pid,
+                      });
+                      await this.progressWriter.appendEvent(
+                        `Pipeline aborted: phase ${pid} failed`,
+                      );
+                      throw new PipelineHaltError(
+                        phaseResult.error ?? `Phase ${pid} ${isRetry ? 'retry ' : ''}failed`,
+                        pid,
+                        executor.name,
+                      );
+                    }
+                    // Non-critical failure: mark gate as passed to exit loop
+                    ctx.context.gatesPassed[pid] = true;
+                    return { phaseId: pid, success: false };
+                  }
+
+                  await this.checkpoint.completePhase(pid, phaseResult.outputPath ?? '');
+                  return { phaseId: pid, success: true };
+                },
+              }),
+              gate<PipelineFlowContext>({
+                id: `gate-${pid}`,
+                evaluate: async (ctx) => {
+                  // If phase already marked as passed (skip or non-critical fail), pass through
+                  if (ctx.context.gatesPassed[pid]) return true;
+
+                  const gateStatus = await gateCoordinator.runGate(pid, this.phases);
+                  if (gateStatus !== 'fail') {
+                    ctx.context.gatesPassed[pid] = true;
+                    return true;
+                  }
+
+                  // Gate failed — check if retries remain
+                  const attempt = (ctx.context.gateAttempts[pid] ?? 0) + 1;
+                  ctx.context.gateAttempts[pid] = attempt;
+
+                  if (attempt > maxGateRetries) {
+                    // Exhausted retries — abort
+                    this.logger.error(
+                      `Gate still failing for phase ${pid} after ${maxGateRetries} retries; aborting`,
+                      { issueNumber: this.issue.number, phase: pid },
+                    );
+                    await this.progressWriter.appendEvent(
+                      `Pipeline aborted: gate still failing for phase ${pid} after ${maxGateRetries} retries`,
+                    );
+                    throw new PipelineHaltError(
+                      `Gate validation failed for phase ${pid} after retry`,
+                      pid,
+                      executor.name,
+                    );
+                  }
+
+                  // Signal retry: log + return true (gate "passes" so the step
+                  // inside the loop can re-execute; the loop's while-condition
+                  // keeps it spinning because gatesPassed is still false)
+                  this.logger.warn(
+                    `Gate failed for phase ${pid} (attempt ${attempt}/${maxGateRetries}); retrying`,
+                    { issueNumber: this.issue.number, phase: pid },
+                  );
+                  await this.progressWriter.appendEvent(
+                    `Phase ${pid} gate failed; retrying phase (attempt ${attempt}/${maxGateRetries})`,
+                  );
+                  return true;
+                },
+              }),
+            ],
+          }),
+        );
+        previousNodeId = loopNodeId;
+      } else {
+        // Phase 5 has no gate — just execute
+        const executeNodeId = `phase-${pid}-execute`;
+        allNodes.push(
+          step<PipelineFlowContext>({
+            id: executeNodeId,
+            dependsOn: [skipNodeId],
+            run: async (ctx) => {
+              if (ctx.context.gatesPassed[pid]) {
+                return { phaseId: pid, skipped: true };
+              }
+
+              const phaseResult = await this.executePhase(executor);
+              this.phases.push(phaseResult);
+
+              if (!phaseResult.success) {
+                if (phaseDef.critical) {
+                  this.logger.error(`Critical phase ${pid} failed, aborting pipeline`, {
+                    issueNumber: this.issue.number,
+                    phase: pid,
+                  });
+                  await this.progressWriter.appendEvent(
+                    `Pipeline aborted: phase ${pid} failed`,
+                  );
+                  throw new PipelineHaltError(
+                    phaseResult.error ?? `Phase ${pid} failed`,
+                    pid,
+                    executor.name,
+                  );
+                }
+                return { phaseId: pid, success: false };
+              }
+
+              await this.checkpoint.completePhase(pid, phaseResult.outputPath ?? '');
+              return { phaseId: pid, success: true };
+            },
+          }),
+        );
+        previousNodeId = executeNodeId;
+      }
+
+      // ── Node 3: Ambiguity halting (phase 1 only) ──
+      if (pid === 1) {
+        const ambiguityNodeId = `phase-${pid}-ambiguity-gate`;
+        allNodes.push(
+          gate<PipelineFlowContext>({
+            id: ambiguityNodeId,
+            dependsOn: [previousNodeId!],
+            evaluate: async () => {
+              const ambiguities = await gateCoordinator.readAmbiguities();
+              for (const ambiguity of ambiguities) {
+                this.logger.warn(`Ambiguity in issue #${this.issue.number}: ${ambiguity}`, {
+                  issueNumber: this.issue.number,
+                });
+              }
+              if (ambiguities.length > 0) {
+                await this.notificationManager.dispatch({
+                  type: 'ambiguity-detected',
+                  issueNumber: this.issue.number,
+                  ambiguities,
+                });
+              }
+              if (
+                this.config.options.haltOnAmbiguity
+                && ambiguities.length > this.config.options.ambiguityThreshold
+              ) {
+                const msg = `Analysis identified ${ambiguities.length} ambiguities (threshold: ${this.config.options.ambiguityThreshold})`;
+                await this.progressWriter.appendEvent(`Pipeline halted: ${msg}`);
+                throw new PipelineHaltError(msg, pid, executor.name);
+              }
+              return true;
+            },
+          }),
+        );
+        previousNodeId = ambiguityNodeId;
+      }
+
+      // ── Node 4: Post-phase hooks ──
+      // Strip cadre files (phase 4), commit-per-phase, and agent resync
+      // are explicit step nodes visible in the flow graph.
+      const postPhaseNodeId = `phase-${pid}-post-hooks`;
+      allNodes.push(
+        step<PipelineFlowContext>({
+          id: postPhaseNodeId,
+          dependsOn: [previousNodeId!],
+          run: async (ctx) => {
+            // Skip hooks for checkpoint-skipped phases
+            if (ctx.context.skippedPhases.has(pid)) {
+              return { hooked: false };
+            }
+
+            if (pid === 4) {
+              await this.stripCadreFilesAfterIntegration();
+            }
+
+            if (this.config.commits.commitPerPhase) {
+              await this.commitPhase(phaseDef);
+            }
+
+            // Re-sync agent symlinks AFTER the Phase 4 commit so they don't
+            // leak into git history.
+            if (pid === 4 && this.resyncAgentFiles) {
+              await this.resyncAgentFiles();
+            }
+
+            return { hooked: true };
+          },
+        }),
+      );
+
+      // ── Node 5: Lifecycle notification + progress ──
+      const notifyNodeId = `phase-${pid}-notify`;
+      allNodes.push(
+        step<PipelineFlowContext>({
+          id: notifyNodeId,
+          dependsOn: [postPhaseNodeId],
+          run: async (ctx) => {
+            // Skip notification for checkpoint-skipped phases
+            if (ctx.context.skippedPhases.has(pid)) {
+              return { notified: false };
+            }
+
+            await this.updateProgress();
+            const lastPhase = this.phases.find((p) => p.phase === pid);
+            await lifecycleNotifier.notifyPhaseCompleted(
+              pid,
+              executor.name,
+              lastPhase?.duration ?? 0,
+            );
+            return { notified: true };
+          },
+        }),
+      );
+
+      previousNodeId = notifyNodeId;
+    }
+
+    return allNodes;
+  }
+
+  // ── Error Helpers ──
+
   private isBudgetExceededError(error: unknown): boolean {
     if (error instanceof BudgetExceededError) {
       return true;
@@ -263,8 +607,11 @@ export class IssueOrchestrator {
     return cause instanceof PipelineHaltError ? cause : undefined;
   }
 
+  // ── Phase Execution ──
+
   /**
-   * Execute a single phase.
+   * Execute a single phase.  This is a thin adapter that delegates to the
+   * phase executor and captures timing / error information.
    */
   private async executePhase(executor: PhaseExecutor): Promise<PhaseResult> {
     const phaseStart = Date.now();
@@ -305,175 +652,6 @@ export class IssueOrchestrator {
         error,
       };
     }
-  }
-
-  private async runPipelinePhase(
-    executor: PhaseExecutor,
-    gateCoordinator: GateCoordinator,
-    lifecycleNotifier: IssueLifecycleNotifier,
-  ): Promise<void> {
-    if (this.checkpoint.isPhaseCompleted(executor.phaseId)) {
-      // Defence-in-depth: before skipping completed phase 4 (Integration
-      // Verification), re-run the lint command to verify the code is still
-      // valid.  A stale-base rebase (fix #1) may have succeeded but left
-      // the integration broken.  If lint fails, reset phases 3-4 and fall
-      // through to re-execute.
-      if (
-        executor.phaseId === 4
-        && this.config.options.buildVerification
-        && this.config.commands?.lint
-      ) {
-        const lintResult = await execShell(this.config.commands.lint, {
-          cwd: this.worktree.path,
-          timeout: 300_000,
-        });
-        if (lintResult.exitCode !== 0) {
-          this.logger.warn(
-            `Completed phase 4 no longer passes lint; resetting phases 3-4`,
-            { issueNumber: this.issue.number, phase: executor.phaseId },
-          );
-          await this.checkpoint.resetPhases([3, 4]);
-          // Fall through to re-execute this phase (and phase 3 will be
-          // re-executed when the flow runner reaches it next)
-        } else {
-          // Lint still passes — skip as normal
-          this.logger.info(`Skipping completed phase ${executor.phaseId}: ${executor.name}`, {
-            issueNumber: this.issue.number,
-            phase: executor.phaseId,
-          });
-          this.phases.push({
-            phase: executor.phaseId,
-            phaseName: executor.name,
-            success: true,
-            duration: 0,
-            tokenUsage: 0,
-          });
-          return;
-        }
-      } else {
-        this.logger.info(`Skipping completed phase ${executor.phaseId}: ${executor.name}`, {
-          issueNumber: this.issue.number,
-          phase: executor.phaseId,
-        });
-        this.phases.push({
-          phase: executor.phaseId,
-          phaseName: executor.name,
-          success: true,
-          duration: 0,
-          tokenUsage: 0,
-        });
-        return;
-      }
-    }
-
-    const phaseDef = getPhase(executor.phaseId)!;
-    const phaseResult = await this.executePhase(executor);
-    this.phases.push(phaseResult);
-
-    if (!phaseResult.success) {
-      if (phaseDef.critical) {
-        this.logger.error(`Critical phase ${executor.phaseId} failed, aborting pipeline`, {
-          issueNumber: this.issue.number,
-          phase: executor.phaseId,
-        });
-        await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} failed`);
-        throw new PipelineHaltError(
-          phaseResult.error ?? `Phase ${executor.phaseId} failed`,
-          executor.phaseId,
-          executor.name,
-        );
-      }
-      return;
-    }
-
-    await this.checkpoint.completePhase(executor.phaseId, phaseResult.outputPath ?? '');
-
-    if (executor.phaseId === 1) {
-      const ambiguities = await gateCoordinator.readAmbiguities();
-      for (const ambiguity of ambiguities) {
-        this.logger.warn(`Ambiguity in issue #${this.issue.number}: ${ambiguity}`, {
-          issueNumber: this.issue.number,
-        });
-      }
-      if (ambiguities.length > 0) {
-        await this.notificationManager.dispatch({
-          type: 'ambiguity-detected',
-          issueNumber: this.issue.number,
-          ambiguities,
-        });
-      }
-      if (
-        this.config.options.haltOnAmbiguity
-        && ambiguities.length > this.config.options.ambiguityThreshold
-      ) {
-        const msg = `Analysis identified ${ambiguities.length} ambiguities (threshold: ${this.config.options.ambiguityThreshold})`;
-        await this.progressWriter.appendEvent(`Pipeline halted: ${msg}`);
-        throw new PipelineHaltError(msg, executor.phaseId, executor.name);
-      }
-    }
-
-    if (executor.phaseId >= 1 && executor.phaseId <= 4) {
-      const maxGateRetries = this.config.options.maxGateRetries ?? 1;
-      let gateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
-
-      for (let gateAttempt = 0; gateAttempt < maxGateRetries && gateStatus === 'fail'; gateAttempt++) {
-        this.logger.warn(
-          `Gate failed for phase ${executor.phaseId} (attempt ${gateAttempt + 1}/${maxGateRetries}); retrying`,
-          { issueNumber: this.issue.number, phase: executor.phaseId },
-        );
-        await this.progressWriter.appendEvent(
-          `Phase ${executor.phaseId} gate failed; retrying phase (attempt ${gateAttempt + 1}/${maxGateRetries})`,
-        );
-
-        const retryResult = await this.executePhase(executor);
-        this.phases[this.phases.length - 1] = retryResult;
-
-        if (!retryResult.success) {
-          await this.progressWriter.appendEvent(`Pipeline aborted: phase ${executor.phaseId} retry failed`);
-          throw new PipelineHaltError(
-            retryResult.error ?? `Phase ${executor.phaseId} retry failed`,
-            executor.phaseId,
-            executor.name,
-          );
-        }
-
-        await this.checkpoint.completePhase(executor.phaseId, retryResult.outputPath ?? '');
-        gateStatus = await gateCoordinator.runGate(executor.phaseId, this.phases);
-      }
-
-      if (gateStatus === 'fail') {
-        this.logger.error(
-          `Gate still failing for phase ${executor.phaseId} after ${maxGateRetries} retries; aborting`,
-          { issueNumber: this.issue.number, phase: executor.phaseId },
-        );
-        await this.progressWriter.appendEvent(
-          `Pipeline aborted: gate still failing for phase ${executor.phaseId} after ${maxGateRetries} retries`,
-        );
-        throw new PipelineHaltError(
-          `Gate validation failed for phase ${executor.phaseId} after retry`,
-          executor.phaseId,
-          executor.name,
-        );
-      }
-    }
-
-    if (executor.phaseId === 4) {
-      await this.stripCadreFilesAfterIntegration();
-    }
-
-    if (this.config.commits.commitPerPhase) {
-      await this.commitPhase(phaseDef);
-    }
-
-    // Re-sync agent symlinks AFTER the Phase 4 commit so they don't leak into
-    // git history.  stripCadreFiles removes them (they're cadre artifacts) but
-    // Phase 5 (PR Composition) still needs to invoke agents.
-    if (executor.phaseId === 4 && this.resyncAgentFiles) {
-      await this.resyncAgentFiles();
-    }
-
-    await this.updateProgress();
-    await lifecycleNotifier.notifyPhaseCompleted(executor.phaseId, executor.name, phaseResult.duration);
   }
 
   // ── Helper Methods ──
