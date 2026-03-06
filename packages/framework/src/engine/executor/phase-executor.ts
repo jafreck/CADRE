@@ -76,4 +76,12 @@ export interface PhaseExecutor<TContext extends PhaseContext = PhaseContext> {
   name: string;
   /** Execute the phase and return the path to the primary output file. */
   execute(ctx: TContext): Promise<string>;
+  /**
+   * Optional: validate that a previously-completed run of this phase is still
+   * valid.  Return `true` if the prior result is still good and the phase can
+   * be skipped; return `false` to force re-execution.
+   *
+   * When not implemented, completed phases are always skipped on resume.
+   */
+  validatePriorCompletion?(ctx: TContext): Promise<boolean>;
 }

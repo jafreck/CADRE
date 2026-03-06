@@ -10,6 +10,34 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 4;
   readonly name = 'Integration Verification';
 
+  /**
+   * Validate that a previously-completed Integration Verification run is still
+   * valid by re-running the lint command.  A stale-base rebase may have left
+   * the worktree in a broken state.  Returns `false` (and resets phases 3-4)
+   * when lint fails, signalling the orchestrator to re-execute.
+   */
+  async validatePriorCompletion(ctx: PhaseContext): Promise<boolean> {
+    if (!ctx.config.options.buildVerification || !ctx.config.commands?.lint) {
+      return true;
+    }
+
+    const lintResult = await execShell(ctx.config.commands.lint, {
+      cwd: ctx.worktree.path,
+      timeout: 300_000,
+    });
+
+    if (lintResult.exitCode !== 0) {
+      ctx.services.logger.warn(
+        `Completed phase 4 no longer passes lint; resetting phases 3-4`,
+        { issueNumber: ctx.issue.number, phase: this.phaseId },
+      );
+      await ctx.callbacks.resetPhases?.([3, 4]);
+      return false;
+    }
+
+    return true;
+  }
+
   async execute(ctx: PhaseContext): Promise<string> {
     const reportPath = join(ctx.io.progressDir, 'integration-report.md');
     let report = '';
