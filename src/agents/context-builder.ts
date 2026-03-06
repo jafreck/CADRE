@@ -188,10 +188,15 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       }
       return files;
     },
-    payload: (args) => ({
+    payload: (args, helpers) => ({
       ...(args.sessionId ? { sessionId: args.sessionId } : {}),
       issueType: args.issueType!,
       ...(args.errorOutput ? { errorOutput: args.errorOutput } : {}),
+      commands: {
+        ...(helpers.commands.build ? { build: helpers.commands.build } : {}),
+        ...(helpers.commands.lint ? { lint: helpers.commands.lint } : {}),
+        ...(helpers.commands.test ? { test: helpers.commands.test } : {}),
+      },
     }),
   },
   'integration-checker': {
