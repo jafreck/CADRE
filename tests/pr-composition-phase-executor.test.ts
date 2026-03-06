@@ -1084,7 +1084,6 @@ describe('PRCompositionPhaseExecutor', () => {
           commitManager: {
             getDiff: vi.fn().mockResolvedValue('diff'),
             ensureNoCadreArtifactsInDiff: vi.fn().mockResolvedValue(undefined),
-            getChangedFiles: vi.fn().mockResolvedValue(['src/core/orchestrator.ts']),
             push,
             isClean: vi.fn().mockResolvedValue(false),
             commit: vi.fn().mockResolvedValue(''),
@@ -1098,12 +1097,12 @@ describe('PRCompositionPhaseExecutor', () => {
 
       await executor.execute(ctx);
 
-      // fix-surgeon invoked with issueType 'lint'
+      // fix-surgeon invoked with issueType 'lint' and errorOutput
       expect(contextBuild).toHaveBeenCalledWith(
         'fix-surgeon',
         expect.objectContaining({
           issueType: 'lint',
-          changedFiles: ['/tmp/worktree/src/core/orchestrator.ts'],
+          errorOutput: expect.stringContaining('error TS2339'),
         }),
       );
       // push only called once (after lint passed on round 2)
@@ -1152,7 +1151,6 @@ describe('PRCompositionPhaseExecutor', () => {
           commitManager: {
             getDiff: vi.fn().mockResolvedValue('diff'),
             ensureNoCadreArtifactsInDiff: vi.fn().mockResolvedValue(undefined),
-            getChangedFiles: vi.fn().mockResolvedValue(['src/foo.ts']),
             push,
             isClean: vi.fn().mockResolvedValue(true),
             commit: vi.fn().mockResolvedValue(''),

@@ -163,7 +163,16 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
     sessionId: (args) => args.sessionId,
     outputFile: (args) => join(args.worktreePath, '.cadre', 'tasks'),
     inputFiles: async (args, fileExists) => {
-      const files = [args.feedbackPath!, ...(args.changedFiles ?? [])];
+      const files: string[] = [];
+      // feedbackPath is the file-based error source (used by build/test retries).
+      // When errorOutput is provided instead, the error goes in the payload and
+      // feedbackPath may be omitted.
+      if (args.feedbackPath) {
+        files.push(args.feedbackPath);
+      }
+      if (args.changedFiles) {
+        files.push(...args.changedFiles);
+      }
       const phase = args.phase ?? 3;
       const planFile = phase === 3
         ? join(args.progressDir, `session-${args.sessionId}.md`)
@@ -182,10 +191,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
     payload: (args) => ({
       sessionId: args.sessionId!,
       issueType: args.issueType!,
-      // NOTE: the error output is provided via feedbackPath (inputFiles[0]).
-      // An alternative would be to pass it inline in the payload as errorOutput
-      // so the agent doesn't need to open a file, but keeping it file-based
-      // is consistent with how all other fix-surgeon callers work today.
+      ...(args.errorOutput ? { errorOutput: args.errorOutput } : {}),
     }),
   },
   'integration-checker': {

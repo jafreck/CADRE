@@ -278,8 +278,8 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
   }
 
   /**
-   * Write the failure output to a file, invoke fix-surgeon, commit the fix,
-   * and clean up cadre artifacts.  Shared by the lint and push-failure paths.
+   * Invoke fix-surgeon with the error output, commit the fix, and clean up
+   * cadre artifacts.  Shared by the lint and push-failure paths.
    */
   private async invokeFixSurgeon(
     ctx: PhaseContext,
@@ -287,19 +287,12 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     issueType: 'lint' | 'build',
     round: number,
   ): Promise<void> {
-    const failurePath = join(ctx.io.progressDir, `push-failure-${round}.txt`);
-    await writeFile(failurePath, errorOutput, 'utf-8');
-
-    const changedFiles = await ctx.io.commitManager.getChangedFiles();
-    const absoluteChanged = changedFiles.map((f) => join(ctx.worktree.path, f));
-
     const fixContextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
       issueNumber: ctx.issue.number,
       worktreePath: ctx.worktree.path,
-      feedbackPath: failurePath,
-      changedFiles: absoluteChanged,
       progressDir: ctx.io.progressDir,
       issueType,
+      errorOutput,
       phase: 5,
     });
 
