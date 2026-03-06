@@ -9,16 +9,7 @@ import {
 } from '../agents/schemas/index.js';
 import { SessionQueue } from '@cadre-dev/framework/engine';
 import { extractCadreJson } from '@cadre-dev/framework/runtime';
-
-// Re-export generic interfaces from engine
-import type { PhaseGate, GateContext, GatePlugin } from '@cadre-dev/framework/engine';
-export type { PhaseGate, GateContext, GatePlugin };
-export {
-  registerGatePlugin,
-  unregisterGatePlugin,
-  clearGatePlugins,
-  listGatePlugins,
-} from '@cadre-dev/framework/engine';
+import type { PhaseGate, GateContext } from '@cadre-dev/framework/engine';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

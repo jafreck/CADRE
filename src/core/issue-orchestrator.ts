@@ -16,8 +16,8 @@ import { Logger } from '@cadre-dev/framework/core';
 import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
-import { IssueLifecycleNotifier } from './issue-lifecycle-notifier.js';
 import { FlowRunner, defineFlow, step, gate, sequence, gatedStep } from '@cadre-dev/framework/flow';
+import type { FlowLifecycleHooks } from '@cadre-dev/framework/flow';
 import { createPhaseActions, PipelineHaltError } from './phase-actions.js';
 import type { PipelineFlowContext } from './phase-actions.js';
 
@@ -107,9 +107,9 @@ export class IssueOrchestrator {
   /**
    * Run the full 5-phase pipeline.
    *
-   * The flow graph is declared inline so the pipeline topology is visible:
-   * each phase is a `sequence` of `loop(execute + gate)` → optional
-   * `ambiguity gate` → `finalize`.
+   * The flow graph is declared inline so the pipeline topology is visible.
+   * Cross-cutting concerns (progress, notifications) are handled by
+   * FlowLifecycleHooks on the runner rather than per-phase step nodes.
    */
   async run(): Promise<IssueResult> {
     const startTime = Date.now();
@@ -134,11 +134,6 @@ export class IssueOrchestrator {
       this.worktree.path,
       this.worktree.baseCommit,
       this.issue.number,
-    );
-    const lifecycleNotifier = new IssueLifecycleNotifier(
-      this.notificationManager,
-      this.issue.number,
-      this.issue.title,
     );
 
     this.ctx = {
@@ -176,7 +171,12 @@ export class IssueOrchestrator {
     });
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
-    await lifecycleNotifier.notifyIssueStarted(this.worktree.path);
+    await this.dispatchNotification({
+      type: 'issue-started',
+      issueNumber: this.issue.number,
+      issueTitle: this.issue.title,
+      worktreePath: this.worktree.path,
+    });
 
     const executorMap = new Map(
       this.registry.getAll()
@@ -200,29 +200,33 @@ export class IssueOrchestrator {
     const maxGateRetries = this.config.options.maxGateRetries ?? 1;
     const exec = (executor: PhaseExecutor) => this.executePhase(executor);
 
-    // Helper: notify step used in every phase sequence.
-    const notifyStep = (pid: number, phaseName: string) =>
-      step<PipelineFlowContext>({
-        id: 'notify', name: 'Report progress',
-        run: async () => {
-          const last = this.phases[this.phases.length - 1] as PhaseResult & { skipped?: boolean };
-          if (last && !last.skipped && last.duration > 0) {
-            await this.updateProgress();
-            await lifecycleNotifier.notifyPhaseCompleted(pid, phaseName, last.duration);
-          }
-          return { notified: true };
-        },
-      });
+    // ── Lifecycle hooks: progress + notifications on phase completion ──
+    const lifecycleHooks: FlowLifecycleHooks<PipelineFlowContext> = {
+      onNodeComplete: async (nodeId) => {
+        if (!nodeId.startsWith('phase-')) return;
+        const last = this.phases[this.phases.length - 1] as PhaseResult & { skipped?: boolean };
+        if (!last || last.skipped || last.duration === 0) return;
+        await this.updateProgress();
+        await this.dispatchNotification({
+          type: 'phase-completed',
+          issueNumber: this.issue.number,
+          phase: last.phase,
+          phaseName: last.phaseName,
+          duration: last.duration,
+        });
+      },
+    };
 
     // ── Declarative pipeline topology ────────────────────────────────────
     //
-    //   Phase 1: Analysis & Scouting      → gatedStep → ambiguity check → finalize → notify
-    //   Phase 2: Planning                 → gatedStep → finalize → notify
-    //   Phase 3: Implementation           → gatedStep → finalize → notify
-    //   Phase 4: Integration Verification → gatedStep → finalize → notify
-    //   Phase 5: PR Composition           → execute   → finalize → notify
+    //   Phase 1: Analysis & Scouting      → gatedStep → ambiguity check → finalize
+    //   Phase 2: Planning                 → gatedStep → finalize
+    //   Phase 3: Implementation           → gatedStep → finalize
+    //   Phase 4: Integration Verification → gatedStep → finalize
+    //   Phase 5: PR Composition           → execute   → finalize
     //
     // gatedStep = loop(run + gate) with retry and checkpoint-skip.
+    // Lifecycle hooks handle progress updates and notifications.
     // ─────────────────────────────────────────────────────────────────────
 
     const phase1 = executorMap.get(1)!;
@@ -238,14 +242,10 @@ export class IssueOrchestrator {
           gatedStep<PipelineFlowContext>({
             id: 'analysis', name: 'Analysis',
             maxRetries: maxGateRetries,
-            shouldExecute: actions.shouldExecute(phase1, this.ctx),
-            onSkip: actions.onPhaseSkip(phase1),
-            run: actions.execute(phase1, exec),
-            evaluate: actions.evaluateGate(phase1, gateCoordinator),
+            ...actions.gated(phase1, this.ctx, gateCoordinator, exec),
           }),
           gate({ id: 'ambiguity-check', name: 'Check for ambiguities', evaluate: actions.checkAmbiguities(gateCoordinator) }),
           step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(phase1) }),
-          notifyStep(1, phase1.name),
         ],
       ),
 
@@ -256,13 +256,9 @@ export class IssueOrchestrator {
           gatedStep<PipelineFlowContext>({
             id: 'planning', name: 'Planning',
             maxRetries: maxGateRetries,
-            shouldExecute: actions.shouldExecute(executorMap.get(2)!, this.ctx),
-            onSkip: actions.onPhaseSkip(executorMap.get(2)!),
-            run: actions.execute(executorMap.get(2)!, exec),
-            evaluate: actions.evaluateGate(executorMap.get(2)!, gateCoordinator),
+            ...actions.gated(executorMap.get(2)!, this.ctx, gateCoordinator, exec),
           }),
           step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(2)!) }),
-          notifyStep(2, 'Planning'),
         ],
       ),
 
@@ -274,13 +270,9 @@ export class IssueOrchestrator {
             gatedStep<PipelineFlowContext>({
               id: 'implementation', name: 'Implementation',
               maxRetries: maxGateRetries,
-              shouldExecute: actions.shouldExecute(executorMap.get(3)!, this.ctx),
-              onSkip: actions.onPhaseSkip(executorMap.get(3)!),
-              run: actions.execute(executorMap.get(3)!, exec),
-              evaluate: actions.evaluateGate(executorMap.get(3)!, gateCoordinator),
+              ...actions.gated(executorMap.get(3)!, this.ctx, gateCoordinator, exec),
             }),
             step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(3)!) }),
-            notifyStep(3, 'Implementation'),
           ],
         ),
       ] : []),
@@ -293,26 +285,21 @@ export class IssueOrchestrator {
             gatedStep<PipelineFlowContext>({
               id: 'integration', name: 'Integration Verification',
               maxRetries: maxGateRetries,
-              shouldExecute: actions.shouldExecute(executorMap.get(4)!, this.ctx),
-              onSkip: actions.onPhaseSkip(executorMap.get(4)!),
-              run: actions.execute(executorMap.get(4)!, exec),
-              evaluate: actions.evaluateGate(executorMap.get(4)!, gateCoordinator),
+              ...actions.gated(executorMap.get(4)!, this.ctx, gateCoordinator, exec),
             }),
             step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(4)!) }),
-            notifyStep(4, 'Integration Verification'),
           ],
         ),
       ] : []),
 
       // ── Phase 5: PR Composition ──
-      // No gate — just execute, finalize, notify.
+      // No gate — just execute and finalize.
       ...(phase5 ? [
         sequence<PipelineFlowContext>(
           { id: 'phase-5', name: 'PR Composition', dependsOn: ['phase-4'] },
           [
-            step({ id: 'execute', name: 'Compose PR', run: actions.executeUngated(phase5, this.ctx, exec) }),
+            step({ id: 'execute', name: 'Compose PR', run: actions.ungated(phase5, this.ctx, exec) }),
             step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(phase5) }),
-            notifyStep(5, phase5.name),
           ],
         ),
       ] : []),
@@ -327,6 +314,7 @@ export class IssueOrchestrator {
           'Cadre issue execution pipeline',
         ),
         { gatesPassed: {}, gateAttempts: {} },
+        { hooks: lifecycleHooks },
       );
     } catch (err) {
       if (this.isBudgetExceededError(err)) {
@@ -334,31 +322,39 @@ export class IssueOrchestrator {
         cpState.budgetExceeded = true;
         await this.checkpoint.recordTokenUsage('__budget__', cpState.currentPhase, 0);
         await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
-        await lifecycleNotifier.notifyIssueFailed('Per-issue token budget exceeded', cpState.currentPhase);
+        await this.dispatchNotification({
+          type: 'issue-failed',
+          issueNumber: this.issue.number,
+          issueTitle: this.issue.title,
+          error: 'Per-issue token budget exceeded',
+          phase: cpState.currentPhase,
+        });
         return this.buildResult(false, 'Per-issue token budget exceeded', startTime, true);
       }
 
       const haltError = this.getPipelineHaltError(err);
       const message = haltError?.message ?? (err instanceof Error ? err.message : String(err));
-      if (haltError) {
-        await lifecycleNotifier.notifyIssueFailed(
-          message,
-          haltError.phaseId ?? this.checkpoint.getState().currentPhase,
-          haltError.phaseName,
-        );
-      } else {
-        await lifecycleNotifier.notifyIssueFailed(message, this.checkpoint.getState().currentPhase);
-      }
+      await this.dispatchNotification({
+        type: 'issue-failed',
+        issueNumber: this.issue.number,
+        issueTitle: this.issue.title,
+        error: message,
+        phase: haltError?.phaseId ?? this.checkpoint.getState().currentPhase,
+        phaseName: haltError?.phaseName,
+      });
       return this.buildResult(false, message, startTime);
     }
 
     await this.progressWriter.appendEvent('Pipeline completed successfully');
     const successResult = this.buildResult(true, undefined, startTime);
-    await lifecycleNotifier.notifyIssueCompleted(
-      successResult.success,
-      successResult.totalDuration,
-      successResult.tokenUsage ?? 0,
-    );
+    await this.dispatchNotification({
+      type: 'issue-completed',
+      issueNumber: this.issue.number,
+      issueTitle: this.issue.title,
+      success: successResult.success,
+      duration: successResult.totalDuration,
+      tokenUsage: successResult.tokenUsage ?? 0,
+    });
     return successResult;
   }
 
@@ -424,6 +420,11 @@ export class IssueOrchestrator {
   }
 
   // ── Helpers ──
+
+  /** Fire-and-forget notification dispatch. */
+  private async dispatchNotification(event: Record<string, unknown>): Promise<void> {
+    await this.notificationManager.dispatch(event as Parameters<NotificationManager['dispatch']>[0]);
+  }
 
   private async updateProgress(): Promise<void> {
     const cpState = this.checkpoint.getState();

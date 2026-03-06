@@ -1,9 +1,15 @@
 /**
- * Pure callback factories for flow DSL nodes in the per-issue pipeline.
+ * Callback factories for flow DSL nodes in the per-issue pipeline.
  *
- * Each function returns the callback for a single DSL node — small, focused,
- * and independently testable.  No shared mutable state; the orchestrator
- * passes deps and reads results from `FlowRunResult.outputs`.
+ * Four factory methods return callbacks for DSL nodes:
+ *
+ *  - `gated(executor, gateCoordinator)` → spreadable into `gatedStep()`
+ *  - `ungated(executor)` → run callback for `step()`
+ *  - `finalize(executor)` → post-phase commit & cleanup step
+ *  - `checkAmbiguities(gateCoordinator)` → ambiguity gate for phase 1
+ *
+ * The orchestrator passes deps at construction; the factories capture them
+ * via closure so the DSL topology stays declarative and free of plumbing.
  */
 
 import type { PhaseResult } from '../agents/types.js';
@@ -15,14 +21,13 @@ import type { Logger } from '@cadre-dev/framework/core';
 import type { NotificationManager } from '@cadre-dev/framework/notifications';
 import type { CommitManager } from '../git/commit.js';
 import type { PhaseExecutor, PhaseContext } from './phase-executor.js';
-import type { PhaseDefinition } from './phase-registry.js';
 import type { GateCoordinator } from './gate-coordinator.js';
-import type { FlowExecutionContext } from '@cadre-dev/framework/flow';
+import type { FlowExecutionContext, MaybePromise } from '@cadre-dev/framework/flow';
 import { getPhase } from './phase-registry.js';
 
 /**
  * Pipeline-level flow context shared across all DSL nodes.
- * Kept minimal: only gate retry tracking.
+ * Tracks gate completion and retry counts per phase.
  */
 export interface PipelineFlowContext {
   gatesPassed: Record<number, boolean>;
@@ -52,155 +57,171 @@ export interface PhaseActionDeps {
   commitManager: CommitManager;
   resyncAgentFiles?: () => Promise<void>;
   /**
-   * Running phases list.  Gate coordinator requires mutable access to record
-   * gate results on the most recent entry.  Post-run, the orchestrator reads
-   * final results from FlowRunResult.outputs instead.
+   * Running phases list — gate coordinator mutates the last entry to record
+   * gate results.  The orchestrator reads final results post-run.
    */
   phases: PhaseResult[];
 }
 
 type Ctx = FlowExecutionContext<PipelineFlowContext>;
 
-/** Typed record of all callback factories used by DSL nodes. */
+/** Callbacks returned by `gated()` — spread directly into `gatedStep()`. */
+export interface GatedPhaseCallbacks {
+  shouldExecute: (ctx: Ctx) => MaybePromise<boolean>;
+  onSkip: (ctx: Ctx) => MaybePromise<unknown>;
+  run: (ctx: Ctx) => MaybePromise<unknown>;
+  evaluate: (ctx: Ctx) => MaybePromise<boolean>;
+}
+
+/** Factory methods for phase DSL node callbacks. */
 export interface PhaseActions {
-  /** `while` guard for the gate-retry loop (also handles checkpoint skip). */
-  shouldExecute: (executor: PhaseExecutor, phaseCtx: PhaseContext) =>
-    (ctx: Ctx) => Promise<boolean>;
-  /** Execute a phase inside the gate-retry loop. */
-  execute: (executor: PhaseExecutor, executePhase: (e: PhaseExecutor) => Promise<PhaseResult>) =>
-    (ctx: Ctx) => Promise<PhaseResult>;
-  /** Gate evaluation inside the gate-retry loop. */
-  evaluateGate: (executor: PhaseExecutor, gateCoordinator: GateCoordinator) =>
-    (ctx: Ctx) => Promise<boolean>;
-  /** `onSkip` handler for when a loop runs 0 iterations (checkpoint skip). */
-  onPhaseSkip: (executor: PhaseExecutor) =>
-    (ctx: Ctx) => Promise<{ skipped: true; phaseId: number }>;
-  /** Execute a gate-less phase (phase 5). */
-  executeUngated: (executor: PhaseExecutor, phaseCtx: PhaseContext, executePhase: (e: PhaseExecutor) => Promise<PhaseResult>) =>
-    (ctx: Ctx) => Promise<PhaseResult>;
-  /** Ambiguity check after phase 1. */
-  checkAmbiguities: (gateCoordinator: GateCoordinator) =>
-    (ctx: Ctx) => Promise<boolean>;
-  /** Post-phase hooks: strip cadre files, commit, resync. */
+  /** Build `gatedStep` callbacks for a gated phase — spread into config. */
+  gated: (
+    executor: PhaseExecutor,
+    phaseCtx: PhaseContext,
+    gateCoordinator: GateCoordinator,
+    executePhase: (e: PhaseExecutor) => Promise<PhaseResult>,
+  ) => GatedPhaseCallbacks;
+  /** Build a `step.run` callback for an ungated phase (e.g. PR composition). */
+  ungated: (
+    executor: PhaseExecutor,
+    phaseCtx: PhaseContext,
+    executePhase: (e: PhaseExecutor) => Promise<PhaseResult>,
+  ) => (ctx: Ctx) => Promise<PhaseResult>;
+  /** Post-phase commit & cleanup step. */
   finalize: (executor: PhaseExecutor) =>
     (ctx: Ctx) => Promise<{ finalized: boolean }>;
+  /** Ambiguity check gate after phase 1. */
+  checkAmbiguities: (gateCoordinator: GateCoordinator) =>
+    (ctx: Ctx) => Promise<boolean>;
 }
 
 /**
  * Create all callback factories for pipeline DSL nodes.
  */
 export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
+  // ── helpers ─────────────────────────────────────────────────────────
+
+  function skipResult(executor: PhaseExecutor): PhaseResult & { skipped: boolean } {
+    return {
+      phase: executor.phaseId,
+      phaseName: executor.name,
+      success: true,
+      duration: 0,
+      tokenUsage: 0,
+      skipped: true,
+    } as PhaseResult & { skipped: boolean };
+  }
+
+  function handleFailure(pid: number, executor: PhaseExecutor, result: PhaseResult, isRetry: boolean): void | never {
+    const phaseDef = getPhase(pid)!;
+    if (phaseDef.critical) {
+      deps.logger.error(`Critical phase ${pid} failed, aborting pipeline`, {
+        issueNumber: deps.issue.number, phase: pid,
+      });
+      throw new PipelineHaltError(
+        result.error ?? `Phase ${pid} ${isRetry ? 'retry ' : ''}failed`,
+        pid, executor.name,
+      );
+    }
+  }
+
+  // ── factories ───────────────────────────────────────────────────────
+
   return {
-    shouldExecute: (executor, phaseCtx) => async (ctx) => {
-      const pid = executor.phaseId;
-      if (ctx.context.gatesPassed[pid]) return false;
+    gated: (executor, phaseCtx, gateCoordinator, executePhase) => ({
+      shouldExecute: async (ctx) => {
+        const pid = executor.phaseId;
+        if (ctx.context.gatesPassed[pid]) return false;
 
-      if (deps.checkpoint.isPhaseCompleted(pid)) {
-        if (executor.validatePriorCompletion) {
-          const valid = await executor.validatePriorCompletion(phaseCtx);
-          if (!valid) return true;
+        if (deps.checkpoint.isPhaseCompleted(pid)) {
+          if (executor.validatePriorCompletion) {
+            const valid = await executor.validatePriorCompletion(phaseCtx);
+            if (!valid) return true;
+          }
+          ctx.context.gatesPassed[pid] = true;
+          return false;
         }
-        ctx.context.gatesPassed[pid] = true;
-        return false;
-      }
 
-      return true;
-    },
+        return true;
+      },
 
-    execute: (executor, executePhase) => async (ctx) => {
-      const pid = executor.phaseId;
-      const phaseDef = getPhase(pid)!;
-      const isRetry = (ctx.context.gateAttempts[pid] ?? 0) > 0;
-      const phaseResult = await executePhase(executor);
+      onSkip: async (_ctx) => {
+        const pid = executor.phaseId;
+        deps.logger.info(`Skipping completed phase ${pid}: ${executor.name}`, {
+          issueNumber: deps.issue.number, phase: pid,
+        });
+        deps.phases.push(skipResult(executor));
+        return { skipped: true, phaseId: pid };
+      },
 
-      // Maintain running phases list for gate coordinator
-      if (isRetry) {
-        deps.phases[deps.phases.length - 1] = phaseResult;
-      } else {
-        deps.phases.push(phaseResult);
-      }
+      run: async (ctx) => {
+        const pid = executor.phaseId;
+        const isRetry = (ctx.context.gateAttempts[pid] ?? 0) > 0;
+        const phaseResult = await executePhase(executor);
 
-      if (!phaseResult.success) {
         if (isRetry) {
-          await deps.progressWriter.appendEvent(
-            `Pipeline aborted: phase ${pid} retry failed`,
-          );
+          deps.phases[deps.phases.length - 1] = phaseResult;
+        } else {
+          deps.phases.push(phaseResult);
         }
-        if (phaseDef.critical) {
-          deps.logger.error(`Critical phase ${pid} failed, aborting pipeline`, {
-            issueNumber: deps.issue.number, phase: pid,
-          });
-          await deps.progressWriter.appendEvent(`Pipeline aborted: phase ${pid} failed`);
+
+        if (!phaseResult.success) {
+          if (isRetry) {
+            await deps.progressWriter.appendEvent(
+              `Pipeline aborted: phase ${pid} retry failed`,
+            );
+          }
+          handleFailure(pid, executor, phaseResult, isRetry);
+          ctx.context.gatesPassed[pid] = true;
+        } else {
+          await deps.checkpoint.completePhase(pid, phaseResult.outputPath ?? '');
+        }
+
+        return phaseResult;
+      },
+
+      evaluate: async (ctx) => {
+        const pid = executor.phaseId;
+        if (ctx.context.gatesPassed[pid]) return true;
+
+        const maxGateRetries = deps.config.options.maxGateRetries ?? 1;
+        const gateStatus = await gateCoordinator.runGate(pid, deps.phases);
+        if (gateStatus !== 'fail') {
+          ctx.context.gatesPassed[pid] = true;
+          return true;
+        }
+
+        const attempt = (ctx.context.gateAttempts[pid] ?? 0) + 1;
+        ctx.context.gateAttempts[pid] = attempt;
+
+        if (attempt > maxGateRetries) {
+          deps.logger.error(
+            `Gate still failing for phase ${pid} after ${maxGateRetries} retries; aborting`,
+            { issueNumber: deps.issue.number, phase: pid },
+          );
+          await deps.progressWriter.appendEvent(
+            `Pipeline aborted: gate still failing for phase ${pid} after ${maxGateRetries} retries`,
+          );
           throw new PipelineHaltError(
-            phaseResult.error ?? `Phase ${pid} ${isRetry ? 'retry ' : ''}failed`,
+            `Gate validation failed for phase ${pid} after retry`,
             pid, executor.name,
           );
         }
-        ctx.context.gatesPassed[pid] = true;
-      } else {
-        await deps.checkpoint.completePhase(pid, phaseResult.outputPath ?? '');
-      }
 
-      return phaseResult;
-    },
-
-    evaluateGate: (executor, gateCoordinator) => async (ctx) => {
-      const pid = executor.phaseId;
-      if (ctx.context.gatesPassed[pid]) return true;
-
-      const maxGateRetries = deps.config.options.maxGateRetries ?? 1;
-      const gateStatus = await gateCoordinator.runGate(pid, deps.phases);
-      if (gateStatus !== 'fail') {
-        ctx.context.gatesPassed[pid] = true;
-        return true;
-      }
-
-      const attempt = (ctx.context.gateAttempts[pid] ?? 0) + 1;
-      ctx.context.gateAttempts[pid] = attempt;
-
-      if (attempt > maxGateRetries) {
-        deps.logger.error(
-          `Gate still failing for phase ${pid} after ${maxGateRetries} retries; aborting`,
+        deps.logger.warn(
+          `Gate failed for phase ${pid} (attempt ${attempt}/${maxGateRetries}); retrying`,
           { issueNumber: deps.issue.number, phase: pid },
         );
         await deps.progressWriter.appendEvent(
-          `Pipeline aborted: gate still failing for phase ${pid} after ${maxGateRetries} retries`,
+          `Phase ${pid} gate failed; retrying phase (attempt ${attempt}/${maxGateRetries})`,
         );
-        throw new PipelineHaltError(
-          `Gate validation failed for phase ${pid} after retry`,
-          pid, executor.name,
-        );
-      }
+        return true;
+      },
+    }),
 
-      deps.logger.warn(
-        `Gate failed for phase ${pid} (attempt ${attempt}/${maxGateRetries}); retrying`,
-        { issueNumber: deps.issue.number, phase: pid },
-      );
-      await deps.progressWriter.appendEvent(
-        `Phase ${pid} gate failed; retrying phase (attempt ${attempt}/${maxGateRetries})`,
-      );
-      return true;
-    },
-
-    onPhaseSkip: (executor) => async (_ctx) => {
+    ungated: (executor, phaseCtx, executePhase) => async (_ctx) => {
       const pid = executor.phaseId;
-      deps.logger.info(`Skipping completed phase ${pid}: ${executor.name}`, {
-        issueNumber: deps.issue.number, phase: pid,
-      });
-      deps.phases.push({
-        phase: pid,
-        phaseName: executor.name,
-        success: true,
-        duration: 0,
-        tokenUsage: 0,
-        skipped: true,
-      } as PhaseResult & { skipped?: boolean });
-      return { skipped: true, phaseId: pid };
-    },
-
-    executeUngated: (executor, phaseCtx, executePhase) => async (ctx) => {
-      const pid = executor.phaseId;
-      const phaseDef = getPhase(pid)!;
 
       // Checkpoint skip
       if (deps.checkpoint.isPhaseCompleted(pid)) {
@@ -212,30 +233,15 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
           deps.logger.info(`Skipping completed phase ${pid}: ${executor.name}`, {
             issueNumber: deps.issue.number, phase: pid,
           });
-          const skipResult: PhaseResult = {
-            phase: pid,
-            phaseName: executor.name,
-            success: true,
-            duration: 0,
-            tokenUsage: 0,
-          };
-          (skipResult as PhaseResult & { skipped?: boolean }).skipped = true;
-          deps.phases.push(skipResult);
-          return skipResult;
+          deps.phases.push(skipResult(executor));
+          return skipResult(executor);
         }
       }
 
       const phaseResult = await executePhase(executor);
       deps.phases.push(phaseResult);
-      if (!phaseResult.success && phaseDef.critical) {
-        deps.logger.error(`Critical phase ${pid} failed, aborting pipeline`, {
-          issueNumber: deps.issue.number, phase: pid,
-        });
-        await deps.progressWriter.appendEvent(`Pipeline aborted: phase ${pid} failed`);
-        throw new PipelineHaltError(
-          phaseResult.error ?? `Phase ${pid} failed`,
-          pid, executor.name,
-        );
+      if (!phaseResult.success) {
+        handleFailure(pid, executor, phaseResult, false);
       }
       if (phaseResult.success) {
         await deps.checkpoint.completePhase(pid, phaseResult.outputPath ?? '');

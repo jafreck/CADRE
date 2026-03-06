@@ -17,7 +17,7 @@ vi.mock('../../packages/framework/src/runtime/commands/parse-failures.js', () =>
 
 const { execShell } = await import('../../packages/framework/src/runtime/commands/exec.js');
 const { extractFailures } = await import('../../packages/framework/src/runtime/commands/parse-failures.js');
-import { runWithRetry, type RunWithRetryConfig } from '../../src/util/command-verifier.js';
+import { verifyCommand, type VerifyCommandConfig } from '../../packages/framework/src/runtime/index.js';
 
 const mockExecShell = execShell as unknown as ReturnType<typeof vi.fn>;
 const mockExtractFailures = extractFailures as unknown as ReturnType<typeof vi.fn>;
@@ -33,7 +33,7 @@ function makeProcessResult(overrides: Partial<ProcessResult> = {}): ProcessResul
   };
 }
 
-describe('runWithRetry', () => {
+describe('verifyCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -43,7 +43,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn();
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -64,7 +64,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn();
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -88,7 +88,7 @@ describe('runWithRetry', () => {
       .mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -113,7 +113,7 @@ describe('runWithRetry', () => {
       .mockReturnValueOnce(['known-fail']);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -133,7 +133,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValueOnce(['known-fail']);
 
     const onFixNeeded = vi.fn();
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -156,7 +156,7 @@ describe('runWithRetry', () => {
       .mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -176,7 +176,7 @@ describe('runWithRetry', () => {
 
     const baseline = new Set(['real error']);
     const onFixNeeded = vi.fn();
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -195,7 +195,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn();
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -212,7 +212,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValue(['persistent error']);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -238,7 +238,7 @@ describe('runWithRetry', () => {
       .mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -255,7 +255,7 @@ describe('runWithRetry', () => {
     mockExecShell.mockResolvedValueOnce(makeProcessResult({ exitCode: 0 }));
     mockExtractFailures.mockReturnValueOnce([]);
 
-    await runWithRetry({
+    await verifyCommand({
       command: 'npx vitest run',
       cwd: '/my/project',
       timeout: 30000,
@@ -272,7 +272,7 @@ describe('runWithRetry', () => {
     );
     mockExtractFailures.mockReturnValueOnce([]);
 
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -289,7 +289,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValue(['err']);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    await runWithRetry({
+    await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -314,7 +314,7 @@ describe('runWithRetry', () => {
       .mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -336,7 +336,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValueOnce(['error']);
 
     const onFixNeeded = vi.fn();
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -360,7 +360,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValueOnce(['old-fail-1']);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -380,7 +380,7 @@ describe('runWithRetry', () => {
 
     const onFixNeeded = vi.fn().mockRejectedValue(new Error('budget exceeded'));
     await expect(
-      runWithRetry({
+      verifyCommand({
         command: 'npm test',
         cwd: '/tmp',
         timeout: 5000,
@@ -402,7 +402,7 @@ describe('runWithRetry', () => {
       .mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -423,7 +423,7 @@ describe('runWithRetry', () => {
     mockExtractFailures.mockReturnValueOnce([]);
 
     const onFixNeeded = vi.fn().mockResolvedValue(undefined);
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,
@@ -441,7 +441,7 @@ describe('runWithRetry', () => {
     mockExecShell.mockResolvedValueOnce(makeProcessResult({ exitCode: null as unknown as number, stderr: 'killed' }));
     mockExtractFailures.mockReturnValueOnce([]);
 
-    const result = await runWithRetry({
+    const result = await verifyCommand({
       command: 'npm test',
       cwd: '/tmp',
       timeout: 5000,

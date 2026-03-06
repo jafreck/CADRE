@@ -18,6 +18,7 @@ export { FlowRunner } from './runner.js';
 export { validateFlowContracts } from './contracts.js';
 
 export type {
+  MaybePromise,
   DataRef,
   FlowContracts,
   StepContract,

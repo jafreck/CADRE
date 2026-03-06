@@ -17,12 +17,12 @@ import {
   type PhaseManifestEntry,
 } from '@cadre-dev/framework/engine';
 
-import type { GatePlugin, PhaseGate } from './phase-gate.js';
+import type { GatePlugin, PhaseGate } from '@cadre-dev/framework/engine';
+import { listGatePlugins } from '@cadre-dev/framework/engine';
 import {
   AnalysisToPlanningGate,
   ImplementationToIntegrationGate,
   IntegrationToPRGate,
-  listGatePlugins,
   PlanningToImplementationGate,
 } from './phase-gate.js';
 import { AnalysisPhaseExecutor } from '../executors/analysis-phase-executor.js';

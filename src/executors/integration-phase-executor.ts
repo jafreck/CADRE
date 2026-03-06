@@ -4,7 +4,7 @@ import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { execShell } from '../util/process.js';
 import { baselineResultsSchema } from '../agents/schemas/index.js';
 import type { BaselineResults } from '../agents/schemas/index.js';
-import { runWithRetry } from '../util/command-verifier.js';
+import { verifyCommand } from '@cadre-dev/framework/runtime';
 
 export class IntegrationPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 4;
@@ -83,7 +83,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     if (ctx.config.commands.build && ctx.config.options.buildVerification) {
       report += `## Build\n\n**Command:** \`${ctx.config.commands.build}\`\n`;
 
-      const buildRetry = await runWithRetry({
+      const buildRetry = await verifyCommand({
         command: ctx.config.commands.build,
         cwd: ctx.worktree.path,
         timeout: 300_000,
@@ -111,7 +111,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     if (ctx.config.commands.test && ctx.config.options.testVerification) {
       report += `## Test\n\n**Command:** \`${ctx.config.commands.test}\`\n`;
 
-      const testRetry = await runWithRetry({
+      const testRetry = await verifyCommand({
         command: ctx.config.commands.test,
         cwd: ctx.worktree.path,
         timeout: 300_000,

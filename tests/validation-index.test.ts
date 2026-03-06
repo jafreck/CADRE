@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
-  PreRunValidationSuite,
   gitValidator,
   agentBackendValidator,
   platformValidator,
   commandValidator,
-  diskValidator,
   registryCompletenessValidator,
   checkStaleState,
   resolveStaleState,
 } from '../src/validation/index.js';
-import type { ValidationResult, PreRunValidator, StaleConflict, StaleStateResult } from '../src/validation/index.js';
+import { PreRunValidationSuite, diskValidator } from '@cadre-dev/framework/core';
+import type { ValidationResult, PreRunValidator } from '@cadre-dev/framework/core';
+import type { StaleConflict, StaleStateResult } from '../src/validation/index.js';
 
 describe('src/validation/index.ts re-exports', () => {
   describe('type exports', () => {

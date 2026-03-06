@@ -12,7 +12,7 @@ import {
   buildGateMap,
 } from '../src/core/phase-registry.js';
 import type { PhaseExecutor } from '../src/core/phase-executor.js';
-import { registerGatePlugin, clearGatePlugins } from '../src/core/phase-gate.js';
+import { registerGatePlugin, clearGatePlugins } from '@cadre-dev/framework/engine';
 
 describe('PhaseRegistry', () => {
   describe('ISSUE_PHASES', () => {

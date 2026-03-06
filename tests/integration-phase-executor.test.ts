@@ -894,7 +894,7 @@ describe('IntegrationPhaseExecutor', () => {
     });
   });
 
-  describe('structured result from runWithRetry', () => {
+  describe('structured result from verifyCommand', () => {
     it('should set signal to null in structured build result', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install
