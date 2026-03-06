@@ -46,6 +46,13 @@ export type PhaseCallbacks = {
   setPR?: (pr: PullRequestInfo) => void;
   /** Re-create agent symlinks in the worktree after artifact cleanup removes them. */
   resyncAgentFiles?: () => Promise<void>;
+  /**
+   * Remove the given phase IDs from the per-issue checkpoint so they will be
+   * re-executed on the next run.  Allows phase executors (e.g. PR composition)
+   * to request checkpoint invalidation without depending on CheckpointManager
+   * directly.
+   */
+  resetPhases?: (phaseIds: number[]) => Promise<void>;
 };
 
 /**

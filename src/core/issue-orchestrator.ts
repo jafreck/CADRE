@@ -13,6 +13,7 @@ import { ResultParser } from '../agents/result-parser.js';
 import { CommitManager } from '../git/commit.js';
 import { TokenTracker } from '@cadre-dev/framework/runtime';
 import { Logger } from '@cadre-dev/framework/core';
+import { execShell } from '@cadre-dev/framework/runtime';
 import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
@@ -175,6 +176,7 @@ export class IssueOrchestrator {
         updateProgress: () => this.updateProgress(),
         setPR: (pr) => { this.createdPR = pr; },
         resyncAgentFiles: this.resyncAgentFiles,
+        resetPhases: (phaseIds) => this.checkpoint.resetPhases(phaseIds),
       },
     };
 
@@ -311,18 +313,57 @@ export class IssueOrchestrator {
     lifecycleNotifier: IssueLifecycleNotifier,
   ): Promise<void> {
     if (this.checkpoint.isPhaseCompleted(executor.phaseId)) {
-      this.logger.info(`Skipping completed phase ${executor.phaseId}: ${executor.name}`, {
-        issueNumber: this.issue.number,
-        phase: executor.phaseId,
-      });
-      this.phases.push({
-        phase: executor.phaseId,
-        phaseName: executor.name,
-        success: true,
-        duration: 0,
-        tokenUsage: 0,
-      });
-      return;
+      // Defence-in-depth: before skipping completed phase 4 (Integration
+      // Verification), re-run the lint command to verify the code is still
+      // valid.  A stale-base rebase (fix #1) may have succeeded but left
+      // the integration broken.  If lint fails, reset phases 3-4 and fall
+      // through to re-execute.
+      if (
+        executor.phaseId === 4
+        && this.config.options.buildVerification
+        && this.config.commands?.lint
+      ) {
+        const lintResult = await execShell(this.config.commands.lint, {
+          cwd: this.worktree.path,
+          timeout: 300_000,
+        });
+        if (lintResult.exitCode !== 0) {
+          this.logger.warn(
+            `Completed phase 4 no longer passes lint; resetting phases 3-4`,
+            { issueNumber: this.issue.number, phase: executor.phaseId },
+          );
+          await this.checkpoint.resetPhases([3, 4]);
+          // Fall through to re-execute this phase (and phase 3 will be
+          // re-executed when the flow runner reaches it next)
+        } else {
+          // Lint still passes — skip as normal
+          this.logger.info(`Skipping completed phase ${executor.phaseId}: ${executor.name}`, {
+            issueNumber: this.issue.number,
+            phase: executor.phaseId,
+          });
+          this.phases.push({
+            phase: executor.phaseId,
+            phaseName: executor.name,
+            success: true,
+            duration: 0,
+            tokenUsage: 0,
+          });
+          return;
+        }
+      } else {
+        this.logger.info(`Skipping completed phase ${executor.phaseId}: ${executor.name}`, {
+          issueNumber: this.issue.number,
+          phase: executor.phaseId,
+        });
+        this.phases.push({
+          phase: executor.phaseId,
+          phaseName: executor.name,
+          success: true,
+          duration: 0,
+          tokenUsage: 0,
+        });
+        return;
+      }
     }
 
     const phaseDef = getPhase(executor.phaseId)!;

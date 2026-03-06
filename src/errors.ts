@@ -102,3 +102,15 @@ export class RuntimeInterruptedError extends Error {
     this.exitCode = exitCode;
   }
 }
+
+/**
+ * Thrown when a rebase onto the base branch fails due to conflicts
+ * that cannot be resolved automatically.  Signals the pipeline to
+ * reset implementation phases and retry on the next resume.
+ */
+export class RebaseConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RebaseConflictError';
+  }
+}
