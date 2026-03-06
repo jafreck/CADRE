@@ -34,14 +34,6 @@ import { PRCompositionPhaseExecutor } from '../executors/pr-composition-phase-ex
 export type { PhaseDefinition, PhaseManifestEntry };
 export { PhaseRegistry };
 
-export const ISSUE_PHASES: PhaseDefinition[] = [
-  { id: 1, name: 'Analysis & Scouting', critical: true, commitType: 'chore', commitMessage: 'analyze issue #{issueNumber}' },
-  { id: 2, name: 'Planning', critical: true, commitType: 'chore', commitMessage: 'plan implementation for #{issueNumber}' },
-  { id: 3, name: 'Implementation', critical: true, commitType: 'feat', commitMessage: 'implement changes for #{issueNumber}' },
-  { id: 4, name: 'Integration Verification', critical: true, commitType: 'fix', commitMessage: 'address integration issues' },
-  { id: 5, name: 'PR Composition', critical: true, commitType: 'chore', commitMessage: 'compose PR for #{issueNumber}' },
-];
-
 /** Single source of truth for all pipeline phase metadata. */
 export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
   {
@@ -95,6 +87,15 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: true,
   },
 ];
+
+/** Derived from PHASE_MANIFEST — thin view used by helpers and reporting. */
+export const ISSUE_PHASES: PhaseDefinition[] = PHASE_MANIFEST.map((e) => ({
+  id: e.phaseId,
+  name: e.name,
+  critical: e.critical,
+  commitType: e.commitType,
+  commitMessage: e.commitMessage,
+}));
 
 /** Phase IDs used by the review-response pipeline (implementation, integration-verification, PR composition). */
 export const REVIEW_RESPONSE_PHASES: readonly number[] = PHASE_MANIFEST
