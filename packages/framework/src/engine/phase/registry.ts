@@ -41,28 +41,28 @@ export interface PhaseManifestEntry<TContext extends PhaseContext = PhaseContext
 /**
  * Get a subset of phase definitions by ID, returned in phase-ID order.
  */
-export function getPhaseSubset(phases: PhaseDefinition[], ids: number[]): PhaseDefinition[] {
+export function getPhaseSubset(phases: readonly PhaseDefinition[], ids: number[]): PhaseDefinition[] {
   return phases.filter((p) => ids.includes(p.id));
 }
 
 /**
  * Get a phase definition by ID.
  */
-export function getPhase(phases: PhaseDefinition[], phaseId: number): PhaseDefinition | undefined {
+export function getPhase(phases: readonly PhaseDefinition[], phaseId: number): PhaseDefinition | undefined {
   return phases.find((p) => p.id === phaseId);
 }
 
 /**
  * Get the total number of phases.
  */
-export function getPhaseCount(phases: PhaseDefinition[]): number {
+export function getPhaseCount(phases: readonly PhaseDefinition[]): number {
   return phases.length;
 }
 
 /**
  * Check if a phase is the last one.
  */
-export function isLastPhase(phases: PhaseDefinition[], phaseId: number): boolean {
+export function isLastPhase(phases: readonly PhaseDefinition[], phaseId: number): boolean {
   return phaseId === phases[phases.length - 1].id;
 }
 

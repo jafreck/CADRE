@@ -7,7 +7,7 @@ import type { RuntimeConfig } from '../src/config/loader.js';
 import type { FleetResult } from '../src/core/fleet-orchestrator.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { RunReport } from '../src/reporting/types.js';
-import { ISSUE_PHASES } from '../src/core/phase-registry.js';
+import { PHASE_MANIFEST } from '../src/core/phase-registry.js';
 
 vi.mock('../src/util/fs.js', () => ({
   atomicWriteJSON: vi.fn().mockResolvedValue(undefined),
@@ -138,14 +138,14 @@ describe('ReportWriter', () => {
       expect(report.issues[0].prNumber).toBeUndefined();
     });
 
-    it('should produce one RunPhaseSummary per ISSUE_PHASES entry', () => {
+    it('should produce one RunPhaseSummary per PHASE_MANIFEST entry', () => {
       const result = makeFleetResult();
       const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
 
-      expect(report.phases).toHaveLength(ISSUE_PHASES.length);
+      expect(report.phases).toHaveLength(PHASE_MANIFEST.length);
       const firstPhase = report.phases[0];
-      expect(firstPhase.id).toBe(String(ISSUE_PHASES[0].id));
-      expect(firstPhase.name).toBe(ISSUE_PHASES[0].name);
+      expect(firstPhase.id).toBe(String(PHASE_MANIFEST[0].id));
+      expect(firstPhase.name).toBe(PHASE_MANIFEST[0].name);
       expect(firstPhase.tokens).toBe(500);
       expect(firstPhase.estimatedCost).toBeGreaterThanOrEqual(0);
     });
@@ -176,7 +176,7 @@ describe('ReportWriter', () => {
         },
       });
       const report = writer.buildReport(result, makeIssues(), Date.now() - 1000);
-      expect(report.phases).toHaveLength(ISSUE_PHASES.length);
+      expect(report.phases).toHaveLength(PHASE_MANIFEST.length);
       for (const phase of report.phases) {
         expect(phase.tokens).toBe(0);
       }

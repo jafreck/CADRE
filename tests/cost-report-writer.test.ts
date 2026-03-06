@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { CostReportWriter } from '../src/reporting/cost-report-writer.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
 import { TokenTracker } from '@cadre-dev/framework/runtime';
-import { ISSUE_PHASES } from '../src/core/phase-registry.js';
+import { PHASE_MANIFEST } from '../src/core/phase-registry.js';
 
 vi.mock('../src/util/fs.js', () => ({
   atomicWriteJSON: vi.fn().mockResolvedValue(undefined),
@@ -71,11 +71,11 @@ describe('CostReportWriter', () => {
 
       const report = writer.build(1, tracker, 'gpt-4o');
 
-      expect(report.byPhase).toHaveLength(ISSUE_PHASES.length);
+      expect(report.byPhase).toHaveLength(PHASE_MANIFEST.length);
 
       const phase1 = report.byPhase.find((e) => e.phase === 1);
       expect(phase1).toBeDefined();
-      expect(phase1!.phaseName).toBe(ISSUE_PHASES[0].name);
+      expect(phase1!.phaseName).toBe(PHASE_MANIFEST[0].name);
       expect(phase1!.tokens).toBe(200);
       expect(typeof phase1!.estimatedCost).toBe('number');
 

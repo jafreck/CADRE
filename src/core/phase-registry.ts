@@ -88,15 +88,6 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
   },
 ];
 
-/** Derived from PHASE_MANIFEST — thin view used by helpers and reporting. */
-export const ISSUE_PHASES: PhaseDefinition[] = PHASE_MANIFEST.map((e) => ({
-  id: e.id,
-  name: e.name,
-  critical: e.critical,
-  commitType: e.commitType,
-  commitMessage: e.commitMessage,
-}));
-
 /** Phase IDs used by the review-response pipeline (implementation, integration-verification, PR composition). */
 export const REVIEW_RESPONSE_PHASES: readonly number[] = PHASE_MANIFEST
   .filter((e) => e.includeInReviewResponse)
@@ -106,28 +97,28 @@ export const REVIEW_RESPONSE_PHASES: readonly number[] = PHASE_MANIFEST
  * Get a subset of phase definitions by ID, returned in phase-ID order.
  */
 export function getPhaseSubset(ids: number[]): PhaseDefinition[] {
-  return _getPhaseSubset(ISSUE_PHASES, ids);
+  return _getPhaseSubset(PHASE_MANIFEST, ids);
 }
 
 /**
  * Get a phase definition by ID.
  */
 export function getPhase(phaseId: number): PhaseDefinition | undefined {
-  return _getPhase(ISSUE_PHASES, phaseId);
+  return _getPhase(PHASE_MANIFEST, phaseId);
 }
 
 /**
  * Get the total number of phases in the pipeline.
  */
 export function getPhaseCount(): number {
-  return _getPhaseCount(ISSUE_PHASES);
+  return _getPhaseCount(PHASE_MANIFEST);
 }
 
 /**
  * Check if a phase is the last one.
  */
 export function isLastPhase(phaseId: number): boolean {
-  return _isLastPhase(ISSUE_PHASES, phaseId);
+  return _isLastPhase(PHASE_MANIFEST, phaseId);
 }
 
 /**
