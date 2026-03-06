@@ -25,11 +25,11 @@ import {
   IntegrationToPRGate,
   PlanningToImplementationGate,
 } from './phase-gate.js';
-import { AnalysisPhaseExecutor } from '../executors/analysis-phase-executor.js';
-import { PlanningPhaseExecutor } from '../executors/planning-phase-executor.js';
-import { ImplementationPhaseExecutor } from '../executors/implementation-phase-executor.js';
-import { IntegrationPhaseExecutor } from '../executors/integration-phase-executor.js';
-import { PRCompositionPhaseExecutor } from '../executors/pr-composition-phase-executor.js';
+import { AnalysisPhaseExecutor } from '../../executors/analysis-phase-executor.js';
+import { PlanningPhaseExecutor } from '../../executors/planning-phase-executor.js';
+import { ImplementationPhaseExecutor } from '../../executors/implementation-phase-executor.js';
+import { IntegrationPhaseExecutor } from '../../executors/integration-phase-executor.js';
+import { PRCompositionPhaseExecutor } from '../../executors/pr-composition-phase-executor.js';
 
 export type { PhaseDefinition, PhaseManifestEntry };
 export { PhaseRegistry };

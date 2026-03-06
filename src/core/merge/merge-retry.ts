@@ -1,5 +1,5 @@
 import type { Logger } from '@cadre-dev/framework/core';
-import type { PlatformProvider, PullRequestMergeMethod } from '../platform/provider.js';
+import type { PlatformProvider, PullRequestMergeMethod } from '../../platform/provider.js';
 
 /** Maximum merge + resolve attempts when encountering dirty state. */
 export const MERGE_MAX_ATTEMPTS = 3;

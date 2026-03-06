@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeFile, readFile } from 'node:fs/promises';
-import { DependencyResolver } from '../src/core/dependency-resolver.js';
+import { DependencyResolver } from '../src/core/fleet/dependency-resolver.js';
 import { WorkItemDag } from '@cadre-dev/framework/engine';
 import { DependencyResolutionError } from '../src/errors.js';
 import type { IssueDetail } from '../src/platform/provider.js';

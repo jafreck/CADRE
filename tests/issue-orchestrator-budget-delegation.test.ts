@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 const guardRecordTokens = vi.fn();
 const guardCheckBudget = vi.fn();
 
-vi.mock('../src/core/issue-budget-guard.js', () => {
+vi.mock('../src/core/issue/issue-budget-guard.js', () => {
   class BudgetExceededError extends Error {
     constructor() {
       super('Per-issue token budget exceeded');
@@ -67,7 +67,7 @@ vi.mock('../src/core/phase-gate.js', () => {
   };
 });
 
-vi.mock('../src/core/issue-notifier.js', () => ({
+vi.mock('../src/core/issue/issue-notifier.js', () => ({
   IssueNotifier: vi.fn().mockImplementation(() => ({
     notify: vi.fn().mockResolvedValue(undefined),
   })),
@@ -81,8 +81,8 @@ import { ImplementationPhaseExecutor } from '../src/executors/implementation-pha
 import { IntegrationPhaseExecutor } from '../src/executors/integration-phase-executor.js';
 import { PRCompositionPhaseExecutor } from '../src/executors/pr-composition-phase-executor.js';
 import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue-budget-guard.js';
-import { IssueNotifier } from '../src/core/issue-notifier.js';
+import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue/issue-budget-guard.js';
+import { IssueNotifier } from '../src/core/issue/issue-notifier.js';
 import { CommitManager } from '../src/git/commit.js';
 import type { PhaseContext } from '../src/core/phase-executor.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';

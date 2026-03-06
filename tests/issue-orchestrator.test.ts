@@ -55,7 +55,7 @@ const mockNotifierMethods = {
   }),
 };
 
-vi.mock('../src/core/issue-notifier.js', () => ({
+vi.mock('../src/core/issue/issue-notifier.js', () => ({
   IssueNotifier: vi.fn().mockImplementation(() => mockNotifierMethods),
 }));
 

@@ -7,17 +7,17 @@ import { WorktreeManager } from '../git/worktree.js';
 import { CommitManager } from '../git/commit.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager } from '@cadre-dev/framework/engine';
-import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
-import { PHASE_MANIFEST } from './phase-registry.js';
+import { IssueOrchestrator, type IssueResult } from './pipeline/issue-orchestrator.js';
+import { PHASE_MANIFEST } from './pipeline/phase-registry.js';
 import { Logger } from '@cadre-dev/framework/core';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import { formatPullRequestTitle } from '../util/title-format.js';
-import { ReviewDiscoveryService, isSkipResult } from './review-discovery-service.js';
+import { ReviewDiscoveryService, isSkipResult } from './review/review-discovery-service.js';
 import { RebaseRecoveryService } from './rebase-recovery-service.js';
-import { ReviewPlanBuilder } from './review-plan-builder.js';
+import { ReviewPlanBuilder } from './review/review-plan-builder.js';
 
 export interface ReviewResponseIssueOutcome {
   issueNumber: number;

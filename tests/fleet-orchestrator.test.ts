@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
+import { FleetOrchestrator } from '../src/core/fleet/fleet-orchestrator.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
 import { RemoteBranchMissingError } from '../src/git/worktree.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';

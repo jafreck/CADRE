@@ -1,12 +1,12 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
-import type { GateResult, AgentSession } from '../agents/types.js';
+import type { GateResult, AgentSession } from '../../agents/types.js';
 import {
   analysisSchema,
   scoutReportSchema,
   integrationReportSchema,
-} from '../agents/schemas/index.js';
+} from '../../agents/schemas/index.js';
 import { SessionQueue } from '@cadre-dev/framework/engine';
 import { extractCadreJson } from '@cadre-dev/framework/runtime';
 import type { PhaseGate, GateContext } from '@cadre-dev/framework/engine';

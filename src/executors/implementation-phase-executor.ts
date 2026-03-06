@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { writeFile, readFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
-import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
+import type { PhaseExecutor, PhaseContext } from '../core/pipeline/phase-executor.js';
 import type { AgentSession, SessionReviewSummary } from '../agents/types.js';
 import { SessionQueue } from '@cadre-dev/framework/engine';
 import { exists } from '../util/fs.js';

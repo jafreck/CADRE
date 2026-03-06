@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { simpleGit } from 'simple-git';
-import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
+import type { PhaseExecutor, PhaseContext } from '../core/pipeline/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import type { AgentResult, PRContent } from '../agents/types.js';

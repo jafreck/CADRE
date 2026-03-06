@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FleetReporter } from '../src/core/fleet-reporter.js';
-import type { FleetResult } from '../src/core/fleet-orchestrator.js';
+import { FleetReporter } from '../src/core/fleet/fleet-reporter.js';
+import type { FleetResult } from '../src/core/fleet/fleet-orchestrator.js';
 import type { IssueResult } from '../src/core/issue-orchestrator.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 

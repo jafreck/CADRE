@@ -2,7 +2,7 @@ import { simpleGit } from 'simple-git';
 import type { RuntimeConfig } from '../config/loader.js';
 import { WorktreeManager } from '../git/worktree.js';
 import { AgentLauncher } from './agent-launcher.js';
-import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
+import { FleetOrchestrator, type FleetResult } from './fleet/fleet-orchestrator.js';
 import { ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
@@ -21,7 +21,7 @@ import { commandValidator } from '../validation/command-validator.js';
 import { registryCompletenessValidator } from '../validation/registry-completeness-validator.js';
 import { checkStaleState } from '../validation/stale-state-validator.js';
 import type { NotificationManager } from '@cadre-dev/framework/notifications';
-import { DependencyResolver } from './dependency-resolver.js';
+import { DependencyResolver } from './fleet/dependency-resolver.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../errors.js';
 
 export class RunCoordinator {

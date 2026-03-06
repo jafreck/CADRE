@@ -1,10 +1,10 @@
-import type { RuntimeConfig } from '../config/loader.js';
-import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
-import type { IssueResult } from './issue-orchestrator.js';
+import type { RuntimeConfig } from '../../config/loader.js';
+import type { IssueDetail, PullRequestInfo } from '../../platform/provider.js';
+import type { IssueResult } from '../pipeline/issue-orchestrator.js';
 import type { FleetCheckpointManager, FleetProgressWriter, IssueProgressInfo, PullRequestRef } from '@cadre-dev/framework/engine';
 import type { TokenTracker } from '@cadre-dev/framework/runtime';
-import { getPhaseCount } from './phase-registry.js';
-import { ReportWriter } from '../reporting/report-writer.js';
+import { getPhaseCount } from '../pipeline/phase-registry.js';
+import { ReportWriter } from '../../reporting/report-writer.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
 import { Logger } from '@cadre-dev/framework/core';
 import type { FleetResult } from './fleet-orchestrator.js';

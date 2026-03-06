@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
-import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
+import type { PhaseExecutor, PhaseContext } from '../core/pipeline/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
 import { captureBaseline as captureBaselineCmd } from '@cadre-dev/framework/runtime';

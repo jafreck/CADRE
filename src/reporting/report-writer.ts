@@ -2,10 +2,10 @@ import { join } from 'node:path';
 import { readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { RuntimeConfig } from '../config/loader.js';
-import type { FleetResult } from '../core/fleet-orchestrator.js';
+import type { FleetResult } from '../core/fleet/fleet-orchestrator.js';
 import type { IssueDetail } from '../platform/provider.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
-import { PHASE_MANIFEST } from '../core/phase-registry.js';
+import { PHASE_MANIFEST } from '../core/pipeline/phase-registry.js';
 import { atomicWriteJSON, ensureDir, readJSON } from '../util/fs.js';
 import type { RunReport, RunIssueSummary, RunPhaseSummary, RunTotals } from './types.js';
 

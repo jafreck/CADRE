@@ -4,7 +4,7 @@ import { ReportWriter } from '../src/reporting/report-writer.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
-import type { FleetResult } from '../src/core/fleet-orchestrator.js';
+import type { FleetResult } from '../src/core/fleet/fleet-orchestrator.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { RunReport } from '../src/reporting/types.js';
 import { PHASE_MANIFEST } from '../src/core/phase-registry.js';

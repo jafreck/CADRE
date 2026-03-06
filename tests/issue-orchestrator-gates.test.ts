@@ -89,7 +89,7 @@ const {
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
-vi.mock('../src/core/issue-notifier.js', () => ({
+vi.mock('../src/core/issue/issue-notifier.js', () => ({
   IssueNotifier: vi.fn().mockImplementation(() => {
     const methods = {
       notifyStart: vi.fn().mockResolvedValue(undefined),

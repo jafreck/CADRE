@@ -1,27 +1,28 @@
 import { join } from 'node:path';
-import type { RuntimeConfig } from '../config/loader.js';
-import type { PhaseResult } from '../agents/types.js';
-import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../platform/provider.js';
-import type { WorktreeInfo } from '../git/worktree.js';
+import type { RuntimeConfig } from '../../config/loader.js';
+import type { PhaseResult } from '../../agents/types.js';
+import type { IssueDetail, PullRequestInfo, PlatformProvider } from '../../platform/provider.js';
+import type { WorktreeInfo } from '../../git/worktree.js';
 import { CheckpointManager, IssueProgressWriter, RetryExecutor } from '@cadre-dev/framework/engine';
 import { PhaseRegistry, buildRegistry } from './phase-registry.js';
 import { type PhaseExecutor, type PhaseContext } from './phase-executor.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
-import { AgentLauncher } from './agent-launcher.js';
-import { ContextBuilder } from '../agents/context-builder.js';
-import { ResultParser } from '../agents/result-parser.js';
-import { CommitManager } from '../git/commit.js';
+import { AgentLauncher } from '../agent-launcher.js';
+import { ContextBuilder } from '../../agents/context-builder.js';
+import { ResultParser } from '../../agents/result-parser.js';
+import { CommitManager } from '../../git/commit.js';
 import { TokenTracker } from '@cadre-dev/framework/runtime';
 import { Logger } from '@cadre-dev/framework/core';
-import { IssueNotifier } from './issue-notifier.js';
-import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
+import { IssueNotifier } from '../issue/issue-notifier.js';
+import { IssueBudgetGuard, BudgetExceededError } from '../issue/issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
 import { FlowRunner, defineFlow } from '@cadre-dev/framework/flow';
 import type { FlowLifecycleHooks } from '@cadre-dev/framework/flow';
-import { createPhaseActions, buildPipelineTopology, PipelineHaltError } from './phase-actions.js';
-import type { PipelineFlowContext } from './phase-actions.js';
+import { createPhaseActions, PipelineHaltError } from './phase-action-callbacks.js';
+import type { PipelineFlowContext } from './phase-action-callbacks.js';
+import { buildPipelineTopology } from './pipeline-topology.js';
 
-export { BudgetExceededError } from './issue-budget-guard.js';
+export { BudgetExceededError } from '../issue/issue-budget-guard.js';
 
 export interface IssueResult {
   issueNumber: number;
@@ -193,8 +194,13 @@ export class IssueOrchestrator {
       progressWriter: this.progressWriter,
       notificationManager: this.notificationManager,
       commitManager: this.commitManager,
-      resyncAgentFiles: this.resyncAgentFiles,
       phases: this.phases,
+      phaseHooks: {
+        4: {
+          beforeCommit: () => this.commitManager.stripCadreFiles(this.worktree.baseCommit),
+          ...(this.resyncAgentFiles ? { afterFinalize: this.resyncAgentFiles } : {}),
+        },
+      },
     });
 
     const maxGateRetries = this.config.options.maxGateRetries ?? 1;

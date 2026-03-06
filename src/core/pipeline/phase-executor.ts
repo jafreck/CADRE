@@ -7,18 +7,18 @@
 
 import type { PhaseExecutor as EnginePhaseExecutor } from '@cadre-dev/framework/engine';
 
-import type { RuntimeConfig } from '../config/loader.js';
-import type { IssueDetail, PlatformProvider, PullRequestInfo } from '../platform/provider.js';
-import type { WorktreeInfo } from '../git/worktree.js';
+import type { RuntimeConfig } from '../../config/loader.js';
+import type { IssueDetail, PlatformProvider, PullRequestInfo } from '../../platform/provider.js';
+import type { WorktreeInfo } from '../../git/worktree.js';
 import type { CheckpointManager, IssueProgressWriter } from '@cadre-dev/framework/engine';
-import type { AgentLauncher } from './agent-launcher.js';
-import type { ContextBuilder } from '../agents/context-builder.js';
-import type { ResultParser } from '../agents/result-parser.js';
-import type { CommitManager } from '../git/commit.js';
+import type { AgentLauncher } from '../agent-launcher.js';
+import type { ContextBuilder } from '../../agents/context-builder.js';
+import type { ResultParser } from '../../agents/result-parser.js';
+import type { CommitManager } from '../../git/commit.js';
 import type { RetryExecutor } from '@cadre-dev/framework/engine';
 import type { TokenTracker } from '@cadre-dev/framework/runtime';
 import type { Logger } from '@cadre-dev/framework/core';
-import type { TokenUsageDetail } from '../agents/types.js';
+import type { TokenUsageDetail } from '../../agents/types.js';
 
 /** Cross-cutting services used by every phase. */
 export type PhaseServices = {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PhaseRunner } from '../src/core/phase-runner.js';
-import { BudgetExceededError } from '../src/core/issue-budget-guard.js';
+import { BudgetExceededError } from '../src/core/issue/issue-budget-guard.js';
 import type { GateCoordinator } from '../src/core/gate-coordinator.js';
 import type { CheckpointManager } from '@cadre-dev/framework/engine';
 import type { IssueProgressWriter } from '@cadre-dev/framework/engine';

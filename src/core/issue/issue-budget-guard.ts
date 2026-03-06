@@ -1,4 +1,4 @@
-import type { TokenUsageDetail } from '../agents/types.js';
+import type { TokenUsageDetail } from '../../agents/types.js';
 import type { CheckpointManager } from '@cadre-dev/framework/engine';
 import type { NotificationManager } from '@cadre-dev/framework/notifications';
 import type { TokenTracker } from '@cadre-dev/framework/runtime';

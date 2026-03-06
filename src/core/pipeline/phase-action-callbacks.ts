@@ -8,26 +8,22 @@
  *  - `finalize(executor)` → post-phase commit & cleanup step
  *  - `checkAmbiguities(gateCoordinator)` → ambiguity gate for phase 1
  *
- * `buildPipelineTopology()` generates the full flow graph from PHASE_MANIFEST,
- * using these factories so the orchestrator doesn't hand-wire each phase.
- *
  * The orchestrator passes deps at construction; the factories capture them
  * via closure so the DSL topology stays declarative and free of plumbing.
  */
 
-import type { PhaseResult } from '../agents/types.js';
-import type { RuntimeConfig } from '../config/loader.js';
-import type { IssueDetail } from '../platform/provider.js';
-import type { WorktreeInfo } from '../git/worktree.js';
+import type { PhaseResult } from '../../agents/types.js';
+import type { RuntimeConfig } from '../../config/loader.js';
+import type { IssueDetail } from '../../platform/provider.js';
+import type { WorktreeInfo } from '../../git/worktree.js';
 import type { CheckpointManager, IssueProgressWriter } from '@cadre-dev/framework/engine';
 import type { Logger } from '@cadre-dev/framework/core';
 import type { NotificationManager } from '@cadre-dev/framework/notifications';
-import type { CommitManager } from '../git/commit.js';
+import type { CommitManager } from '../../git/commit.js';
 import type { PhaseExecutor, PhaseContext } from './phase-executor.js';
 import type { GateCoordinator } from './gate-coordinator.js';
-import { step, gate, sequence, gatedStep } from '@cadre-dev/framework/flow';
-import type { FlowExecutionContext, FlowNode, MaybePromise } from '@cadre-dev/framework/flow';
-import { getPhase, PHASE_MANIFEST } from './phase-registry.js';
+import type { FlowExecutionContext, MaybePromise } from '@cadre-dev/framework/flow';
+import { getPhase } from './phase-registry.js';
 
 /**
  * Pipeline-level flow context shared across all DSL nodes.
@@ -49,6 +45,14 @@ export class PipelineHaltError extends Error {
   }
 }
 
+/** Per-phase lifecycle hooks invoked during finalize. */
+export interface PhaseHooks {
+  /** Called before the per-phase commit (e.g. strip intermediate files). */
+  beforeCommit?: () => Promise<void>;
+  /** Called after finalize completes successfully (e.g. resync files). */
+  afterFinalize?: () => Promise<void>;
+}
+
 /** Dependencies for phase action callbacks. */
 export interface PhaseActionDeps {
   config: RuntimeConfig;
@@ -59,12 +63,17 @@ export interface PhaseActionDeps {
   progressWriter: IssueProgressWriter;
   notificationManager: NotificationManager;
   commitManager: CommitManager;
-  resyncAgentFiles?: () => Promise<void>;
   /**
    * Running phases list — gate coordinator mutates the last entry to record
    * gate results.  The orchestrator reads final results post-run.
    */
   phases: PhaseResult[];
+  /**
+   * Optional per-phase lifecycle hooks, keyed by phase ID.
+   * Called during finalize to run phase-specific pre-commit or post-finalize
+   * work without hardcoding phase IDs in the generic callback logic.
+   */
+  phaseHooks?: Record<number, PhaseHooks>;
 }
 
 type Ctx = FlowExecutionContext<PipelineFlowContext>;
@@ -288,8 +297,10 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
         return { finalized: false };
       }
 
-      if (pid === 4) {
-        await deps.commitManager.stripCadreFiles(deps.worktree.baseCommit);
+      const hooks = deps.phaseHooks?.[pid];
+
+      if (hooks?.beforeCommit) {
+        await hooks.beforeCommit();
       }
 
       if (deps.config.commits.commitPerPhase) {
@@ -308,81 +319,11 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
         }
       }
 
-      if (pid === 4 && deps.resyncAgentFiles) {
-        await deps.resyncAgentFiles();
+      if (hooks?.afterFinalize) {
+        await hooks.afterFinalize();
       }
 
       return { finalized: true };
     },
   };
-}
-
-// ── Topology builder ──────────────────────────────────────────────────
-
-export interface PipelineTopologyOpts {
-  executorMap: Map<number, PhaseExecutor>;
-  actions: PhaseActions;
-  gateCoordinator: GateCoordinator;
-  phaseCtx: PhaseContext;
-  executePhase: (e: PhaseExecutor) => Promise<PhaseResult>;
-  maxGateRetries: number;
-}
-
-/**
- * Generate the pipeline flow graph from PHASE_MANIFEST.
- *
- * Each manifest entry with an executor in the map becomes a `sequence`:
- *  - Gated phases (gate !== null) → `gatedStep` + `finalize`
- *  - Ungated phases (gate === null) → `step` + `finalize`
- *  - Phase 1 additionally gets an ambiguity gate between execute and finalize
- *
- * Phases are chained via `dependsOn` in manifest order.
- */
-export function buildPipelineTopology(opts: PipelineTopologyOpts): FlowNode<PipelineFlowContext>[] {
-  const { executorMap, actions, gateCoordinator, phaseCtx, executePhase, maxGateRetries } = opts;
-  const nodes: FlowNode<PipelineFlowContext>[] = [];
-  let prevId: string | undefined;
-
-  for (const entry of PHASE_MANIFEST) {
-    const executor = executorMap.get(entry.id);
-    if (!executor) continue;
-
-    const phaseNodeId = `phase-${entry.id}`;
-    const innerNodes: FlowNode<PipelineFlowContext>[] = [];
-
-    if (entry.gate !== null) {
-      innerNodes.push(
-        gatedStep<PipelineFlowContext>({
-          id: 'execute', name: entry.name,
-          maxRetries: maxGateRetries,
-          ...actions.gated(executor, phaseCtx, gateCoordinator, executePhase),
-        }),
-      );
-      // Phase 1: ambiguity gate after the gated execution
-      if (entry.id === 1) {
-        innerNodes.push(
-          gate({ id: 'ambiguity-check', name: 'Check for ambiguities', evaluate: actions.checkAmbiguities(gateCoordinator) }),
-        );
-      }
-    } else {
-      innerNodes.push(
-        step({ id: 'execute', name: entry.name, run: actions.ungated(executor, phaseCtx, executePhase) }),
-      );
-    }
-
-    innerNodes.push(
-      step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executor) }),
-    );
-
-    nodes.push(
-      sequence<PipelineFlowContext>(
-        { id: phaseNodeId, name: entry.name, ...(prevId ? { dependsOn: [prevId] } : {}) },
-        innerNodes,
-      ),
-    );
-
-    prevId = phaseNodeId;
-  }
-
-  return nodes;
 }

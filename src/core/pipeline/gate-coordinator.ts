@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { GateResult, PhaseResult } from '../agents/types.js';
+import type { GateResult, PhaseResult } from '../../agents/types.js';
 import { AnalysisAmbiguityGate } from './phase-gate.js';
 import { buildGateMap } from './phase-registry.js';
 import type { PhaseGate, GateContext } from '@cadre-dev/framework/engine';

@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { writeFile, readFile } from 'node:fs/promises';
-import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
+import type { PhaseExecutor, PhaseContext } from '../core/pipeline/phase-executor.js';
 import { execShell } from '../util/process.js';
 import { baselineResultsSchema } from '../agents/schemas/index.js';
 import type { BaselineResults } from '../agents/schemas/index.js';

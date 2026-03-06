@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
-import type { PRComment, PRReview, ReviewThread } from '../platform/provider.js';
+import type { PRComment, PRReview, ReviewThread } from '../../platform/provider.js';
 import { Logger } from '@cadre-dev/framework/core';
 
 /**
