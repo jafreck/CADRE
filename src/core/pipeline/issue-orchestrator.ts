@@ -271,7 +271,7 @@ export class IssueOrchestrator {
         issueNumber: this.issue.number,
         issueTitle: this.issue.title,
         error: message,
-        phase: haltError?.id ?? this.checkpoint.getState().currentPhase,
+        phase: haltError?.phaseId ?? this.checkpoint.getState().currentPhase,
         phaseName: haltError?.phaseName,
       });
       return this.buildResult(false, message, startTime);
@@ -355,7 +355,7 @@ export class IssueOrchestrator {
 
   /** Fire-and-forget notification dispatch. */
   private async dispatchNotification(event: Record<string, unknown>): Promise<void> {
-    await this.notificationManager.dispatch(event as Parameters<NotificationManager['dispatch']>[0]);
+    await this.notificationManager.dispatch(event as unknown as Parameters<NotificationManager['dispatch']>[0]);
   }
 
   private async updateProgress(): Promise<void> {
