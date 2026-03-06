@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock all heavy dependencies
-vi.mock('@cadre/framework/core', () => ({
+vi.mock('@cadre-dev/framework/core', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock('../src/platform/factory.js', () => ({
   }),
 }));
 
-vi.mock('@cadre/framework/notifications', () => ({
+vi.mock('@cadre-dev/framework/notifications', () => ({
   NotificationManager: vi.fn().mockImplementation(() => ({
     dispatch: vi.fn().mockResolvedValue(undefined),
   })),
@@ -85,8 +85,8 @@ vi.mock('../src/core/agent-launcher.js', () => ({
   })),
 }));
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byIssue: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
     setIssueStatus: vi.fn().mockResolvedValue(undefined),
@@ -121,8 +121,8 @@ vi.mock('../src/util/fs.js', () => ({
   atomicWriteJSON: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byIssue: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
     setIssueStatus: vi.fn().mockResolvedValue(undefined),
@@ -163,7 +163,7 @@ vi.mock('@cadre/framework/engine', async (importOriginal) => ({
   ],
 }));
 
-vi.mock('@cadre/framework/core', () => ({
+vi.mock('@cadre-dev/framework/core', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -177,7 +177,7 @@ vi.mock('@cadre/framework/core', () => ({
   })),
 }));
 
-vi.mock('@cadre/framework/runtime', () => ({
+vi.mock('@cadre-dev/framework/runtime', () => ({
   TokenTracker: vi.fn(),
 }));
 
@@ -195,8 +195,8 @@ vi.mock('simple-git', () => {
   };
 });
 
-vi.mock('@cadre/framework/core', async (importActual) => {
-  const actual = await importActual<typeof import('@cadre/framework/core')>();
+vi.mock('@cadre-dev/framework/core', async (importActual) => {
+  const actual = await importActual<typeof import('@cadre-dev/framework/core')>();
   const passResult = { passed: true, errors: [], warnings: [] as string[] };
   return {
     ...actual,
@@ -231,17 +231,17 @@ vi.mock('../src/reporting/report-writer.js', () => ({
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
-import { NotificationManager } from '@cadre/framework/notifications';
+import { NotificationManager } from '@cadre-dev/framework/notifications';
 import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
-import { FleetProgressWriter } from '@cadre/framework/engine';
-import { FleetCheckpointManager, CheckpointManager } from '@cadre/framework/engine';
+import { FleetProgressWriter } from '@cadre-dev/framework/engine';
+import { FleetCheckpointManager, CheckpointManager } from '@cadre-dev/framework/engine';
 import { exists } from '../src/util/fs.js';
 import { checkStaleState } from '../src/validation/stale-state-validator.js';
 import { DependencyResolver } from '../src/core/dependency-resolver.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../src/errors.js';
 import { ReportWriter } from '../src/reporting/report-writer.js';
-import { PreRunValidationSuite } from '@cadre/framework/core';
+import { PreRunValidationSuite } from '@cadre-dev/framework/core';
 import { WorktreeManager } from '../src/git/worktree.js';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;

@@ -1,5 +1,5 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 
 /**
  * Manages git branch operations.

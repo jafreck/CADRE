@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ProcessResult } from '@cadre/framework/runtime';
+import type { ProcessResult } from '@cadre-dev/framework/runtime';
 
 vi.mock('../../packages/framework/src/runtime/commands/exec.js', () => ({
   execShell: vi.fn(),

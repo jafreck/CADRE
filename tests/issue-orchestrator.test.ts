@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { IssueOrchestrator, BudgetExceededError } from '../src/core/issue-orchestrator.js';
-import { NotificationManager } from '@cadre/framework/notifications';
+import { NotificationManager } from '@cadre-dev/framework/notifications';
 import { AnalysisAmbiguityGate } from '../src/core/phase-gate.js';
 import * as fsUtils from '../src/util/fs.js';
 import { mkdir, rm } from 'node:fs/promises';
@@ -11,9 +11,9 @@ import { makeMockIssue } from './helpers/make-mock-issue.js';
 import { makeMockWorktree } from './helpers/make-mock-worktree.js';
 import { makeMockLogger } from './helpers/make-mock-logger.js';
 import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
+import type { CheckpointManager } from '@cadre-dev/framework/engine';
 import type { AgentLauncher } from '../src/agents/types.js';
-import type { Logger } from '@cadre/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
 
 // ── Mock IssueNotifier so we can spy on lifecycle calls ──
 const mockNotifierMethods = {
@@ -78,8 +78,8 @@ vi.mock('../src/core/phase-gate.js', () => {
 });
 
 // Mock heavy I/O and pipeline dependencies so unit tests stay fast and deterministic.
-vi.mock('@cadre/framework/engine', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@cadre/framework/engine')>();
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre-dev/framework/engine')>();
   return {
     ...actual,
     IssueProgressWriter: vi.fn().mockImplementation(() => ({
@@ -111,7 +111,7 @@ vi.mock('../src/agents/result-parser.js', () => ({
   ResultParser: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('@cadre/framework/runtime', () => ({
+vi.mock('@cadre-dev/framework/runtime', () => ({
   TokenTracker: vi.fn().mockImplementation(() => ({
     getTotal: vi.fn().mockReturnValue(0),
     record: vi.fn(),

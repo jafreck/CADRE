@@ -4,7 +4,7 @@ import type { RuntimeConfig } from '../config/loader.js';
 import { exists } from '../util/fs.js';
 import { AGENT_CONTEXT_REGISTRY } from '../agents/context-builder.js';
 import { listRegisteredAgents } from '../agents/registry.js';
-import type { PreRunValidator, ValidationResult } from '@cadre/framework/core';
+import type { PreRunValidator, ValidationResult } from '@cadre-dev/framework/core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

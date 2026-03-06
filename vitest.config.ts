@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 export default defineConfig({
   resolve: {
     alias: [
-      { find: /^@cadre\/framework$/, replacement: resolve(__dirname, 'packages/framework/src/index.ts') },
+      { find: /^@cadre-dev\/framework$/, replacement: resolve(__dirname, 'packages/framework/src/index.ts') },
       {
-        find: /^@cadre\/framework\/(.+)$/,
+        find: /^@cadre-dev\/framework\/(.+)$/,
         replacement: `${resolve(__dirname, 'packages/framework/src')}/$1/index.ts`,
       },
     ],

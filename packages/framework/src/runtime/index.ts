@@ -1,4 +1,4 @@
-// @cadre/framework/runtime — agent runtime, command diagnostics, host provider
+// @cadre-dev/framework/runtime — agent runtime, command diagnostics, host provider
 
 // === From agent-runtime ===
 export * from './budget/token-tracker.js';

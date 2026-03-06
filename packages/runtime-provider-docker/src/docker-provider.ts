@@ -5,7 +5,7 @@ import type {
   IsolationPolicy,
   IsolationProvider,
   IsolationSession,
-} from '@cadre/framework/runtime';
+} from '@cadre-dev/framework/runtime';
 import { DockerSession, type DockerRunner } from './docker-session.js';
 
 export interface DockerProviderOptions {

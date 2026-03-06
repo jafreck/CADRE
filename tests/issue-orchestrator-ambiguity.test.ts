@@ -57,8 +57,8 @@ vi.mock('../src/core/phase-gate.js', () => ({
   clearGatePlugins: vi.fn(),
 }));
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@cadre/framework/engine')>();
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre-dev/framework/engine')>();
   return {
     ...actual,
     IssueProgressWriter: vi.fn(() => ({
@@ -112,8 +112,8 @@ vi.mock('../src/git/commit.js', () => ({
   })),
 }));
 
-vi.mock('@cadre/framework/runtime', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@cadre/framework/runtime')>();
+vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre-dev/framework/runtime')>();
   return {
     ...actual,
     TokenTracker: vi.fn(() => ({

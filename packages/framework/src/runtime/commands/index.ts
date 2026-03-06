@@ -1,4 +1,4 @@
-// @cadre/framework runtime/commands barrel — previously @cadre/command-diagnostics
+// @cadre-dev/framework runtime/commands barrel — previously @cadre/command-diagnostics
 
 // exec
 export {

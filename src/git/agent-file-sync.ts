@@ -1,6 +1,6 @@
 import { join, relative } from 'node:path';
 import { readFile, writeFile, readdir, symlink, unlink, lstat } from 'node:fs/promises';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import { exists, ensureDir } from '../util/fs.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
 

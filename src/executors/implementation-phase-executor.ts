@@ -3,10 +3,10 @@ import { writeFile, readFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import type { AgentSession, SessionReviewSummary } from '../agents/types.js';
-import { SessionQueue } from '@cadre/framework/engine';
+import { SessionQueue } from '@cadre-dev/framework/engine';
 import { exists } from '../util/fs.js';
 import { runWithRetry } from '../util/command-verifier.js';
-import { FlowRunner, defineFlow, step, loop } from '@cadre/framework/flow';
+import { FlowRunner, defineFlow, step, loop } from '@cadre-dev/framework/flow';
 
 export class ImplementationPhaseExecutor implements PhaseExecutor {
   readonly phaseId = 3;

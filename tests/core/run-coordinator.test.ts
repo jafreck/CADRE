@@ -3,7 +3,7 @@ import { makeRuntimeConfig } from '../helpers/make-runtime-config.js';
 
 // ─── Module mocks ────────────────────────────────────────────────────────────
 
-vi.mock('../@cadre/framework/core', () => ({
+vi.mock('../@cadre-dev/framework/core', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -64,14 +64,14 @@ vi.mock('../../src/core/dependency-resolver.js', () => ({
   })),
 }));
 
-vi.mock('../@cadre/framework/core', () => ({
+vi.mock('../@cadre-dev/framework/core', () => ({
   CostEstimator: vi.fn().mockImplementation(() => ({
     estimate: vi.fn().mockReturnValue(0),
     format: vi.fn().mockReturnValue('$0.00'),
   })),
 }));
 
-vi.mock('../@cadre/framework/engine', () => ({
+vi.mock('../@cadre-dev/framework/engine', () => ({
   FleetProgressWriter: vi.fn().mockImplementation(() => ({
     appendEvent: vi.fn().mockResolvedValue(undefined),
   })),
@@ -81,8 +81,8 @@ vi.mock('simple-git', () => ({
   simpleGit: vi.fn(() => ({ raw: vi.fn().mockResolvedValue('') })),
 }));
 
-vi.mock('@cadre/framework/core', async (importActual) => {
-  const actual = await importActual<typeof import('@cadre/framework/core')>();
+vi.mock('@cadre-dev/framework/core', async (importActual) => {
+  const actual = await importActual<typeof import('@cadre-dev/framework/core')>();
   return {
     ...actual,
     PreRunValidationSuite: vi.fn().mockImplementation(() => ({
@@ -103,14 +103,14 @@ vi.mock('../../src/validation/stale-state-validator.js', () => ({
 import { RunCoordinator } from '../../src/core/run-coordinator.js';
 import { FleetOrchestrator } from '../../src/core/fleet-orchestrator.js';
 import { DependencyResolver } from '../../src/core/dependency-resolver.js';
-import { PreRunValidationSuite } from '@cadre/framework/core';
+import { PreRunValidationSuite } from '@cadre-dev/framework/core';
 import { checkStaleState } from '../../src/validation/stale-state-validator.js';
 import { ensureDir } from '../../src/util/fs.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../../src/errors.js';
 import { killAllTrackedProcesses } from '../../src/util/process.js';
 import type { RuntimeConfig } from '../../src/config/loader.js';
 import type { PlatformProvider } from '../../src/platform/provider.js';
-import type { NotificationManager } from '../@cadre/framework/notifications';
+import type { NotificationManager } from '../@cadre-dev/framework/notifications';
 
 const MockFleetOrchestrator = FleetOrchestrator as unknown as ReturnType<typeof vi.fn>;
 const MockDependencyResolver = DependencyResolver as unknown as ReturnType<typeof vi.fn>;

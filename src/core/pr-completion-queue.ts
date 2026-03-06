@@ -1,4 +1,4 @@
-import type { Logger } from '@cadre/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
 import type { PlatformProvider, PullRequestMergeMethod } from '../platform/provider.js';
 import { MergeRetryHelper, MERGE_MAX_ATTEMPTS, MERGE_BASE_DELAY_MS, type ConflictResolverCallback, type MergeAttemptContext } from './merge-retry.js';
 

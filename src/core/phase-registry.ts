@@ -1,7 +1,7 @@
 /**
  * Phase definitions and ordering for CADRE's per-issue pipeline.
  *
- * Generic types and helpers are provided by @cadre/framework/engine;
+ * Generic types and helpers are provided by @cadre-dev/framework/engine;
  * this module re-exports them alongside Cadre-specific constants.
  */
 
@@ -15,7 +15,7 @@ import {
   buildGateMap as _buildGateMap,
   type PhaseDefinition,
   type PhaseManifestEntry,
-} from '@cadre/framework/engine';
+} from '@cadre-dev/framework/engine';
 
 import type { GatePlugin, PhaseGate } from './phase-gate.js';
 import {

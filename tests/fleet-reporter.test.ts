@@ -15,7 +15,7 @@ vi.mock('../src/reporting/report-writer.js', () => ({
   })),
 }));
 
-vi.mock('@cadre/framework/core', () => ({
+vi.mock('@cadre-dev/framework/core', () => ({
   CostEstimator: vi.fn().mockImplementation(() => ({})),
 }));
 

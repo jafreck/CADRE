@@ -7,10 +7,10 @@ import type { IssueDetail } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
 import type { AgentLauncher } from './agent-launcher.js';
 import type { WorktreeManager } from '../git/worktree.js';
-import { WorkItemDag } from '@cadre/framework/engine';
+import { WorkItemDag } from '@cadre-dev/framework/engine';
 import { CyclicDependencyError, DependencyResolutionError } from '../errors.js';
-import { Logger } from '@cadre/framework/core';
-import { extractCadreJson } from '@cadre/framework/runtime';
+import { Logger } from '@cadre-dev/framework/core';
+import { extractCadreJson } from '@cadre-dev/framework/runtime';
 import { ContextBuilder } from '../agents/context-builder.js';
 
 /** Zod schema for the dependency-analyst agent output: maps issue number (string key) to list of dependency issue numbers. */

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DockerProvider } from '../docker-provider.js';
 import type { DockerRunner } from '../docker-session.js';
-import type { ExecResult } from '@cadre/framework/runtime';
+import type { ExecResult } from '@cadre-dev/framework/runtime';
 
 function makeRunner(results: ExecResult[]): DockerRunner {
   let callIndex = 0;

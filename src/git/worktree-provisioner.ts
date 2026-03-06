@@ -1,7 +1,7 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import { exists, ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
 import { AgentFileSync } from './agent-file-sync.js';

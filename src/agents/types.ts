@@ -4,7 +4,7 @@
 
 import type { SessionReviewSummary } from './schemas/session-review-summary.schema.js';
 
-// Re-export generic agent runtime types from @cadre/framework/runtime
+// Re-export generic agent runtime types from @cadre-dev/framework/runtime
 export type {
   AgentInvocation as _AgentInvocationBase,
   AgentResult as _AgentResultBase,
@@ -14,9 +14,9 @@ export type {
   GateResult,
   PhaseResult,
   AgentContext as _AgentContextBase,
-} from '@cadre/framework/runtime';
+} from '@cadre-dev/framework/runtime';
 
-import type { AgentInvocation as _AgentInvocationBase, AgentResult as _AgentResultBase, AgentContext as _AgentContextBase, AgentStep, AgentSession, TokenUsageDetail } from '@cadre/framework/runtime';
+import type { AgentInvocation as _AgentInvocationBase, AgentResult as _AgentResultBase, AgentContext as _AgentContextBase, AgentStep, AgentSession, TokenUsageDetail } from '@cadre-dev/framework/runtime';
 import type {
   AnalysisResult,
   ScoutReport,

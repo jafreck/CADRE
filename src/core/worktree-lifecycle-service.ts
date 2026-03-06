@@ -1,8 +1,8 @@
 import type { RuntimeConfig } from '../config/loader.js';
 import { WorktreeManager } from '../git/worktree.js';
-import { FleetCheckpointManager } from '@cadre/framework/engine';
+import { FleetCheckpointManager } from '@cadre-dev/framework/engine';
 import type { PlatformProvider } from '../platform/provider.js';
-import type { Logger } from '@cadre/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
 
 export class WorktreeLifecycleService {
   constructor(

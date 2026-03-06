@@ -1,0 +1,38 @@
+name: Publish @cadre-dev/framework
+
+# Triggered by tags like: framework-v0.1.0, framework-v1.2.3
+on:
+  push:
+    tags:
+      - "framework-v*"
+
+jobs:
+  publish-framework:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci
+
+      - name: Build framework
+        run: npm run build -w packages/framework
+
+      - name: Run framework tests
+        run: npx vitest run --exclude 'tests/e2e-*.test.ts'
+
+      # Trusted publishing: OIDC auth, no NPM_TOKEN needed.
+      # Configure at: npmjs.com → @cadre-dev/framework → Settings → Trusted Publisher
+      #   Organization/user: jafreck
+      #   Repository: CADRE
+      #   Workflow filename: publish-framework.yml
+      - name: Publish @cadre-dev/framework
+        run: npm publish --access public -w packages/framework

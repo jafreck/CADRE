@@ -2,18 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { Logger, CostEstimator, FleetEventBus } from '@cadre/framework/core';
-import { NotificationManager } from '@cadre/framework/notifications';
-import { SessionQueue, ParallelExecutor, RetryExecutor } from '@cadre/framework/engine';
+import { Logger, CostEstimator, FleetEventBus } from '@cadre-dev/framework/core';
+import { NotificationManager } from '@cadre-dev/framework/notifications';
+import { SessionQueue, ParallelExecutor, RetryExecutor } from '@cadre-dev/framework/engine';
 import {
   createAgentBackend,
   registerAgentBackendFactory,
   registerAgentBackends,
   getAgentBackendOptions,
   normalizeAgentBackendName,
-} from '@cadre/framework/runtime';
-import { PreRunValidationSuite, diskValidator } from '@cadre/framework/core';
-import { defineFlow, step, loop, parallel, conditional, gate, FlowRunner, fromStep, fromContext, fromSteps } from '@cadre/framework/flow';
+} from '@cadre-dev/framework/runtime';
+import { PreRunValidationSuite, diskValidator } from '@cadre-dev/framework/core';
+import { defineFlow, step, loop, parallel, conditional, gate, FlowRunner, fromStep, fromContext, fromSteps } from '@cadre-dev/framework/flow';
 
 function walkTsFiles(dir: string): string[] {
   const out: string[] = [];

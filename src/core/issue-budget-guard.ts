@@ -1,7 +1,7 @@
 import type { TokenUsageDetail } from '../agents/types.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
-import type { NotificationManager } from '@cadre/framework/notifications';
-import type { TokenTracker } from '@cadre/framework/runtime';
+import type { CheckpointManager } from '@cadre-dev/framework/engine';
+import type { NotificationManager } from '@cadre-dev/framework/notifications';
+import type { TokenTracker } from '@cadre-dev/framework/runtime';
 
 export class BudgetExceededError extends Error {
   constructor() {

@@ -9,8 +9,8 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 const mockExecShell = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-vi.mock('@cadre/framework/runtime', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@cadre/framework/runtime')>();
+vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre-dev/framework/runtime')>();
   return { ...actual, execShell: (...args: unknown[]) => mockExecShell(...args) };
 });
 

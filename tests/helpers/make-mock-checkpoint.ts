@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { CheckpointManager } from '@cadre/framework/engine';
+import type { CheckpointManager } from '@cadre-dev/framework/engine';
 
 /**
  * Create a mock CheckpointManager.

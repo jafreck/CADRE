@@ -1,7 +1,7 @@
 import type { RuntimeConfig } from '../config/loader.js';
 import type { PullRequestInfo, PRComment, PRReview, ReviewThread } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 
 export interface IssueDiscoveryResult {
   issueNumber: number;

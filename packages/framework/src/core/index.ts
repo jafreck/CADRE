@@ -1,4 +1,4 @@
-// @cadre/framework/core — observability + validation primitives
+// @cadre-dev/framework/core — observability + validation primitives
 
 export * from './events.js';
 export * from './logger.js';

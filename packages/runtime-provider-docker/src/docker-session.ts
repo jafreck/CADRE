@@ -1,4 +1,4 @@
-import type { ExecOptions, ExecResult, IsolationSession } from '@cadre/framework/runtime';
+import type { ExecOptions, ExecResult, IsolationSession } from '@cadre-dev/framework/runtime';
 
 export type DockerRunner = (args: string[]) => Promise<ExecResult>;
 

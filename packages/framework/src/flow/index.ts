@@ -1,4 +1,4 @@
-// @cadre/framework/flow — declarative flow graph DSL and runner
+// @cadre-dev/framework/flow — declarative flow graph DSL and runner
 
 export {
   defineFlow,

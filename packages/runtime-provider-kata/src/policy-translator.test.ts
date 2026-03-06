@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CapabilityMismatchError } from '@cadre/framework/runtime';
+import { CapabilityMismatchError } from '@cadre-dev/framework/runtime';
 import { translatePolicy } from './policy-translator.js';
 
 describe('translatePolicy', () => {

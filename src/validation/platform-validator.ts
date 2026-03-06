@@ -1,5 +1,5 @@
 import { exec } from '../util/process.js';
-import type { PreRunValidator, ValidationResult } from '@cadre/framework/core';
+import type { PreRunValidator, ValidationResult } from '@cadre-dev/framework/core';
 import type { RuntimeConfig } from '../config/loader.js';
 
 /** Expand ${ENV_VAR} placeholders using process.env. Returns empty string if any variable is unset/empty. */

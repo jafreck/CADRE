@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as pipelineEngine from '@cadre/framework/engine';
+import * as pipelineEngine from '@cadre-dev/framework/engine';
 import { PhaseRegistry as CorePhaseRegistry, buildRegistry as buildCoreRegistry } from '../../../../src/core/phase-registry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

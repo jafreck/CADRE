@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommitManager } from '../src/git/commit.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 
 // Mock simple-git

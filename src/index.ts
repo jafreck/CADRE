@@ -16,12 +16,12 @@ import { StatusService } from './core/status-service.js';
 import { ResetService } from './core/reset-service.js';
 import { ReportService } from './core/report-service.js';
 import { WorktreeLifecycleService } from './core/worktree-lifecycle-service.js';
-import { PreRunValidationSuite, diskValidator } from '@cadre/framework/core';
+import { PreRunValidationSuite, diskValidator } from '@cadre-dev/framework/core';
 import { gitValidator } from './validation/git-validator.js';
 import { agentBackendValidator } from './validation/agent-backend-validator.js';
 import { platformValidator } from './validation/platform-validator.js';
 import { commandValidator } from './validation/command-validator.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import { createPlatformProvider } from './platform/factory.js';
 import { withCommandHandler } from './cli/command-error-handler.js';
 

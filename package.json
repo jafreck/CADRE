@@ -1,5 +1,5 @@
 {
-  "name": "@jafreck/cadre",
+  "name": "@cadre-dev/cadre",
   "version": "0.1.0",
   "description": "Coordinated Agent Development Runtime Engine",
   "license": "MIT",
@@ -20,9 +20,9 @@
     "src/agents/templates/"
   ],
   "bundledDependencies": [
-    "@cadre/framework",
-    "@cadre/runtime-provider-docker",
-    "@cadre/runtime-provider-kata"
+    "@cadre-dev/framework",
+    "@cadre-dev/runtime-provider-docker",
+    "@cadre-dev/runtime-provider-kata"
   ],
   "bin": {
     "cadre": "dist/index.js"
@@ -37,9 +37,9 @@
     "test:e2e": "CADRE_E2E=1 vitest run tests/e2e-*.test.ts"
   },
   "dependencies": {
-    "@cadre/framework": "*",
-    "@cadre/runtime-provider-docker": "*",
-    "@cadre/runtime-provider-kata": "*",
+    "@cadre-dev/framework": "*",
+    "@cadre-dev/runtime-provider-docker": "*",
+    "@cadre-dev/runtime-provider-kata": "*",
     "@inquirer/prompts": "^8",
     "@modelcontextprotocol/sdk": "^1.27",
     "@octokit/rest": "^22",

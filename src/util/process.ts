@@ -8,4 +8,4 @@ export {
   trackProcess,
   killAllTrackedProcesses,
   getTrackedProcessCount,
-} from '@cadre/framework/runtime';
+} from '@cadre-dev/framework/runtime';
