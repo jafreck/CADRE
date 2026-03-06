@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReviewResponseOrchestrator, REVIEW_RESPONSE_PHASES } from '../src/core/review-response-orchestrator.js';
+import { ReviewResponseOrchestrator } from '../src/core/review-response-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
 import type { PullRequestInfo, ReviewThread } from '../src/platform/provider.js';
@@ -154,12 +154,6 @@ function makeMockDeps() {
   };
   return { worktreeManager, launcher, platform, logger };
 }
-
-describe('ReviewResponseOrchestrator — REVIEW_RESPONSE_PHASES constant', () => {
-  it('exports REVIEW_RESPONSE_PHASES as [3, 4, 5]', () => {
-    expect(REVIEW_RESPONSE_PHASES).toEqual([3, 4, 5]);
-  });
-});
 
 describe('ReviewResponseOrchestrator — run() skipping logic', () => {
   beforeEach(() => {

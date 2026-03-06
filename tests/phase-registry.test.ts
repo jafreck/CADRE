@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   PHASE_MANIFEST,
-  REVIEW_RESPONSE_PHASES,
   getPhase,
   getPhaseCount,
   getPhaseSubset,
@@ -74,16 +73,6 @@ describe('PhaseRegistry', () => {
     it('should return false for other phases', () => {
       expect(isLastPhase(1)).toBe(false);
       expect(isLastPhase(3)).toBe(false);
-    });
-  });
-
-  describe('REVIEW_RESPONSE_PHASES', () => {
-    it('should equal [3, 4, 5]', () => {
-      expect(REVIEW_RESPONSE_PHASES).toEqual([3, 4, 5]);
-    });
-
-    it('should be readonly', () => {
-      expect(Object.isFrozen(REVIEW_RESPONSE_PHASES) || Array.isArray(REVIEW_RESPONSE_PHASES)).toBe(true);
     });
   });
 

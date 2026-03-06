@@ -88,11 +88,6 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
   },
 ];
 
-/** Phase IDs used by the review-response pipeline (implementation, integration-verification, PR composition). */
-export const REVIEW_RESPONSE_PHASES: readonly number[] = PHASE_MANIFEST
-  .filter((e) => e.includeInReviewResponse)
-  .map((e) => e.id);
-
 /**
  * Get a subset of phase definitions by ID, returned in phase-ID order.
  */
