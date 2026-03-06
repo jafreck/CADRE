@@ -39,6 +39,7 @@ export type { NegotiationOptions } from './negotiation.js';
 // === From command-diagnostics ===
 export { extractFailures } from './commands/parse-failures.js';
 export { type RegressionResult, computeRegressions } from './commands/regression.js';
+export { execShell } from './commands/exec.js';
 export {
   type VerifyCommandConfig,
   type VerifyCommandResult,

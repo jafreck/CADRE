@@ -174,6 +174,7 @@ export class IssueOrchestrator {
         checkBudget: () => budgetGuard.checkBudget(),
         updateProgress: () => this.updateProgress(),
         setPR: (pr) => { this.createdPR = pr; },
+        resyncAgentFiles: this.resyncAgentFiles,
       },
     };
 

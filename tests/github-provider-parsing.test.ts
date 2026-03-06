@@ -1326,6 +1326,41 @@ describe('GitHubProvider – mergePullRequest', () => {
     await expect(provider.mergePullRequest(16, 'main')).rejects.toThrow('checks failed: commit-status');
   });
 
+  it('does not treat combined status pending as blocking when there are no actual commit statuses', async () => {
+    // Repos using only GitHub Actions (check runs) have zero commit statuses,
+    // causing getCombinedStatusForRef to return state='pending'.  This should
+    // not block the merge when all check runs are passing.
+    const mergeMock = vi.fn()
+      .mockRejectedValueOnce({ status: 409 })
+      .mockResolvedValueOnce({ data: { merged: true } });
+    const getMock = vi.fn().mockResolvedValue({
+      data: {
+        merged: false,
+        state: 'open',
+        head: { sha: 'sha-no-statuses' },
+        mergeable: true,
+        mergeable_state: 'clean',
+      },
+    });
+    const mockOctokit = {
+      rest: {
+        pulls: { merge: mergeMock, get: getMock, updateBranch: vi.fn() },
+        repos: { getCombinedStatusForRef: vi.fn().mockResolvedValue({ data: { state: 'pending', statuses: [] } }) },
+        checks: {
+          listForRef: vi.fn().mockResolvedValue({
+            data: { check_runs: [{ name: 'CI', status: 'completed', conclusion: 'success' }] },
+          }),
+        },
+      },
+    };
+
+    const provider = new GitHubProvider('owner/repo', mockLogger, mockOctokit as any);
+
+    // Should succeed — combined status 'pending' with empty statuses should not block
+    await expect(provider.mergePullRequest(200, 'main')).resolves.toBeUndefined();
+    expect(mergeMock).toHaveBeenCalledTimes(2);
+  });
+
   it('throws when completed check runs finish with failing conclusions', async () => {
     const mergeMock = vi.fn().mockRejectedValueOnce({ status: 409 });
     const mockOctokit = {

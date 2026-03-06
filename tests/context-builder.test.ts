@@ -41,7 +41,7 @@ describe('ContextBuilder', () => {
         buildVerification: true,
         testVerification: true,
       },
-      commands: { install: 'npm install', build: 'npm run build', test: 'npm test' },
+      commands: { install: 'npm install', build: 'npm run build', test: 'npm test', lint: 'npm run lint' },
       copilot: { cliCommand: 'copilot', agentDir: '.github/agents', timeout: 300000 },
       environment: { inheritShellPath: true, extraPath: [] },
     } as CadreConfig;
@@ -1043,6 +1043,7 @@ describe('ContextBuilder', () => {
       const payload = ctx.payload as Record<string, unknown>;
       expect(payload.sessionId).toBe('session-001');
       expect(payload.issueType).toBe('test-failure');
+      expect(payload.commands).toEqual({ build: 'npm run build', lint: 'npm run lint', test: 'npm test' });
     });
 
     it('should include feedbackPath and changedFiles in inputFiles', async () => {
