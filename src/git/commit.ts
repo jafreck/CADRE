@@ -297,7 +297,6 @@ export class CommitManager {
   }
 
   /**
-  /**
    * Check if the working tree is clean.
    */
   async isClean(): Promise<boolean> {
