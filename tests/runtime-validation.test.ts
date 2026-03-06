@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies before importing CadreRuntime
-vi.mock('@cadre/framework/core', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/core')>()),
+vi.mock('@cadre-dev/framework/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/core')>()),
   Logger: vi.fn().mockImplementation(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -21,8 +21,8 @@ vi.mock('@cadre/framework/core', async (importOriginal) => ({
   registryCompletenessValidator: { name: 'registry-completeness', validate: vi.fn() },
 }));
 
-vi.mock('@cadre/framework/notifications', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/notifications')>()),
+vi.mock('@cadre-dev/framework/notifications', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/notifications')>()),
   NotificationManager: vi.fn().mockImplementation(() => ({
     dispatch: vi.fn().mockResolvedValue(undefined),
   })),
@@ -40,7 +40,7 @@ vi.mock('../src/platform/factory.js', () => ({
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
-import { PreRunValidationSuite } from '@cadre/framework/core';
+import { PreRunValidationSuite } from '@cadre-dev/framework/core';
 
 const makeConfig = (skipValidation = false) =>
   makeRuntimeConfig({

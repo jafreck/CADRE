@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import { CostReportWriter } from '../src/reporting/cost-report-writer.js';
-import { CostEstimator } from '@cadre/framework/core';
-import { TokenTracker } from '@cadre/framework/runtime';
+import { CostEstimator } from '@cadre-dev/framework/core';
+import { TokenTracker } from '@cadre-dev/framework/runtime';
 import { ISSUE_PHASES } from '../src/core/phase-registry.js';
 
 vi.mock('../src/util/fs.js', () => ({

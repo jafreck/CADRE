@@ -42,7 +42,7 @@ vi.mock('../src/core/report-service.js', () => ({
   ReportService: MockReportService,
 }));
 
-vi.mock('@cadre/framework/core', () => ({
+vi.mock('@cadre-dev/framework/core', () => ({
   Logger: vi.fn().mockImplementation(() => ({
     info: vi.fn(),
     warn: vi.fn(),

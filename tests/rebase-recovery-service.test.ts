@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RebaseRecoveryService } from '../src/core/rebase-recovery-service.js';
 
-vi.mock('@cadre/framework/core', () => ({
+vi.mock('@cadre-dev/framework/core', () => ({
   Logger: vi.fn(),
 }));
 

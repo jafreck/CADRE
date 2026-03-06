@@ -46,7 +46,7 @@ export class SchemaValidationError extends Error {
   }
 }
 
-export { CyclicDependencyError } from '@cadre/framework/engine';
+export { CyclicDependencyError } from '@cadre-dev/framework/engine';
 
 export class DependencyResolutionError extends Error {
   constructor(message: string) {

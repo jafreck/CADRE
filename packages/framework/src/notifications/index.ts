@@ -1,4 +1,4 @@
-// @cadre/framework/notifications — notification dispatch framework
+// @cadre-dev/framework/notifications — notification dispatch framework
 
 export type {
   NotificationEvent,

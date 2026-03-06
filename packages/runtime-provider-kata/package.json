@@ -1,5 +1,5 @@
 {
-  "name": "@cadre/runtime-provider-kata",
+  "name": "@cadre-dev/runtime-provider-kata",
   "version": "0.1.0",
   "description": "Kata Containers isolation provider for cadre agent runtimes",
   "license": "MIT",
@@ -17,6 +17,6 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@cadre/framework": "*"
+    "@cadre-dev/framework": "*"
   }
 }

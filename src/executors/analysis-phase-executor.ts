@@ -3,8 +3,8 @@ import { writeFile } from 'node:fs/promises';
 import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
-import { captureBaseline as captureBaselineCmd } from '@cadre/framework/runtime';
-import { extractCadreJson, type BaselineResults } from '@cadre/framework/runtime';
+import { captureBaseline as captureBaselineCmd } from '@cadre-dev/framework/runtime';
+import { extractCadreJson, type BaselineResults } from '@cadre-dev/framework/runtime';
 import type { AgentResult } from '../agents/types.js';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {

@@ -3,8 +3,8 @@ import { IssueNotifier } from '../src/core/issue-notifier.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
 import type { PlatformProvider } from '../src/platform/provider.js';
-import type { Logger } from '@cadre/framework/core';
-import type { CadreEvent } from '@cadre/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
+import type { CadreEvent } from '@cadre-dev/framework/core';
 
 function makeMockLogger(): Logger {
   return {

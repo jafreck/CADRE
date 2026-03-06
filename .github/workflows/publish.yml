@@ -1,5 +1,6 @@
-name: Publish to npm
+name: Publish @cadre-dev/cadre
 
+# Triggered by GitHub releases (tags like v0.1.0, v1.0.0)
 on:
   release:
     types: [published]
@@ -8,6 +9,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Skip framework-only releases — those are handled by publish-framework.yml
+    if: ${{ !startsWith(github.event.release.tag_name, 'framework-v') }}
     permissions:
       contents: read
       id-token: write  # Required for OIDC trusted publishing
@@ -25,7 +28,7 @@ jobs:
 
       # Trusted publishing: OIDC auth, no NPM_TOKEN needed.
       # Provenance attestations are generated automatically.
-      # Configure at: npmjs.com → @jafreck/cadre → Settings → Trusted Publisher
+      # Configure at: npmjs.com → @cadre-dev/cadre → Settings → Trusted Publisher
       #   Organization/user: jafreck
       #   Repository: CADRE
       #   Workflow filename: publish.yml

@@ -1,5 +1,5 @@
 {
-  "name": "@cadre/runtime-provider-docker",
+  "name": "@cadre-dev/runtime-provider-docker",
   "version": "0.1.0",
   "description": "Docker isolation provider for agent runtime",
   "license": "MIT",
@@ -17,6 +17,6 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@cadre/framework": "*"
+    "@cadre-dev/framework": "*"
   }
 }

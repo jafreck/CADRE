@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { Logger } from '@cadre/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
 
 /**
  * Create a mock Logger with all methods stubbed via vi.fn().

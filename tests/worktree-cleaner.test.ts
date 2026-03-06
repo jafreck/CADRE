@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fsp from 'node:fs/promises';
 import { WorktreeCleaner } from '../src/git/worktree-cleaner.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import * as fsUtils from '../src/util/fs.js';
 
 vi.mock('node:fs/promises', () => ({

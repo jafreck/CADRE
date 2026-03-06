@@ -16,8 +16,8 @@ export type { CommandResult, IntegrationReport } from './integration-report.sche
 export { prContentSchema } from './pr-content.schema.js';
 export type { PRContent } from './pr-content.schema.js';
 
-export { baselineResultsSchema } from '@cadre/framework/runtime';
-export type { BaselineResults } from '@cadre/framework/runtime';
+export { baselineResultsSchema } from '@cadre-dev/framework/runtime';
+export type { BaselineResults } from '@cadre-dev/framework/runtime';
 
 export { sessionReviewSummarySchema } from './session-review-summary.schema.js';
 export type { SessionReviewSummary } from './session-review-summary.schema.js';

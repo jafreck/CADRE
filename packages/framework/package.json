@@ -1,8 +1,17 @@
 {
-  "name": "@cadre/framework",
+  "name": "@cadre-dev/framework",
   "version": "0.1.0",
   "description": "Consolidated framework for CADRE agent orchestration",
   "license": "MIT",
+  "author": "Jacob Freck",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jafreck/CADRE.git",
+    "directory": "packages/framework"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

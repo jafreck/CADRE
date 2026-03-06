@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { formatElapsed, renderFleetStatus, renderIssueDetail } from '../src/cli/status-renderer.js';
-import type { FleetCheckpointState, FleetIssueStatus, CheckpointState } from '@cadre/framework/engine';
+import type { FleetCheckpointState, FleetIssueStatus, CheckpointState } from '@cadre-dev/framework/engine';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

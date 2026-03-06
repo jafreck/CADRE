@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { simpleGit } from 'simple-git';
 import { WorktreeManager } from '../src/git/worktree.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import * as fsUtils from '../src/util/fs.js';
 
 // ── Mock simple-git ──────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
 import { makeMockIssue } from './helpers/make-mock-issue.js';
 import { makeMockWorktree } from './helpers/make-mock-worktree.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
+import type { CheckpointManager } from '@cadre-dev/framework/engine';
 import type { AgentLauncher } from '../src/core/agent-launcher.js';
 import type { PlatformProvider } from '../src/platform/provider.js';
 
@@ -118,7 +118,7 @@ vi.mock('../src/core/phase-gate.js', () => ({
   clearGatePlugins: vi.fn(),
 }));
 
-vi.mock('@cadre/framework/engine', () => ({
+vi.mock('@cadre-dev/framework/engine', () => ({
   IssueProgressWriter: vi.fn(() => ({
     appendEvent: mockProgressAppendEvent,
     write: mockProgressWrite,
@@ -152,8 +152,8 @@ vi.mock('../src/git/commit.js', () => ({
   })),
 }));
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
   RetryExecutor: vi.fn(() => ({
     execute: mockRetryExecutorExecute,
   })),
@@ -167,8 +167,8 @@ const mockSessionQueueInstance = {
   restoreState: vi.fn(),
 };
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
   TaskQueue: vi.fn(() => mockSessionQueueInstance),
   SessionQueue: vi.fn(() => mockSessionQueueInstance),
   // static method:
@@ -182,8 +182,8 @@ vi.mock('@cadre/framework/engine', async (importOriginal) => ({
   })),
 }));
 
-vi.mock('@cadre/framework/runtime', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/runtime')>()),
+vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/runtime')>()),
   TokenTracker: vi.fn(() => ({
     record: vi.fn(),
     getTotal: mockTokenTrackerGetTotal,

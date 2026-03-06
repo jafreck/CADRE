@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CapabilityMismatchError } from '@cadre/framework/runtime';
+import { CapabilityMismatchError } from '@cadre-dev/framework/runtime';
 import { KataProvider, type KataAdapter } from './kata-provider.js';
 import type { KataSessionConfig } from './types.js';
 

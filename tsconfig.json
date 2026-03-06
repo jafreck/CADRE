@@ -16,8 +16,8 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@cadre/framework": ["packages/framework/src/index.ts"],
-      "@cadre/framework/*": [
+      "@cadre-dev/framework": ["packages/framework/src/index.ts"],
+      "@cadre-dev/framework/*": [
         "packages/framework/src/*/index.ts",
         "packages/framework/src/*"
       ]

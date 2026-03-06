@@ -5,4 +5,4 @@ export {
   CopilotBackend,
   ClaudeBackend,
   isCopilotCliInvocationError,
-} from '@cadre/framework/runtime';
+} from '@cadre-dev/framework/runtime';

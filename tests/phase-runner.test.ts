@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PhaseRunner } from '../src/core/phase-runner.js';
 import { BudgetExceededError } from '../src/core/issue-budget-guard.js';
 import type { GateCoordinator } from '../src/core/gate-coordinator.js';
-import type { CheckpointManager } from '@cadre/framework/engine';
-import type { IssueProgressWriter } from '@cadre/framework/engine';
-import type { TokenTracker } from '@cadre/framework/runtime';
-import type { Logger } from '@cadre/framework/core';
+import type { CheckpointManager } from '@cadre-dev/framework/engine';
+import type { IssueProgressWriter } from '@cadre-dev/framework/engine';
+import type { TokenTracker } from '@cadre-dev/framework/runtime';
+import type { Logger } from '@cadre-dev/framework/core';
 import type { PhaseExecutor, PhaseContext } from '../src/core/phase-executor.js';
 import type { PhaseResult } from '../src/agents/types.js';
 

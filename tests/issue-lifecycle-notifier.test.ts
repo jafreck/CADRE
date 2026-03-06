@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueLifecycleNotifier } from '../src/core/issue-lifecycle-notifier.js';
-import type { NotificationManager } from '@cadre/framework/notifications';
+import type { NotificationManager } from '@cadre-dev/framework/notifications';
 
 function makeNotificationManager(): NotificationManager {
   return {

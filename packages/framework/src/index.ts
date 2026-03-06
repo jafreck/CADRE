@@ -1,7 +1,7 @@
-// @cadre/framework — root barrel re-exports all subpaths
+// @cadre-dev/framework — root barrel re-exports all subpaths
 // Note: Logger from core (class) and engine (interface) conflict.
 // The root barrel exports core's Logger class; engine's Logger is available
-// via @cadre/framework/engine.
+// via @cadre-dev/framework/engine.
 
 export * from './core/index.js';
 export * from './runtime/index.js';

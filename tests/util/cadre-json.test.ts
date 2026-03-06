@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractCadreJson, extractCadreJsonWithError } from '@cadre/framework/runtime';
+import { extractCadreJson, extractCadreJsonWithError } from '@cadre-dev/framework/runtime';
 
 function wrap(json: string): string {
   return `\`\`\`cadre-json\n${json}\n\`\`\``;

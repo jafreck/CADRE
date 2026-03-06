@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type { CadreConfig } from '../config/schema.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import { formatCommitSubject } from '../util/title-format.js';
 
 /**

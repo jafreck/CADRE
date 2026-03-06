@@ -2,7 +2,7 @@ import type { RuntimeConfig } from '../config/loader.js';
 import type { PlatformProvider } from './provider.js';
 import { GitHubProvider } from './github-provider.js';
 import { AzureDevOpsProvider } from './azure-devops-provider.js';
-import type { Logger } from '@cadre/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
 
 /**
  * Resolve `${ENV_VAR}` references in strings.

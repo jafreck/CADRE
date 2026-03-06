@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import type { RuntimeConfig } from '../config/loader.js';
 import { exists } from '../util/fs.js';
 import { exec } from '../util/process.js';
-import type { PreRunValidator, ValidationResult } from '@cadre/framework/core';
+import type { PreRunValidator, ValidationResult } from '@cadre-dev/framework/core';
 
 export const gitValidator: PreRunValidator = {
   name: 'git',

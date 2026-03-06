@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
 import type { SimpleGit } from 'simple-git';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import { exists } from '../util/fs.js';
 
 /**

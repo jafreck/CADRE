@@ -1,5 +1,5 @@
-import type { IsolationPolicy } from '@cadre/framework/runtime';
-import { CapabilityMismatchError } from '@cadre/framework/runtime';
+import type { IsolationPolicy } from '@cadre-dev/framework/runtime';
+import { CapabilityMismatchError } from '@cadre-dev/framework/runtime';
 import type { KataSessionConfig } from './types.js';
 
 /**

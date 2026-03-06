@@ -6,21 +6,21 @@ import { FleetOrchestrator, type FleetResult } from './fleet-orchestrator.js';
 import { ensureDir } from '../util/fs.js';
 import type { IssueDetail } from '../platform/provider.js';
 import type { PlatformProvider } from '../platform/provider.js';
-import { CostEstimator } from '@cadre/framework/core';
-import type { Logger } from '@cadre/framework/core';
+import { CostEstimator } from '@cadre-dev/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
 import { killAllTrackedProcesses } from '../util/process.js';
-import { FleetProgressWriter, type WorkItemDag } from '@cadre/framework/engine';
+import { FleetProgressWriter, type WorkItemDag } from '@cadre-dev/framework/engine';
 import {
   PreRunValidationSuite,
   diskValidator,
-} from '@cadre/framework/core';
+} from '@cadre-dev/framework/core';
 import { gitValidator } from '../validation/git-validator.js';
 import { agentBackendValidator } from '../validation/agent-backend-validator.js';
 import { platformValidator } from '../validation/platform-validator.js';
 import { commandValidator } from '../validation/command-validator.js';
 import { registryCompletenessValidator } from '../validation/registry-completeness-validator.js';
 import { checkStaleState } from '../validation/stale-state-validator.js';
-import type { NotificationManager } from '@cadre/framework/notifications';
+import type { NotificationManager } from '@cadre-dev/framework/notifications';
 import { DependencyResolver } from './dependency-resolver.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../errors.js';
 

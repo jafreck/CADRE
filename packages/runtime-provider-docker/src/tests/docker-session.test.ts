@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DockerSession } from '../docker-session.js';
 import type { DockerRunner } from '../docker-session.js';
-import type { ExecResult } from '@cadre/framework/runtime';
+import type { ExecResult } from '@cadre-dev/framework/runtime';
 
 function makeRunner(result: ExecResult = { exitCode: 0, stdout: 'ok', stderr: '' }): DockerRunner {
   return vi.fn(async (_args: string[]) => result);

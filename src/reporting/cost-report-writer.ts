@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import { CostEstimator } from '@cadre/framework/core';
+import { CostEstimator } from '@cadre-dev/framework/core';
 import { ISSUE_PHASES } from '../core/phase-registry.js';
 import { atomicWriteJSON } from '../util/fs.js';
-import type { TokenTracker, TokenRecord } from '@cadre/framework/runtime';
+import type { TokenTracker, TokenRecord } from '@cadre-dev/framework/runtime';
 import type { CostReport, CostReportAgentEntry, CostReportPhaseEntry } from './types.js';
 
 export class CostReportWriter {

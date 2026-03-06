@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { ZodType } from 'zod';
-import { extractCadreJsonWithError } from '@cadre/framework/runtime';
+import { extractCadreJsonWithError } from '@cadre-dev/framework/runtime';
 import type {
   AgentSession,
   AnalysisResult,

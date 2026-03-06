@@ -12,7 +12,7 @@ import type {
   PullRequestMergeMethod,
 } from './provider.js';
 import { GitHubAPI } from '../github/api.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import { Octokit } from '@octokit/rest';
 
 function asString(value: unknown, fallback = ''): string {

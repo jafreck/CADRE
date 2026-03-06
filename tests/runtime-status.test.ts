@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock heavy dependencies
-vi.mock('@cadre/framework/core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@cadre/framework/core')>();
+vi.mock('@cadre-dev/framework/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre-dev/framework/core')>();
   return {
     ...actual,
     Logger: vi.fn().mockImplementation(() => ({
@@ -31,7 +31,7 @@ vi.mock('../src/platform/factory.js', () => ({
   }),
 }));
 
-vi.mock('@cadre/framework/notifications', () => ({
+vi.mock('@cadre-dev/framework/notifications', () => ({
   NotificationManager: vi.fn(),
   createNotificationManager: vi.fn().mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) }),
 }));
@@ -55,7 +55,7 @@ vi.mock('../src/core/agent-launcher.js', () => ({
 
 vi.mock('../src/util/process.js', () => ({ killAllTrackedProcesses: vi.fn() }));
 
-vi.mock('@cadre/framework/runtime', () => ({ TokenTracker: vi.fn() }));
+vi.mock('@cadre-dev/framework/runtime', () => ({ TokenTracker: vi.fn() }));
 
 vi.mock('../src/reporting/report-writer.js', () => ({
   ReportWriter: { listReports: vi.fn().mockResolvedValue([]), readReport: vi.fn() },
@@ -69,8 +69,8 @@ vi.mock('../src/util/fs.js', () => ({
   readJSON: vi.fn(),
 }));
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@cadre/framework/engine')>();
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cadre-dev/framework/engine')>();
   return {
     ...actual,
     FleetProgressWriter: vi.fn().mockImplementation(() => ({
@@ -116,7 +116,7 @@ vi.mock('../src/cli/status-renderer.js', () => ({
 }));
 
 import { CadreRuntime } from '../src/core/runtime.js';
-import { FleetCheckpointManager, CheckpointManager } from '@cadre/framework/engine';
+import { FleetCheckpointManager, CheckpointManager } from '@cadre-dev/framework/engine';
 import { exists } from '../src/util/fs.js';
 import { renderFleetStatus, renderIssueDetail } from '../src/cli/status-renderer.js';
 

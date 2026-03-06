@@ -1,10 +1,10 @@
 import pLimit from 'p-limit';
 import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
 import type { IssueResult } from './issue-orchestrator.js';
-import type { WorkItemDag, FleetCheckpointManager } from '@cadre/framework/engine';
+import type { WorkItemDag, FleetCheckpointManager } from '@cadre-dev/framework/engine';
 import type { PlatformProvider } from '../platform/provider.js';
 import type { RuntimeConfig } from '../config/loader.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 import { MergeRetryHelper } from './merge-retry.js';
 
 /** Callback type for processing a single issue. */

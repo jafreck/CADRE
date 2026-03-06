@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Logger } from '@cadre/framework/core';
+import type { Logger } from '@cadre-dev/framework/core';
 import type { PlatformProvider } from '../src/platform/provider.js';
 import { PullRequestCompletionQueue } from '../src/core/pr-completion-queue.js';
 

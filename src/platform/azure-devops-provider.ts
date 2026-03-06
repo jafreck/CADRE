@@ -11,7 +11,7 @@ import type {
   PRReview,
   PullRequestMergeMethod,
 } from './provider.js';
-import { Logger } from '@cadre/framework/core';
+import { Logger } from '@cadre-dev/framework/core';
 
 const MERGE_POLL_INTERVAL_MS = 15_000;
 const MERGE_POLL_TIMEOUT_MS = 30 * 60_000;

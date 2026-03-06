@@ -1,4 +1,4 @@
-// @cadre/framework/engine — pipeline engine + execution primitives
+// @cadre-dev/framework/engine — pipeline engine + execution primitives
 
 // === From pipeline-engine ===
 

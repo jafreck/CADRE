@@ -6,7 +6,7 @@ import type {
   IsolationPolicy,
   IsolationProvider,
   IsolationSession,
-} from '@cadre/framework/runtime';
+} from '@cadre-dev/framework/runtime';
 import type { KataSessionConfig } from './types.js';
 import { translatePolicy } from './policy-translator.js';
 

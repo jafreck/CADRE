@@ -96,7 +96,7 @@ vi.mock('../src/core/phase-gate.js', () => ({
   clearGatePlugins: vi.fn(),
 }));
 
-vi.mock('@cadre/framework/engine', () => ({
+vi.mock('@cadre-dev/framework/engine', () => ({
   IssueProgressWriter: vi.fn(() => ({
     appendEvent: mockProgressAppendEvent,
     write: mockProgressWrite,
@@ -130,15 +130,15 @@ vi.mock('../src/git/commit.js', () => ({
   })),
 }));
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/engine')>()),
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
   RetryExecutor: vi.fn(() => ({
     execute: mockRetryExecutorExecute,
   })),
 }));
 
-vi.mock('@cadre/framework/engine', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@cadre/framework/engine')>();
+vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@cadre-dev/framework/engine')>();
   // selectNonOverlappingBatch is a static method on the TaskQueue class, so it must be
   // attached to the mock constructor function itself (not as a module-level export).
   const QueueFactory = vi.fn(() => ({
@@ -176,8 +176,8 @@ vi.mock('@cadre/framework/engine', async (importOriginal) => {
   };
 });
 
-vi.mock('@cadre/framework/runtime', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre/framework/runtime')>()),
+vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cadre-dev/framework/runtime')>()),
   TokenTracker: vi.fn(() => ({
     record: vi.fn(),
     getTotal: mockTokenTrackerGetTotal,

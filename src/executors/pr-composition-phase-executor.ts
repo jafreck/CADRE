@@ -5,7 +5,7 @@ import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import type { AgentResult, PRContent } from '../agents/types.js';
-import { extractCadreJson } from '@cadre/framework/runtime';
+import { extractCadreJson } from '@cadre-dev/framework/runtime';
 import type { PullRequestMergeMethod } from '../platform/provider.js';
 import { formatPullRequestTitle } from '../util/title-format.js';
 
