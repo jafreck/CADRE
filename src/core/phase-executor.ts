@@ -44,6 +44,8 @@ export type PhaseCallbacks = {
   checkBudget: () => void;
   updateProgress: () => Promise<void>;
   setPR?: (pr: PullRequestInfo) => void;
+  /** Re-create agent symlinks in the worktree after artifact cleanup removes them. */
+  resyncAgentFiles?: () => Promise<void>;
 };
 
 /**

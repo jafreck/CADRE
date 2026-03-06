@@ -182,6 +182,10 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
     payload: (args) => ({
       sessionId: args.sessionId!,
       issueType: args.issueType!,
+      // NOTE: the error output is provided via feedbackPath (inputFiles[0]).
+      // An alternative would be to pass it inline in the payload as errorOutput
+      // so the agent doesn't need to open a file, but keeping it file-based
+      // is consistent with how all other fix-surgeon callers work today.
     }),
   },
   'integration-checker': {

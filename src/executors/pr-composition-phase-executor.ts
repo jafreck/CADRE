@@ -5,7 +5,7 @@ import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import type { AgentResult, PRContent } from '../agents/types.js';
-import { extractCadreJson } from '@cadre/framework/runtime';
+import { extractCadreJson, execShell } from '@cadre/framework/runtime';
 import type { PullRequestMergeMethod } from '../platform/provider.js';
 import { formatPullRequestTitle } from '../util/title-format.js';
 
@@ -153,7 +153,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     // or from an agent independently committing .cadre/ files).
     await ctx.io.commitManager.ensureNoCadreArtifactsInDiff(ctx.worktree.baseCommit);
 
-    await ctx.io.commitManager.push(true, ctx.worktree.branch);
+    await this.pushWithFixRetry(ctx);
 
     const prTitle = formatPullRequestTitle(prContent.title, ctx.issue.title, ctx.issue.number);
     let prBody = prContent.body;
@@ -213,6 +213,126 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
 
     ctx.callbacks.setPR?.(pr);
     // Fix 2: Do not merge inline — the fleet orchestrator's completion queue handles serial merge.
+  }
+
+  /**
+   * Run the configured lint command (if any) before pushing.  When lint fails,
+   * invoke fix-surgeon with the lint output to fix the code, then retry.  This
+   * catches typecheck / lint errors proactively so we know the exact failure
+   * type instead of relying on heuristic parsing of pre-push hook output.
+   *
+   * After lint passes (or if no lint command is configured), push to origin.
+   * If the push itself still fails for a hook-related reason, treat it as a
+   * lint failure and retry through the same fix loop.
+   */
+  private async pushWithFixRetry(ctx: PhaseContext): Promise<void> {
+    const maxRounds = ctx.config.options.maxBuildFixRounds;
+    const lintCommand = ctx.config.commands?.lint;
+
+    for (let round = 0; round <= maxRounds; round++) {
+      // 1. Run lint proactively before pushing (if configured)
+      if (lintCommand) {
+        const lintResult = await execShell(lintCommand, {
+          cwd: ctx.worktree.path,
+          timeout: 300_000,
+        });
+
+        if (lintResult.exitCode !== 0) {
+          if (round >= maxRounds) {
+            throw new Error(`Lint failed after ${maxRounds} fix-surgeon rounds:\n${lintResult.stderr + lintResult.stdout}`);
+          }
+
+          const lintOutput = lintResult.stderr + lintResult.stdout;
+          ctx.services.logger.warn(
+            `Lint failed before push (round ${round + 1}/${maxRounds}), invoking fix-surgeon`,
+            { issueNumber: ctx.issue.number, phase: 5 },
+          );
+
+          await this.invokeFixSurgeon(ctx, lintOutput, 'lint', round);
+          continue;
+        }
+      }
+
+      // 2. Lint passed (or not configured) — push
+      try {
+        await ctx.io.commitManager.push(true, ctx.worktree.branch);
+        return; // success
+      } catch (pushErr) {
+        const errMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+
+        // Only retry if this looks like a pre-push hook failure rather than
+        // a network or auth error.
+        const isHookFailure = /pre-push|tsc|eslint|lint|test|build|error TS/i.test(errMsg);
+        if (!isHookFailure || round >= maxRounds) {
+          throw pushErr;
+        }
+
+        ctx.services.logger.warn(
+          `Push failed (round ${round + 1}/${maxRounds}), invoking fix-surgeon: ${errMsg.slice(0, 200)}`,
+          { issueNumber: ctx.issue.number, phase: 5 },
+        );
+
+        await this.invokeFixSurgeon(ctx, errMsg, 'lint', round);
+      }
+    }
+  }
+
+  /**
+   * Write the failure output to a file, invoke fix-surgeon, commit the fix,
+   * and clean up cadre artifacts.  Shared by the lint and push-failure paths.
+   */
+  private async invokeFixSurgeon(
+    ctx: PhaseContext,
+    errorOutput: string,
+    issueType: 'lint' | 'build',
+    round: number,
+  ): Promise<void> {
+    const failurePath = join(ctx.io.progressDir, `push-failure-${round}.txt`);
+    await writeFile(failurePath, errorOutput, 'utf-8');
+
+    const changedFiles = await ctx.io.commitManager.getChangedFiles();
+    const absoluteChanged = changedFiles.map((f) => join(ctx.worktree.path, f));
+
+    const fixContextPath = await ctx.services.contextBuilder.build('fix-surgeon', {
+      issueNumber: ctx.issue.number,
+      worktreePath: ctx.worktree.path,
+      feedbackPath: failurePath,
+      changedFiles: absoluteChanged,
+      progressDir: ctx.io.progressDir,
+      issueType,
+      phase: 5,
+    });
+
+    const fixResult = await ctx.services.launcher.launchAgent(
+      {
+        agent: 'fix-surgeon',
+        issueNumber: ctx.issue.number,
+        phase: 5,
+        contextPath: fixContextPath,
+        outputPath: ctx.worktree.path,
+      },
+      ctx.worktree.path,
+    );
+
+    ctx.callbacks.recordTokens('fix-surgeon', fixResult.tokenUsage);
+    ctx.callbacks.checkBudget();
+
+    const isClean = await ctx.io.commitManager.isClean();
+    if (!isClean) {
+      await ctx.io.commitManager.commit(
+        `fix: resolve ${issueType} failures (round ${round + 1})`,
+        ctx.issue.number,
+        'fix',
+      );
+    }
+
+    await ctx.io.commitManager.ensureNoCadreArtifactsInDiff(ctx.worktree.baseCommit);
+
+    // ensureNoCadreArtifactsInDiff runs `git clean -fd` which removes agent
+    // symlinks from the worktree.  Re-sync so the next round can find them.
+    if (ctx.callbacks.resyncAgentFiles) {
+      await ctx.callbacks.resyncAgentFiles();
+    }
   }
 
   /**

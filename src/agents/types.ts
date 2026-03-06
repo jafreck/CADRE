@@ -218,7 +218,7 @@ export interface ContextBuildArgs {
   sessionPlanPaths?: string[];
   sessionSummaries?: SessionReviewSummary[];
   feedbackPath?: string;
-  issueType?: 'review' | 'test-failure' | 'build';
+  issueType?: 'review' | 'test-failure' | 'build' | 'lint';
   phase?: number;
   planPath?: string;
   integrationReportPath?: string;
