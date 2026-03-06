@@ -1109,7 +1109,7 @@ describe('PRCompositionPhaseExecutor', () => {
       expect(push).toHaveBeenCalledTimes(1);
     });
 
-    it('should not retry push for non-hook errors (e.g. network)', async () => {
+    it('should propagate push errors without retrying', async () => {
       const push = vi.fn()
         .mockRejectedValue(new Error('fatal: could not read from remote repository'));
 

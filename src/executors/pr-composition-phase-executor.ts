@@ -222,59 +222,46 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
    * type instead of relying on heuristic parsing of pre-push hook output.
    *
    * After lint passes (or if no lint command is configured), push to origin.
-   * If the push itself still fails for a hook-related reason, treat it as a
-   * lint failure and retry through the same fix loop.
+   * Push errors are not retried — they indicate network/auth issues, not code
+   * problems.
    */
   private async pushWithFixRetry(ctx: PhaseContext): Promise<void> {
-    const maxRounds = ctx.config.options.maxBuildFixRounds;
     const lintCommand = ctx.config.commands?.lint;
 
-    for (let round = 0; round <= maxRounds; round++) {
-      // 1. Run lint proactively before pushing (if configured)
-      if (lintCommand) {
-        const lintResult = await execShell(lintCommand, {
-          cwd: ctx.worktree.path,
-          timeout: 300_000,
-        });
-
-        if (lintResult.exitCode !== 0) {
-          if (round >= maxRounds) {
-            throw new Error(`Lint failed after ${maxRounds} fix-surgeon rounds:\n${lintResult.stderr + lintResult.stdout}`);
-          }
-
-          const lintOutput = lintResult.stderr + lintResult.stdout;
-          ctx.services.logger.warn(
-            `Lint failed before push (round ${round + 1}/${maxRounds}), invoking fix-surgeon`,
-            { issueNumber: ctx.issue.number, phase: 5 },
-          );
-
-          await this.invokeFixSurgeon(ctx, lintOutput, 'lint', round);
-          continue;
-        }
-      }
-
-      // 2. Lint passed (or not configured) — push
-      try {
-        await ctx.io.commitManager.push(true, ctx.worktree.branch);
-        return; // success
-      } catch (pushErr) {
-        const errMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
-
-        // Only retry if this looks like a pre-push hook failure rather than
-        // a network or auth error.
-        const isHookFailure = /pre-push|tsc|eslint|lint|test|build|error TS/i.test(errMsg);
-        if (!isHookFailure || round >= maxRounds) {
-          throw pushErr;
-        }
-
-        ctx.services.logger.warn(
-          `Push failed (round ${round + 1}/${maxRounds}), invoking fix-surgeon: ${errMsg.slice(0, 200)}`,
-          { issueNumber: ctx.issue.number, phase: 5 },
-        );
-
-        await this.invokeFixSurgeon(ctx, errMsg, 'lint', round);
-      }
+    // No lint command configured — just push directly.
+    if (!lintCommand) {
+      await ctx.io.commitManager.push(true, ctx.worktree.branch);
+      return;
     }
+
+    const maxRounds = ctx.config.options.maxBuildFixRounds ?? 2;
+
+    for (let round = 0; round <= maxRounds; round++) {
+      const lintResult = await execShell(lintCommand, {
+        cwd: ctx.worktree.path,
+        timeout: 300_000,
+      });
+
+      if (lintResult.exitCode === 0) {
+        // Lint passed — push and return.
+        await ctx.io.commitManager.push(true, ctx.worktree.branch);
+        return;
+      }
+
+      if (round >= maxRounds) {
+        throw new Error(`Lint failed after ${maxRounds} fix-surgeon rounds:\n${lintResult.stderr + lintResult.stdout}`);
+      }
+
+      const lintOutput = lintResult.stderr + lintResult.stdout;
+      ctx.services.logger.warn(
+        `Lint failed before push (round ${round + 1}/${maxRounds}), invoking fix-surgeon`,
+        { issueNumber: ctx.issue.number, phase: 5 },
+      );
+
+      await this.invokeFixSurgeon(ctx, lintOutput, 'lint', round);
+    }
+
+    throw new Error(`Lint failed after ${maxRounds} fix-surgeon rounds (all retries exhausted)`);
   }
 
   /**

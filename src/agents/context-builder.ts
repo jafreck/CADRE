@@ -189,7 +189,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       return files;
     },
     payload: (args) => ({
-      sessionId: args.sessionId!,
+      ...(args.sessionId ? { sessionId: args.sessionId } : {}),
       issueType: args.issueType!,
       ...(args.errorOutput ? { errorOutput: args.errorOutput } : {}),
     }),
