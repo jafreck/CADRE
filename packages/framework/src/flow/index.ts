@@ -8,7 +8,10 @@ export {
   loop,
   parallel,
   sequence,
+  gatedStep,
 } from './dsl.js';
+
+export type { GatedStepConfig } from './dsl.js';
 
 export { fromStep, fromSteps, fromContext } from './refs.js';
 export { FlowRunner } from './runner.js';

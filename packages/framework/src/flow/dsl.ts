@@ -1,12 +1,14 @@
 import type {
   FlowConditionalNode,
   FlowDefinition,
+  FlowExecutionContext,
   FlowGateNode,
   FlowLoopNode,
   FlowNode,
   FlowParallelNode,
   FlowSequenceNode,
   FlowStepNode,
+  MaybePromise,
 } from './types.js';
 
 export function defineFlow<TContext = Record<string, unknown>>(
@@ -60,4 +62,66 @@ export function sequence<TContext = Record<string, unknown>>(
   nodes: FlowNode<TContext>[],
 ): FlowSequenceNode<TContext> {
   return { kind: 'sequence', ...config, nodes };
+}
+
+/**
+ * Configuration for a gated step — execute with gate validation and retry.
+ */
+export interface GatedStepConfig<TContext = Record<string, unknown>> {
+  id: string;
+  name?: string;
+  description?: string;
+  dependsOn?: string[];
+  /** Maximum number of gate-retry attempts (not counting the initial run). */
+  maxRetries: number;
+  /** Called before each iteration; return false to skip (e.g. checkpoint resume). */
+  shouldExecute: (ctx: FlowExecutionContext<TContext>) => MaybePromise<boolean>;
+  /** Called when the loop runs 0 iterations (shouldExecute returned false). */
+  onSkip?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<unknown>;
+  /** The work to execute.  Called each attempt (initial + retries). */
+  run: (ctx: FlowExecutionContext<TContext>) => MaybePromise<unknown>;
+  /** Gate validation.  Return true to pass, false to retry or abort. */
+  evaluate: (ctx: FlowExecutionContext<TContext>) => MaybePromise<boolean>;
+}
+
+/**
+ * Convenience combinator: execute a step with gate validation and retry.
+ *
+ * Expands to `sequence([ loop(step + gate) ])`.  The loop's `while` guard
+ * is `shouldExecute`; inner nodes are `run` (step) and `evaluate` (gate).
+ * No new node kind is introduced — this is syntactic sugar over existing
+ * primitives.
+ *
+ * @example
+ * ```ts
+ * gatedStep({
+ *   id: 'analysis',
+ *   name: 'Analysis & Scouting',
+ *   maxRetries: 2,
+ *   shouldExecute: (ctx) => !ctx.context.completed['analysis'],
+ *   run: (ctx) => runAnalysis(ctx),
+ *   evaluate: (ctx) => validateAnalysisGate(ctx),
+ * })
+ * ```
+ */
+export function gatedStep<TContext = Record<string, unknown>>(
+  config: GatedStepConfig<TContext>,
+): FlowSequenceNode<TContext> {
+  return sequence<TContext>(
+    { id: config.id, name: config.name, description: config.description, dependsOn: config.dependsOn },
+    [
+      {
+        kind: 'loop',
+        id: 'execute-with-gate',
+        name: config.name ? `Execute ${config.name} with gate retries` : 'Execute with gate retries',
+        maxIterations: config.maxRetries + 1,
+        while: config.shouldExecute,
+        onSkip: config.onSkip,
+        do: [
+          { kind: 'step', id: 'run', name: config.name ? `Run ${config.name}` : 'Run', run: config.run },
+          { kind: 'gate', id: 'gate', name: config.name ? `Validate ${config.name} gate` : 'Validate gate', evaluate: config.evaluate },
+        ],
+      } as FlowLoopNode<TContext>,
+    ],
+  );
 }

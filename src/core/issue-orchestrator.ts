@@ -17,7 +17,7 @@ import { IssueNotifier } from './issue-notifier.js';
 import { IssueBudgetGuard, BudgetExceededError } from './issue-budget-guard.js';
 import { GateCoordinator } from './gate-coordinator.js';
 import { IssueLifecycleNotifier } from './issue-lifecycle-notifier.js';
-import { FlowRunner, defineFlow, step, loop, gate, sequence } from '@cadre-dev/framework/flow';
+import { FlowRunner, defineFlow, step, gate, sequence, gatedStep } from '@cadre-dev/framework/flow';
 import { createPhaseActions, PipelineHaltError } from './phase-actions.js';
 import type { PipelineFlowContext } from './phase-actions.js';
 
@@ -200,48 +200,29 @@ export class IssueOrchestrator {
     const maxGateRetries = this.config.options.maxGateRetries ?? 1;
     const exec = (executor: PhaseExecutor) => this.executePhase(executor);
 
-    // Shorthand: build the common gated-phase sequence (phases 1-4).
-    const gatedPhase = (pid: number, dependsOn?: string[]) => {
-      const e = executorMap.get(pid)!;
-      return sequence<PipelineFlowContext>(
-        { id: `phase-${pid}`, name: e.name, dependsOn },
-        [
-          loop<PipelineFlowContext>({
-            id: 'execute-with-gate', name: `Execute with gate retries`,
-            maxIterations: maxGateRetries + 1,
-            while: actions.shouldExecute(e, this.ctx),
-            onSkip: actions.onPhaseSkip(e),
-            do: [
-              step({ id: 'run', name: `Run phase`, run: actions.execute(e, exec) }),
-              gate({ id: 'gate', name: `Validate gate`, evaluate: actions.evaluateGate(e, gateCoordinator) }),
-            ],
-          }),
-          step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(e) }),
-          step({
-            id: 'notify', name: 'Report progress',
-            run: async () => {
-              const last = this.phases[this.phases.length - 1] as PhaseResult & { skipped?: boolean };
-              if (last && !last.skipped && last.duration > 0) {
-                await this.updateProgress();
-                await lifecycleNotifier.notifyPhaseCompleted(pid, e.name, last.duration);
-              }
-              return { notified: true };
-            },
-          }),
-        ],
-      );
-    };
+    // Helper: notify step used in every phase sequence.
+    const notifyStep = (pid: number, phaseName: string) =>
+      step<PipelineFlowContext>({
+        id: 'notify', name: 'Report progress',
+        run: async () => {
+          const last = this.phases[this.phases.length - 1] as PhaseResult & { skipped?: boolean };
+          if (last && !last.skipped && last.duration > 0) {
+            await this.updateProgress();
+            await lifecycleNotifier.notifyPhaseCompleted(pid, phaseName, last.duration);
+          }
+          return { notified: true };
+        },
+      });
 
     // ── Declarative pipeline topology ────────────────────────────────────
     //
-    //   Phase 1: Analysis & Scouting      → gate → ambiguity check → finalize
-    //   Phase 2: Planning                 → gate → finalize
-    //   Phase 3: Implementation           → gate → finalize
-    //   Phase 4: Integration Verification → gate → finalize
-    //   Phase 5: PR Composition           → finalize
+    //   Phase 1: Analysis & Scouting      → gatedStep → ambiguity check → finalize → notify
+    //   Phase 2: Planning                 → gatedStep → finalize → notify
+    //   Phase 3: Implementation           → gatedStep → finalize → notify
+    //   Phase 4: Integration Verification → gatedStep → finalize → notify
+    //   Phase 5: PR Composition           → execute   → finalize → notify
     //
-    // Each gated phase retries up to maxGateRetries on gate failure.
-    // Checkpoint-completed phases are skipped via the loop's while-guard.
+    // gatedStep = loop(run + gate) with retry and checkpoint-skip.
     // ─────────────────────────────────────────────────────────────────────
 
     const phase1 = executorMap.get(1)!;
@@ -250,44 +231,78 @@ export class IssueOrchestrator {
     const flowNodes = [
 
       // ── Phase 1: Analysis & Scouting ──
-      // Unique: includes an ambiguity gate after execution.
+      // Unique: includes an ambiguity gate after the gated execution.
       sequence<PipelineFlowContext>(
         { id: 'phase-1', name: 'Analysis & Scouting' },
         [
-          loop<PipelineFlowContext>({
-            id: 'execute-with-gate', name: 'Execute with gate retries',
-            maxIterations: maxGateRetries + 1,
-            while: actions.shouldExecute(phase1, this.ctx),
+          gatedStep<PipelineFlowContext>({
+            id: 'analysis', name: 'Analysis',
+            maxRetries: maxGateRetries,
+            shouldExecute: actions.shouldExecute(phase1, this.ctx),
             onSkip: actions.onPhaseSkip(phase1),
-            do: [
-              step({ id: 'run', name: 'Run analysis', run: actions.execute(phase1, exec) }),
-              gate({ id: 'gate', name: 'Validate analysis gate', evaluate: actions.evaluateGate(phase1, gateCoordinator) }),
-            ],
+            run: actions.execute(phase1, exec),
+            evaluate: actions.evaluateGate(phase1, gateCoordinator),
           }),
           gate({ id: 'ambiguity-check', name: 'Check for ambiguities', evaluate: actions.checkAmbiguities(gateCoordinator) }),
           step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(phase1) }),
-          step({
-            id: 'notify', name: 'Report progress',
-            run: async () => {
-              const last = this.phases[this.phases.length - 1] as PhaseResult & { skipped?: boolean };
-              if (last && !last.skipped && last.duration > 0) {
-                await this.updateProgress();
-                await lifecycleNotifier.notifyPhaseCompleted(1, phase1.name, last.duration);
-              }
-              return { notified: true };
-            },
-          }),
+          notifyStep(1, phase1.name),
         ],
       ),
 
       // ── Phase 2: Planning ──
-      gatedPhase(2, ['phase-1']),
+      sequence<PipelineFlowContext>(
+        { id: 'phase-2', name: 'Planning', dependsOn: ['phase-1'] },
+        [
+          gatedStep<PipelineFlowContext>({
+            id: 'planning', name: 'Planning',
+            maxRetries: maxGateRetries,
+            shouldExecute: actions.shouldExecute(executorMap.get(2)!, this.ctx),
+            onSkip: actions.onPhaseSkip(executorMap.get(2)!),
+            run: actions.execute(executorMap.get(2)!, exec),
+            evaluate: actions.evaluateGate(executorMap.get(2)!, gateCoordinator),
+          }),
+          step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(2)!) }),
+          notifyStep(2, 'Planning'),
+        ],
+      ),
 
       // ── Phase 3: Implementation ──
-      ...(executorMap.has(3) ? [gatedPhase(3, ['phase-2'])] : []),
+      ...(executorMap.has(3) ? [
+        sequence<PipelineFlowContext>(
+          { id: 'phase-3', name: 'Implementation', dependsOn: ['phase-2'] },
+          [
+            gatedStep<PipelineFlowContext>({
+              id: 'implementation', name: 'Implementation',
+              maxRetries: maxGateRetries,
+              shouldExecute: actions.shouldExecute(executorMap.get(3)!, this.ctx),
+              onSkip: actions.onPhaseSkip(executorMap.get(3)!),
+              run: actions.execute(executorMap.get(3)!, exec),
+              evaluate: actions.evaluateGate(executorMap.get(3)!, gateCoordinator),
+            }),
+            step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(3)!) }),
+            notifyStep(3, 'Implementation'),
+          ],
+        ),
+      ] : []),
 
       // ── Phase 4: Integration Verification ──
-      ...(executorMap.has(4) ? [gatedPhase(4, ['phase-3'])] : []),
+      ...(executorMap.has(4) ? [
+        sequence<PipelineFlowContext>(
+          { id: 'phase-4', name: 'Integration Verification', dependsOn: ['phase-3'] },
+          [
+            gatedStep<PipelineFlowContext>({
+              id: 'integration', name: 'Integration Verification',
+              maxRetries: maxGateRetries,
+              shouldExecute: actions.shouldExecute(executorMap.get(4)!, this.ctx),
+              onSkip: actions.onPhaseSkip(executorMap.get(4)!),
+              run: actions.execute(executorMap.get(4)!, exec),
+              evaluate: actions.evaluateGate(executorMap.get(4)!, gateCoordinator),
+            }),
+            step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(executorMap.get(4)!) }),
+            notifyStep(4, 'Integration Verification'),
+          ],
+        ),
+      ] : []),
 
       // ── Phase 5: PR Composition ──
       // No gate — just execute, finalize, notify.
@@ -297,17 +312,7 @@ export class IssueOrchestrator {
           [
             step({ id: 'execute', name: 'Compose PR', run: actions.executeUngated(phase5, this.ctx, exec) }),
             step({ id: 'finalize', name: 'Commit & cleanup', run: actions.finalize(phase5) }),
-            step({
-              id: 'notify', name: 'Report progress',
-              run: async () => {
-                const last = this.phases[this.phases.length - 1] as PhaseResult & { skipped?: boolean };
-                if (last && !last.skipped && last.duration > 0) {
-                  await this.updateProgress();
-                  await lifecycleNotifier.notifyPhaseCompleted(5, phase5.name, last.duration);
-                }
-                return { notified: true };
-              },
-            }),
+            notifyStep(5, phase5.name),
           ],
         ),
       ] : []),
