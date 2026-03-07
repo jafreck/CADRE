@@ -25,8 +25,10 @@ export function extractFailures(
     else if (includeTS && /error TS\d+:/.test(trimmed)) {
       failures.add(trimmed);
     }
-    // Generic error lines
+    // Generic error lines — but exclude common CLI/usage noise
     else if (/^\s*(error|Error)\s*:/i.test(trimmed) && trimmed.length < 200) {
+      // Skip benign CLI help/usage messages that are not real failures
+      if (/unknown option|Did you mean|Usage:/i.test(trimmed)) continue;
       failures.add(trimmed);
     }
   }
