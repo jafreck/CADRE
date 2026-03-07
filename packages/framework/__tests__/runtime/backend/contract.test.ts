@@ -4,6 +4,7 @@ import {
   normalizeAgentBackendName,
   ensureValidAgentBackendName,
   type BackendRuntimeConfig,
+  type AgentInvocationOptions,
 } from '../../../src/runtime/backend/contract.js';
 
 function makeConfig(): BackendRuntimeConfig {
@@ -52,5 +53,26 @@ describe('backend contract helpers', () => {
     };
 
     expect(() => getAgentBackendOptions(config, 'custom')).toThrow(/generic options must be an object/);
+  });
+});
+
+describe('AgentInvocationOptions', () => {
+  it('accepts an object with an optional onData field', () => {
+    const options: AgentInvocationOptions = {};
+    expect(options.onData).toBeUndefined();
+  });
+
+  it('accepts onData as a function with chunk and stream parameters', () => {
+    const calls: Array<{ chunk: string; stream: string }> = [];
+    const options: AgentInvocationOptions = {
+      onData: (chunk, stream) => calls.push({ chunk, stream }),
+    };
+    options.onData?.('hello', 'stdout');
+    expect(calls).toEqual([{ chunk: 'hello', stream: 'stdout' }]);
+  });
+
+  it('calling onData optionally on an object without onData does not throw', () => {
+    const options: AgentInvocationOptions = {};
+    expect(() => options.onData?.('hello', 'stdout')).not.toThrow();
   });
 });
