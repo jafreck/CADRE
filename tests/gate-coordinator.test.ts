@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GateCoordinator } from '../src/core/gate-coordinator.js';
+import { GateCoordinator } from '../src/core/pipeline/gate-coordinator.js';
 import type { CheckpointManager } from '@cadre-dev/framework/engine';
 import type { IssueProgressWriter } from '@cadre-dev/framework/engine';
 import type { Logger } from '@cadre-dev/framework/core';
@@ -16,7 +16,7 @@ const {
 }));
 
 // Mock phase-registry to control which gates are present
-vi.mock('../src/core/phase-registry.js', () => ({
+vi.mock('../src/core/pipeline/phase-registry.js', () => ({
   buildGateMap: () => ({
     1: { validate: mockGate1Validate },
   }),
@@ -25,7 +25,7 @@ vi.mock('../src/core/phase-registry.js', () => ({
 }));
 
 // Mock AnalysisAmbiguityGate constructor
-vi.mock('../src/core/phase-gate.js', () => ({
+vi.mock('../src/core/pipeline/phase-gate.js', () => ({
   AnalysisAmbiguityGate: vi.fn().mockImplementation(() => ({
     validate: mockGate1AmbiguityValidate,
   })),

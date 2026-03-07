@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { IssueNotifier } from '../src/core/issue-notifier.js';
+import { IssueNotifier } from '../src/core/issue/issue-notifier.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { RuntimeConfig } from '../src/config/loader.js';
 import type { PlatformProvider } from '../src/platform/provider.js';

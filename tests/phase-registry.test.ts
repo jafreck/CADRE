@@ -1,8 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  ISSUE_PHASES,
   PHASE_MANIFEST,
-  REVIEW_RESPONSE_PHASES,
   getPhase,
   getPhaseCount,
   getPhaseSubset,
@@ -10,41 +8,41 @@ import {
   PhaseRegistry,
   buildRegistry,
   buildGateMap,
-} from '../src/core/phase-registry.js';
-import type { PhaseExecutor } from '../src/core/phase-executor.js';
-import { registerGatePlugin, clearGatePlugins } from '../src/core/phase-gate.js';
+} from '../src/core/pipeline/phase-registry.js';
+import type { PhaseExecutor } from '../src/core/pipeline/phase-executor.js';
+import { registerGatePlugin, clearGatePlugins } from '@cadre-dev/framework/engine';
 
 describe('PhaseRegistry', () => {
-  describe('ISSUE_PHASES', () => {
+  describe('PHASE_MANIFEST', () => {
     it('should have 5 phases', () => {
-      expect(ISSUE_PHASES).toHaveLength(5);
+      expect(PHASE_MANIFEST).toHaveLength(5);
     });
 
     it('should have IDs from 1 to 5', () => {
-      const ids = ISSUE_PHASES.map((p) => p.id);
+      const ids = PHASE_MANIFEST.map((p) => p.id);
       expect(ids).toEqual([1, 2, 3, 4, 5]);
     });
 
     it('should have phases 1-3 as critical', () => {
-      expect(ISSUE_PHASES[0].critical).toBe(true);
-      expect(ISSUE_PHASES[1].critical).toBe(true);
-      expect(ISSUE_PHASES[2].critical).toBe(true);
+      expect(PHASE_MANIFEST[0].critical).toBe(true);
+      expect(PHASE_MANIFEST[1].critical).toBe(true);
+      expect(PHASE_MANIFEST[2].critical).toBe(true);
     });
 
     it('should have phase 4 as critical', () => {
-      expect(ISSUE_PHASES[3].critical).toBe(true);
+      expect(PHASE_MANIFEST[3].critical).toBe(true);
     });
 
     it('should have phase 5 as critical', () => {
-      expect(ISSUE_PHASES[4].critical).toBe(true);
+      expect(PHASE_MANIFEST[4].critical).toBe(true);
     });
 
     it('should have expected phase names', () => {
-      expect(ISSUE_PHASES[0].name).toBe('Analysis & Scouting');
-      expect(ISSUE_PHASES[1].name).toBe('Planning');
-      expect(ISSUE_PHASES[2].name).toBe('Implementation');
-      expect(ISSUE_PHASES[3].name).toBe('Integration Verification');
-      expect(ISSUE_PHASES[4].name).toBe('PR Composition');
+      expect(PHASE_MANIFEST[0].name).toBe('Analysis & Scouting');
+      expect(PHASE_MANIFEST[1].name).toBe('Planning');
+      expect(PHASE_MANIFEST[2].name).toBe('Implementation');
+      expect(PHASE_MANIFEST[3].name).toBe('Integration Verification');
+      expect(PHASE_MANIFEST[4].name).toBe('PR Composition');
     });
   });
 
@@ -78,16 +76,6 @@ describe('PhaseRegistry', () => {
     });
   });
 
-  describe('REVIEW_RESPONSE_PHASES', () => {
-    it('should equal [3, 4, 5]', () => {
-      expect(REVIEW_RESPONSE_PHASES).toEqual([3, 4, 5]);
-    });
-
-    it('should be readonly', () => {
-      expect(Object.isFrozen(REVIEW_RESPONSE_PHASES) || Array.isArray(REVIEW_RESPONSE_PHASES)).toBe(true);
-    });
-  });
-
   describe('getPhaseSubset', () => {
     it('should return phases matching the given IDs in phase-ID order', () => {
       const subset = getPhaseSubset([3, 4, 5]);
@@ -118,8 +106,8 @@ describe('PhaseRegistry', () => {
   });
 });
 
-function makeExecutor(phaseId: number, name: string): PhaseExecutor {
-  return { phaseId, name, execute: vi.fn().mockResolvedValue(`/output/${phaseId}.md`) };
+function makeExecutor(id: number, name: string): PhaseExecutor {
+  return { id, name, execute: vi.fn().mockResolvedValue(`/output/${id}.md`) };
 }
 
 describe('PhaseRegistry class', () => {
@@ -180,12 +168,12 @@ describe('PHASE_MANIFEST', () => {
   });
 
   it('should have phaseIds 1 through 5 in order', () => {
-    expect(PHASE_MANIFEST.map((e) => e.phaseId)).toEqual([1, 2, 3, 4, 5]);
+    expect(PHASE_MANIFEST.map((e) => e.id)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it('should have the correct names matching ISSUE_PHASES', () => {
+  it('should have the correct names matching PHASE_MANIFEST', () => {
     for (let i = 0; i < PHASE_MANIFEST.length; i++) {
-      expect(PHASE_MANIFEST[i].name).toBe(ISSUE_PHASES[i].name);
+      expect(PHASE_MANIFEST[i].name).toBe(PHASE_MANIFEST[i].name);
     }
   });
 
@@ -217,9 +205,9 @@ describe('PHASE_MANIFEST', () => {
     }
   });
 
-  it('should have matching commitType values as ISSUE_PHASES', () => {
+  it('should have matching commitType values as PHASE_MANIFEST', () => {
     for (let i = 0; i < PHASE_MANIFEST.length; i++) {
-      expect(PHASE_MANIFEST[i].commitType).toBe(ISSUE_PHASES[i].commitType);
+      expect(PHASE_MANIFEST[i].commitType).toBe(PHASE_MANIFEST[i].commitType);
     }
   });
 });
@@ -232,7 +220,7 @@ describe('buildRegistry', () => {
 
   it('should return executors in phase-ID order (1 to 5)', () => {
     const registry = buildRegistry();
-    const ids = registry.getAll().map((e) => e.phaseId);
+    const ids = registry.getAll().map((e) => e.id);
     expect(ids).toEqual([1, 2, 3, 4, 5]);
   });
 
@@ -254,7 +242,7 @@ describe('buildGateMap', () => {
     const pluginGate = {
       validate: vi.fn().mockResolvedValue({ status: 'pass', errors: [], warnings: [] }),
     };
-    const map = buildGateMap([{ phaseId: 5, gate: pluginGate }]);
+    const map = buildGateMap([{ id: 5, gate: pluginGate }]);
     await map[5].validate({ artifactsDir: '.', workspacePath: '.' });
     expect(pluginGate.validate).toHaveBeenCalled();
   });
@@ -264,7 +252,7 @@ describe('buildGateMap', () => {
     const pluginGate = {
       validate: vi.fn().mockResolvedValue({ status: 'pass', errors: [], warnings: [] }),
     };
-    registerGatePlugin({ name: 'phase5-plugin', phaseId: 5, gate: pluginGate });
+    registerGatePlugin({ name: 'phase5-plugin', id: 5, gate: pluginGate });
 
     const map = buildGateMap();
     await map[5].validate({ artifactsDir: '.', workspacePath: '.' });

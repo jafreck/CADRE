@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ZodError } from 'zod';
-import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
+import { IssueOrchestrator } from '../src/core/pipeline/issue-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
 import { makeMockIssue } from './helpers/make-mock-issue.js';
@@ -85,7 +85,7 @@ const {
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
-vi.mock('../src/core/phase-gate.js', () => ({
+vi.mock('../src/core/pipeline/phase-gate.js', () => ({
   AnalysisToPlanningGate: vi.fn(() => ({ validate: mockAnalysisGateValidate })),
   PlanningToImplementationGate: vi.fn(() => ({ validate: mockPlanningGateValidate })),
   ImplementationToIntegrationGate: vi.fn(() => ({ validate: mockImplGateValidate })),

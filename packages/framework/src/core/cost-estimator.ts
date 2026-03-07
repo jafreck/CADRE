@@ -12,6 +12,8 @@ const DEFAULT_COSTS: Record<string, { input: number; output: number }> = {
 
 export interface CostEstimatorConfig {
   costOverrides?: Record<string, { input: number; output: number }>;
+  /** Default input/output token split ratio when only total tokens are known. Defaults to 0.75. */
+  defaultInputRatio?: number;
 }
 
 export interface CostEstimate {
@@ -26,9 +28,11 @@ export interface CostEstimate {
 
 export class CostEstimator {
   private readonly costs: Record<string, { input: number; output: number }>;
+  private readonly inputRatio: number;
 
   constructor(config: CostEstimatorConfig = {}) {
     this.costs = { ...DEFAULT_COSTS };
+    this.inputRatio = config.defaultInputRatio ?? 0.75;
 
     if (config.costOverrides) {
       for (const [model, cost] of Object.entries(config.costOverrides)) {
@@ -39,7 +43,7 @@ export class CostEstimator {
 
   estimate(totalTokens: number, model?: string): CostEstimate {
     const cost = this.costs[model ?? 'default'] ?? this.costs['default'];
-    const inputTokens = Math.round(totalTokens * 0.75);
+    const inputTokens = Math.round(totalTokens * this.inputRatio);
     const outputTokens = totalTokens - inputTokens;
 
     const inputCost = (inputTokens / 1000) * cost.input;

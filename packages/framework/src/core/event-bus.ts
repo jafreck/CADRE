@@ -70,7 +70,9 @@ export class FleetEventBus {
         await invoke(currentIndex + 1);
         await item.afterDispatch?.(context);
       } catch (error) {
-        await item.onDispatchError?.(context, error);
+        try {
+          await item.onDispatchError?.(context, error);
+        } catch { /* isolate error handler failures */ }
         throw error;
       }
     };

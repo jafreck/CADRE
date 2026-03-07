@@ -1,14 +1,14 @@
 import { join } from 'node:path';
 import type { RuntimeConfig } from '../config/loader.js';
-import type { FleetResult } from './fleet-orchestrator.js';
+import type { FleetResult } from './fleet/fleet-orchestrator.js';
 import type { PlatformProvider } from '../platform/provider.js';
 import { createPlatformProvider } from '../platform/factory.js';
 import { Logger } from '@cadre-dev/framework/core';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
-import { StatusService } from './status-service.js';
-import { ResetService } from './reset-service.js';
-import { ReportService } from './report-service.js';
-import { WorktreeLifecycleService } from './worktree-lifecycle-service.js';
+import { StatusService } from './services/status-service.js';
+import { ResetService } from './services/reset-service.js';
+import { ReportService } from './services/report-service.js';
+import { WorktreeLifecycleService } from './services/worktree-lifecycle-service.js';
 import { RunCoordinator } from './run-coordinator.js';
 
 /**

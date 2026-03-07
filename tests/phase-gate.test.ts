@@ -8,7 +8,7 @@ import {
   ImplementationToIntegrationGate,
   IntegrationToPRGate,
   AnalysisAmbiguityGate,
-} from '../src/core/phase-gate.js';
+} from '../src/core/pipeline/phase-gate.js';
 
 // Mock simple-git for ImplementationToIntegrationGate tests
 const mockDiff = vi.fn();

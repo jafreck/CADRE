@@ -2,10 +2,10 @@ import { join } from 'node:path';
 import { readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { RuntimeConfig } from '../config/loader.js';
-import type { FleetResult } from '../core/fleet-orchestrator.js';
+import type { FleetResult } from '../core/fleet/fleet-orchestrator.js';
 import type { IssueDetail } from '../platform/provider.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
-import { ISSUE_PHASES } from '../core/phase-registry.js';
+import { PHASE_MANIFEST } from '../core/pipeline/phase-registry.js';
 import { atomicWriteJSON, ensureDir, readJSON } from '../util/fs.js';
 import type { RunReport, RunIssueSummary, RunPhaseSummary, RunTotals } from './types.js';
 
@@ -52,7 +52,7 @@ export class ReportWriter {
 
     // Derive per-phase summaries from byPhase token usage
     const byPhase = result.tokenUsage.byPhase;
-    const phases: RunPhaseSummary[] = ISSUE_PHASES.map((phase) => {
+    const phases: RunPhaseSummary[] = PHASE_MANIFEST.map((phase) => {
       const tokens = byPhase[phase.id] ?? 0;
       const costEstimate = this.costEstimator.estimate(tokens, this.config.agent.model);
       return {

@@ -1,24 +1,24 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { PhaseContext, PhaseExecutor } from '../src/core/phase-executor.js';
+import type { PhaseContext, PhaseExecutor } from '../src/core/pipeline/phase-executor.js';
 
 // ── PhaseExecutor interface ──
 
 describe('PhaseExecutor', () => {
-  it('should accept an object with phaseId, name, and execute', () => {
+  it('should accept an object with id, name, and execute', () => {
     const executor: PhaseExecutor = {
-      phaseId: 1,
+      id: 1,
       name: 'Test Phase',
       execute: vi.fn().mockResolvedValue('/output/path.md'),
     };
 
-    expect(executor.phaseId).toBe(1);
+    expect(executor.id).toBe(1);
     expect(executor.name).toBe('Test Phase');
     expect(typeof executor.execute).toBe('function');
   });
 
   it('should allow execute to return a Promise<string>', async () => {
     const executor: PhaseExecutor = {
-      phaseId: 2,
+      id: 2,
       name: 'Another Phase',
       execute: vi.fn().mockResolvedValue('/some/output.md'),
     };
@@ -27,21 +27,21 @@ describe('PhaseExecutor', () => {
     expect(result).toBe('/some/output.md');
   });
 
-  it('should allow phaseId to be any positive number', () => {
+  it('should allow id to be any positive number', () => {
     const executors: PhaseExecutor[] = [1, 2, 3, 4, 5].map((id) => ({
-      phaseId: id,
+      id: id,
       name: `Phase ${id}`,
       execute: vi.fn().mockResolvedValue(`/output/phase-${id}.md`),
     }));
 
     executors.forEach((e, i) => {
-      expect(e.phaseId).toBe(i + 1);
+      expect(e.id).toBe(i + 1);
     });
   });
 
   it('execute should propagate errors from the implementation', async () => {
     const executor: PhaseExecutor = {
-      phaseId: 3,
+      id: 3,
       name: 'Failing Phase',
       execute: vi.fn().mockRejectedValue(new Error('phase failed')),
     };

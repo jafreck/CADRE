@@ -270,6 +270,13 @@ function indexFlow<TContext = Record<string, unknown>>(flow: FlowDefinition<TCon
           visit(branch);
         }
       }
+      if (node.kind === 'sequence') {
+        visit(node.nodes);
+      }
+      if (node.kind === 'catch') {
+        visit(node.try);
+        if (node.finally) visit(node.finally);
+      }
     }
   };
 

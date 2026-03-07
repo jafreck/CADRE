@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue-budget-guard.js';
+import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue/issue-budget-guard.js';
 import type { TokenTracker } from '@cadre-dev/framework/runtime';
 import type { NotificationManager } from '@cadre-dev/framework/notifications';
 import type { CheckpointManager } from '@cadre-dev/framework/engine';

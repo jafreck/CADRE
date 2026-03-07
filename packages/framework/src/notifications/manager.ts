@@ -101,11 +101,27 @@ function resolveLogFilePath(logFile: string | undefined, stateDir: string | unde
   return join(stateDir, logFile);
 }
 
+export interface NotificationManagerOptions {
+  /** Maximum number of retries for transient failures per provider. Defaults to 0. */
+  maxRetries?: number;
+  /** Base delay in ms between retries. Defaults to 1000. */
+  retryDelayMs?: number;
+  /** Optional logger for dispatch errors. When absent errors are silently swallowed. */
+  logger?: { warn(message: string, context?: Record<string, unknown>): void };
+}
+
 export class NotificationManager {
   private readonly providers: NotificationProvider[];
   private enabled: boolean;
+  private readonly maxRetries: number;
+  private readonly retryDelayMs: number;
+  private readonly logger?: { warn(message: string, context?: Record<string, unknown>): void };
 
-  constructor(config?: NotificationsConfig, stateDir?: string) {
+  constructor(config?: NotificationsConfig, stateDir?: string, options?: NotificationManagerOptions) {
+    this.maxRetries = options?.maxRetries ?? 0;
+    this.retryDelayMs = options?.retryDelayMs ?? 1000;
+    this.logger = options?.logger;
+
     if (!config || !config.enabled) {
       this.enabled = false;
       this.providers = [];
@@ -128,6 +144,33 @@ export class NotificationManager {
       return;
     }
 
-    await Promise.allSettled(this.providers.map((provider) => provider.notify(event)));
+    const results = await Promise.allSettled(
+      this.providers.map((provider) => this.dispatchWithRetry(provider, event)),
+    );
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger?.warn('Notification dispatch failed', {
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          event: event.type,
+        });
+      }
+    }
+  }
+
+  private async dispatchWithRetry(provider: NotificationProvider, event: NotificationEvent): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        await provider.notify(event);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < this.maxRetries) {
+          await new Promise((r) => setTimeout(r, this.retryDelayMs * (attempt + 1)));
+        }
+      }
+    }
+    throw lastError;
   }
 }

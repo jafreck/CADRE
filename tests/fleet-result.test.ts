@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { FleetResult } from '../src/core/fleet-orchestrator.js';
+import type { FleetResult } from '../src/core/fleet/fleet-orchestrator.js';
 import type { TokenSummary } from '@cadre-dev/framework/runtime';
 import { CadreRuntime } from '../src/core/runtime.js';
 import { CadreConfigSchema } from '../src/config/schema.js';

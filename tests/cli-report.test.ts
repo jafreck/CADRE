@@ -38,7 +38,7 @@ vi.mock('../src/core/runtime.js', () => ({
   })),
 }));
 
-vi.mock('../src/core/report-service.js', () => ({
+vi.mock('../src/core/services/report-service.js', () => ({
   ReportService: MockReportService,
 }));
 

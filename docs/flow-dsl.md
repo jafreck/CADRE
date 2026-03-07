@@ -1,15 +1,19 @@
-# `@cadre/flow` DSL and Runner
+# `@cadre-dev/framework/flow` DSL and Runner
 
-`@cadre/flow` provides a declarative flow graph DSL and a generic execution engine (`FlowRunner`) for framework-level orchestration.
+`@cadre-dev/framework/flow` provides a declarative flow graph DSL and a generic execution engine (`FlowRunner`) for framework-level orchestration.
 
 ## Core DSL
 
 - `defineFlow(id, nodes, description?)`
-- `step({ id, run, input?, dependsOn? })`
+- `step({ id, run, input?, dependsOn?, timeoutMs?, retry? })`
 - `gate({ id, evaluate, input?, dependsOn? })`
 - `conditional({ id, when, then, else?, input?, dependsOn? })`
-- `loop({ id, do, maxIterations, while?, until?, dependsOn? })`
+- `loop({ id, do, maxIterations, while?, until?, onSkip?, dependsOn? })`
 - `parallel({ id, branches, concurrency?, dependsOn? })`
+- `sequence({ id }, nodes)` — auto-wires `dependsOn` to the previous sibling
+- `map({ id, do, concurrency?, input?, dependsOn? })` — dynamic fan-out over collections
+- `catchError({ id, try, catch, finally? })` — try/catch/finally error handling
+- `gatedStep({ id, maxRetries, shouldExecute, run, evaluate })` — convenience combinator for step + gate + retry loop
 
 ## Data Routing References
 
@@ -18,6 +22,105 @@
 - `fromContext(path?)`
 
 Path syntax is dot notation (`a.b.c`) and supports array indexes (`items.0.id`).
+
+## Per-Node Timeout and Retry
+
+Every node supports optional `timeoutMs` and `retry` configuration:
+
+```ts
+step({
+  id: 'flaky-api-call',
+  timeoutMs: 30_000,                         // abort if >30s
+  retry: {
+    maxAttempts: 3,                           // retry up to 3 times
+    backoff: 'exponential',                   // 'fixed' | 'linear' | 'exponential'
+    delayMs: 1000,                            // base delay between retries
+  },
+  run: () => callExternalApi(),
+})
+```
+
+## Contract Validation
+
+Steps can declare `inputSchema` / `outputSchema` (Zod) for compile-time and runtime contract validation:
+
+```ts
+import { z } from 'zod';
+import { validateFlowContracts } from '@cadre-dev/framework/flow';
+
+const flow = defineFlow('validated', [
+  step({
+    id: 'producer',
+    outputSchema: z.object({ count: z.number() }),
+    run: () => ({ count: 42 }),
+  }),
+  step({
+    id: 'consumer',
+    input: { data: fromStep('producer', 'count') },
+    inputSchema: z.object({ data: z.number() }),
+    run: (_ctx, input) => `Got ${input.data}`,
+  }),
+]);
+
+const result = validateFlowContracts(flow);
+// result.valid === true
+```
+
+## Lifecycle Hooks
+
+`FlowRunnerOptions` accepts a `hooks` object for monitoring:
+
+```ts
+const runner = new FlowRunner({
+  hooks: {
+    onNodeStart: (nodeId, node) => console.log(`Starting ${nodeId}`),
+    onNodeComplete: (nodeId, node, output) => console.log(`Completed ${nodeId}`),
+    onNodeSkip: (nodeId) => console.log(`Skipped ${nodeId} (checkpoint)`),
+    onUpstreamFailure: (nodeId, node, failedDeps) => {
+      console.log(`${nodeId} skipped due to failed deps: ${failedDeps}`);
+      return null; // optional recovery output
+    },
+  },
+});
+```
+
+## Flow-Level Timeout and Cancellation
+
+```ts
+const controller = new AbortController();
+
+const runner = new FlowRunner();
+const result = await runner.run(flow, context, {
+  timeoutMs: 300_000,            // 5 minute total timeout
+  signal: controller.signal,     // external abort
+});
+
+// result.status: 'completed' | 'failed' | 'cancelled' | 'timed-out'
+```
+
+## Concurrent Execution Mode
+
+By default, nodes execute in declaration order. Set `concurrentNodes: true` to schedule nodes by dependency graph:
+
+```ts
+const runner = new FlowRunner({
+  concurrency: 4,
+  concurrentNodes: true,
+});
+```
+
+## Flow-Engine Bridge
+
+The bridge adapter connects the flow DSL to the engine's phase pipeline:
+
+```ts
+import { manifestToFlow, FlowRunner } from '@cadre-dev/framework/flow';
+import type { FlowPhaseContext } from '@cadre-dev/framework/flow';
+
+const flow = manifestToFlow('my-pipeline', manifest, gateMap);
+const runner = new FlowRunner<FlowPhaseContext>();
+await runner.run(flow, { phaseContext: ctx, gateContext: gateCtx });
+```
 
 ## Example
 
@@ -33,7 +136,7 @@ import {
   fromStep,
   fromSteps,
   fromContext,
-} from '@cadre/flow';
+} from '@cadre-dev/framework/flow';
 
 type Context = {
   attempts: number;
@@ -110,7 +213,7 @@ await runner.run(flow, {
 `FlowRunner` accepts a `checkpoint` adapter via options. The adapter can persist snapshots after node completion and at terminal states.
 
 ```ts
-import type { FlowCheckpointAdapter } from '@cadre/flow';
+import type { FlowCheckpointAdapter } from '@cadre-dev/framework/flow';
 
 const checkpoint: FlowCheckpointAdapter = {
   async load(flowId) {

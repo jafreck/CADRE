@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import { PRCompositionPhaseExecutor } from '../src/executors/pr-composition-phase-executor.js';
-import type { PhaseContext } from '../src/core/phase-executor.js';
+import type { PhaseContext } from '../src/core/pipeline/phase-executor.js';
 import type { AgentResult } from '../src/agents/types.js';
 
 vi.mock('node:fs/promises', () => ({
@@ -163,8 +163,8 @@ describe('PRCompositionPhaseExecutor', () => {
   });
 
   describe('PhaseExecutor contract', () => {
-    it('should have phaseId of 5', () => {
-      expect(executor.phaseId).toBe(5);
+    it('should have id of 5', () => {
+      expect(executor.id).toBe(5);
     });
 
     it('should have name "PR Composition"', () => {

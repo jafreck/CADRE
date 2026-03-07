@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@cadre-dev/framework/core';
 import type { PlatformProvider } from '../src/platform/provider.js';
-import { PullRequestCompletionQueue } from '../src/core/pr-completion-queue.js';
+import { PullRequestCompletionQueue } from '../src/core/merge/pr-completion-queue.js';
 
 function makeItem(overrides: Partial<{
   issueNumber: number;

@@ -23,15 +23,19 @@ export interface GatePlugin {
   /** Optional plugin identifier used for inspection/removal. */
   name?: string;
   /** Phase ID this gate targets. */
-  phaseId: number;
+  id: number;
   /** Gate instance to register for the target phase. */
   gate: PhaseGate;
+  /** Optional priority for ordering. Higher priority runs first. Defaults to 0. */
+  priority?: number;
 }
 
 const gatePlugins: GatePlugin[] = [];
 
 export function registerGatePlugin(plugin: GatePlugin): void {
   gatePlugins.push(plugin);
+  // Sort by priority descending (higher priority first)
+  gatePlugins.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
 }
 
 export function unregisterGatePlugin(name: string): void {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import { IntegrationPhaseExecutor } from '../src/executors/integration-phase-executor.js';
-import type { PhaseContext } from '../src/core/phase-executor.js';
+import type { PhaseContext } from '../src/core/pipeline/phase-executor.js';
 import type { AgentResult } from '../src/agents/types.js';
 
 const { sharedExecShell } = vi.hoisted(() => ({
@@ -141,8 +141,8 @@ describe('IntegrationPhaseExecutor', () => {
   });
 
   describe('PhaseExecutor contract', () => {
-    it('should have phaseId of 4', () => {
-      expect(executor.phaseId).toBe(4);
+    it('should have id of 4', () => {
+      expect(executor.id).toBe(4);
     });
 
     it('should have name "Integration Verification"', () => {
@@ -894,7 +894,7 @@ describe('IntegrationPhaseExecutor', () => {
     });
   });
 
-  describe('structured result from runWithRetry', () => {
+  describe('structured result from verifyCommand', () => {
     it('should set signal to null in structured build result', async () => {
       vi.mocked(execShell)
         .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '', signal: null, timedOut: false }) // install

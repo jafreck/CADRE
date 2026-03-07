@@ -14,7 +14,7 @@ vi.mock('@cadre-dev/framework/core', () => ({
   })),
 }));
 
-import { ReportService } from '../../src/core/report-service.js';
+import { ReportService } from '../../src/core/services/report-service.js';
 import { ReportWriter } from '../../src/reporting/report-writer.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
 import type { RuntimeConfig } from '../../src/config/loader.js';

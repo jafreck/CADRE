@@ -1,7 +1,24 @@
 import type { PreRunValidator } from './types.js';
 
+export interface ValidationSuiteOutput {
+  log(message: string): void;
+  error(message: string): void;
+}
+
+const consoleOutput: ValidationSuiteOutput = {
+  log: (msg) => console.log(msg),
+  error: (msg) => console.error(msg),
+};
+
 export class PreRunValidationSuite<TConfig = unknown> {
-  constructor(private readonly validators: PreRunValidator<TConfig>[]) {}
+  private readonly output: ValidationSuiteOutput;
+
+  constructor(
+    private readonly validators: PreRunValidator<TConfig>[],
+    output?: ValidationSuiteOutput,
+  ) {
+    this.output = output ?? consoleOutput;
+  }
 
   async run(config: TConfig): Promise<boolean> {
     const results = await Promise.allSettled(
@@ -12,8 +29,8 @@ export class PreRunValidationSuite<TConfig = unknown> {
 
     for (const settled of results) {
       if (settled.status === 'rejected') {
-        console.log(`❌ (unknown validator)`);
-        console.log(`  ${settled.reason}`);
+        this.output.log(`❌ (unknown validator)`);
+        this.output.log(`  ${settled.reason}`);
         allPassed = false;
         continue;
       }
@@ -22,18 +39,18 @@ export class PreRunValidationSuite<TConfig = unknown> {
 
       if (!result.passed) {
         allPassed = false;
-        console.log(`❌ ${validator.name}`);
+        this.output.log(`❌ ${validator.name}`);
       } else if (result.warnings.length > 0) {
-        console.log(`⚠️  ${validator.name}`);
+        this.output.log(`⚠️  ${validator.name}`);
       } else {
-        console.log(`✅ ${validator.name}`);
+        this.output.log(`✅ ${validator.name}`);
       }
 
       for (const err of result.errors) {
-        console.log(`  ${err}`);
+        this.output.log(`  ${err}`);
       }
       for (const warn of result.warnings) {
-        console.log(`  ${warn}`);
+        this.output.log(`  ${warn}`);
       }
     }
 

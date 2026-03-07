@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReviewPlanBuilder } from '../src/core/review-plan-builder.js';
+import { ReviewPlanBuilder } from '../src/core/review/review-plan-builder.js';
 import type { ReviewThread, PRComment, PRReview } from '../src/platform/provider.js';
 
 vi.mock('@cadre-dev/framework/core', () => ({

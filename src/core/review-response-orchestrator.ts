@@ -7,18 +7,17 @@ import { WorktreeManager } from '../git/worktree.js';
 import { CommitManager } from '../git/commit.js';
 import { AgentLauncher } from './agent-launcher.js';
 import { CheckpointManager } from '@cadre-dev/framework/engine';
-import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
-import { REVIEW_RESPONSE_PHASES } from './phase-registry.js';
-export { REVIEW_RESPONSE_PHASES };
+import { IssueOrchestrator, type IssueResult } from './pipeline/issue-orchestrator.js';
+import { PHASE_MANIFEST } from './pipeline/phase-registry.js';
 import { Logger } from '@cadre-dev/framework/core';
 import { ContextBuilder } from '../agents/context-builder.js';
 import { ResultParser } from '../agents/result-parser.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
 import { isCadreSelfRun } from '../util/cadre-self-run.js';
 import { formatPullRequestTitle } from '../util/title-format.js';
-import { ReviewDiscoveryService, isSkipResult } from './review-discovery-service.js';
+import { ReviewDiscoveryService, isSkipResult } from './review/review-discovery-service.js';
 import { RebaseRecoveryService } from './rebase-recovery-service.js';
-import { ReviewPlanBuilder } from './review-plan-builder.js';
+import { ReviewPlanBuilder } from './review/review-plan-builder.js';
 
 export interface ReviewResponseIssueOutcome {
   issueNumber: number;
@@ -132,7 +131,9 @@ export class ReviewResponseOrchestrator {
         // Reset phases 3–5 so they re-execute against the new review-response
         // implementation plan.  Without this, IssueOrchestrator sees them as
         // already completed and skips them entirely.
-        await checkpoint.resetPhases([...REVIEW_RESPONSE_PHASES]);
+        await checkpoint.resetPhases(
+          PHASE_MANIFEST.filter((e) => e.includeInReviewResponse).map((e) => e.id),
+        );
         // Ensure phases 1 and 2 are marked completed so IssueOrchestrator starts
         // at phase 3.  On a fresh worktree the checkpoint has no completed phases,
         // which would cause the orchestrator to fall back to phase 1.

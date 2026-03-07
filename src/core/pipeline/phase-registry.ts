@@ -17,35 +17,27 @@ import {
   type PhaseManifestEntry,
 } from '@cadre-dev/framework/engine';
 
-import type { GatePlugin, PhaseGate } from './phase-gate.js';
+import type { GatePlugin, PhaseGate } from '@cadre-dev/framework/engine';
+import { listGatePlugins } from '@cadre-dev/framework/engine';
 import {
   AnalysisToPlanningGate,
   ImplementationToIntegrationGate,
   IntegrationToPRGate,
-  listGatePlugins,
   PlanningToImplementationGate,
 } from './phase-gate.js';
-import { AnalysisPhaseExecutor } from '../executors/analysis-phase-executor.js';
-import { PlanningPhaseExecutor } from '../executors/planning-phase-executor.js';
-import { ImplementationPhaseExecutor } from '../executors/implementation-phase-executor.js';
-import { IntegrationPhaseExecutor } from '../executors/integration-phase-executor.js';
-import { PRCompositionPhaseExecutor } from '../executors/pr-composition-phase-executor.js';
+import { AnalysisPhaseExecutor } from '../../executors/analysis-phase-executor.js';
+import { PlanningPhaseExecutor } from '../../executors/planning-phase-executor.js';
+import { ImplementationPhaseExecutor } from '../../executors/implementation-phase-executor.js';
+import { IntegrationPhaseExecutor } from '../../executors/integration-phase-executor.js';
+import { PRCompositionPhaseExecutor } from '../../executors/pr-composition-phase-executor.js';
 
 export type { PhaseDefinition, PhaseManifestEntry };
 export { PhaseRegistry };
 
-export const ISSUE_PHASES: PhaseDefinition[] = [
-  { id: 1, name: 'Analysis & Scouting', critical: true, commitType: 'chore', commitMessage: 'analyze issue #{issueNumber}' },
-  { id: 2, name: 'Planning', critical: true, commitType: 'chore', commitMessage: 'plan implementation for #{issueNumber}' },
-  { id: 3, name: 'Implementation', critical: true, commitType: 'feat', commitMessage: 'implement changes for #{issueNumber}' },
-  { id: 4, name: 'Integration Verification', critical: true, commitType: 'fix', commitMessage: 'address integration issues' },
-  { id: 5, name: 'PR Composition', critical: true, commitType: 'chore', commitMessage: 'compose PR for #{issueNumber}' },
-];
-
 /** Single source of truth for all pipeline phase metadata. */
 export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
   {
-    phaseId: 1,
+    id: 1,
     name: 'Analysis & Scouting',
     executorFactory: () => new AnalysisPhaseExecutor(),
     gate: new AnalysisToPlanningGate(),
@@ -55,7 +47,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: false,
   },
   {
-    phaseId: 2,
+    id: 2,
     name: 'Planning',
     executorFactory: () => new PlanningPhaseExecutor(),
     gate: new PlanningToImplementationGate(),
@@ -65,7 +57,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: false,
   },
   {
-    phaseId: 3,
+    id: 3,
     name: 'Implementation',
     executorFactory: () => new ImplementationPhaseExecutor(),
     gate: new ImplementationToIntegrationGate(),
@@ -75,7 +67,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: true,
   },
   {
-    phaseId: 4,
+    id: 4,
     name: 'Integration Verification',
     executorFactory: () => new IntegrationPhaseExecutor(),
     gate: new IntegrationToPRGate(),
@@ -85,7 +77,7 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
     includeInReviewResponse: true,
   },
   {
-    phaseId: 5,
+    id: 5,
     name: 'PR Composition',
     executorFactory: () => new PRCompositionPhaseExecutor(),
     gate: null,
@@ -96,37 +88,32 @@ export const PHASE_MANIFEST: readonly PhaseManifestEntry[] = [
   },
 ];
 
-/** Phase IDs used by the review-response pipeline (implementation, integration-verification, PR composition). */
-export const REVIEW_RESPONSE_PHASES: readonly number[] = PHASE_MANIFEST
-  .filter((e) => e.includeInReviewResponse)
-  .map((e) => e.phaseId);
-
 /**
  * Get a subset of phase definitions by ID, returned in phase-ID order.
  */
 export function getPhaseSubset(ids: number[]): PhaseDefinition[] {
-  return _getPhaseSubset(ISSUE_PHASES, ids);
+  return _getPhaseSubset(PHASE_MANIFEST, ids);
 }
 
 /**
  * Get a phase definition by ID.
  */
 export function getPhase(phaseId: number): PhaseDefinition | undefined {
-  return _getPhase(ISSUE_PHASES, phaseId);
+  return _getPhase(PHASE_MANIFEST, phaseId);
 }
 
 /**
  * Get the total number of phases in the pipeline.
  */
 export function getPhaseCount(): number {
-  return _getPhaseCount(ISSUE_PHASES);
+  return _getPhaseCount(PHASE_MANIFEST);
 }
 
 /**
  * Check if a phase is the last one.
  */
 export function isLastPhase(phaseId: number): boolean {
-  return _isLastPhase(ISSUE_PHASES, phaseId);
+  return _isLastPhase(PHASE_MANIFEST, phaseId);
 }
 
 /**

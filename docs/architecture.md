@@ -8,15 +8,15 @@
 
 ### Package Boundaries (Extracted Framework Modules)
 
-Cadre now publishes generic framework primitives as workspace packages:
+Cadre now publishes generic framework primitives as workspace packages under `@cadre-dev/framework`:
 
-- `@cadre/notifications`: notification manager and providers (`log`, `slack`, `webhook`)
-- `@cadre/observability`: logger, typed runtime events, fleet event bus, and cost estimator
-- `@cadre/execution`: serial/parallel executors, session queue/task queue, retry facade
-- `@cadre/validation`: pre-run validation suite/types and disk validator
-- `@cadre/flow`: declarative flow/graph DSL and `FlowRunner` with loops, conditionals, and parallel fan-out/fan-in
+- `@cadre-dev/framework/notifications`: notification manager and providers (`log`, `slack`, `webhook`) with retry and error logging
+- `@cadre-dev/framework/core`: logger (with `flush()`), typed runtime events, fleet event bus (with error-isolated middleware), cost estimator (configurable input/output split), and pre-run validation suite (with configurable output)
+- `@cadre-dev/framework/engine`: serial/parallel executors, session queue/task queue, retry facade, phase registry, gate plugins (with priority ordering and multi-gate composition), checkpoint managers (with serialized write safety), and dynamic progress writers
+- `@cadre-dev/framework/runtime`: agent backends, launcher, isolation providers, contract validation, token tracking
+- `@cadre-dev/framework/flow`: declarative flow/graph DSL and `FlowRunner` with loops, conditionals, parallel fan-out/fan-in, `map` (dynamic fan-out), `catchError` (try/catch/finally), `sequence`, `gatedStep`, per-node timeout/retry, flow-level timeout, abort/cancellation, contract validation, and flow-engine bridge adapter
 
-Cadre-specific orchestration validators remain under `src/validation` and consume `@cadre/validation` types.
+Cadre-specific orchestration validators remain under `src/validation` and consume `@cadre-dev/framework/core` types.
 
 ### Extension Model (Plugin APIs)
 

@@ -1,6 +1,6 @@
-import type { RuntimeConfig } from '../config/loader.js';
+import type { RuntimeConfig } from '../../config/loader.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
-import { ReportWriter } from '../reporting/report-writer.js';
+import { ReportWriter } from '../../reporting/report-writer.js';
 import type { Logger } from '@cadre-dev/framework/core';
 
 export class ReportService {

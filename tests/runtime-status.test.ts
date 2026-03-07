@@ -36,7 +36,7 @@ vi.mock('@cadre-dev/framework/notifications', () => ({
   createNotificationManager: vi.fn().mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) }),
 }));
 
-vi.mock('../src/core/fleet-orchestrator.js', () => ({
+vi.mock('../src/core/fleet/fleet-orchestrator.js', () => ({
   FleetOrchestrator: vi.fn().mockImplementation(() => ({
     run: vi.fn().mockResolvedValue({ success: true, issues: [], prsCreated: [], failedIssues: [], totalDuration: 0, tokenUsage: { total: 0, byIssue: {}, byAgent: {} } }),
   })),

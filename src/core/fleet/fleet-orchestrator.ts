@@ -1,26 +1,26 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { simpleGit } from 'simple-git';
-import type { RuntimeConfig } from '../config/loader.js';
-import type { IssueDetail, PullRequestInfo } from '../platform/provider.js';
-import type { PlatformProvider } from '../platform/provider.js';
-import { WorktreeManager, RemoteBranchMissingError, type WorktreeInfo } from '../git/worktree.js';
-import { AgentLauncher } from './agent-launcher.js';
+import type { RuntimeConfig } from '../../config/loader.js';
+import type { IssueDetail, PullRequestInfo } from '../../platform/provider.js';
+import type { PlatformProvider } from '../../platform/provider.js';
+import { WorktreeManager, RemoteBranchMissingError, type WorktreeInfo } from '../../git/worktree.js';
+import { AgentLauncher } from '../agent-launcher.js';
 import { CheckpointManager, FleetCheckpointManager, FleetProgressWriter, WorkItemDag } from '@cadre-dev/framework/engine';
-import { IssueOrchestrator, type IssueResult } from './issue-orchestrator.js';
+import { IssueOrchestrator, type IssueResult } from '../pipeline/issue-orchestrator.js';
 import { TokenTracker, type TokenSummary } from '@cadre-dev/framework/runtime';
 import { CostEstimator, FleetEventBus, Logger } from '@cadre-dev/framework/core';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
-import { ReviewResponseOrchestrator } from './review-response-orchestrator.js';
-import { DependencyMergeConflictError } from '../errors.js';
-import { ContextBuilder } from '../agents/context-builder.js';
-import { ensureDir, exists } from '../util/fs.js';
-import type { DependencyMergeConflictContext } from '../git/dependency-branch-merger.js';
+import { ReviewResponseOrchestrator } from '../review-response-orchestrator.js';
+import { DependencyMergeConflictError } from '../../errors.js';
+import { ContextBuilder } from '../../agents/context-builder.js';
+import { ensureDir, exists } from '../../util/fs.js';
+import type { DependencyMergeConflictContext } from '../../git/dependency-branch-merger.js';
 import { FleetReporter } from './fleet-reporter.js';
 import { FleetScheduler } from './fleet-scheduler.js';
-import { PullRequestCompletionQueue, type CompletionFailure, type MergeConflictResolverFn } from './pr-completion-queue.js';
-import { MergeRetryHelper } from './merge-retry.js';
-import type { PullRequestMergeMethod } from '../platform/provider.js';
+import { PullRequestCompletionQueue, type CompletionFailure, type MergeConflictResolverFn } from '../merge/pr-completion-queue.js';
+import { MergeRetryHelper } from '../merge/merge-retry.js';
+import type { PullRequestMergeMethod } from '../../platform/provider.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
