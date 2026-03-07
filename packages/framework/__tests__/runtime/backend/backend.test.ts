@@ -188,6 +188,19 @@ describe('CopilotBackend', () => {
     expect(args).toContain('gpt-4o');
   });
 
+  it('should forward onData to spawnProcess when provided', async () => {
+    mockProcessResult({ stdout: 'chunk1', exitCode: 0 });
+    const onData = vi.fn();
+
+    await backend.invoke(makeInvocation(), '/tmp/worktree', { onData });
+
+    expect(mockSpawnProcess).toHaveBeenCalledWith(
+      'copilot',
+      expect.any(Array),
+      expect.objectContaining({ onData }),
+    );
+  });
+
   it('should include sessionId in args when provided', async () => {
     mockProcessResult();
 
@@ -271,5 +284,18 @@ describe('ClaudeBackend', () => {
     const args = mockSpawnProcess.mock.calls[0][1] as string[];
     expect(args).toContain('--output-format');
     expect(args).toContain('json');
+  });
+
+  it('should forward onData to spawnProcess when provided', async () => {
+    mockProcessResult({ stdout: '{"result":"ok"}', exitCode: 0 });
+    const onData = vi.fn();
+
+    await backend.invoke(makeInvocation(), '/tmp/worktree', { onData });
+
+    expect(mockSpawnProcess).toHaveBeenCalledWith(
+      'claude',
+      expect.any(Array),
+      expect.objectContaining({ onData }),
+    );
   });
 });

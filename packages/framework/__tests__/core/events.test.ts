@@ -22,6 +22,7 @@ import type {
   AgentLaunchedEvent,
   AgentCompletedEvent,
   AgentFailedEvent,
+  AgentOutputEvent,
   TaskStartedEvent,
   TaskCompletedEvent,
   TaskBlockedEvent,
@@ -199,6 +200,43 @@ describe('CadreEvent type definitions', () => {
         timedOut: true,
       };
       expect(event.timedOut).toBe(true);
+    });
+
+    it('AgentOutputEvent has correct required fields', () => {
+      const event: AgentOutputEvent = {
+        type: 'agent-output',
+        issueNumber: 5,
+        agent: 'code-writer',
+        chunk: 'some output',
+        stream: 'stdout',
+      };
+      expect(event.type).toBe('agent-output');
+      expect(event.issueNumber).toBe(5);
+      expect(event.agent).toBe('code-writer');
+      expect(event.chunk).toBe('some output');
+      expect(event.stream).toBe('stdout');
+    });
+
+    it('AgentOutputEvent can use stderr stream', () => {
+      const event: AgentOutputEvent = {
+        type: 'agent-output',
+        issueNumber: 7,
+        agent: 'scout',
+        chunk: 'error line',
+        stream: 'stderr',
+      };
+      expect(event.stream).toBe('stderr');
+    });
+
+    it('AgentOutputEvent is assignable to CadreEvent', () => {
+      const event: CadreEvent = {
+        type: 'agent-output',
+        issueNumber: 5,
+        agent: 'code-writer',
+        chunk: 'chunk data',
+        stream: 'stdout',
+      };
+      expect(event.type).toBe('agent-output');
     });
   });
 
@@ -411,6 +449,20 @@ describe('CadreEvent type definitions', () => {
       };
       const narrowed = narrowEvent(event, 'pr-created');
       expect(narrowed?.prNumber).toBe(77);
+    });
+
+    it('narrows to AgentOutputEvent via type === "agent-output" discriminant', () => {
+      const event: CadreEvent = {
+        type: 'agent-output',
+        issueNumber: 10,
+        agent: 'code-writer',
+        chunk: 'streaming chunk',
+        stream: 'stdout',
+      };
+      const narrowed = narrowEvent(event, 'agent-output');
+      expect(narrowed?.chunk).toBe('streaming chunk');
+      expect(narrowed?.stream).toBe('stdout');
+      expect(narrowed?.agent).toBe('code-writer');
     });
   });
 
