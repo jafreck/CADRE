@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FleetScheduler, type ProcessIssueFn, type MarkDepBlockedFn } from '../src/core/fleet/fleet-scheduler.js';
 import type { IssueDetail } from '../src/platform/provider.js';
-import type { IssueResult } from '../src/core/issue-orchestrator.js';
+import type { IssueResult } from '../src/core/pipeline/issue-orchestrator.js';
 import type { WorkItemDag } from '@cadre-dev/framework/engine';
 
 function makeIssue(number: number): IssueDetail {
@@ -353,6 +353,7 @@ describe('FleetScheduler', () => {
       const config = makeConfig({ resume: true });
       const scheduler = new FleetScheduler(
         config, issues, fleetCheckpoint as any, platform as any, logger as any,
+        { 2: [1] },
       );
 
       const processIssue: ProcessIssueFn = vi.fn().mockImplementation(async (issue) =>

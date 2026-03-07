@@ -98,20 +98,46 @@ export function buildRegistry<TContext extends PhaseContext>(
 
 /**
  * Build a gate map from a manifest, keyed by phase ID.
+ * When multiple gates target the same phase (from manifest + plugins), they
+ * are composed: all gates run and their results are merged (errors/warnings
+ * concatenated, worst status wins).
  */
 export function buildGateMap<TContext extends PhaseContext>(
   manifest: readonly PhaseManifestEntry<TContext>[],
   plugins: readonly GatePlugin[] = listGatePlugins(),
 ): Record<number, PhaseGate> {
-  const map: Record<number, PhaseGate> = {};
+  // Collect all gates per phase
+  const gatesPerPhase = new Map<number, PhaseGate[]>();
   for (const entry of manifest) {
     if (entry.gate !== null) {
-      map[entry.id] = entry.gate;
+      const existing = gatesPerPhase.get(entry.id) ?? [];
+      existing.push(entry.gate);
+      gatesPerPhase.set(entry.id, existing);
     }
   }
-
   for (const plugin of plugins) {
-    map[plugin.id] = plugin.gate;
+    const existing = gatesPerPhase.get(plugin.id) ?? [];
+    existing.push(plugin.gate);
+    gatesPerPhase.set(plugin.id, existing);
+  }
+
+  const map: Record<number, PhaseGate> = {};
+  for (const [phaseId, gates] of gatesPerPhase) {
+    if (gates.length === 1) {
+      map[phaseId] = gates[0];
+    } else {
+      // Compose multiple gates into one
+      map[phaseId] = {
+        async validate(context) {
+          const results = await Promise.all(gates.map((g) => g.validate(context)));
+          const errors = results.flatMap((r) => r.errors);
+          const warnings = results.flatMap((r) => r.warnings);
+          const statuses = results.map((r) => r.status);
+          const status = statuses.includes('fail') ? 'fail' : statuses.includes('warn') ? 'warn' : 'pass';
+          return { status, errors, warnings };
+        },
+      };
+    }
   }
 
   return map;

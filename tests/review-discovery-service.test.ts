@@ -5,7 +5,7 @@ import {
   type IssueDiscoveryResult,
   type IssueSkipResult,
   type DiscoveryResult,
-} from '../src/core/review-discovery-service.js';
+} from '../src/core/review/review-discovery-service.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import type { PullRequestInfo, ReviewThread, PRComment, PRReview } from '../src/platform/provider.js';
 

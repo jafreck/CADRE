@@ -57,6 +57,8 @@ export class Logger {
     return `${ts} ${levelTag} [${entry.source}]${ctxStr} ${entry.message}`;
   }
 
+  private pendingWrites: Promise<unknown>[] = [];
+
   private async writeEntry(entry: LogEntry): Promise<void> {
     if (!this.shouldLog(entry.level)) return;
 
@@ -71,12 +73,27 @@ export class Logger {
       }
     }
 
-    try {
-      await this.ensureDir();
-      const line = JSON.stringify(entry) + '\n';
-      await appendFile(this.logFile, line, 'utf-8');
-    } catch {
-    }
+    const writePromise = (async () => {
+      try {
+        await this.ensureDir();
+        const line = JSON.stringify(entry) + '\n';
+        await appendFile(this.logFile, line, 'utf-8');
+      } catch {
+      }
+    })();
+    this.pendingWrites.push(writePromise);
+    // Clean up resolved promises to avoid unbounded growth
+    writePromise.finally(() => {
+      const idx = this.pendingWrites.indexOf(writePromise);
+      if (idx >= 0) this.pendingWrites.splice(idx, 1);
+    });
+  }
+
+  /**
+   * Flush all pending log writes. Call before process exit to avoid data loss.
+   */
+  async flush(): Promise<void> {
+    await Promise.allSettled(this.pendingWrites);
   }
 
   private buildEntry(

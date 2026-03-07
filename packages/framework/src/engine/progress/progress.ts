@@ -149,12 +149,16 @@ export class IssueProgressWriter {
     currentPhase: number,
     tasks: Array<{ id: string; name: string; status: string }>,
     tokenUsage: number,
+    customPhaseNames?: readonly string[],
   ): Promise<void> {
     await ensureDir(this.progressDir);
 
+    const activePhaseNames = customPhaseNames ?? phaseNames;
+    const totalPhases = activePhaseNames.length;
+
     let md = `# Issue #${this.issueNumber}: ${this.issueTitle}\n\n`;
     md += `## Pipeline Status\n`;
-    md += `- **Current Phase**: ${currentPhase}/5\n`;
+    md += `- **Current Phase**: ${currentPhase}/${totalPhases}\n`;
     md += `- **Token Usage**: ${tokenUsage.toLocaleString()}\n`;
     md += `- **Last Updated**: ${new Date().toISOString()}\n\n`;
 
@@ -162,9 +166,9 @@ export class IssueProgressWriter {
     md += `| # | Phase | Status | Duration |\n`;
     md += `|---|-------|--------|----------|`;
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < totalPhases; i++) {
       const phase = phases.find((p) => p.phase === i + 1);
-      const name = phaseNames[i];
+      const name = activePhaseNames[i];
       const status = phase ? (phase.success ? '✅' : '❌') : i + 1 === currentPhase ? '🔄' : '⏳';
       const duration = phase ? `${(phase.duration / 1000).toFixed(1)}s` : '—';
       md += `\n| ${i + 1} | ${name} | ${status} | ${duration} |`;

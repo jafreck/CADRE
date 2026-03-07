@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { CostReportWriter } from '../src/reporting/cost-report-writer.js';
 import { CostEstimator } from '@cadre-dev/framework/core';
 import { TokenTracker } from '@cadre-dev/framework/runtime';
-import { PHASE_MANIFEST } from '../src/core/phase-registry.js';
+import { PHASE_MANIFEST } from '../src/core/pipeline/phase-registry.js';
 
 vi.mock('../src/util/fs.js', () => ({
   atomicWriteJSON: vi.fn().mockResolvedValue(undefined),

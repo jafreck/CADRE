@@ -45,7 +45,7 @@ vi.mock('../src/git/commit.js', () => ({
 }));
 
 // Mock phase gates so they always pass
-vi.mock('../src/core/phase-gate.js', () => {
+vi.mock('../src/core/pipeline/phase-gate.js', () => {
   const makeGate = () => ({
     validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })),
   });
@@ -67,8 +67,8 @@ import { PlanningPhaseExecutor } from '../src/executors/planning-phase-executor.
 import { ImplementationPhaseExecutor } from '../src/executors/implementation-phase-executor.js';
 import { IntegrationPhaseExecutor } from '../src/executors/integration-phase-executor.js';
 import { PRCompositionPhaseExecutor } from '../src/executors/pr-composition-phase-executor.js';
-import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import type { PhaseContext } from '../src/core/phase-executor.js';
+import { IssueOrchestrator } from '../src/core/pipeline/issue-orchestrator.js';
+import type { PhaseContext } from '../src/core/pipeline/phase-executor.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeMockLogger } from './helpers/make-mock-logger.js';
 import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { PhaseContext, PhaseExecutor } from '../src/core/phase-executor.js';
+import type { PhaseContext, PhaseExecutor } from '../src/core/pipeline/phase-executor.js';
 
 // ── PhaseExecutor interface ──
 

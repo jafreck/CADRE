@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
-import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
+import { IssueOrchestrator } from '../src/core/pipeline/issue-orchestrator.js';
 import { CheckpointManager } from '@cadre-dev/framework/engine';
 import { MockPlatformProvider } from './helpers/mock-platform-provider.js';
 import { Logger } from '@cadre-dev/framework/core';
@@ -71,7 +71,7 @@ ${JSON.stringify({ requirements: ['Implement the requested feature', 'Ensure bac
 const SYNTHETIC_SCOUT_REPORT = `# Scout Report
 
 \`\`\`cadre-json
-${JSON.stringify({ relevantFiles: [{ path: 'src/core/issue-orchestrator.ts', reason: 'Main orchestration logic' }, { path: 'src/agents/types.ts', reason: 'Type definitions' }], dependencyMap: {}, testFiles: ['tests/issue-orchestrator.test.ts'], estimatedChanges: [] })}
+${JSON.stringify({ relevantFiles: [{ path: 'src/core/pipeline/issue-orchestrator.ts', reason: 'Main orchestration logic' }, { path: 'src/agents/types.ts', reason: 'Type definitions' }], dependencyMap: {}, testFiles: ['tests/issue-orchestrator.test.ts'], estimatedChanges: [] })}
 \`\`\`
 `;
 
@@ -79,7 +79,7 @@ const SYNTHETIC_IMPLEMENTATION_PLAN = `# Implementation Plan: Issue
 
 \`\`\`cadre-json
 ${JSON.stringify([
-  { id: 'session-001', name: 'Implement core changes', rationale: 'Make the primary code changes required by the issue.', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Core implementation', description: 'Make the primary code changes.', files: ['src/core/issue-orchestrator.ts'], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented correctly'] }] },
+  { id: 'session-001', name: 'Implement core changes', rationale: 'Make the primary code changes required by the issue.', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Core implementation', description: 'Make the primary code changes.', files: ['src/core/pipeline/issue-orchestrator.ts'], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented correctly'] }] },
   { id: 'session-002', name: 'Add tests', rationale: 'Write tests for the changes.', dependencies: ['session-001'], steps: [{ id: 'session-002-step-001', name: 'Write tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], complexity: 'simple', acceptanceCriteria: ['Tests cover new functionality'] }] },
 ])}
 \`\`\`
@@ -110,7 +110,7 @@ const THREE_TASK_PLAN = `# Implementation Plan: Issue
 
 \`\`\`cadre-json
 ${JSON.stringify([
-  { id: 'session-001', name: 'Implement core changes', rationale: 'Make the primary code changes.', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Core implementation', description: 'Make the primary code changes.', files: ['src/core/issue-orchestrator.ts'], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented'] }] },
+  { id: 'session-001', name: 'Implement core changes', rationale: 'Make the primary code changes.', dependencies: [], steps: [{ id: 'session-001-step-001', name: 'Core implementation', description: 'Make the primary code changes.', files: ['src/core/pipeline/issue-orchestrator.ts'], complexity: 'moderate', acceptanceCriteria: ['Core changes implemented'] }] },
   { id: 'session-002', name: 'Add tests', rationale: 'Write tests for the changes.', dependencies: [], steps: [{ id: 'session-002-step-001', name: 'Write tests', description: 'Write tests for the changes.', files: ['tests/issue-orchestrator.test.ts'], complexity: 'simple', acceptanceCriteria: ['Tests pass'] }] },
   { id: 'session-003', name: 'Always blocked task', rationale: 'This task is configured to always fail in the test.', dependencies: [], steps: [{ id: 'session-003-step-001', name: 'Blocked step', description: 'This task is configured to always fail in the test.', files: ['src/blocked.ts'], complexity: 'simple', acceptanceCriteria: ['Will never pass (for testing blocked-task behavior)'] }] },
 ])}

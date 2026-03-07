@@ -8,8 +8,8 @@ import {
   PhaseRegistry,
   buildRegistry,
   buildGateMap,
-} from '../src/core/phase-registry.js';
-import type { PhaseExecutor } from '../src/core/phase-executor.js';
+} from '../src/core/pipeline/phase-registry.js';
+import type { PhaseExecutor } from '../src/core/pipeline/phase-executor.js';
 import { registerGatePlugin, clearGatePlugins } from '@cadre-dev/framework/engine';
 
 describe('PhaseRegistry', () => {

@@ -7,7 +7,7 @@ import type { RuntimeConfig } from '../src/config/loader.js';
 import type { FleetResult } from '../src/core/fleet/fleet-orchestrator.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 import type { RunReport } from '../src/reporting/types.js';
-import { PHASE_MANIFEST } from '../src/core/phase-registry.js';
+import { PHASE_MANIFEST } from '../src/core/pipeline/phase-registry.js';
 
 vi.mock('../src/util/fs.js', () => ({
   atomicWriteJSON: vi.fn().mockResolvedValue(undefined),

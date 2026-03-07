@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import { ImplementationPhaseExecutor } from '../src/executors/implementation-phase-executor.js';
-import { BudgetExceededError } from '../src/core/issue-orchestrator.js';
-import type { PhaseContext } from '../src/core/phase-executor.js';
+import { BudgetExceededError } from '../src/core/pipeline/issue-orchestrator.js';
+import type { PhaseContext } from '../src/core/pipeline/phase-executor.js';
 import type { AgentResult, AgentSession, SessionReviewSummary } from '../src/agents/types.js';
 
 vi.mock('../src/util/fs.js', () => ({

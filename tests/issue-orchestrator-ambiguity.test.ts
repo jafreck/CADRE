@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
+import { IssueOrchestrator } from '../src/core/pipeline/issue-orchestrator.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
 import { makeMockIssue } from './helpers/make-mock-issue.js';
@@ -45,7 +45,7 @@ vi.mock('../src/core/issue/issue-notifier.js', () => ({
   }),
 }));
 
-vi.mock('../src/core/phase-gate.js', () => ({
+vi.mock('../src/core/pipeline/phase-gate.js', () => ({
   AnalysisToPlanningGate: vi.fn(() => ({ validate: mockAnalysisGateValidate })),
   PlanningToImplementationGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
   ImplementationToIntegrationGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),

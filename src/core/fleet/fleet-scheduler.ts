@@ -5,6 +5,8 @@ import type { WorkItemDag, FleetCheckpointManager } from '@cadre-dev/framework/e
 import type { PlatformProvider } from '../../platform/provider.js';
 import type { RuntimeConfig } from '../../config/loader.js';
 import { Logger } from '@cadre-dev/framework/core';
+import { FlowRunner, defineFlow, step } from '@cadre-dev/framework/flow';
+import type { FlowLifecycleHooks } from '@cadre-dev/framework/flow';
 import { MergeRetryHelper } from '../merge/merge-retry.js';
 
 /** Callback type for processing a single issue. */
@@ -13,8 +15,24 @@ export type ProcessIssueFn = (issue: IssueDetail, dag?: WorkItemDag<IssueDetail>
 /** Callback type for marking an issue as dep-blocked. */
 export type MarkDepBlockedFn = (issue: IssueDetail) => Promise<IssueResult>;
 
+/** Map issue number → a stable FlowNode id. */
+function issueNodeId(num: number): string {
+  return `issue-${num}`;
+}
+
+/** Reverse: extract issue number from a FlowNode id. */
+function nodeIdToNumber(nodeId: string): number {
+  return Number(nodeId.replace('issue-', ''));
+}
+
 /**
  * Handles bounded-parallelism and DAG wave scheduling for fleet issue pipelines.
+ *
+ * In DAG mode the scheduler delegates to `FlowRunner` with `concurrentNodes`
+ * enabled, modelling each issue as a `step` FlowNode whose `dependsOn` edges
+ * mirror the issue dependency map.  Upstream-failure propagation is handled by
+ * the framework's `onUpstreamFailure` hook, which calls the `markDepBlocked`
+ * callback supplied by the fleet orchestrator.
  */
 export class FleetScheduler {
   constructor(
@@ -48,133 +66,150 @@ export class FleetScheduler {
   }
 
   /**
-   * Execute all issues wave-by-wave when a DAG is present.
+   * Execute all issues via FlowRunner when a DAG is present.
+   *
+   * Each issue becomes a `step` FlowNode.  `dependsOn` edges are derived
+   * from `dagDepMap`, the framework handles topological scheduling and
+   * upstream-failure propagation, and the `onUpstreamFailure` hook maps
+   * to the existing `markDepBlocked` callback.
    */
   private async runWithDag(
     dag: WorkItemDag<IssueDetail>,
     processIssue: ProcessIssueFn,
     markDepBlocked: MarkDepBlockedFn,
   ): Promise<PromiseSettledResult<IssueResult>[]> {
+    // ── Derive effective dep map ─────────────────────────────────────────
+    // When dagDepMap is provided, use it directly.  Otherwise, derive it
+    // from the DAG so that dependsOn edges are always wired correctly.
+    const effectiveDepMap = this.dagDepMap ?? this.buildDepMapFromDag(dag);
+
+    // ── Log DAG plan + persist to checkpoint ───────────────────────────
     const waves = dag.getWaves();
     const waveNumbers = waves.map((w) => w.map((i) => i.number));
     this.logger.info(
       `DAG plan: ${waveNumbers.map((w, i) => `Wave ${i} → [${w.map((n) => `#${n}`).join(', ')}]`).join(' | ')}`,
     );
-    await this.fleetCheckpoint.setDag(this.dagDepMap ?? {}, waveNumbers);
+    await this.fleetCheckpoint.setDag(effectiveDepMap, waveNumbers);
 
-    // --- Per-dependency scheduling ---
-    const allIssues = new Map(this.issues.map((i) => [i.number, i]));
-    const completed = new Set<number>();
-    const failed = new Set<number>();
-    const inFlight = new Set<number>();
-    const blocked = new Set<number>();
-
-    const allResults: PromiseSettledResult<IssueResult>[] = [];
-    const limit = pLimit(this.config.options.maxParallelIssues);
-
-    // On resume, treat already-completed issues as done
+    // ── Identify resumed (already-completed) issues ────────────────────
+    const issueMap = new Map(this.issues.map((i) => [i.number, i]));
+    const completedFromResume = new Set<number>();
     if (this.config.options.resume) {
       for (const issue of this.issues) {
         if (this.fleetCheckpoint.isIssueCompleted(issue.number)) {
-          completed.add(issue.number);
+          completedFromResume.add(issue.number);
           this.logger.info(`Resume: issue #${issue.number} already completed`, { issueNumber: issue.number });
         }
       }
     }
 
-    const depsReady = (issueNumber: number): boolean => {
-      const deps = dag.getDirectDeps(issueNumber);
-      return deps.every((d) => completed.has(d));
-    };
+    // ── Build per-issue result collector ────────────────────────────────
+    const resultsMap = new Map<number, PromiseSettledResult<IssueResult>>();
 
-    const depsFailed = (issueNumber: number): boolean => {
-      const deps = dag.getDirectDeps(issueNumber);
-      return deps.some((d) => failed.has(d) || blocked.has(d));
-    };
+    // ── Build one FlowNode step per issue ──────────────────────────────
+    const flowNodes = this.issues.map((issue) => {
+      const deps = (effectiveDepMap[issue.number] ?? [])
+        .filter((dep) => issueMap.has(dep))
+        .map(issueNodeId);
 
-    const scheduleReady = (): void => {
-      for (const [num, issue] of allIssues) {
-        if (completed.has(num) || failed.has(num) || blocked.has(num) || inFlight.has(num)) continue;
+      return step<Record<string, unknown>>({
+        id: issueNodeId(issue.number),
+        name: `Issue #${issue.number}`,
+        dependsOn: deps.length > 0 ? deps : undefined,
+        run: async () => {
+          // Execute the full per-issue pipeline
+          let result: IssueResult;
+          try {
+            result = await processIssue(issue, dag);
+          } catch (err) {
+            resultsMap.set(issue.number, { status: 'rejected', reason: err });
+            throw err;
+          }
 
-        if (depsFailed(num)) {
-          blocked.add(num);
-          const blockPromise = markDepBlocked(issue).then((result) => {
-            allResults.push({ status: 'fulfilled', value: result });
-            scheduleReady();
-          });
-          blockPromise.catch(() => {});
-          continue;
-        }
+          // Always record as fulfilled (matches original scheduler semantics)
+          resultsMap.set(issue.number, { status: 'fulfilled', value: result });
 
-        if (depsReady(num)) {
-          inFlight.add(num);
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          limit(() => this.runDagIssue(num, issue, dag, processIssue, completed, failed, blocked, allResults, limit, scheduleReady));
-        }
-      }
-    };
+          // Check for dep-related failure statuses set during execution
+          const depFailureStatuses = new Set(['dep-failed', 'dep-merge-conflict', 'dep-build-broken']);
+          const cpStatus = this.fleetCheckpoint.getIssueStatus(issue.number);
+          const isFailure = !result.success || (cpStatus && depFailureStatuses.has(cpStatus.status));
 
-    scheduleReady();
+          if (isFailure) {
+            // Throw so the framework marks this node as failed and
+            // propagates upstream-failure to dependents.
+            throw new Error(result.error ?? 'Issue failed');
+          }
 
-    await new Promise<void>((resolve) => {
-      const check = (): void => {
-        const settled = completed.size + failed.size + blocked.size;
-        if (settled >= allIssues.size) {
-          resolve();
-        } else {
-          setTimeout(check, 200);
-        }
-      };
-      check();
+          // Auto-merge cadre-produced PRs (not pre-existing ones)
+          if (this.config.dag?.autoMerge && result.success && result.codeComplete && result.pr) {
+            const merged = await this.tryMergeWithRetry(result.pr, issue.number, issue.title);
+            if (!merged) {
+              throw new Error(`Merge failed after retries for PR #${result.pr.number}`);
+            }
+          }
+
+          return result;
+        },
+      });
     });
 
-    return allResults;
-  }
+    // ── Lifecycle hooks ────────────────────────────────────────────────
+    const hooks: FlowLifecycleHooks<Record<string, unknown>> = {
+      onUpstreamFailure: async (nodeId) => {
+        const issueNumber = nodeIdToNumber(nodeId);
+        const issue = issueMap.get(issueNumber);
+        if (!issue) return;
+        const result = await markDepBlocked(issue);
+        resultsMap.set(issueNumber, { status: 'fulfilled', value: result });
+        return result;
+      },
+    };
 
-  /**
-   * Run a single DAG issue, then autoMerge if applicable, then notify the scheduler.
-   */
-  private async runDagIssue(
-    num: number,
-    issue: IssueDetail,
-    dag: WorkItemDag<IssueDetail>,
-    processIssue: ProcessIssueFn,
-    completed: Set<number>,
-    failed: Set<number>,
-    blocked: Set<number>,
-    allResults: PromiseSettledResult<IssueResult>[],
-    _limit: ReturnType<typeof pLimit>,
-    scheduleReady: () => void,
-  ): Promise<void> {
-    try {
-      const result = await processIssue(issue, dag);
-      allResults.push({ status: 'fulfilled', value: result });
-
-      const depFailureStatuses = new Set(['dep-failed', 'dep-merge-conflict', 'dep-build-broken']);
-      const cpStatus = this.fleetCheckpoint.getIssueStatus(num);
-      const isFailure = !result.success || (cpStatus && depFailureStatuses.has(cpStatus.status));
-
-      if (isFailure) {
-        failed.add(num);
-      } else {
-        // Only autoMerge PRs that cadre actually produced (codeComplete).
-        // Pre-existing open PRs (codeComplete=false) are handled by the
-        // PR completion queue which has a full conflict-resolver callback.
-        if (this.config.dag?.autoMerge && result.success && result.codeComplete && result.pr) {
-          const merged = await this.tryMergeWithRetry(result.pr, num, issue.title);
-          if (!merged) {
-            failed.add(num);
-            scheduleReady();
-            return;
-          }
+    // ── Build checkpoint adapter for resume ────────────────────────────
+    const completedExecutionIds = [...completedFromResume].map(
+      (num) => `fleet-dag/${issueNodeId(num)}`,
+    );
+    const checkpoint = completedExecutionIds.length > 0
+      ? {
+          load: async () => ({
+            flowId: 'fleet-dag' as const,
+            status: 'completed' as const,
+            startedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            completedExecutionIds,
+            outputs: {} as Record<string, unknown>,
+            executionOutputs: {} as Record<string, unknown>,
+          }),
+          save: async () => {},
         }
-        completed.add(num);
-      }
-    } catch (err) {
-      allResults.push({ status: 'rejected', reason: err });
-      failed.add(num);
+      : undefined;
+
+    // ── Run the flow ───────────────────────────────────────────────────
+    const flow = defineFlow('fleet-dag', flowNodes, 'Fleet DAG issue scheduling');
+
+    try {
+      await new FlowRunner().run(flow, {}, {
+        concurrency: this.config.options.maxParallelIssues,
+        continueOnError: true,
+        concurrentNodes: true,
+        hooks,
+        checkpoint,
+      });
+    } catch {
+      // continueOnError should prevent this, but guard defensively
     }
-    scheduleReady();
+
+    // ── Assemble results in issue order (excluding resumed) ────────────
+    const allResults: PromiseSettledResult<IssueResult>[] = [];
+    for (const issue of this.issues) {
+      if (completedFromResume.has(issue.number)) continue;
+      const result = resultsMap.get(issue.number);
+      if (result) {
+        allResults.push(result);
+      }
+    }
+
+    return allResults;
   }
 
   /**
@@ -209,5 +244,21 @@ export class FleetScheduler {
     }
 
     return merged;
+  }
+
+  /**
+   * Derive a dep map from the DAG when no explicit `dagDepMap` was provided.
+   * Uses `dag.getDirectDeps()` for each issue to build the same
+   * `{ issueNumber: number[] }` structure.
+   */
+  private buildDepMapFromDag(dag: WorkItemDag<IssueDetail>): Record<number, number[]> {
+    const depMap: Record<number, number[]> = {};
+    for (const issue of this.issues) {
+      const deps = dag.getDirectDeps(issue.number);
+      if (deps.length > 0) {
+        depMap[issue.number] = deps;
+      }
+    }
+    return depMap;
   }
 }

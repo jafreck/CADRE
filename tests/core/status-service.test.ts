@@ -42,7 +42,7 @@ vi.mock('../../src/cli/status-renderer.js', () => ({
   renderIssueDetail: vi.fn().mockReturnValue('issue detail table'),
 }));
 
-import { StatusService } from '../../src/core/status-service.js';
+import { StatusService } from '../../src/core/services/status-service.js';
 import { FleetCheckpointManager, CheckpointManager } from '@cadre-dev/framework/engine';
 import { exists } from '../../src/util/fs.js';
 import { renderFleetStatus, renderIssueDetail } from '../../src/cli/status-renderer.js';

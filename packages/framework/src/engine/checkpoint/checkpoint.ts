@@ -106,6 +106,7 @@ export class CheckpointManager {
   private readonly checkpointPath: string;
   private readonly backupPath: string;
   private readonly store: CheckpointStore;
+  private saveLock: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly progressDir: string,
@@ -416,9 +417,15 @@ export class CheckpointManager {
   }
 
   /**
-   * Persist the checkpoint atomically.
+   * Persist the checkpoint atomically, serialized to prevent concurrent writes.
    */
   private async save(): Promise<void> {
+    // Chain saves to serialize concurrent callers
+    this.saveLock = this.saveLock.then(() => this.doSave()).catch(() => {});
+    await this.saveLock;
+  }
+
+  private async doSave(): Promise<void> {
     if (!this.state) return;
     this.state.lastCheckpoint = new Date().toISOString();
 
@@ -442,6 +449,7 @@ export class FleetCheckpointManager {
   private state: FleetCheckpointState | null = null;
   private readonly checkpointPath: string;
   private readonly store: CheckpointStore;
+  private saveLock: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly cadreDir: string,
@@ -592,6 +600,11 @@ export class FleetCheckpointManager {
   }
 
   private async save(): Promise<void> {
+    this.saveLock = this.saveLock.then(() => this.doSave()).catch(() => {});
+    await this.saveLock;
+  }
+
+  private async doSave(): Promise<void> {
     if (!this.state) return;
     this.state.lastCheckpoint = new Date().toISOString();
     await this.store.writeJSON(this.checkpointPath, this.state);

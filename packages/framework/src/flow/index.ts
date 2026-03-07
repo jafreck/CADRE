@@ -8,6 +8,8 @@ export {
   loop,
   parallel,
   sequence,
+  map,
+  catchError,
   gatedStep,
 } from './dsl.js';
 
@@ -31,9 +33,12 @@ export type {
   FlowParallelNode,
   FlowConditionalNode,
   FlowSequenceNode,
+  FlowMapNode,
+  FlowCatchNode,
   FlowDefinition,
   FlowExecutionContext,
   FlowRunResult,
+  FlowRunStatus,
   FlowRunnerOptions,
   FlowCheckpointAdapter,
   FlowCheckpointSnapshot,
@@ -41,3 +46,10 @@ export type {
 } from './types.js';
 
 export { FlowExecutionError, FlowCycleError, FlowContractError } from './types.js';
+
+export {
+  phaseExecutorAsStep,
+  phaseGateAsFlowGate,
+  manifestToFlow,
+  type FlowPhaseContext,
+} from './bridge.js';

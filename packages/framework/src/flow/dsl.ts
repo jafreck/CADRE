@@ -1,9 +1,11 @@
 import type {
+  FlowCatchNode,
   FlowConditionalNode,
   FlowDefinition,
   FlowExecutionContext,
   FlowGateNode,
   FlowLoopNode,
+  FlowMapNode,
   FlowNode,
   FlowParallelNode,
   FlowSequenceNode,
@@ -65,6 +67,32 @@ export function sequence<TContext = Record<string, unknown>>(
 }
 
 /**
+ * Create a map node that runs a function over each item in a collection.
+ *
+ * The input must resolve to an array. The `do` function is invoked for each
+ * item (up to `concurrency` in parallel). The node output is the collected
+ * array of results.
+ */
+export function map<TContext = Record<string, unknown>, TInput = unknown, TItemOutput = unknown>(
+  config: Omit<FlowMapNode<TContext, TInput, TItemOutput>, 'kind'>,
+): FlowMapNode<TContext, TInput, TItemOutput> {
+  return { kind: 'map', ...config };
+}
+
+/**
+ * Create a catch node for error handling.
+ *
+ * Wraps a list of nodes in a try/catch/finally construct. If any node in `try`
+ * throws, the `catch` handler is called with the error. Optional `finally`
+ * nodes execute regardless of outcome.
+ */
+export function catchError<TContext = Record<string, unknown>>(
+  config: Omit<FlowCatchNode<TContext>, 'kind'>,
+): FlowCatchNode<TContext> {
+  return { kind: 'catch', ...config };
+}
+
+/**
  * Configuration for a gated step — execute with gate validation and retry.
  */
 export interface GatedStepConfig<TContext = Record<string, unknown>> {
@@ -107,19 +135,22 @@ export interface GatedStepConfig<TContext = Record<string, unknown>> {
 export function gatedStep<TContext = Record<string, unknown>>(
   config: GatedStepConfig<TContext>,
 ): FlowSequenceNode<TContext> {
+  const loopId = `${config.id}-execute-with-gate`;
+  const runId = `${config.id}-run`;
+  const gateId = `${config.id}-gate`;
   return sequence<TContext>(
     { id: config.id, name: config.name, description: config.description, dependsOn: config.dependsOn },
     [
       {
         kind: 'loop',
-        id: 'execute-with-gate',
+        id: loopId,
         name: config.name ? `Execute ${config.name} with gate retries` : 'Execute with gate retries',
         maxIterations: config.maxRetries + 1,
         while: config.shouldExecute,
         onSkip: config.onSkip,
         do: [
-          { kind: 'step', id: 'run', name: config.name ? `Run ${config.name}` : 'Run', run: config.run },
-          { kind: 'gate', id: 'gate', name: config.name ? `Validate ${config.name} gate` : 'Validate gate', evaluate: config.evaluate },
+          { kind: 'step', id: runId, name: config.name ? `Run ${config.name}` : 'Run', run: config.run },
+          { kind: 'gate', id: gateId, name: config.name ? `Validate ${config.name} gate` : 'Validate gate', evaluate: config.evaluate },
         ],
       } as FlowLoopNode<TContext>,
     ],

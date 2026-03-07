@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { IssueOrchestrator, BudgetExceededError } from '../src/core/issue-orchestrator.js';
+import { IssueOrchestrator, BudgetExceededError } from '../src/core/pipeline/issue-orchestrator.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
-import { AnalysisAmbiguityGate } from '../src/core/phase-gate.js';
+import { AnalysisAmbiguityGate } from '../src/core/pipeline/phase-gate.js';
 import * as fsUtils from '../src/util/fs.js';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -60,7 +60,7 @@ vi.mock('../src/core/issue/issue-notifier.js', () => ({
 }));
 
 // Mock phase gates so they always pass
-vi.mock('../src/core/phase-gate.js', () => {
+vi.mock('../src/core/pipeline/phase-gate.js', () => {
   const makeGate = () => ({
     validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })),
   });

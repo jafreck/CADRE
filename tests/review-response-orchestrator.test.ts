@@ -32,7 +32,7 @@ vi.mock('@cadre-dev/framework/engine', () => ({
   })),
 }));
 
-vi.mock('../src/core/issue-orchestrator.js', () => ({
+vi.mock('../src/core/pipeline/issue-orchestrator.js', () => ({
   IssueOrchestrator: vi.fn().mockImplementation(() => ({
     run: vi.fn().mockResolvedValue({
       issueNumber: 1,
@@ -716,7 +716,7 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
   });
 
   it('does not push or update PR when pipeline fails', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({ issueNumber: 1, success: false, phases: [], totalDuration: 0, tokenUsage: 0 }),
     }));
@@ -743,7 +743,7 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
   });
 
   it('does not post a reply comment when autoReplyOnResolved is true but pipeline fails', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({ issueNumber: 1, success: false, phases: [], totalDuration: 0, tokenUsage: 0 }),
     }));
@@ -826,7 +826,7 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
   });
 
   it('increments failed count and logs error when pipeline throws', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockRejectedValue(new Error('pipeline error')),
     }));
@@ -1088,7 +1088,7 @@ describe('ReviewResponseOrchestrator — isCadreSelfRun label guarantee', () => 
   });
 
   it('does not call ensureLabel or applyLabels when isCadreSelfRun is true but pipeline fails', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
