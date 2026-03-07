@@ -36,6 +36,13 @@ export async function verifyCommand(config: VerifyCommandConfig): Promise<Verify
   let output = result.stderr + result.stdout;
   let failures = extractFailures(output);
 
+  // When the command passes (exit code 0), discard any "failures" extracted
+  // from benign stderr noise (e.g. CLI help text, deprecation warnings).
+  // A passing command has no actionable failures by definition.
+  if (result.exitCode === 0) {
+    failures = [];
+  }
+
   if (result.exitCode !== 0 && failures.length === 0 && sentinelValue) {
     failures = [sentinelValue];
   }
@@ -53,6 +60,10 @@ export async function verifyCommand(config: VerifyCommandConfig): Promise<Verify
     result = await execShell(command, { cwd, timeout });
     output = result.stderr + result.stdout;
     failures = extractFailures(output);
+
+    if (result.exitCode === 0) {
+      failures = [];
+    }
 
     if (result.exitCode !== 0 && failures.length === 0 && sentinelValue) {
       failures = [sentinelValue];
