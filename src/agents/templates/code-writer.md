@@ -21,6 +21,8 @@ The following files may be provided as additional context. They are read-only â€
 
 Read all relevant source files before writing any code. Understand existing patterns, types, and conventions before modifying anything.
 
+{{LORE_GUIDANCE}}
+
 ## Output Contract
 
 - **Modified or created source files**: Apply the minimal changes required to satisfy the acceptance criteria. Do not touch files outside the task's file list.

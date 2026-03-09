@@ -74,7 +74,10 @@ describe('AgentFileSync', () => {
     });
 
     it('generates .agent.md files with frontmatter into cache for copilot', async () => {
-      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsUtils.exists).mockImplementation(async (p: string) => {
+        if (typeof p === 'string' && p.includes('partials')) return false;
+        return true;
+      });
       vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
       vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
 
@@ -89,7 +92,10 @@ describe('AgentFileSync', () => {
     });
 
     it('generates .md files with frontmatter into cache for claude', async () => {
-      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      vi.mocked(fsUtils.exists).mockImplementation(async (p: string) => {
+        if (typeof p === 'string' && p.includes('partials')) return false;
+        return true;
+      });
       vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
       vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('body');
 
@@ -101,6 +107,84 @@ describe('AgentFileSync', () => {
       expect(writeCall[0]).toBe('/tmp/state/agents-cache-claude/code-writer.md');
       expect(writeCall[1]).not.toContain('tools:');
       expect(writeCall[1]).toContain('body');
+    });
+
+    it('expands {{PARTIAL}} placeholders from partials/ directory', async () => {
+      // exists: agentDir=true, partialsDir=true, cacheDir check=true
+      vi.mocked(fsUtils.exists).mockResolvedValue(true);
+      // First readdir call is for partials/, second for agentDir entries
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(['lore-guidance.md'])        // partials dir
+        .mockResolvedValueOnce(['code-writer.md']);          // agent dir
+      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce('Partial content here')      // partial file read
+        .mockResolvedValueOnce('before\n{{LORE_GUIDANCE}}\nafter'); // agent template read
+
+      const sync = new AgentFileSync('/tmp/agents', 'claude', mockLogger, '/tmp/state');
+      await sync.buildAgentCache();
+
+      const writeCall = vi.mocked(fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(writeCall[1]).toContain('Partial content here');
+      expect(writeCall[1]).not.toContain('{{LORE_GUIDANCE}}');
+      expect(writeCall[1]).toContain('before\nPartial content here\nafter');
+    });
+
+    it('removes unresolved {{PLACEHOLDER}} tokens when no matching partial exists', async () => {
+      vi.mocked(fsUtils.exists).mockImplementation(async (p: string) => {
+        if (typeof p === 'string' && p.includes('partials')) return false;
+        return true;
+      });
+      vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.md']);
+      vi.mocked(fsp.readFile as ReturnType<typeof vi.fn>)
+        .mockResolvedValue('before\n{{UNKNOWN_PARTIAL}}\nafter');
+
+      const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
+      await sync.buildAgentCache();
+
+      const writeCall = vi.mocked(fsp.writeFile as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(writeCall[1]).not.toContain('{{UNKNOWN_PARTIAL}}');
+      expect(writeCall[1]).toContain('before\n\nafter');
+    });
+  });
+
+  describe('expandPartials (static)', () => {
+    it('replaces a single placeholder', () => {
+      const partials = new Map([['FOO', 'replaced content']]);
+      const result = AgentFileSync.expandPartials('before {{FOO}} after', partials);
+      expect(result).toBe('before replaced content after');
+    });
+
+    it('replaces multiple different placeholders', () => {
+      const partials = new Map([
+        ['A', 'alpha'],
+        ['B', 'beta'],
+      ]);
+      const result = AgentFileSync.expandPartials('{{A}} and {{B}}', partials);
+      expect(result).toBe('alpha and beta');
+    });
+
+    it('replaces repeated occurrences of the same placeholder', () => {
+      const partials = new Map([['X', 'val']]);
+      const result = AgentFileSync.expandPartials('{{X}} then {{X}}', partials);
+      expect(result).toBe('val then val');
+    });
+
+    it('removes unresolved placeholders', () => {
+      const partials = new Map<string, string>();
+      const result = AgentFileSync.expandPartials('keep {{MISSING}} keep', partials);
+      expect(result).toBe('keep  keep');
+    });
+
+    it('returns body unchanged when no placeholders exist', () => {
+      const partials = new Map([['FOO', 'bar']]);
+      const result = AgentFileSync.expandPartials('no placeholders here', partials);
+      expect(result).toBe('no placeholders here');
+    });
+
+    it('does not match lowercase or mixed-case placeholders', () => {
+      const partials = new Map([['foo', 'bar']]);
+      const result = AgentFileSync.expandPartials('{{foo}} {{Foo}}', partials);
+      expect(result).toBe('{{foo}} {{Foo}}');
     });
   });
 

@@ -21,6 +21,7 @@ import { gitValidator } from './validation/git-validator.js';
 import { agentBackendValidator } from './validation/agent-backend-validator.js';
 import { platformValidator } from './validation/platform-validator.js';
 import { commandValidator } from './validation/command-validator.js';
+import { loreValidator } from './validation/lore-validator.js';
 import { Logger } from '@cadre-dev/framework/core';
 import { createPlatformProvider } from './platform/factory.js';
 import { withCommandHandler } from './cli/command-error-handler.js';
@@ -196,6 +197,7 @@ program
       agentBackendValidator,
       platformValidator,
       commandValidator,
+      loreValidator,
       diskValidator,
     ]);
     const passed = await suite.run(config);

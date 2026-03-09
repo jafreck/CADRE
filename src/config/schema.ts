@@ -379,6 +379,39 @@ export const CadreConfigSchema = z.object({
 
   /** Isolation provider configuration for agent invocations. */
   isolation: IsolationConfigSchema,
+
+  /**
+   * Lore knowledge-base configuration.
+   *
+   * When enabled, cadre builds a Lore index for the target repo once per issue
+   * and registers the Lore MCP server in each worktree so agents can query a
+   * pre-built knowledge base instead of reading full files.
+   */
+  lore: z
+    .object({
+      /** Enable the Lore knowledge-base integration. */
+      enabled: z.boolean().default(false),
+      /**
+       * Command used to invoke the Lore CLI.  Defaults to `lore`.
+       * The CLI must support `lore index --root <dir> --db <path>` and
+       * `lore mcp --db <path>`.
+       */
+      command: z.string().default('lore'),
+      /** Extra arguments appended to `lore index --root <worktree> --db <db>`. */
+      indexArgs: z.array(z.string()).default([]),
+      /**
+       * Arguments for the Lore MCP server command written into each
+       * worktree's MCP config.  Defaults to `['mcp']`.
+       */
+      serveArgs: z.array(z.string()).default(['mcp']),
+      /**
+       * Timeout in milliseconds for the index build step.
+       * Defaults to 120 000 (2 min).
+       */
+      indexTimeout: z.number().int().min(1000).default(120_000),
+    })
+    .default({ enabled: false })
+    .optional(),
 });
 
 export type CadreConfig = z.infer<typeof CadreConfigSchema>;

@@ -103,6 +103,12 @@ export class AgentFileSync {
 
     await ensureDir(this.cacheDir);
 
+    // Load template partials from {agentDir}/partials/.
+    // Each partial is a Markdown file whose content replaces the matching
+    // placeholder in agent templates.  File `lore-guidance.md` is injected
+    // wherever `{{LORE_GUIDANCE}}` appears.
+    const partials = await this.loadPartials(this.agentDir);
+
     const entries = await readdir(this.agentDir);
     const sourceFiles = entries.filter((f) => f.endsWith('.md') && !f.endsWith('.agent.md'));
 
@@ -116,7 +122,10 @@ export class AgentFileSync {
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
       const description = definition?.description ?? displayName;
-      const body = await readFile(srcPath, 'utf-8');
+      let body = await readFile(srcPath, 'utf-8');
+
+      // Expand {{PARTIAL_NAME}} placeholders with loaded partial content.
+      body = AgentFileSync.expandPartials(body, partials);
 
       let destFileName: string;
       let content: string;
@@ -234,5 +243,50 @@ export class AgentFileSync {
       );
     }
     return syncedRelPaths;
+  }
+
+  // ── Partial Expansion ──
+
+  /**
+   * Load partial Markdown files from `{agentDir}/partials/`.
+   *
+   * Returns a map of placeholder name → content.
+   * File `lore-guidance.md` produces placeholder `LORE_GUIDANCE`.
+   */
+  private async loadPartials(agentDir: string): Promise<Map<string, string>> {
+    const partialsDir = join(agentDir, 'partials');
+    const partials = new Map<string, string>();
+
+    if (!(await exists(partialsDir))) return partials;
+
+    const entries = await readdir(partialsDir);
+    for (const file of entries) {
+      if (!file.endsWith('.md')) continue;
+      const name = file
+        .replace(/\.md$/, '')
+        .replace(/-/g, '_')
+        .toUpperCase();
+      const content = (await readFile(join(partialsDir, file), 'utf-8')).trimEnd();
+      partials.set(name, content);
+    }
+
+    if (partials.size > 0) {
+      this.logger.debug(
+        `Loaded ${partials.size} template partial(s): ${[...partials.keys()].join(', ')}`,
+      );
+    }
+
+    return partials;
+  }
+
+  /**
+   * Replace `{{NAME}}` placeholders in a template body with partial content.
+   * Unresolved placeholders (no matching partial) are removed so raw
+   * `{{…}}` tokens never leak into the final agent file.
+   */
+  static expandPartials(body: string, partials: Map<string, string>): string {
+    return body.replace(/\{\{([A-Z][A-Z0-9_]*)\}\}/g, (match, name: string) => {
+      return partials.get(name) ?? '';
+    });
   }
 }

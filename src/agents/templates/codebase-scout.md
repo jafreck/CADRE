@@ -21,6 +21,8 @@ You may use the following tools to inspect the repository:
 - **grep** — search file contents for symbols, function names, imports, or patterns
 - **view** — read specific files to understand structure, exports, and logic
 
+{{LORE_GUIDANCE}}
+
 Do **not** modify any files. Do **not** run shell commands or execute code.
 
 ## Output Contract
