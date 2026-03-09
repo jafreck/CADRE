@@ -69,8 +69,8 @@ describe('dist/agents/templates/ after build', () => {
     }
   });
 
-  it.skipIf(!existsSync(DIST_TEMPLATES_DIR))('should not contain any non-.md files', () => {
-    const nonMd = readdirSync(DIST_TEMPLATES_DIR).filter((f) => !f.endsWith('.md'));
+  it.skipIf(!existsSync(DIST_TEMPLATES_DIR))('should not contain unexpected non-.md files', () => {
+    const nonMd = readdirSync(DIST_TEMPLATES_DIR).filter((f) => !f.endsWith('.md') && f !== 'partials');
     expect(nonMd).toHaveLength(0);
   });
 });

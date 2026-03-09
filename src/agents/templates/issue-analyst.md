@@ -88,6 +88,8 @@ The block must match the `AnalysisResult` schema: `requirements` (string array),
 - **File read**: Read context `inputFiles` and any source files needed for accurate analysis
 - **File write**: Write the final markdown report to `outputPath`
 
+{{LORE_GUIDANCE}}
+
 ## Example Output
 
 ```

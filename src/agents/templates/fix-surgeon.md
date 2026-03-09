@@ -18,6 +18,8 @@ The following files may be provided as additional context. They are read-only â€
 - **`scout-report.md`** (conditionally provided): A report of the codebase structure and patterns. Consult this only if you need broader context about how surrounding code works.
 - **Session plan / `implementation-plan.md`** (conditionally provided): The step-by-step implementation plan for the current session (phase-3) or the full plan (`implementation-plan.md` in phase-4). Consult this only if you need to understand how the flagged issue fits into the broader change set.
 
+{{LORE_GUIDANCE}}
+
 Read each flagged issue carefully before making any change. Understand the exact scope of what needs fixing before touching any file.
 
 ## Output Contract

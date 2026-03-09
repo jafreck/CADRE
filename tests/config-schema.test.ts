@@ -1081,3 +1081,66 @@ describe('AgentConfigSchema', () => {
     expect(result.success).toBe(true);
   });
 });
+
+// ── Lore Config ──
+
+describe('CadreConfigSchema — lore', () => {
+  const validConfig = {
+    projectName: 'test-project',
+    platform: 'github',
+    repository: 'owner/repo',
+    repoPath: '/tmp/repo',
+    issues: { ids: [1] },
+  };
+
+  it('should default lore to undefined (opt-in)', () => {
+    const result = CadreConfigSchema.parse(validConfig);
+    // lore is optional — undefined when omitted
+    expect(result.lore).toBeUndefined();
+  });
+
+  it('should accept lore.enabled = true with all defaults', () => {
+    const result = CadreConfigSchema.parse({
+      ...validConfig,
+      lore: { enabled: true },
+    });
+    expect(result.lore?.enabled).toBe(true);
+    expect(result.lore?.command).toBe('lore');
+    expect(result.lore?.indexArgs).toEqual([]);
+    expect(result.lore?.serveArgs).toEqual(['mcp']);
+    expect(result.lore?.indexTimeout).toBe(120_000);
+  });
+
+  it('should accept custom lore command and args', () => {
+    const result = CadreConfigSchema.parse({
+      ...validConfig,
+      lore: {
+        enabled: true,
+        command: '/usr/local/bin/lore',
+        indexArgs: ['--deep', '--lang', 'typescript'],
+        serveArgs: ['serve'],
+        indexTimeout: 60_000,
+      },
+    });
+    expect(result.lore?.command).toBe('/usr/local/bin/lore');
+    expect(result.lore?.indexArgs).toEqual(['--deep', '--lang', 'typescript']);
+    expect(result.lore?.serveArgs).toEqual(['serve']);
+    expect(result.lore?.indexTimeout).toBe(60_000);
+  });
+
+  it('should reject indexTimeout below 1000', () => {
+    const result = CadreConfigSchema.safeParse({
+      ...validConfig,
+      lore: { enabled: true, indexTimeout: 500 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should default enabled to false when lore object provided without enabled', () => {
+    const result = CadreConfigSchema.parse({
+      ...validConfig,
+      lore: {},
+    });
+    expect(result.lore?.enabled).toBe(false);
+  });
+});

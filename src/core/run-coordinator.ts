@@ -18,6 +18,7 @@ import { gitValidator } from '../validation/git-validator.js';
 import { agentBackendValidator } from '../validation/agent-backend-validator.js';
 import { platformValidator } from '../validation/platform-validator.js';
 import { commandValidator } from '../validation/command-validator.js';
+import { loreValidator } from '../validation/lore-validator.js';
 import { registryCompletenessValidator } from '../validation/registry-completeness-validator.js';
 import { checkStaleState } from '../validation/stale-state-validator.js';
 import type { NotificationManager } from '@cadre-dev/framework/notifications';
@@ -53,6 +54,7 @@ export class RunCoordinator {
       agentBackendValidator,
       platformValidator,
       commandValidator,
+      loreValidator,
       diskValidator,
       registryCompletenessValidator,
     ]);

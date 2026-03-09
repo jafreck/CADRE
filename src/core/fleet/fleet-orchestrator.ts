@@ -21,6 +21,7 @@ import { FleetScheduler } from './fleet-scheduler.js';
 import { PullRequestCompletionQueue, type CompletionFailure, type MergeConflictResolverFn } from '../merge/pr-completion-queue.js';
 import { MergeRetryHelper } from '../merge/merge-retry.js';
 import type { PullRequestMergeMethod } from '../../platform/provider.js';
+import { LoreIndexBuilder, LoreMcpConfigWriter, resolveLoreConfig, type LoreConfig } from '../lore/index.js';
 
 export interface FleetResult {
   /** Whether all issues were resolved successfully. */
@@ -55,6 +56,9 @@ export class FleetOrchestrator {
   private readonly tokenTracker: TokenTracker;
   private readonly costEstimator: CostEstimator;
   private readonly contextBuilder: ContextBuilder;
+  private readonly loreConfig: LoreConfig;
+  private readonly loreIndexBuilder: LoreIndexBuilder | undefined;
+  private readonly loreMcpConfigWriter: LoreMcpConfigWriter | undefined;
   private fleetBudgetExceeded = false;
   private eventBus!: FleetEventBus;
   private reporter!: FleetReporter;
@@ -78,6 +82,13 @@ export class FleetOrchestrator {
     this.tokenTracker = new TokenTracker();
     this.costEstimator = new CostEstimator(config.agent.copilot);
     this.contextBuilder = new ContextBuilder(config, logger);
+
+    // Lore knowledge-base integration
+    this.loreConfig = resolveLoreConfig(config);
+    if (this.loreConfig.enabled) {
+      this.loreIndexBuilder = new LoreIndexBuilder(this.loreConfig, logger);
+      this.loreMcpConfigWriter = new LoreMcpConfigWriter(this.loreConfig, config.agent.backend, logger);
+    }
 
     const autoComplete = this.resolveAutoCompleteConfig();
     this.autoCompleteEnabled = autoComplete.enabled;
@@ -874,6 +885,17 @@ export class FleetOrchestrator {
       );
 
       // 5. Create per-issue orchestrator
+      //
+      // Before creating the orchestrator, build the Lore knowledge-base
+      // index for this worktree (once per issue) and write the MCP config
+      // so every agent invocation can query the pre-built index.
+      if (this.loreIndexBuilder) {
+        const indexed = await this.loreIndexBuilder.buildIndex(worktree.path, issue.number);
+        if (indexed && this.loreMcpConfigWriter) {
+          await this.loreMcpConfigWriter.writeMcpConfig(worktree.path, issue.number);
+        }
+      }
+
       const issueOrchestrator = new IssueOrchestrator(
         this.config,
         issue,
