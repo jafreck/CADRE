@@ -96,14 +96,14 @@ describe('CadreRuntime.validate()', () => {
     expect(result).toBe(false);
   });
 
-  it('should construct PreRunValidationSuite with all five validators', async () => {
+  it('should construct PreRunValidationSuite with all validators', async () => {
     mockRunSuite.mockResolvedValue(true);
     const runtime = new CadreRuntime(makeConfig());
     await runtime.validate();
     expect(PreRunValidationSuite).toHaveBeenCalledOnce();
     const [validators] = (PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [unknown[]];
     expect(Array.isArray(validators)).toBe(true);
-    expect((validators as unknown[]).length).toBe(6);
+    expect((validators as unknown[]).length).toBe(7);
   });
 
   it('should pass config to the suite run method', async () => {

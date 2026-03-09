@@ -57,8 +57,8 @@ describe('Agent Template Files', () => {
       expect(files).toHaveLength(14);
     });
 
-    it('should not contain any non-.md files', () => {
-      const files = readdirSync(TEMPLATES_DIR).filter((f) => !f.endsWith('.md'));
+    it('should not contain unexpected non-.md entries', () => {
+      const files = readdirSync(TEMPLATES_DIR).filter((f) => !f.endsWith('.md') && f !== 'partials');
       expect(files).toHaveLength(0);
     });
 

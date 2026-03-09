@@ -41,6 +41,7 @@
     "@cadre-dev/runtime-provider-docker": "*",
     "@cadre-dev/runtime-provider-kata": "*",
     "@inquirer/prompts": "^8",
+    "@jafreck/lore": "^0.2.5",
     "@modelcontextprotocol/sdk": "^1.27",
     "@octokit/rest": "^22",
     "chalk": "^5",

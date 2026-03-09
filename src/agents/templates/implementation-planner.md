@@ -112,6 +112,8 @@ When `testable: false`, the test-writer agent is skipped for that session. Leave
 
 - **Read files** (required): Read analysis.md, scout-report.md, and every source file you intend to reference before making any claims about its contents or structure.
 
+{{LORE_GUIDANCE}}
+
 ## Example Output
 
 ```cadre-json
