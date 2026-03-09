@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { IssueOrchestrator, BudgetExceededError } from '../src/core/issue-orchestrator.js';
+import { IssueOrchestrator, BudgetExceededError } from '../src/core/pipeline/issue-orchestrator.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
-import { AnalysisAmbiguityGate } from '../src/core/phase-gate.js';
+import { AnalysisAmbiguityGate } from '../src/core/pipeline/phase-gate.js';
 import * as fsUtils from '../src/util/fs.js';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -55,12 +55,12 @@ const mockNotifierMethods = {
   }),
 };
 
-vi.mock('../src/core/issue-notifier.js', () => ({
+vi.mock('../src/core/issue/issue-notifier.js', () => ({
   IssueNotifier: vi.fn().mockImplementation(() => mockNotifierMethods),
 }));
 
 // Mock phase gates so they always pass
-vi.mock('../src/core/phase-gate.js', () => {
+vi.mock('../src/core/pipeline/phase-gate.js', () => {
   const makeGate = () => ({
     validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })),
   });
@@ -376,7 +376,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
 
     it('should dispatch issue-failed when a critical phase fails', async () => {
       const checkpoint = makeCheckpointMock({
-        isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 1),
+        isPhaseCompleted: vi.fn((id: number) => phaseId !== 1),
       });
       vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('simulated phase failure'));
       const dispatch = vi.fn().mockResolvedValue(undefined);
@@ -403,7 +403,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
 
     it('should include the failing phase id in the issue-failed event', async () => {
       const checkpoint = makeCheckpointMock({
-        isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 1),
+        isPhaseCompleted: vi.fn((id: number) => phaseId !== 1),
       });
       vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
       const dispatch = vi.fn().mockResolvedValue(undefined);
@@ -431,7 +431,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
 
     it('should not throw when notificationManager is absent and a critical phase fails', async () => {
       const checkpoint = makeCheckpointMock({
-        isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 1),
+        isPhaseCompleted: vi.fn((id: number) => phaseId !== 1),
       });
       vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
 
@@ -451,7 +451,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
 
     it('should not dispatch issue-completed when pipeline fails', async () => {
       const checkpoint = makeCheckpointMock({
-        isPhaseCompleted: vi.fn((phaseId: number) => phaseId !== 1),
+        isPhaseCompleted: vi.fn((id: number) => phaseId !== 1),
       });
       vi.mocked(fsUtils.ensureDir).mockRejectedValueOnce(new Error('phase 1 error'));
       const dispatch = vi.fn().mockResolvedValue(undefined);

@@ -4,7 +4,7 @@ vi.mock('@cadre-dev/framework/engine', () => ({
   FleetCheckpointManager: vi.fn(),
 }));
 
-import { ResetService } from '../../src/core/reset-service.js';
+import { ResetService } from '../../src/core/services/reset-service.js';
 import { FleetCheckpointManager } from '@cadre-dev/framework/engine';
 import type { RuntimeConfig } from '../../src/config/loader.js';
 

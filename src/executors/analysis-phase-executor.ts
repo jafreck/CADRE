@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
-import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
+import type { PhaseExecutor, PhaseContext } from '../core/pipeline/phase-executor.js';
 import { launchWithRetry } from './helpers.js';
 import { atomicWriteJSON, ensureDir, listFilesRecursive } from '../util/fs.js';
 import { captureBaseline as captureBaselineCmd } from '@cadre-dev/framework/runtime';
@@ -8,7 +8,7 @@ import { extractCadreJson, type BaselineResults } from '@cadre-dev/framework/run
 import type { AgentResult } from '../agents/types.js';
 
 export class AnalysisPhaseExecutor implements PhaseExecutor {
-  readonly phaseId = 1;
+  readonly id = 1;
   readonly name = 'Analysis & Scouting';
 
   async execute(ctx: PhaseContext): Promise<string> {

@@ -32,8 +32,8 @@ export function makeMockCheckpoint(
       resumeCount: 0,
     }),
     getResumePoint: vi.fn().mockReturnValue({ phase: 1, task: null }),
-    isPhaseCompleted: vi.fn().mockImplementation((phaseId: number) =>
-      completedPhaseIds.includes(phaseId),
+    isPhaseCompleted: vi.fn().mockImplementation((id: number) =>
+      completedPhaseIds.includes(id),
     ),
     isTaskCompleted: vi.fn().mockReturnValue(false),
     startPhase: vi.fn().mockResolvedValue(undefined),

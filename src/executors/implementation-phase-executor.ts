@@ -1,15 +1,15 @@
 import { join } from 'node:path';
 import { writeFile, readFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
-import type { PhaseExecutor, PhaseContext } from '../core/phase-executor.js';
+import type { PhaseExecutor, PhaseContext } from '../core/pipeline/phase-executor.js';
 import type { AgentSession, SessionReviewSummary } from '../agents/types.js';
 import { SessionQueue } from '@cadre-dev/framework/engine';
 import { exists } from '../util/fs.js';
-import { runWithRetry } from '../util/command-verifier.js';
+import { verifyCommand } from '@cadre-dev/framework/runtime';
 import { FlowRunner, defineFlow, step, loop } from '@cadre-dev/framework/flow';
 
 export class ImplementationPhaseExecutor implements PhaseExecutor {
-  readonly phaseId = 3;
+  readonly id = 3;
   readonly name = 'Implementation';
 
   async execute(ctx: PhaseContext): Promise<string> {
@@ -128,7 +128,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           if (!ctx.io.checkpoint.isSubTaskCompleted(`${session.id}:build-check`)) {
             await ctx.io.checkpoint.startSubTask(`${session.id}:build-check`);
 
-            const buildRetry = await runWithRetry({
+            const buildRetry = await verifyCommand({
               command: ctx.config.commands.build,
               cwd: ctx.worktree.path,
               timeout: 300_000,

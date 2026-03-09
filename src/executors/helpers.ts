@@ -1,4 +1,4 @@
-import type { PhaseContext } from '../core/phase-executor.js';
+import type { PhaseContext } from '../core/pipeline/phase-executor.js';
 import type { AgentInvocation, AgentResult } from '../agents/types.js';
 
 /**

@@ -22,7 +22,7 @@ vi.mock('@cadre-dev/framework/engine', () => ({
   })),
 }));
 
-import { WorktreeLifecycleService } from '../../src/core/worktree-lifecycle-service.js';
+import { WorktreeLifecycleService } from '../../src/core/services/worktree-lifecycle-service.js';
 import { FleetCheckpointManager } from '@cadre-dev/framework/engine';
 import type { RuntimeConfig } from '../../src/config/loader.js';
 

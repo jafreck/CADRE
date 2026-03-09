@@ -402,4 +402,140 @@ describe('@cadre/flow FlowRunner', () => {
       toStep: 'consumerV1',
     });
   });
+
+  describe('onUpstreamFailure hook', () => {
+    it('calls onUpstreamFailure for nodes whose dependencies failed', async () => {
+      const hook = vi.fn().mockResolvedValue({ depBlocked: true });
+      const runner = new FlowRunner({ continueOnError: true });
+
+      const flow = defineFlow('upstream-fail', [
+        step({
+          id: 'a',
+          run: () => { throw new Error('boom'); },
+        }),
+        step({
+          id: 'b',
+          dependsOn: ['a'],
+          run: () => 'should-not-run',
+        }),
+      ]);
+
+      const result = await runner.run(flow, {}, { hooks: { onUpstreamFailure: hook } });
+
+      expect(result.status).toBe('failed');
+      expect(hook).toHaveBeenCalledTimes(1);
+      expect(hook).toHaveBeenCalledWith('b', expect.objectContaining({ id: 'b' }), ['a']);
+      expect(result.outputs.b).toEqual({ depBlocked: true });
+    });
+
+    it('propagates upstream failure transitively', async () => {
+      const hook = vi.fn().mockResolvedValue('blocked');
+      const runner = new FlowRunner({ continueOnError: true });
+
+      const flow = defineFlow('transitive', [
+        step({ id: 'root', run: () => { throw new Error('fail'); } }),
+        step({ id: 'mid', dependsOn: ['root'], run: () => 'skip' }),
+        step({ id: 'leaf', dependsOn: ['mid'], run: () => 'skip' }),
+      ]);
+
+      const result = await runner.run(flow, {}, { hooks: { onUpstreamFailure: hook } });
+
+      expect(hook).toHaveBeenCalledTimes(2);
+      expect(hook).toHaveBeenCalledWith('mid', expect.objectContaining({ id: 'mid' }), ['root']);
+      expect(hook).toHaveBeenCalledWith('leaf', expect.objectContaining({ id: 'leaf' }), ['mid']);
+      expect(result.outputs.mid).toBe('blocked');
+      expect(result.outputs.leaf).toBe('blocked');
+    });
+
+    it('does not fire for nodes whose dependencies succeeded', async () => {
+      const hook = vi.fn();
+      const runner = new FlowRunner({ continueOnError: true });
+
+      const flow = defineFlow('no-fail', [
+        step({ id: 'a', run: () => 1 }),
+        step({ id: 'b', dependsOn: ['a'], run: () => 2 }),
+      ]);
+
+      const result = await runner.run(flow, {}, { hooks: { onUpstreamFailure: hook } });
+
+      expect(result.status).toBe('completed');
+      expect(hook).not.toHaveBeenCalled();
+      expect(result.outputs.b).toBe(2);
+    });
+  });
+
+  describe('concurrentNodes', () => {
+    it('runs independent nodes concurrently when enabled', async () => {
+      const runner = new FlowRunner();
+      const order: string[] = [];
+
+      const flow = defineFlow('concurrent', [
+        step({
+          id: 'fast',
+          run: async () => { order.push('fast-start'); await delay(10); order.push('fast-end'); return 'f'; },
+        }),
+        step({
+          id: 'slow',
+          run: async () => { order.push('slow-start'); await delay(50); order.push('slow-end'); return 's'; },
+        }),
+        step({
+          id: 'last',
+          dependsOn: ['fast', 'slow'],
+          run: () => { order.push('last'); return 'l'; },
+        }),
+      ]);
+
+      const result = await runner.run(flow, {}, { concurrentNodes: true, concurrency: 2 });
+
+      expect(result.status).toBe('completed');
+      // Both fast and slow should start before either finishes
+      expect(order.indexOf('fast-start')).toBeLessThan(order.indexOf('slow-end'));
+      expect(order.indexOf('slow-start')).toBeLessThan(order.indexOf('fast-end'));
+      expect(order[order.length - 1]).toBe('last');
+      expect(result.outputs.last).toBe('l');
+    });
+
+    it('respects concurrency limit in concurrent mode', async () => {
+      const runner = new FlowRunner();
+      let maxConcurrent = 0;
+      let active = 0;
+
+      const flow = defineFlow('limit-test', [
+        step({ id: 'a', run: async () => { active++; maxConcurrent = Math.max(maxConcurrent, active); await delay(30); active--; } }),
+        step({ id: 'b', run: async () => { active++; maxConcurrent = Math.max(maxConcurrent, active); await delay(30); active--; } }),
+        step({ id: 'c', run: async () => { active++; maxConcurrent = Math.max(maxConcurrent, active); await delay(30); active--; } }),
+      ]);
+
+      await runner.run(flow, {}, { concurrentNodes: true, concurrency: 2 });
+
+      expect(maxConcurrent).toBeLessThanOrEqual(2);
+    });
+
+    it('fires onUpstreamFailure in concurrent mode', async () => {
+      const hook = vi.fn().mockResolvedValue('blocked');
+      const runner = new FlowRunner();
+
+      const flow = defineFlow('concurrent-upstream', [
+        step({ id: 'fail', run: () => { throw new Error('boom'); } }),
+        step({ id: 'ok', run: () => 'fine' }),
+        step({ id: 'child', dependsOn: ['fail'], run: () => 'skip' }),
+      ]);
+
+      const result = await runner.run(flow, {}, {
+        concurrentNodes: true,
+        concurrency: 3,
+        continueOnError: true,
+        hooks: { onUpstreamFailure: hook },
+      });
+
+      expect(result.status).toBe('failed');
+      expect(hook).toHaveBeenCalledWith('child', expect.objectContaining({ id: 'child' }), ['fail']);
+      expect(result.outputs.child).toBe('blocked');
+      expect(result.outputs.ok).toBe('fine');
+    });
+  });
 });
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

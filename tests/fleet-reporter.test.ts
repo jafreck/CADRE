@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FleetReporter } from '../src/core/fleet-reporter.js';
-import type { FleetResult } from '../src/core/fleet-orchestrator.js';
-import type { IssueResult } from '../src/core/issue-orchestrator.js';
+import { FleetReporter } from '../src/core/fleet/fleet-reporter.js';
+import type { FleetResult } from '../src/core/fleet/fleet-orchestrator.js';
+import type { IssueResult } from '../src/core/pipeline/issue-orchestrator.js';
 import type { IssueDetail } from '../src/platform/provider.js';
 
-vi.mock('../src/core/phase-registry.js', () => ({
+vi.mock('../src/core/pipeline/phase-registry.js', () => ({
   getPhaseCount: vi.fn().mockReturnValue(5),
 }));
 

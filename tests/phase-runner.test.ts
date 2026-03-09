@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PhaseRunner } from '../src/core/phase-runner.js';
-import { BudgetExceededError } from '../src/core/issue-budget-guard.js';
-import type { GateCoordinator } from '../src/core/gate-coordinator.js';
+import { PhaseRunner } from '../src/core/pipeline/phase-runner.js';
+import { BudgetExceededError } from '../src/core/issue/issue-budget-guard.js';
+import type { GateCoordinator } from '../src/core/pipeline/gate-coordinator.js';
 import type { CheckpointManager } from '@cadre-dev/framework/engine';
 import type { IssueProgressWriter } from '@cadre-dev/framework/engine';
 import type { TokenTracker } from '@cadre-dev/framework/runtime';
 import type { Logger } from '@cadre-dev/framework/core';
-import type { PhaseExecutor, PhaseContext } from '../src/core/phase-executor.js';
+import type { PhaseExecutor, PhaseContext } from '../src/core/pipeline/phase-executor.js';
 import type { PhaseResult } from '../src/agents/types.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ function makeLogger(): Logger {
 
 function makeExecutor(overrides: Partial<PhaseExecutor> = {}): PhaseExecutor {
   return {
-    phaseId: 1,
+    id: 1,
     name: 'Analysis & Scouting',
     execute: vi.fn().mockResolvedValue('/tmp/output/analysis.md'),
     ...overrides,
@@ -132,7 +132,7 @@ describe('PhaseRunner', () => {
     it('does not run gate for phase 5 (out of 1-4 range)', async () => {
       const gateCoordinator = makeGateCoordinator('pass');
       const runner = makePhaseRunner(gateCoordinator);
-      const executor = makeExecutor({ phaseId: 5, name: 'PR Composition' });
+      const executor = makeExecutor({ id: 5, name: 'PR Composition' });
 
       await runner.runPhase(executor, MOCK_CTX, []);
 

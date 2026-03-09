@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 const guardRecordTokens = vi.fn();
 const guardCheckBudget = vi.fn();
 
-vi.mock('../src/core/issue-budget-guard.js', () => {
+vi.mock('../src/core/issue/issue-budget-guard.js', () => {
   class BudgetExceededError extends Error {
     constructor() {
       super('Per-issue token budget exceeded');
@@ -52,7 +52,7 @@ vi.mock('../src/executors/implementation-phase-executor.js', () => ({ Implementa
 vi.mock('../src/executors/integration-phase-executor.js', () => ({ IntegrationPhaseExecutor: vi.fn() }));
 vi.mock('../src/executors/pr-composition-phase-executor.js', () => ({ PRCompositionPhaseExecutor: vi.fn() }));
 
-vi.mock('../src/core/phase-gate.js', () => {
+vi.mock('../src/core/pipeline/phase-gate.js', () => {
   const makeGate = () => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) });
   return {
     AnalysisToPlanningGate: vi.fn(() => makeGate()),
@@ -67,7 +67,7 @@ vi.mock('../src/core/phase-gate.js', () => {
   };
 });
 
-vi.mock('../src/core/issue-notifier.js', () => ({
+vi.mock('../src/core/issue/issue-notifier.js', () => ({
   IssueNotifier: vi.fn().mockImplementation(() => ({
     notify: vi.fn().mockResolvedValue(undefined),
   })),
@@ -80,11 +80,11 @@ import { PlanningPhaseExecutor } from '../src/executors/planning-phase-executor.
 import { ImplementationPhaseExecutor } from '../src/executors/implementation-phase-executor.js';
 import { IntegrationPhaseExecutor } from '../src/executors/integration-phase-executor.js';
 import { PRCompositionPhaseExecutor } from '../src/executors/pr-composition-phase-executor.js';
-import { IssueOrchestrator } from '../src/core/issue-orchestrator.js';
-import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue-budget-guard.js';
-import { IssueNotifier } from '../src/core/issue-notifier.js';
+import { IssueOrchestrator } from '../src/core/pipeline/issue-orchestrator.js';
+import { IssueBudgetGuard, BudgetExceededError } from '../src/core/issue/issue-budget-guard.js';
+import { IssueNotifier } from '../src/core/issue/issue-notifier.js';
 import { CommitManager } from '../src/git/commit.js';
-import type { PhaseContext } from '../src/core/phase-executor.js';
+import type { PhaseContext } from '../src/core/pipeline/phase-executor.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 import { makeMockLogger } from './helpers/make-mock-logger.js';
 import { makeMockCheckpoint } from './helpers/make-mock-checkpoint.js';
@@ -154,11 +154,11 @@ function makeConfig(
   });
 }
 
-function makeExecutorMock(phaseId: number, name: string) {
+function makeExecutorMock(id: number, name: string) {
   return {
-    phaseId,
+    id,
     name,
-    execute: vi.fn(async (_ctx: PhaseContext) => `/output/phase-${phaseId}.md`),
+    execute: vi.fn(async (_ctx: PhaseContext) => `/output/phase-${id}.md`),
   };
 }
 

@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import type { RuntimeConfig } from '../config/loader.js';
+import type { RuntimeConfig } from '../../config/loader.js';
 import { FleetCheckpointManager, CheckpointManager } from '@cadre-dev/framework/engine';
-import { exists } from '../util/fs.js';
-import { renderFleetStatus, renderIssueDetail } from '../cli/status-renderer.js';
+import { exists } from '../../util/fs.js';
+import { renderFleetStatus, renderIssueDetail } from '../../cli/status-renderer.js';
 import type { Logger } from '@cadre-dev/framework/core';
 
 export class StatusService {

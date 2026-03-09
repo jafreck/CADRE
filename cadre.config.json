@@ -5,10 +5,7 @@
   "repoPath": ".",
   "baseBranch": "main",
   "issues": {
-    "query": {
-      "state": "open",
-      "limit": 1000
-    }
+    "ids": [361]
   },
   "branchTemplate": "cadre/issue-{issue}",
   "commits": {
@@ -43,7 +40,7 @@
   },
   "copilot": {
     "cliCommand": "copilot",
-    "model": "claude-sonnet-4.6",
+    "model": "claude-opus-4.6",
     "timeout": 1800000
   },
   "environment": {

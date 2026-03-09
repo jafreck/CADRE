@@ -21,7 +21,7 @@ vi.mock('../../src/util/process.js', () => ({
   killAllTrackedProcesses: vi.fn(),
 }));
 
-vi.mock('../../src/core/fleet-orchestrator.js', () => ({
+vi.mock('../../src/core/fleet/fleet-orchestrator.js', () => ({
   FleetOrchestrator: vi.fn().mockImplementation(() => ({
     run: vi.fn().mockResolvedValue({
       success: true,
@@ -58,7 +58,7 @@ vi.mock('../../src/core/agent-launcher.js', () => ({
 
 const mockDag = { getWaves: vi.fn().mockReturnValue([[{ number: 1, title: 'Test issue' }]]) };
 
-vi.mock('../../src/core/dependency-resolver.js', () => ({
+vi.mock('../../src/core/fleet/dependency-resolver.js', () => ({
   DependencyResolver: vi.fn().mockImplementation(() => ({
     resolve: vi.fn().mockResolvedValue(mockDag),
   })),
@@ -101,8 +101,8 @@ vi.mock('../../src/validation/stale-state-validator.js', () => ({
 }));
 
 import { RunCoordinator } from '../../src/core/run-coordinator.js';
-import { FleetOrchestrator } from '../../src/core/fleet-orchestrator.js';
-import { DependencyResolver } from '../../src/core/dependency-resolver.js';
+import { FleetOrchestrator } from '../../src/core/fleet/fleet-orchestrator.js';
+import { DependencyResolver } from '../../src/core/fleet/dependency-resolver.js';
 import { PreRunValidationSuite } from '@cadre-dev/framework/core';
 import { checkStaleState } from '../../src/validation/stale-state-validator.js';
 import { ensureDir } from '../../src/util/fs.js';

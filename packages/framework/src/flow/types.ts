@@ -58,10 +58,25 @@ export interface FlowExecutionContext<TContext = Record<string, unknown>> {
 
 export interface FlowNodeBase<TContext = Record<string, unknown>> {
   id: string;
+  /** Human-readable label for visualization and logging. */
+  name?: string;
+  /** Longer description of what this node does. */
+  description?: string;
   dependsOn?: string[];
   input?: unknown;
   checkpoint?: boolean;
   metadata?: Record<string, unknown>;
+  /** Per-node timeout in milliseconds. When exceeded, the node is aborted and treated as failed. */
+  timeoutMs?: number;
+  /** Per-node retry configuration. When set, the node is retried on failure. */
+  retry?: {
+    /** Maximum number of retry attempts (not counting the initial run). */
+    maxAttempts: number;
+    /** Backoff strategy between retries. Defaults to 'fixed'. */
+    backoff?: 'fixed' | 'linear' | 'exponential';
+    /** Base delay in milliseconds between retries. Defaults to 1000. */
+    delayMs?: number;
+  };
 }
 
 export interface FlowStepNode<TContext = Record<string, unknown>, TInput = unknown, TOutput = unknown>
@@ -95,6 +110,8 @@ export interface FlowLoopNode<TContext = Record<string, unknown>> extends FlowNo
   maxIterations: number;
   while?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<boolean>;
   until?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<boolean>;
+  /** Called when the loop runs 0 iterations (e.g. `while` returns false immediately). */
+  onSkip?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<unknown>;
 }
 
 export interface FlowParallelNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
@@ -103,12 +120,43 @@ export interface FlowParallelNode<TContext = Record<string, unknown>> extends Fl
   concurrency?: number;
 }
 
+export interface FlowSequenceNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
+  kind: 'sequence';
+  nodes: FlowNode<TContext>[];
+}
+
+export interface FlowMapNode<TContext = Record<string, unknown>, TInput = unknown, TItemOutput = unknown>
+  extends FlowNodeBase<TContext> {
+  kind: 'map';
+  /** Input that resolves to an iterable collection. */
+  input?: RoutedInput<TInput[]>;
+  inputSchema?: ZodType<TInput[]>;
+  outputSchema?: ZodType<TItemOutput[]>;
+  /** Maximum concurrent items. Defaults to unbounded. */
+  concurrency?: number;
+  /** Execute this step for each item in the input collection. */
+  do: (ctx: FlowExecutionContext<TContext>, item: TInput, index: number) => MaybePromise<TItemOutput>;
+}
+
+export interface FlowCatchNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
+  kind: 'catch';
+  /** The nodes to execute inside the try block. */
+  try: FlowNode<TContext>[];
+  /** Called when any node in `try` throws. Return value becomes the catch node's output. */
+  catch: (ctx: FlowExecutionContext<TContext>, error: Error) => MaybePromise<unknown>;
+  /** Optional nodes to execute after try/catch regardless of outcome. */
+  finally?: FlowNode<TContext>[];
+}
+
 export type FlowNode<TContext = Record<string, unknown>> =
   | FlowStepNode<TContext>
   | FlowGateNode<TContext>
   | FlowConditionalNode<TContext>
   | FlowLoopNode<TContext>
-  | FlowParallelNode<TContext>;
+  | FlowParallelNode<TContext>
+  | FlowSequenceNode<TContext>
+  | FlowMapNode<TContext>
+  | FlowCatchNode<TContext>;
 
 export interface FlowDefinition<TContext = Record<string, unknown>> {
   id: string;
@@ -117,7 +165,7 @@ export interface FlowDefinition<TContext = Record<string, unknown>> {
   contracts?: FlowContracts;
 }
 
-export type FlowRunStatus = 'completed' | 'failed';
+export type FlowRunStatus = 'completed' | 'failed' | 'running' | 'cancelled' | 'timed-out';
 
 export interface FlowCheckpointSnapshot<TContext = Record<string, unknown>> {
   flowId: string;
@@ -136,11 +184,42 @@ export interface FlowCheckpointAdapter<TContext = Record<string, unknown>> {
   save(snapshot: FlowCheckpointSnapshot<TContext>): MaybePromise<void>;
 }
 
+/** Lifecycle hooks called by FlowRunner during execution. */
+export interface FlowLifecycleHooks<TContext = Record<string, unknown>> {
+  /** Called before a node starts executing. */
+  onNodeStart?: (nodeId: string, node: FlowNode<TContext>) => MaybePromise<void>;
+  /** Called after a node completes successfully. */
+  onNodeComplete?: (nodeId: string, node: FlowNode<TContext>, output: unknown) => MaybePromise<void>;
+  /** Called when a node is skipped (checkpoint resume or loop skip). */
+  onNodeSkip?: (nodeId: string, node: FlowNode<TContext>) => MaybePromise<void>;
+  /**
+   * Called when a node is skipped because one or more of its `dependsOn`
+   * targets failed (or were themselves upstream-failed).  Requires
+   * `continueOnError: true`.  The return value, if any, is stored as the
+   * node's output.  The node is then marked as failed so that its own
+   * dependents also receive this callback.
+   */
+  onUpstreamFailure?: (nodeId: string, node: FlowNode<TContext>, failedDeps: string[]) => MaybePromise<unknown>;
+}
+
 export interface FlowRunnerOptions<TContext = Record<string, unknown>> {
   concurrency?: number;
   continueOnError?: boolean;
+  /**
+   * When `true`, nodes whose `dependsOn` constraints are satisfied are
+   * executed concurrently (up to `concurrency`).  When `false` (default),
+   * nodes execute sequentially in declaration order — which is required
+   * when data routing relies on implicit ordering rather than explicit
+   * `dependsOn` edges.
+   */
+  concurrentNodes?: boolean;
   checkpoint?: FlowCheckpointAdapter<TContext>;
   contracts?: FlowContracts;
+  hooks?: FlowLifecycleHooks<TContext>;
+  /** Flow-level timeout in milliseconds. When exceeded the run is aborted with status 'timed-out'. */
+  timeoutMs?: number;
+  /** AbortSignal for external cancellation. When aborted, the run completes with status 'cancelled'. */
+  signal?: AbortSignal;
 }
 
 export interface FlowRunResult<TContext = Record<string, unknown>> {

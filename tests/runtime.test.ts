@@ -44,7 +44,7 @@ vi.mock('@cadre-dev/framework/notifications', () => ({
   })),
 }));
 
-vi.mock('../src/core/fleet-orchestrator.js', () => ({
+vi.mock('../src/core/fleet/fleet-orchestrator.js', () => ({
   FleetOrchestrator: vi.fn().mockImplementation(() => ({
     run: vi.fn().mockResolvedValue({
       success: true,
@@ -67,7 +67,7 @@ vi.mock('../src/core/fleet-orchestrator.js', () => ({
 
 const mockDag = { getWaves: vi.fn().mockReturnValue([[{ number: 1, title: 'Test issue' }]]) };
 
-vi.mock('../src/core/dependency-resolver.js', () => ({
+vi.mock('../src/core/fleet/dependency-resolver.js', () => ({
   DependencyResolver: vi.fn().mockImplementation(() => ({
     resolve: vi.fn().mockResolvedValue(mockDag),
   })),
@@ -232,13 +232,13 @@ vi.mock('../src/reporting/report-writer.js', () => ({
 
 import { CadreRuntime } from '../src/core/runtime.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
-import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
+import { FleetOrchestrator } from '../src/core/fleet/fleet-orchestrator.js';
 import { createPlatformProvider } from '../src/platform/factory.js';
 import { FleetProgressWriter } from '@cadre-dev/framework/engine';
 import { FleetCheckpointManager, CheckpointManager } from '@cadre-dev/framework/engine';
 import { exists } from '../src/util/fs.js';
 import { checkStaleState } from '../src/validation/stale-state-validator.js';
-import { DependencyResolver } from '../src/core/dependency-resolver.js';
+import { DependencyResolver } from '../src/core/fleet/dependency-resolver.js';
 import { DependencyResolutionError, StaleStateError, RuntimeInterruptedError } from '../src/errors.js';
 import { ReportWriter } from '../src/reporting/report-writer.js';
 import { PreRunValidationSuite } from '@cadre-dev/framework/core';

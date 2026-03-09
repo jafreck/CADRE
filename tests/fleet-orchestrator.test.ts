@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FleetOrchestrator } from '../src/core/fleet-orchestrator.js';
+import { FleetOrchestrator } from '../src/core/fleet/fleet-orchestrator.js';
 import { NotificationManager } from '@cadre-dev/framework/notifications';
 import { RemoteBranchMissingError } from '../src/git/worktree.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
@@ -93,7 +93,7 @@ vi.mock('@cadre-dev/framework/engine', () => ({
     execute: vi.fn(),
   })),
 }));
-vi.mock('../src/core/issue-orchestrator.js', () => ({
+vi.mock('../src/core/pipeline/issue-orchestrator.js', () => ({
   IssueOrchestrator: vi.fn().mockImplementation(() => ({
     run: vi.fn().mockResolvedValue({
       issueNumber: 1,
@@ -105,7 +105,7 @@ vi.mock('../src/core/issue-orchestrator.js', () => ({
     }),
   })),
 }));
-vi.mock('../src/core/phase-registry.js', () => ({
+vi.mock('../src/core/pipeline/phase-registry.js', () => ({
   getPhaseCount: vi.fn().mockReturnValue(5),
 }));
 vi.mock('@cadre-dev/framework/core', async (importOriginal) => ({
@@ -418,7 +418,7 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
   });
 
   it('dispatches budget-exceeded when token budget is exceeded', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
@@ -460,7 +460,7 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
   });
 
   it('dispatches budget-warning when token usage is between 80-100% of budget', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
@@ -1518,7 +1518,7 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
   });
 
   it('codeDoneNoPR is populated when an issue has codeComplete: true and success: false', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
@@ -1566,7 +1566,7 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
   });
 
   it('codeDoneNoPR is empty when codeComplete is false and success is false', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
@@ -1601,7 +1601,7 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
   });
 
   it('sets code-complete fleet checkpoint status when codeComplete is true and success is false', async () => {
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 2,
@@ -2107,7 +2107,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
@@ -2151,7 +2151,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
       () => makeMockFleetCheckpoint(),
     );
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => ({
         run: vi.fn().mockResolvedValue({
@@ -2219,7 +2219,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => ({
         run: vi.fn().mockResolvedValue({
@@ -2284,7 +2284,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
@@ -2342,7 +2342,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 1,
@@ -2482,7 +2482,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 16,
@@ -2590,7 +2590,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 16,
@@ -2678,7 +2678,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 17,
@@ -2830,7 +2830,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 16,
@@ -2927,7 +2927,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
-    const { IssueOrchestrator } = await import('../src/core/issue-orchestrator.js');
+    const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue({
         issueNumber: 20,

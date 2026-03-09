@@ -12,6 +12,7 @@ import {
   type FlowNode,
   type FlowRunResult,
   type FlowRunnerOptions,
+  type FlowRunStatus,
 } from './types.js';
 
 interface RunnerState<TContext> {
@@ -22,10 +23,15 @@ interface RunnerState<TContext> {
   outputs: Record<string, unknown>;
   executionOutputs: Record<string, unknown>;
   completedExecutionIds: Set<string>;
+  failedExecutionIds: Set<string>;
   hadError: boolean;
   lastError?: FlowExecutionError;
   startedAt: string;
-  options: Required<Pick<FlowRunnerOptions<TContext>, 'concurrency' | 'continueOnError'>> & Pick<FlowRunnerOptions<TContext>, 'checkpoint'>;
+  aborted: boolean;
+  abortReason?: FlowRunStatus;
+  options: Required<Pick<FlowRunnerOptions<TContext>, 'concurrency' | 'continueOnError'>>
+    & Pick<FlowRunnerOptions<TContext>, 'checkpoint' | 'hooks' | 'timeoutMs' | 'signal'>
+    & { concurrentNodes: boolean };
 }
 
 export class FlowRunner<TContext = Record<string, unknown>> {
@@ -35,8 +41,15 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     const merged: RunnerState<TContext>['options'] = {
       concurrency: options.concurrency ?? this.defaults.concurrency ?? Number.POSITIVE_INFINITY,
       continueOnError: options.continueOnError ?? this.defaults.continueOnError ?? false,
+      concurrentNodes: options.concurrentNodes ?? this.defaults.concurrentNodes ?? false,
       checkpoint: options.checkpoint ?? this.defaults.checkpoint,
+      hooks: options.hooks ?? this.defaults.hooks,
+      timeoutMs: options.timeoutMs ?? this.defaults.timeoutMs,
+      signal: options.signal ?? this.defaults.signal,
     };
+
+    // Validate all dependsOn references point to real node IDs
+    this.validateDependsOnRefs(flow);
 
     const startedAt = new Date().toISOString();
     const state: RunnerState<TContext> = {
@@ -47,12 +60,25 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       outputs: {},
       executionOutputs: {},
       completedExecutionIds: new Set(),
+      failedExecutionIds: new Set(),
       hadError: false,
       startedAt,
+      aborted: false,
       options: merged,
     };
 
     await this.loadCheckpoint(state);
+
+    // Wire up external abort signal
+    if (merged.signal) {
+      if (merged.signal.aborted) {
+        state.aborted = true;
+        state.abortReason = 'cancelled';
+      } else {
+        const onAbort = (): void => { state.aborted = true; state.abortReason = 'cancelled'; };
+        merged.signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
 
     if (Object.keys(state.contracts).length > 0) {
       const validation = validateFlowContracts(flow, state.contracts);
@@ -69,10 +95,21 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       }
     }
 
+    // Flow-level timeout
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    if (merged.timeoutMs && merged.timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        state.aborted = true;
+        state.abortReason = 'timed-out';
+      }, merged.timeoutMs);
+    }
+
     try {
       await this.executeNodeList(state, flow.nodes, [flow.id]);
       const finishedAt = new Date().toISOString();
-      const status = state.hadError ? 'failed' : 'completed';
+      const status: FlowRunStatus = state.aborted
+        ? (state.abortReason ?? 'cancelled')
+        : state.hadError ? 'failed' : 'completed';
       await this.persistCheckpoint(state, status, state.lastError?.message);
       return {
         flowId: flow.id,
@@ -87,13 +124,16 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       };
     } catch (error) {
       const wrapped = this.wrapError(flow.id, 'flow', flow.id, error);
-      await this.persistCheckpoint(state, 'failed', wrapped.message);
+      const status: FlowRunStatus = state.aborted
+        ? (state.abortReason ?? 'cancelled')
+        : 'failed';
+      await this.persistCheckpoint(state, status, wrapped.message);
       if (!merged.continueOnError) {
         throw wrapped;
       }
       return {
         flowId: flow.id,
-        status: 'failed',
+        status,
         outputs: { ...state.outputs },
         executionOutputs: { ...state.executionOutputs },
         context: state.context,
@@ -102,6 +142,8 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         completedExecutionIds: [...state.completedExecutionIds],
         error: wrapped,
       };
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
     }
   }
 
@@ -114,11 +156,15 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     for (const executionId of snapshot.completedExecutionIds) {
       state.completedExecutionIds.add(executionId);
     }
+    // Restore context from checkpoint if available
+    if (snapshot.context !== undefined) {
+      state.context = snapshot.context;
+    }
   }
 
   private async persistCheckpoint(
     state: RunnerState<TContext>,
-    status: 'completed' | 'failed',
+    status: FlowRunStatus,
     error?: string,
   ): Promise<void> {
     if (!state.options.checkpoint) return;
@@ -153,13 +199,30 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     nodes: FlowNode<TContext>[],
     executionPath: string[],
   ): Promise<Record<string, unknown>> {
+    if (state.options.concurrentNodes) {
+      return this.executeNodeListConcurrent(state, nodes, executionPath);
+    }
+    return this.executeNodeListSequential(state, nodes, executionPath);
+  }
+
+  // ── Sequential path (default — preserves declaration-order execution) ─────
+
+  private async executeNodeListSequential(
+    state: RunnerState<TContext>,
+    nodes: FlowNode<TContext>[],
+    executionPath: string[],
+  ): Promise<Record<string, unknown>> {
     this.validateNodeIds(nodes, executionPath.join('/'));
 
     const pending = [...nodes];
     const localResolved = new Set<string>();
+    const localFailed = new Set<string>();
     const localOutputs: Record<string, unknown> = {};
 
     while (pending.length > 0) {
+      // Check for abort
+      if (state.aborted) break;
+
       const ready = pending.filter((node) => (node.dependsOn ?? []).every((dependency) => localResolved.has(dependency)));
 
       if (ready.length === 0) {
@@ -168,8 +231,30 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       }
 
       for (const node of ready) {
+        if (state.aborted) break;
+
         const executionId = `${executionPath.join('/')}/${node.id}`;
+
+        // ── Upstream failure propagation ───────────────────────────────
+        const failedDeps = (node.dependsOn ?? []).filter((d) => localFailed.has(d));
+        if (failedDeps.length > 0) {
+          if (state.options.hooks?.onUpstreamFailure) {
+            const output = await state.options.hooks.onUpstreamFailure(node.id, node, failedDeps);
+            localOutputs[node.id] = output;
+            state.outputs[node.id] = output;
+          }
+          state.hadError = true;
+          localResolved.add(node.id);
+          localFailed.add(node.id);
+          state.failedExecutionIds.add(executionId);
+          await this.persistCheckpoint(state, 'failed');
+          const index = pending.findIndex((candidate) => candidate.id === node.id);
+          pending.splice(index, 1);
+          continue;
+        }
+
         if (state.completedExecutionIds.has(executionId)) {
+          await state.options.hooks?.onNodeSkip?.(node.id, node);
           localResolved.add(node.id);
           localOutputs[node.id] = state.executionOutputs[executionId];
           const index = pending.findIndex((candidate) => candidate.id === node.id);
@@ -178,18 +263,23 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         }
 
         try {
-          const output = await this.executeNode(state, node, [...executionPath, node.id], executionId);
+          await state.options.hooks?.onNodeStart?.(node.id, node);
+          const output = await this.executeNodeWithRetry(state, node, [...executionPath, node.id], executionId);
           state.outputs[node.id] = output;
           state.executionOutputs[executionId] = output;
           state.completedExecutionIds.add(executionId);
           localOutputs[node.id] = output;
           localResolved.add(node.id);
+          await state.options.hooks?.onNodeComplete?.(node.id, node, output);
           await this.persistCheckpoint(state, 'completed');
         } catch (error) {
           const wrapped = this.wrapError(state.flow.id, node.id, executionId, error);
           state.hadError = true;
           state.lastError = wrapped;
           localResolved.add(node.id);
+          localFailed.add(node.id);
+          state.failedExecutionIds.add(executionId);
+          await this.persistCheckpoint(state, 'failed', wrapped.message);
           if (!state.options.continueOnError) {
             throw wrapped;
           }
@@ -201,6 +291,193 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     }
 
     return localOutputs;
+  }
+
+  // ── Concurrent path (event-driven, fine-grained dep scheduling) ───────────
+
+  private executeNodeListConcurrent(
+    state: RunnerState<TContext>,
+    nodes: FlowNode<TContext>[],
+    executionPath: string[],
+  ): Promise<Record<string, unknown>> {
+    this.validateNodeIds(nodes, executionPath.join('/'));
+
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    const localResolved = new Set<string>();
+    const localFailed = new Set<string>();
+    const localOutputs: Record<string, unknown> = {};
+    const limit = pLimit(state.options.concurrency);
+    const inFlight = new Set<string>();
+
+    if (nodeMap.size === 0) {
+      return Promise.resolve(localOutputs);
+    }
+
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      let settled = false;
+
+      const finish = (error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        if (error) reject(error);
+        else resolve(localOutputs);
+      };
+
+      const processNode = async (node: FlowNode<TContext>): Promise<void> => {
+        if (settled || state.aborted) return;
+        const executionId = `${executionPath.join('/')}/${node.id}`;
+
+        // ── Upstream failure propagation ─────────────────────────────
+        const failedDeps = (node.dependsOn ?? []).filter((d) => localFailed.has(d));
+        if (failedDeps.length > 0) {
+          if (state.options.hooks?.onUpstreamFailure) {
+            try {
+              const output = await state.options.hooks.onUpstreamFailure(node.id, node, failedDeps);
+              localOutputs[node.id] = output;
+              state.outputs[node.id] = output;
+            } catch { /* hook errors do not stop propagation */ }
+          }
+          state.hadError = true;
+          localResolved.add(node.id);
+          localFailed.add(node.id);
+          state.failedExecutionIds.add(executionId);
+          return;
+        }
+
+        // ── Checkpoint skip ─────────────────────────────────────────
+        if (state.completedExecutionIds.has(executionId)) {
+          try {
+            await state.options.hooks?.onNodeSkip?.(node.id, node);
+          } catch { /* swallow */ }
+          localResolved.add(node.id);
+          localOutputs[node.id] = state.executionOutputs[executionId];
+          return;
+        }
+
+        // ── Normal execution ────────────────────────────────────────
+        try {
+          await state.options.hooks?.onNodeStart?.(node.id, node);
+          const output = await this.executeNodeWithRetry(state, node, [...executionPath, node.id], executionId);
+          state.outputs[node.id] = output;
+          state.executionOutputs[executionId] = output;
+          state.completedExecutionIds.add(executionId);
+          localOutputs[node.id] = output;
+          localResolved.add(node.id);
+          await state.options.hooks?.onNodeComplete?.(node.id, node, output);
+          await this.persistCheckpoint(state, 'completed');
+        } catch (error) {
+          const wrapped = this.wrapError(state.flow.id, node.id, executionId, error);
+          state.hadError = true;
+          state.lastError = wrapped;
+          localResolved.add(node.id);
+          localFailed.add(node.id);
+          state.failedExecutionIds.add(executionId);
+          await this.persistCheckpoint(state, 'failed', wrapped.message);
+          if (!state.options.continueOnError) {
+            finish(wrapped);
+            return;
+          }
+        }
+      };
+
+      const scheduleReady = (): void => {
+        if (settled || state.aborted) {
+          if (state.aborted && !settled) finish();
+          return;
+        }
+
+        // Check completion
+        if (localResolved.size >= nodeMap.size) {
+          finish();
+          return;
+        }
+
+        let newlyScheduled = false;
+        for (const [id, node] of nodeMap) {
+          if (localResolved.has(id) || inFlight.has(id)) continue;
+          const deps = node.dependsOn ?? [];
+          if (!deps.every((d) => localResolved.has(d))) continue;
+
+          newlyScheduled = true;
+          inFlight.add(id);
+          limit(async () => {
+            await processNode(node);
+            inFlight.delete(id);
+            scheduleReady();
+          }).catch((err) => {
+            if (!settled) finish(err instanceof Error ? err : new Error(String(err)));
+          });
+        }
+
+        // Cycle detection: nothing in flight, nothing new, but not all resolved
+        if (!newlyScheduled && inFlight.size === 0 && localResolved.size < nodeMap.size) {
+          const unresolved = [...nodeMap.keys()].filter((id) => !localResolved.has(id)).join(', ');
+          finish(new FlowCycleError(`No executable nodes remain in scope ${executionPath.join('/')} (pending: ${unresolved})`));
+        }
+      };
+
+      scheduleReady();
+    });
+  }
+
+  // ── Per-node retry + timeout wrapper ───────────────────────────────────────
+
+  private async executeNodeWithRetry(
+    state: RunnerState<TContext>,
+    node: FlowNode<TContext>,
+    executionPath: string[],
+    executionId: string,
+  ): Promise<unknown> {
+    const maxAttempts = (node.retry?.maxAttempts ?? 0) + 1;
+    const backoff = node.retry?.backoff ?? 'fixed';
+    const baseDelay = node.retry?.delayMs ?? 1000;
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (state.aborted) {
+        throw new Error(`Flow aborted (${state.abortReason ?? 'cancelled'})`);
+      }
+      try {
+        return await this.executeNodeWithTimeout(state, node, executionPath, executionId);
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxAttempts - 1) {
+          const delay = backoff === 'exponential'
+            ? baseDelay * Math.pow(2, attempt)
+            : backoff === 'linear'
+              ? baseDelay * (attempt + 1)
+              : baseDelay;
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private async executeNodeWithTimeout(
+    state: RunnerState<TContext>,
+    node: FlowNode<TContext>,
+    executionPath: string[],
+    executionId: string,
+  ): Promise<unknown> {
+    if (!node.timeoutMs || node.timeoutMs <= 0) {
+      return this.executeNode(state, node, executionPath, executionId);
+    }
+
+    return new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new FlowExecutionError(
+          `Node '${node.id}' timed out after ${node.timeoutMs}ms`,
+          state.flow.id,
+          node.id,
+          executionId,
+        ));
+      }, node.timeoutMs);
+
+      this.executeNode(state, node, executionPath, executionId)
+        .then(resolve, reject)
+        .finally(() => clearTimeout(timer));
+    });
   }
 
   private async executeNode(
@@ -238,6 +515,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         let iterations = 0;
 
         while (iterations < node.maxIterations) {
+          if (state.aborted) break;
           const loopCtx = this.buildExecutionContext(state, [...executionPath, `iteration-${iterations + 1}`]);
           if (node.while) {
             const shouldContinue = await node.while(loopCtx);
@@ -260,7 +538,27 @@ export class FlowRunner<TContext = Record<string, unknown>> {
           }
         }
 
+        // Fire onSkip when the loop ran 0 iterations
+        if (iterations === 0 && node.onSkip) {
+          const skipCtx = this.buildExecutionContext(state, executionPath);
+          const skipOutput = await node.onSkip(skipCtx);
+          return { iterations: 0, outputs: [], skipped: true, skipOutput };
+        }
+
         return { iterations, outputs };
+      }
+      case 'sequence': {
+        // Expand sequence: auto-wire dependsOn to previous sibling
+        const wiredNodes = node.nodes.map((child, index) => {
+          if (index === 0) return child;
+          const prev = node.nodes[index - 1];
+          return {
+            ...child,
+            dependsOn: child.dependsOn ?? [prev.id],
+          };
+        });
+        const seqOutputs = await this.executeNodeList(state, wiredNodes, executionPath);
+        return seqOutputs;
       }
       case 'parallel': {
         const entries = Object.entries(node.branches);
@@ -278,9 +576,46 @@ export class FlowRunner<TContext = Record<string, unknown>> {
 
         return branchResults;
       }
+      case 'map': {
+        const items = resolvedInput as unknown[];
+        if (!Array.isArray(items)) {
+          throw new FlowExecutionError(
+            `Map node '${node.id}' requires array input, got ${typeof items}`,
+            state.flow.id,
+            node.id,
+            executionId,
+          );
+        }
+        const mapLimit = pLimit(Math.max(1, Math.floor(node.concurrency ?? state.options.concurrency)));
+        const results = await Promise.all(
+          items.map((item, index) =>
+            mapLimit(async () => {
+              if (state.aborted) return undefined;
+              const itemCtx = this.buildExecutionContext(state, [...executionPath, `item-${index}`]);
+              return node.do(itemCtx, item, index);
+            }),
+          ),
+        );
+        return results;
+      }
+      case 'catch': {
+        let tryOutput: unknown;
+        let caughtError: Error | undefined;
+        try {
+          tryOutput = await this.executeNodeList(state, node.try, [...executionPath, 'try']);
+        } catch (error) {
+          caughtError = error instanceof Error ? error : new Error(String(error));
+          const catchCtx = this.buildExecutionContext(state, [...executionPath, 'catch']);
+          tryOutput = await node.catch(catchCtx, caughtError);
+        }
+        if (node.finally) {
+          await this.executeNodeList(state, node.finally, [...executionPath, 'finally']);
+        }
+        return { output: tryOutput, caught: caughtError?.message };
+      }
       default: {
-        const exhaustive: never = node;
-        throw new Error(`Unsupported node kind ${(exhaustive as { kind?: string }).kind ?? 'unknown'}`);
+        const _exhaustive: never = node;
+        throw new Error(`Unsupported node kind ${(_exhaustive as { kind?: string }).kind ?? 'unknown'}`);
       }
     }
   }
@@ -482,15 +817,64 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         if (node.kind === 'loop') {
           visit(node.do);
         }
+        if (node.kind === 'sequence') {
+          visit(node.nodes);
+        }
         if (node.kind === 'parallel') {
           for (const branch of Object.values(node.branches)) {
             visit(branch);
           }
         }
+        if (node.kind === 'catch') {
+          visit(node.try);
+          if (node.finally) visit(node.finally);
+        }
       }
     };
     visit(nodes);
     return indexed;
+  }
+
+  /**
+   * Validate that all dependsOn references in a flow point to node IDs
+   * that actually exist. Throws FlowCycleError if dangling references found.
+   */
+  private validateDependsOnRefs(flow: FlowDefinition<TContext>): void {
+    const allNodeIds = new Set<string>();
+    const danglingRefs: Array<{ nodeId: string; missingDep: string }> = [];
+
+    const collectIds = (items: FlowNode<TContext>[]): void => {
+      for (const node of items) {
+        allNodeIds.add(node.id);
+        if (node.kind === 'conditional') { collectIds(node.then); collectIds(node.else ?? []); }
+        if (node.kind === 'loop') { collectIds(node.do); }
+        if (node.kind === 'sequence') { collectIds(node.nodes); }
+        if (node.kind === 'parallel') { for (const b of Object.values(node.branches)) collectIds(b); }
+        if (node.kind === 'catch') { collectIds(node.try); if (node.finally) collectIds(node.finally); }
+      }
+    };
+    collectIds(flow.nodes);
+
+    const checkDeps = (items: FlowNode<TContext>[]): void => {
+      for (const node of items) {
+        for (const dep of node.dependsOn ?? []) {
+          if (!allNodeIds.has(dep)) {
+            danglingRefs.push({ nodeId: node.id, missingDep: dep });
+          }
+        }
+        if (node.kind === 'conditional') { checkDeps(node.then); checkDeps(node.else ?? []); }
+        if (node.kind === 'loop') { checkDeps(node.do); }
+        if (node.kind === 'sequence') { checkDeps(node.nodes); }
+        if (node.kind === 'parallel') { for (const b of Object.values(node.branches)) checkDeps(b); }
+        if (node.kind === 'catch') { checkDeps(node.try); if (node.finally) checkDeps(node.finally); }
+      }
+    };
+    checkDeps(flow.nodes);
+
+    if (danglingRefs.length > 0) {
+      const details = danglingRefs.map((r) => `node '${r.nodeId}' depends on non-existent '${r.missingDep}'`).join('; ');
+      throw new FlowCycleError(`Invalid dependsOn references in flow '${flow.id}': ${details}`);
+    }
   }
 
   private validateNodeIds(nodes: FlowNode<TContext>[], scope: string): void {

@@ -7,13 +7,20 @@ export {
   conditional,
   loop,
   parallel,
+  sequence,
+  map,
+  catchError,
+  gatedStep,
 } from './dsl.js';
+
+export type { GatedStepConfig } from './dsl.js';
 
 export { fromStep, fromSteps, fromContext } from './refs.js';
 export { FlowRunner } from './runner.js';
 export { validateFlowContracts } from './contracts.js';
 
 export type {
+  MaybePromise,
   DataRef,
   FlowContracts,
   StepContract,
@@ -25,12 +32,24 @@ export type {
   FlowLoopNode,
   FlowParallelNode,
   FlowConditionalNode,
+  FlowSequenceNode,
+  FlowMapNode,
+  FlowCatchNode,
   FlowDefinition,
   FlowExecutionContext,
   FlowRunResult,
+  FlowRunStatus,
   FlowRunnerOptions,
   FlowCheckpointAdapter,
   FlowCheckpointSnapshot,
+  FlowLifecycleHooks,
 } from './types.js';
 
 export { FlowExecutionError, FlowCycleError, FlowContractError } from './types.js';
+
+export {
+  phaseExecutorAsStep,
+  phaseGateAsFlowGate,
+  manifestToFlow,
+  type FlowPhaseContext,
+} from './bridge.js';

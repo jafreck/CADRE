@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { CostEstimator } from '@cadre-dev/framework/core';
-import { ISSUE_PHASES } from '../core/phase-registry.js';
+import { PHASE_MANIFEST } from '../core/pipeline/phase-registry.js';
 import { atomicWriteJSON } from '../util/fs.js';
 import type { TokenTracker, TokenRecord } from '@cadre-dev/framework/runtime';
 import type { CostReport, CostReportAgentEntry, CostReportPhaseEntry } from './types.js';
@@ -57,7 +57,7 @@ export class CostReportWriter {
       });
     }
 
-    const byPhase: CostReportPhaseEntry[] = ISSUE_PHASES.map((phase) => {
+    const byPhase: CostReportPhaseEntry[] = PHASE_MANIFEST.map((phase) => {
       const agg = phaseMap.get(phase.id) ?? { tokens: 0, inputTokens: 0, outputTokens: 0 };
       const costEst =
         agg.inputTokens > 0 || agg.outputTokens > 0
