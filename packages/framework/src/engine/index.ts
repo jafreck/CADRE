@@ -10,6 +10,8 @@ export type {
   PhaseResult,
   WorkItemComment,
   WorkItem,
+  CondensedWorkItemComponent,
+  CondensedWorkItemGraph,
 } from './types.js';
 export { CyclicDependencyError } from './types.js';
 
@@ -59,6 +61,7 @@ export {
 
 // Scheduler
 export { WorkItemDag } from './scheduler/issue-dag.js';
+export { condenseWorkItemGraph } from './scheduler/graph-condensation.js';
 
 // Progress
 export type { PullRequestRef, IssueProgressInfo } from './progress/progress.js';

@@ -21,6 +21,10 @@ describe('@cadre/pipeline-engine barrel exports', () => {
     expect(typeof pipelineEngine.WorkItemDag).toBe('function');
   });
 
+  it('should export condenseWorkItemGraph', () => {
+    expect(typeof pipelineEngine.condenseWorkItemGraph).toBe('function');
+  });
+
   it('should export helper functions for phase manifests', () => {
     expect(typeof pipelineEngine.getPhaseSubset).toBe('function');
     expect(typeof pipelineEngine.getPhase).toBe('function');

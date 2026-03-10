@@ -36,6 +36,28 @@ export interface WorkItem {
   linkedPRs: number[];
 }
 
+/** A strongly-connected component produced by graph condensation. */
+export interface CondensedWorkItemComponent<TWorkItem extends WorkItem = WorkItem> {
+  /** Stable component id derived from the sorted work item numbers. */
+  id: string;
+  /** Sorted work item numbers contained in this component. */
+  itemNumbers: number[];
+  /** Original work items contained in this component. */
+  items: TWorkItem[];
+  /** True when the component represents a cycle or self-loop. */
+  isCycle: boolean;
+}
+
+/** Result of condensing an arbitrary directed work-item graph into a DAG. */
+export interface CondensedWorkItemGraph<TWorkItem extends WorkItem = WorkItem> {
+  /** All condensed components, one per SCC, in stable order. */
+  components: CondensedWorkItemComponent<TWorkItem>[];
+  /** DAG dependency map between component ids. */
+  depMap: Record<string, string[]>;
+  /** Lookup from work item number to its containing component id. */
+  itemToComponentId: Record<number, string>;
+}
+
 /** Minimal logger interface for engine consumers. */
 export interface Logger {
   info(message: string, context?: Record<string, unknown>): void;
