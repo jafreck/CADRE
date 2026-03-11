@@ -31,10 +31,10 @@ describe('CostReportWriter', () => {
 
   describe('build', () => {
     it('returns a CostReport with the correct top-level fields', () => {
-      tracker.record(1, 'scout', 1, 500);
+      tracker.record('1', 'scout', 1, 500);
       const report = writer.build(1, tracker, 'gpt-4o');
 
-      expect(report.issueNumber).toBe(1);
+      expect(report.workItemId).toBe('1');
       expect(report.model).toBe('gpt-4o');
       expect(typeof report.generatedAt).toBe('string');
       expect(report.totalTokens).toBe(500);
@@ -43,9 +43,9 @@ describe('CostReportWriter', () => {
 
     it('aggregates byAgent with agent, tokens, inputTokens, outputTokens, estimatedCost', () => {
       tracker.importRecords([
-        { issueNumber: 1, agent: 'scout', phase: 1, tokens: 300, timestamp: '', input: 200, output: 100 },
-        { issueNumber: 1, agent: 'scout', phase: 2, tokens: 200, timestamp: '', input: 150, output: 50 },
-        { issueNumber: 1, agent: 'coder', phase: 3, tokens: 400, timestamp: '', input: 300, output: 100 },
+        { workItemId: '1', agent: 'scout', phase: 1, tokens: 300, timestamp: '', input: 200, output: 100 },
+        { workItemId: '1', agent: 'scout', phase: 2, tokens: 200, timestamp: '', input: 150, output: 50 },
+        { workItemId: '1', agent: 'coder', phase: 3, tokens: 400, timestamp: '', input: 300, output: 100 },
       ]);
 
       const report = writer.build(1, tracker, 'gpt-4o');
@@ -65,8 +65,8 @@ describe('CostReportWriter', () => {
 
     it('aggregates byPhase with phase, phaseName, tokens, estimatedCost', () => {
       tracker.importRecords([
-        { issueNumber: 1, agent: 'scout', phase: 1, tokens: 200, timestamp: '' },
-        { issueNumber: 1, agent: 'planner', phase: 2, tokens: 300, timestamp: '' },
+        { workItemId: '1', agent: 'scout', phase: 1, tokens: 200, timestamp: '' },
+        { workItemId: '1', agent: 'planner', phase: 2, tokens: 300, timestamp: '' },
       ]);
 
       const report = writer.build(1, tracker, 'gpt-4o');
@@ -90,7 +90,7 @@ describe('CostReportWriter', () => {
 
       const w = new CostReportWriter(estimator);
       tracker.importRecords([
-        { issueNumber: 1, agent: 'scout', phase: 1, tokens: 300, timestamp: '', input: 200, output: 100 },
+        { workItemId: '1', agent: 'scout', phase: 1, tokens: 300, timestamp: '', input: 200, output: 100 },
       ]);
 
       w.build(1, tracker, 'gpt-4o');
@@ -105,7 +105,7 @@ describe('CostReportWriter', () => {
 
       const w = new CostReportWriter(estimator);
       tracker.importRecords([
-        { issueNumber: 1, agent: 'scout', phase: 1, tokens: 300, timestamp: '' },
+        { workItemId: '1', agent: 'scout', phase: 1, tokens: 300, timestamp: '' },
       ]);
 
       w.build(1, tracker, 'gpt-4o');
@@ -117,8 +117,8 @@ describe('CostReportWriter', () => {
 
     it('filters records to the specified issueNumber', () => {
       tracker.importRecords([
-        { issueNumber: 1, agent: 'scout', phase: 1, tokens: 100, timestamp: '' },
-        { issueNumber: 2, agent: 'scout', phase: 1, tokens: 9999, timestamp: '' },
+        { workItemId: '1', agent: 'scout', phase: 1, tokens: 100, timestamp: '' },
+        { workItemId: '2', agent: 'scout', phase: 1, tokens: 9999, timestamp: '' },
       ]);
 
       const report = writer.build(1, tracker, 'gpt-4o');
@@ -127,7 +127,7 @@ describe('CostReportWriter', () => {
 
     it('returns zero tokens for an issue with no records', () => {
       const report = writer.build(42, tracker, 'gpt-4o');
-      expect(report.issueNumber).toBe(42);
+      expect(report.workItemId).toBe('42');
       expect(report.totalTokens).toBe(0);
       expect(report.byAgent).toHaveLength(0);
     });
@@ -145,9 +145,9 @@ describe('CostReportWriter', () => {
       expect(fsUtil.atomicWriteJSON).toHaveBeenCalledWith(expectedPath, report);
     });
 
-    it('written JSON contains correct issueNumber and totalTokens', async () => {
+    it('written JSON contains correct workItemId and totalTokens', async () => {
       tracker.importRecords([
-        { issueNumber: 7, agent: 'coder', phase: 3, tokens: 750, timestamp: '' },
+        { workItemId: '7', agent: 'coder', phase: 3, tokens: 750, timestamp: '' },
       ]);
       const report = writer.build(7, tracker, 'gpt-4o');
       const progressDir = '/tmp/cadre/issues/7';
@@ -155,7 +155,7 @@ describe('CostReportWriter', () => {
       await writer.write(7, report, progressDir);
 
       const [, writtenData] = vi.mocked(fsUtil.atomicWriteJSON).mock.calls[0] as [string, typeof report];
-      expect(writtenData.issueNumber).toBe(7);
+      expect(writtenData.workItemId).toBe('7');
       expect(writtenData.totalTokens).toBe(750);
     });
   });

@@ -42,9 +42,9 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
 function makeDeps() {
   const fleetCheckpoint = {
     setDag: vi.fn().mockResolvedValue(undefined),
-    isIssueCompleted: vi.fn().mockReturnValue(false),
-    getIssueStatus: vi.fn().mockReturnValue(null),
-    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    isWorkItemCompleted: vi.fn().mockReturnValue(false),
+    getWorkItemStatus: vi.fn().mockReturnValue(null),
+    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
   };
   const platform = {
     mergePullRequest: vi.fn().mockResolvedValue(undefined),
@@ -237,8 +237,8 @@ describe('FleetScheduler', () => {
 
       const results = await scheduler.schedule(issues, processIssue, markDepBlocked, dag);
 
-      expect(fleetCheckpoint.setIssueStatus).toHaveBeenCalledWith(
-        1, 'dep-merge-conflict', '', 'cadre/issue-1', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
+      expect(fleetCheckpoint.setWorkItemStatus).toHaveBeenCalledWith(
+        '1', 'dep-merge-conflict', '', 'cadre/issue-1', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
       );
       expect(results).toHaveLength(1);
     });
@@ -286,7 +286,7 @@ describe('FleetScheduler', () => {
         // Should have requested branch update
         expect(platform.updatePullRequestBranch).toHaveBeenCalledWith(10);
         // Should not have recorded failure
-        expect(fleetCheckpoint.setIssueStatus).not.toHaveBeenCalled();
+        expect(fleetCheckpoint.setWorkItemStatus).not.toHaveBeenCalled();
         expect(results).toHaveLength(1);
         expect((results[0] as PromiseFulfilledResult<IssueResult>).value.success).toBe(true);
       } finally {
@@ -336,8 +336,8 @@ describe('FleetScheduler', () => {
         expect(platform.mergePullRequest).toHaveBeenCalledTimes(3);
         expect(platform.updatePullRequestBranch).toHaveBeenCalledTimes(2);
         // Should record dep-merge-conflict (with preserved branchName)
-        expect(fleetCheckpoint.setIssueStatus).toHaveBeenCalledWith(
-          1, 'dep-merge-conflict', '', 'cadre/issue-1', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
+        expect(fleetCheckpoint.setWorkItemStatus).toHaveBeenCalledWith(
+          '1', 'dep-merge-conflict', '', 'cadre/issue-1', 0, 'Issue 1', expect.stringContaining('Merge failed after retries'),
         );
       } finally {
         vi.useRealTimers();
@@ -349,7 +349,7 @@ describe('FleetScheduler', () => {
       const issue2 = makeIssue(2);
       const issues = [issue1, issue2];
       const { fleetCheckpoint, platform, logger } = makeDeps();
-      fleetCheckpoint.isIssueCompleted.mockImplementation((num: number) => num === 1);
+      fleetCheckpoint.isWorkItemCompleted.mockImplementation((id: string) => id === '1');
       const config = makeConfig({ resume: true });
       const scheduler = new FleetScheduler(
         config, issues, fleetCheckpoint as any, platform as any, logger as any,

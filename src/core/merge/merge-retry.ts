@@ -89,7 +89,7 @@ export class MergeRetryHelper {
         if (isDirty && attempt < maxAttempts) {
           this.logger.info(
             `PR #${ctx.prNumber} merge blocked (dirty); requesting branch update (attempt ${attempt}/${maxAttempts})`,
-            { issueNumber: ctx.issueNumber, data: { prUrl: ctx.prUrl, branch: ctx.branch } },
+            { workItemId: String(ctx.issueNumber), data: { prUrl: ctx.prUrl, branch: ctx.branch } },
           );
 
           const updated = await this.platform.updatePullRequestBranch(ctx.prNumber).catch(() => false);
@@ -97,7 +97,7 @@ export class MergeRetryHelper {
             const delay = baseDelayMs * Math.pow(2, attempt - 1);
             this.logger.info(
               `Branch update requested for PR #${ctx.prNumber}; waiting ${delay / 1000}s before retry`,
-              { issueNumber: ctx.issueNumber },
+              { workItemId: String(ctx.issueNumber) },
             );
             await new Promise((r) => setTimeout(r, delay));
             continue;
@@ -117,7 +117,7 @@ export class MergeRetryHelper {
             } catch (resolveErr) {
               this.logger.warn(
                 `Conflict resolver failed for PR #${ctx.prNumber}: ${String(resolveErr)}`,
-                { issueNumber: ctx.issueNumber },
+                { workItemId: String(ctx.issueNumber) },
               );
             }
           }
@@ -126,7 +126,7 @@ export class MergeRetryHelper {
         // Final attempt failed, non-dirty error, or no resolution path — give up.
         this.logger.warn(
           `Failed to merge PR #${ctx.prNumber} for issue #${ctx.issueNumber}: ${error}`,
-          { issueNumber: ctx.issueNumber, data: { prUrl: ctx.prUrl, branch: ctx.branch } },
+          { workItemId: String(ctx.issueNumber), data: { prUrl: ctx.prUrl, branch: ctx.branch } },
         );
         return false;
       }
@@ -153,7 +153,7 @@ export class MergeRetryHelper {
         if (state !== 'unknown') {
           this.logger.info(
             `PR #${ctx.prNumber} mergeable state settled: ${state}`,
-            { issueNumber: ctx.issueNumber },
+            { workItemId: String(ctx.issueNumber) },
           );
           return;
         }
@@ -165,7 +165,7 @@ export class MergeRetryHelper {
 
     this.logger.info(
       `PR #${ctx.prNumber} mergeable state poll timed out after ${timeoutMs / 1000}s; proceeding with merge attempt`,
-      { issueNumber: ctx.issueNumber },
+      { workItemId: String(ctx.issueNumber) },
     );
   }
 }

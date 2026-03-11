@@ -50,7 +50,7 @@ export class FleetReporter {
         }
 
         if (result.value.codeComplete && !result.value.success) {
-          const checkpointStatus = this.fleetCheckpoint.getIssueStatus(result.value.issueNumber);
+          const checkpointStatus = this.fleetCheckpoint.getWorkItemStatus(String(result.value.issueNumber));
           codeDoneNoPR.push({
             issueNumber: result.value.issueNumber,
             branch: checkpointStatus?.branchName ?? '',
@@ -83,9 +83,9 @@ export class FleetReporter {
   async writeFleetProgress(result: FleetResult): Promise<void> {
     const issueInfos: IssueProgressInfo[] = this.issues.map((issue) => {
       const ir = result.issues.find((r) => r.issueNumber === issue.number);
-      const status = this.fleetCheckpoint.getIssueStatus(issue.number);
+      const status = this.fleetCheckpoint.getWorkItemStatus(String(issue.number));
       return {
-        issueNumber: issue.number,
+        workItemId: String(issue.number),
         issueTitle: issue.title,
         status: status?.status ?? 'not-started',
         currentPhase: status?.lastPhase ?? 0,
@@ -99,7 +99,7 @@ export class FleetReporter {
     const prRefs: PullRequestRef[] = result.issues
       .filter((ir) => ir.pr != null)
       .map((ir) => ({
-        issueNumber: ir.issueNumber,
+        workItemId: String(ir.issueNumber),
         prNumber: ir.pr!.number,
         url: ir.pr!.url,
       }));
@@ -115,9 +115,9 @@ export class FleetReporter {
    */
   async writeFleetProgressIncremental(): Promise<void> {
     const issueInfos: IssueProgressInfo[] = this.issues.map((issue) => {
-      const status = this.fleetCheckpoint.getIssueStatus(issue.number);
+      const status = this.fleetCheckpoint.getWorkItemStatus(String(issue.number));
       return {
-        issueNumber: issue.number,
+        workItemId: String(issue.number),
         issueTitle: issue.title,
         status: status?.status ?? 'not-started',
         currentPhase: status?.lastPhase ?? 0,

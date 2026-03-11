@@ -52,7 +52,7 @@ export class ReviewDiscoveryService {
       if (!pr) {
         this.logger.info(
           `Issue #${issueNumber}: no open PR found, skipping`,
-          { issueNumber },
+          { workItemId: String(issueNumber) },
         );
         results.push({ issueNumber, skipReason: 'no open PR' });
         continue;
@@ -66,7 +66,7 @@ export class ReviewDiscoveryService {
         const prComments = await this.platform.listPRComments(pr.number);
         actionableComments = prComments.filter((c) => !c.isBot && c.body.trim().length > 0);
       } catch (err) {
-        this.logger.warn(`Issue #${issueNumber}: could not fetch PR comments: ${err}`, { issueNumber });
+        this.logger.warn(`Issue #${issueNumber}: could not fetch PR comments: ${err}`, { workItemId: String(issueNumber) });
       }
 
       let actionableReviews: PRReview[] = [];
@@ -74,13 +74,13 @@ export class ReviewDiscoveryService {
         const prReviews = await this.platform.listPRReviews(pr.number);
         actionableReviews = prReviews.filter((r) => !r.isBot && r.body.trim().length > 0);
       } catch (err) {
-        this.logger.warn(`Issue #${issueNumber}: could not fetch PR reviews: ${err}`, { issueNumber });
+        this.logger.warn(`Issue #${issueNumber}: could not fetch PR reviews: ${err}`, { workItemId: String(issueNumber) });
       }
 
       if (activeThreads.length === 0 && actionableComments.length === 0 && actionableReviews.length === 0) {
         this.logger.info(
           `Issue #${issueNumber} (PR #${pr.number}): all review threads resolved or outdated, skipping`,
-          { issueNumber },
+          { workItemId: String(issueNumber) },
         );
         results.push({
           issueNumber,

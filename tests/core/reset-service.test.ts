@@ -44,19 +44,19 @@ describe('ResetService', () => {
   function setUpCheckpoint(issues: Record<number, { status: string; issueTitle?: string }>) {
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({ issues }),
-      setIssueStatus: mockSetIssueStatus,
+      setWorkItemStatus: mockSetIssueStatus,
     }));
   }
 
   describe('reset() — single issue', () => {
-    it('should call setIssueStatus with not-started and issueTitle', async () => {
+    it('should call setWorkItemStatus with not-started and issueTitle', async () => {
       setUpCheckpoint({ 42: { status: 'in-progress', issueTitle: 'Fix login bug' } });
 
       const service = new ResetService(makeConfig(), makeLogger());
       await service.reset(42);
 
       expect(mockSetIssueStatus).toHaveBeenCalledOnce();
-      expect(mockSetIssueStatus).toHaveBeenCalledWith(42, 'not-started', '', '', 0, 'Fix login bug');
+      expect(mockSetIssueStatus).toHaveBeenCalledWith('42', 'not-started', '', '', 0, 'Fix login bug');
     });
 
     it('should fall back to empty string when issueTitle is missing', async () => {
@@ -65,7 +65,7 @@ describe('ResetService', () => {
       const service = new ResetService(makeConfig(), makeLogger());
       await service.reset(7);
 
-      expect(mockSetIssueStatus).toHaveBeenCalledWith(7, 'not-started', '', '', 0, '');
+      expect(mockSetIssueStatus).toHaveBeenCalledWith('7', 'not-started', '', '', 0, '');
     });
 
     it('should print confirmation message', async () => {
@@ -86,13 +86,13 @@ describe('ResetService', () => {
 
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Resetting issue #5'),
-        expect.objectContaining({ issueNumber: 5, data: { fromPhase: 3 } }),
+        expect.objectContaining({ workItemId: '5', data: { fromPhase: 3 } }),
       );
     });
   });
 
   describe('reset() — entire fleet', () => {
-    it('should call setIssueStatus for every issue in the fleet', async () => {
+    it('should call setWorkItemStatus for every issue in the fleet', async () => {
       setUpCheckpoint({
         1: { status: 'completed', issueTitle: 'Issue one' },
         2: { status: 'failed', issueTitle: 'Issue two' },
@@ -103,12 +103,12 @@ describe('ResetService', () => {
       await service.reset();
 
       expect(mockSetIssueStatus).toHaveBeenCalledTimes(3);
-      expect(mockSetIssueStatus).toHaveBeenCalledWith(1, 'not-started', '', '', 0, 'Issue one');
-      expect(mockSetIssueStatus).toHaveBeenCalledWith(2, 'not-started', '', '', 0, 'Issue two');
-      expect(mockSetIssueStatus).toHaveBeenCalledWith(3, 'not-started', '', '', 0, 'Issue three');
+      expect(mockSetIssueStatus).toHaveBeenCalledWith('1', 'not-started', '', '', 0, 'Issue one');
+      expect(mockSetIssueStatus).toHaveBeenCalledWith('2', 'not-started', '', '', 0, 'Issue two');
+      expect(mockSetIssueStatus).toHaveBeenCalledWith('3', 'not-started', '', '', 0, 'Issue three');
     });
 
-    it('should not call setIssueStatus when there are no issues', async () => {
+    it('should not call setWorkItemStatus when there are no issues', async () => {
       setUpCheckpoint({});
 
       const service = new ResetService(makeConfig(), makeLogger());

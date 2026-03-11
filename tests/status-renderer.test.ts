@@ -9,7 +9,7 @@ function makeFleetState(overrides: Partial<FleetCheckpointState> = {}): FleetChe
     projectName: 'test-project',
     version: 1,
     issues: {},
-    tokenUsage: { total: 0, byIssue: {} },
+    tokenUsage: { total: 0, byWorkItem: {} },
     startedAt: new Date().toISOString(),
     lastCheckpoint: new Date().toISOString(),
     resumeCount: 0,
@@ -178,7 +178,7 @@ describe('renderFleetStatus', () => {
   it('should show token count for issues with tokens', () => {
     const state = makeFleetState({
       issues: { 7: makeIssueStatus({ issueTitle: 'Token test' }) },
-      tokenUsage: { total: 5000, byIssue: { 7: 5000 } },
+      tokenUsage: { total: 5000, byWorkItem: { 7: 5000 } },
     });
     const output = renderFleetStatus(state);
     expect(output).toContain('5,000');
@@ -187,7 +187,7 @@ describe('renderFleetStatus', () => {
   it('should show "—" for cost when token count is 0', () => {
     const state = makeFleetState({
       issues: { 1: makeIssueStatus() },
-      tokenUsage: { total: 0, byIssue: { 1: 0 } },
+      tokenUsage: { total: 0, byWorkItem: { 1: 0 } },
     });
     const output = renderFleetStatus(state);
     expect(output).toContain('—');
@@ -203,7 +203,7 @@ describe('renderFleetStatus', () => {
 
   it('should include total token usage in the header', () => {
     const state = makeFleetState({
-      tokenUsage: { total: 12000, byIssue: {} },
+      tokenUsage: { total: 12000, byWorkItem: {} },
     });
     const output = renderFleetStatus(state);
     expect(output).toContain('12,000');
@@ -211,7 +211,7 @@ describe('renderFleetStatus', () => {
 
   it('should include estimated cost in the header', () => {
     const state = makeFleetState({
-      tokenUsage: { total: 10000, byIssue: {} },
+      tokenUsage: { total: 10000, byWorkItem: {} },
     });
     const output = renderFleetStatus(state);
     expect(output).toContain('Estimated Cost');

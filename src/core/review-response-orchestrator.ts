@@ -148,7 +148,7 @@ export class ReviewResponseOrchestrator {
           checkpoint,
           this.launcher,
           this.platform,
-          this.logger.child(issueNumber, join(this.cadreDir, 'logs')),
+          this.logger.child(String(issueNumber), join(this.cadreDir, 'logs')),
           this.notifications,
         );
 
@@ -164,12 +164,12 @@ export class ReviewResponseOrchestrator {
             await commitManager.push(true, worktree.branch);
             this.logger.info(
               `Issue #${issueNumber} (PR #${pr.number}): pushed changes to ${worktree.branch}`,
-              { issueNumber },
+              { workItemId: String(issueNumber) },
             );
           } catch (pushErr) {
             this.logger.error(
               `Issue #${issueNumber}: push failed: ${pushErr}`,
-              { issueNumber },
+              { workItemId: String(issueNumber) },
             );
             throw pushErr;
           }
@@ -196,12 +196,12 @@ export class ReviewResponseOrchestrator {
             }
             this.logger.info(
               `Issue #${issueNumber}: updated PR #${pr.number} description`,
-              { issueNumber },
+              { workItemId: String(issueNumber) },
             );
           } catch (updateErr) {
             this.logger.error(
               `Issue #${issueNumber}: failed to update PR #${pr.number}: ${updateErr}`,
-              { issueNumber },
+              { workItemId: String(issueNumber) },
             );
             throw updateErr;
           }
@@ -224,7 +224,7 @@ export class ReviewResponseOrchestrator {
       } catch (err) {
         this.logger.error(
           `Issue #${issueNumber}: review response pipeline failed: ${err}`,
-          { issueNumber },
+          { workItemId: String(issueNumber) },
         );
         result.failed++;
         result.issues.push({ issueNumber, skipped: false });

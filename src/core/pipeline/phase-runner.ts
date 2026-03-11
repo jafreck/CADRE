@@ -40,7 +40,7 @@ export class PhaseRunner {
       const gateStatus = await this.gateCoordinator.runGate(executor.id, phases);
       if (gateStatus === 'fail') {
         this.logger.warn(`Gate failed for phase ${executor.id}; retrying`, {
-          issueNumber: this.issueNumber,
+          workItemId: String(this.issueNumber),
           phase: executor.id,
         });
         await this.progressWriter.appendEvent(`Phase ${executor.id} gate failed; retrying phase`);
@@ -57,7 +57,7 @@ export class PhaseRunner {
         const retryGateStatus = await this.gateCoordinator.runGate(executor.id, phases);
         if (retryGateStatus === 'fail') {
           this.logger.error(`Gate still failing for phase ${executor.id} after retry; aborting`, {
-            issueNumber: this.issueNumber,
+            workItemId: String(this.issueNumber),
             phase: executor.id,
           });
           await this.progressWriter.appendEvent(
@@ -86,7 +86,7 @@ export class PhaseRunner {
     await this.progressWriter.appendEvent(`Phase ${executor.id} started: ${executor.name}`);
 
     this.logger.info(`Phase ${executor.id}: ${executor.name}`, {
-      issueNumber: this.issueNumber,
+      workItemId: String(this.issueNumber),
       phase: executor.id,
     });
 

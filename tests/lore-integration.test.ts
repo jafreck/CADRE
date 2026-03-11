@@ -120,7 +120,7 @@ describe('LoreIndexBuilder', () => {
     );
     expect(mockLogger.info).toHaveBeenCalledWith(
       'Building Lore index for worktree',
-      expect.objectContaining({ issueNumber: 42 }),
+      expect.objectContaining({ workItemId: '42' }),
     );
   });
 
@@ -160,7 +160,7 @@ describe('LoreIndexBuilder', () => {
     expect(result).toBe(false);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Lore index build failed'),
-      expect.objectContaining({ issueNumber: 42 }),
+      expect.objectContaining({ workItemId: '42' }),
     );
   });
 
@@ -172,7 +172,7 @@ describe('LoreIndexBuilder', () => {
     expect(result).toBe(false);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Lore index build error'),
-      expect.objectContaining({ issueNumber: 42 }),
+      expect.objectContaining({ workItemId: '42' }),
     );
   });
 

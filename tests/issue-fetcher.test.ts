@@ -59,7 +59,7 @@ describe('IssueFetcher', () => {
 
       await fetcher.fetchIssue(42);
 
-      expect(logger.debug).toHaveBeenCalledWith('Fetching issue #42', { issueNumber: 42 });
+      expect(logger.debug).toHaveBeenCalledWith('Fetching issue #42', { workItemId: '42' });
     });
 
     it('returns parsed IssueDetail with correct number and title', async () => {

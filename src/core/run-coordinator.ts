@@ -212,7 +212,7 @@ export class RunCoordinator {
           const issue = await this.provider.getIssue(id);
           issues.push(issue);
         } catch (err) {
-          this.logger.error(`Failed to fetch issue #${id}: ${err}`, { issueNumber: id });
+          this.logger.error(`Failed to fetch issue #${id}: ${err}`, { workItemId: String(id) });
         }
       }
       return issues;
@@ -270,7 +270,7 @@ export class RunCoordinator {
       await this.notifications.dispatch({
         type: 'fleet-interrupted',
         signal,
-        issuesInProgress: this.activeIssueNumbers,
+        workItemsInProgress: this.activeIssueNumbers.map(String),
       });
     };
 
@@ -323,7 +323,7 @@ export class RunCoordinator {
       failedIssues: [],
       codeDoneNoPR: [],
       totalDuration: 0,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       prCompletion: {
         queued: 0,
         failed: 0,

@@ -87,7 +87,7 @@ export class IssueOrchestrator {
     this.retryExecutor = new RetryExecutor(logger);
     this.progressWriter = new IssueProgressWriter(
       this.progressDir,
-      issue.number,
+      String(issue.number),
       issue.title,
       logger,
     );
@@ -167,14 +167,14 @@ export class IssueOrchestrator {
     };
 
     this.logger.info(`Starting pipeline for issue #${this.issue.number}: ${this.issue.title}`, {
-      issueNumber: this.issue.number,
+      workItemId: String(this.issue.number),
       data: { resumeFrom: resumePoint },
     });
 
     await this.progressWriter.appendEvent(`Pipeline started (resume from phase ${resumePoint.phase})`);
     await this.dispatchNotification({
       type: 'issue-started',
-      issueNumber: this.issue.number,
+      workItemId: String(this.issue.number),
       issueTitle: this.issue.title,
       worktreePath: this.worktree.path,
     });
@@ -215,7 +215,7 @@ export class IssueOrchestrator {
         await this.updateProgress();
         await this.dispatchNotification({
           type: 'phase-completed',
-          issueNumber: this.issue.number,
+          workItemId: String(this.issue.number),
           phase: last.phase,
           phaseName: last.phaseName,
           duration: last.duration,
@@ -256,7 +256,7 @@ export class IssueOrchestrator {
         await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
         await this.dispatchNotification({
           type: 'issue-failed',
-          issueNumber: this.issue.number,
+          workItemId: String(this.issue.number),
           issueTitle: this.issue.title,
           error: 'Per-issue token budget exceeded',
           phase: cpState.currentPhase,
@@ -268,7 +268,7 @@ export class IssueOrchestrator {
       const message = haltError?.message ?? (err instanceof Error ? err.message : String(err));
       await this.dispatchNotification({
         type: 'issue-failed',
-        issueNumber: this.issue.number,
+        workItemId: String(this.issue.number),
         issueTitle: this.issue.title,
         error: message,
         phase: haltError?.phaseId ?? this.checkpoint.getState().currentPhase,
@@ -281,7 +281,7 @@ export class IssueOrchestrator {
     const successResult = this.buildResult(true, undefined, startTime);
     await this.dispatchNotification({
       type: 'issue-completed',
-      issueNumber: this.issue.number,
+      workItemId: String(this.issue.number),
       issueTitle: this.issue.title,
       success: successResult.success,
       duration: successResult.totalDuration,
@@ -317,7 +317,7 @@ export class IssueOrchestrator {
     await this.progressWriter.appendEvent(`Phase ${executor.id} started: ${executor.name}`);
 
     this.logger.info(`Phase ${executor.id}: ${executor.name}`, {
-      issueNumber: this.issue.number,
+      workItemId: String(this.issue.number),
       phase: executor.id,
     });
 

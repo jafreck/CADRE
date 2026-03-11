@@ -52,7 +52,7 @@ vi.mock('../src/core/fleet/fleet-orchestrator.js', () => ({
       prsCreated: [],
       failedIssues: [],
       totalDuration: 100,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
     }),
     runReviewResponse: vi.fn().mockResolvedValue({
       success: true,
@@ -60,7 +60,7 @@ vi.mock('../src/core/fleet/fleet-orchestrator.js', () => ({
       prsCreated: [],
       failedIssues: [],
       totalDuration: 100,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
     }),
   })),
 }));
@@ -88,8 +88,8 @@ vi.mock('../src/core/agent-launcher.js', () => ({
 vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byIssue: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
-    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byWorkItem: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
+    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
   })),
   CheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({
@@ -124,8 +124,8 @@ vi.mock('../src/util/fs.js', () => ({
 vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byIssue: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
-    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byWorkItem: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
+    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
   })),
   CheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue({
@@ -333,7 +333,7 @@ describe('CadreRuntime — NotificationManager wiring', () => {
         prsCreated: [],
         failedIssues: [],
         totalDuration: 100,
-        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
       }),
     }));
   });
@@ -430,7 +430,7 @@ describe('CadreRuntime — review-response routing', () => {
         prsCreated: [],
         failedIssues: [],
         totalDuration: 100,
-        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
       }),
       runReviewResponse: vi.fn().mockResolvedValue({
         success: true,
@@ -438,7 +438,7 @@ describe('CadreRuntime — review-response routing', () => {
         prsCreated: [],
         failedIssues: [],
         totalDuration: 100,
-        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
       }),
     }));
   });
@@ -529,7 +529,7 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
         prsCreated: [],
         failedIssues: [],
         totalDuration: 100,
-        tokenUsage: { total: 0, byIssue: {}, byAgent: {} },
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
       }),
     }));
   });
@@ -565,7 +565,7 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
       expect.objectContaining({
         type: 'fleet-interrupted',
         signal: 'SIGINT',
-        issuesInProgress: expect.any(Array),
+        workItemsInProgress: expect.any(Array),
       }),
     );
   });
@@ -586,7 +586,7 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
       expect.objectContaining({
         type: 'fleet-interrupted',
         signal: 'SIGTERM',
-        issuesInProgress: expect.any(Array),
+        workItemsInProgress: expect.any(Array),
       }),
     );
   });
@@ -615,8 +615,8 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
     const interruptedCall = dispatchSpy.mock.calls.find(([e]) => e.type === 'fleet-interrupted');
     expect(interruptedCall).toBeDefined();
-    expect(interruptedCall![0].issuesInProgress).toEqual(expect.arrayContaining([10, 20]));
-    expect(interruptedCall![0].issuesInProgress).toHaveLength(2);
+    expect(interruptedCall![0].workItemsInProgress).toEqual(expect.arrayContaining(['10', '20']));
+    expect(interruptedCall![0].workItemsInProgress).toHaveLength(2);
   });
 
   it('causes run() to reject with RuntimeInterruptedError(exitCode=130) on SIGINT', async () => {
@@ -715,14 +715,14 @@ describe('CadreRuntime — status() rendering', () => {
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({
         projectName: 'my-awesome-project',
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         issues: {},
         lastCheckpoint: new Date().toISOString(),
         resumeCount: 0,
         version: 1,
         startedAt: new Date().toISOString(),
       }),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
 
     const runtime = new CadreRuntime(makeConfig());
@@ -738,7 +738,7 @@ describe('CadreRuntime — status() rendering', () => {
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({
         projectName: 'test-project',
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         issues: {
           42: {
             status: 'in-progress',
@@ -754,7 +754,7 @@ describe('CadreRuntime — status() rendering', () => {
         version: 1,
         startedAt: new Date().toISOString(),
       }),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
 
     const runtime = new CadreRuntime(makeConfig());
@@ -773,7 +773,7 @@ describe('CadreRuntime — status() rendering', () => {
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({
         projectName: 'test-project',
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         issues: {
           42: {
             status: 'in-progress',
@@ -789,7 +789,7 @@ describe('CadreRuntime — status() rendering', () => {
         version: 1,
         startedAt: new Date().toISOString(),
       }),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
 
     MockCheckpointManager.mockImplementation(() => ({
@@ -908,7 +908,7 @@ describe('CadreRuntime — stale-state check wiring', () => {
         failedIssues: [],
         codeDoneNoPR: [],
         totalDuration: 100,
-        tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       }),
     }));
   });
@@ -1079,7 +1079,7 @@ describe('CadreRuntime — DAG wiring', () => {
         failedIssues: [],
         codeDoneNoPR: [],
         totalDuration: 100,
-        tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       }),
     }));
 
@@ -1217,14 +1217,14 @@ describe('CadreRuntime — reset()', () => {
           10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
           20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
         },
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         lastCheckpoint: '',
         resumeCount: 0,
         projectName: 'test',
         version: 1,
         startedAt: '',
       }),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
   });
 
@@ -1240,21 +1240,21 @@ describe('CadreRuntime — reset()', () => {
         issues: {
           10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
         },
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         lastCheckpoint: '',
         resumeCount: 0,
         projectName: 'test',
         version: 1,
         startedAt: '',
       }),
-      setIssueStatus: mockSetIssueStatus,
+      setWorkItemStatus: mockSetIssueStatus,
     }));
 
     const runtime = new CadreRuntime(makeConfig());
     await runtime.reset(10);
 
     expect(mockSetIssueStatus).toHaveBeenCalledOnce();
-    expect(mockSetIssueStatus).toHaveBeenCalledWith(10, 'not-started', '', '', 0, 'Issue 10');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith('10', 'not-started', '', '', 0, 'Issue 10');
     expect(consoleSpy).toHaveBeenCalledWith('Reset issue #10');
   });
 
@@ -1266,14 +1266,14 @@ describe('CadreRuntime — reset()', () => {
           10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
           20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
         },
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         lastCheckpoint: '',
         resumeCount: 0,
         projectName: 'test',
         version: 1,
         startedAt: '',
       }),
-      setIssueStatus: mockSetIssueStatus,
+      setWorkItemStatus: mockSetIssueStatus,
     }));
 
     const runtime = new CadreRuntime(makeConfig());
@@ -1424,14 +1424,14 @@ describe('CadreRuntime — pruneWorktrees()', () => {
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({
         issues: {},
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         lastCheckpoint: '',
         resumeCount: 0,
         projectName: 'test',
         version: 1,
         startedAt: '',
       }),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
   });
 
@@ -1452,14 +1452,14 @@ describe('CadreRuntime — pruneWorktrees()', () => {
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({
         issues: { 7: { status: 'completed', issueTitle: 'Issue 7', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' } },
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         lastCheckpoint: '',
         resumeCount: 0,
         projectName: 'test',
         version: 1,
         startedAt: '',
       }),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
 
     const runtime = new CadreRuntime(makeConfig());
@@ -1547,7 +1547,7 @@ describe('CadreRuntime — resolveIssues() error handling', () => {
         failedIssues: [],
         codeDoneNoPR: [],
         totalDuration: 100,
-        tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       }),
     }));
   });

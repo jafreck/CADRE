@@ -49,7 +49,7 @@ function makeConfig() {
 
 function makeDeps() {
   const fleetCheckpoint = {
-    getIssueStatus: vi.fn().mockReturnValue(null),
+    getWorkItemStatus: vi.fn().mockReturnValue(null),
   };
   const fleetProgress = {
     write: vi.fn().mockResolvedValue(undefined),
@@ -59,7 +59,7 @@ function makeDeps() {
     getTotal: vi.fn().mockReturnValue(5000),
     getSummary: vi.fn().mockReturnValue({
       total: 5000,
-      byIssue: { 1: 3000, 2: 2000 },
+      byWorkItem: { '1': 3000, '2': 2000 },
       byAgent: { 'code-writer': 5000 },
       byPhase: { 3: 5000 },
       recordCount: 2,
@@ -184,7 +184,7 @@ describe('FleetReporter', () => {
     it('should populate codeDoneNoPR for codeComplete but failed issues', () => {
       const issues = [makeIssue(1)];
       const { fleetCheckpoint, fleetProgress, tokenTracker, logger } = makeDeps();
-      fleetCheckpoint.getIssueStatus.mockReturnValue({ branchName: 'cadre/issue-1' });
+      fleetCheckpoint.getWorkItemStatus.mockReturnValue({ branchName: 'cadre/issue-1' });
       const reporter = new FleetReporter(
         makeConfig(), issues, fleetCheckpoint as any, fleetProgress as any, tokenTracker as any, logger as any,
       );
@@ -208,7 +208,7 @@ describe('FleetReporter', () => {
     it('should return empty branch string when checkpoint status is null', () => {
       const issues = [makeIssue(1)];
       const { fleetCheckpoint, fleetProgress, tokenTracker, logger } = makeDeps();
-      fleetCheckpoint.getIssueStatus.mockReturnValue(null);
+      fleetCheckpoint.getWorkItemStatus.mockReturnValue(null);
       const reporter = new FleetReporter(
         makeConfig(), issues, fleetCheckpoint as any, fleetProgress as any, tokenTracker as any, logger as any,
       );
@@ -245,7 +245,7 @@ describe('FleetReporter', () => {
     it('should call fleetProgress.write with issue infos and PR refs', async () => {
       const issues = [makeIssue(1)];
       const { fleetCheckpoint, fleetProgress, tokenTracker, logger } = makeDeps();
-      fleetCheckpoint.getIssueStatus.mockReturnValue({ status: 'completed', lastPhase: 5, branchName: 'cadre/issue-1' });
+      fleetCheckpoint.getWorkItemStatus.mockReturnValue({ status: 'completed', lastPhase: 5, branchName: 'cadre/issue-1' });
       const reporter = new FleetReporter(
         makeConfig(), issues, fleetCheckpoint as any, fleetProgress as any, tokenTracker as any, logger as any,
       );
@@ -261,7 +261,7 @@ describe('FleetReporter', () => {
         failedIssues: [],
         codeDoneNoPR: [],
         totalDuration: 1000,
-        tokenUsage: { total: 1000, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 1 },
+        tokenUsage: { total: 1000, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 1 },
       };
 
       await reporter.writeFleetProgress(fleetResult);
@@ -269,7 +269,7 @@ describe('FleetReporter', () => {
       expect(fleetProgress.write).toHaveBeenCalledTimes(1);
       const [issueInfos, prRefs, budget] = fleetProgress.write.mock.calls[0];
       expect(issueInfos).toHaveLength(1);
-      expect(issueInfos[0].issueNumber).toBe(1);
+      expect(issueInfos[0].workItemId).toBe('1');
       expect(issueInfos[0].status).toBe('completed');
       expect(prRefs).toHaveLength(1);
       expect(prRefs[0].prNumber).toBe(10);
@@ -279,14 +279,14 @@ describe('FleetReporter', () => {
     it('should use defaults when checkpoint returns null', async () => {
       const issues = [makeIssue(1)];
       const { fleetCheckpoint, fleetProgress, tokenTracker, logger } = makeDeps();
-      fleetCheckpoint.getIssueStatus.mockReturnValue(null);
+      fleetCheckpoint.getWorkItemStatus.mockReturnValue(null);
       const reporter = new FleetReporter(
         makeConfig(), issues, fleetCheckpoint as any, fleetProgress as any, tokenTracker as any, logger as any,
       );
 
       const fleetResult: FleetResult = {
         success: true, issues: [], prsCreated: [], failedIssues: [], codeDoneNoPR: [],
-        totalDuration: 0, tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        totalDuration: 0, tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       };
 
       await reporter.writeFleetProgress(fleetResult);
@@ -301,7 +301,7 @@ describe('FleetReporter', () => {
     it('should call fleetProgress.write with empty PR refs', async () => {
       const issues = [makeIssue(1)];
       const { fleetCheckpoint, fleetProgress, tokenTracker, logger } = makeDeps();
-      fleetCheckpoint.getIssueStatus.mockReturnValue({ status: 'in-progress', lastPhase: 2, branchName: 'cadre/issue-1' });
+      fleetCheckpoint.getWorkItemStatus.mockReturnValue({ status: 'in-progress', lastPhase: 2, branchName: 'cadre/issue-1' });
       const reporter = new FleetReporter(
         makeConfig(), issues, fleetCheckpoint as any, fleetProgress as any, tokenTracker as any, logger as any,
       );
@@ -327,7 +327,7 @@ describe('FleetReporter', () => {
 
       const fleetResult: FleetResult = {
         success: true, issues: [], prsCreated: [], failedIssues: [], codeDoneNoPR: [],
-        totalDuration: 0, tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        totalDuration: 0, tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       };
 
       await reporter.writeReport(fleetResult, Date.now());
@@ -348,7 +348,7 @@ describe('FleetReporter', () => {
 
       const fleetResult: FleetResult = {
         success: true, issues: [], prsCreated: [], failedIssues: [], codeDoneNoPR: [],
-        totalDuration: 0, tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        totalDuration: 0, tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       };
 
       await reporter.writeReport(fleetResult, Date.now());

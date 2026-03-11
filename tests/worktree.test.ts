@@ -462,7 +462,7 @@ describe('WorktreeManager', () => {
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Worktree already exists for issue #42',
-        expect.objectContaining({ issueNumber: 42 }),
+        expect.objectContaining({ workItemId: '42' }),
       );
     });
 
@@ -471,7 +471,7 @@ describe('WorktreeManager', () => {
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Provisioned worktree from branch cadre/issue-42 for issue #42',
-        expect.objectContaining({ issueNumber: 42 }),
+        expect.objectContaining({ workItemId: '42' }),
       );
     });
   });

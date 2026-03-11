@@ -79,7 +79,7 @@ export class LoreMcpConfigWriter {
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
 
     this.logger.debug('Wrote Lore MCP config for Claude backend', {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { configPath },
     });
   }
@@ -119,7 +119,7 @@ export class LoreMcpConfigWriter {
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
 
     this.logger.debug('Wrote Lore MCP config for Copilot backend', {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { configPath },
     });
   }

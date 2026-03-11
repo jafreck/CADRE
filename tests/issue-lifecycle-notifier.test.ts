@@ -27,7 +27,7 @@ describe('IssueLifecycleNotifier', () => {
       expect(manager.dispatch).toHaveBeenCalledOnce();
       expect(manager.dispatch).toHaveBeenCalledWith({
         type: 'issue-started',
-        issueNumber: ISSUE_NUMBER,
+        workItemId: String(ISSUE_NUMBER),
         issueTitle: ISSUE_TITLE,
         worktreePath,
       });
@@ -41,7 +41,7 @@ describe('IssueLifecycleNotifier', () => {
       expect(manager.dispatch).toHaveBeenCalledOnce();
       expect(manager.dispatch).toHaveBeenCalledWith({
         type: 'phase-completed',
-        issueNumber: ISSUE_NUMBER,
+        workItemId: String(ISSUE_NUMBER),
         phase: 2,
         phaseName: 'Implementation',
         duration: 4500,
@@ -56,7 +56,7 @@ describe('IssueLifecycleNotifier', () => {
       expect(manager.dispatch).toHaveBeenCalledOnce();
       expect(manager.dispatch).toHaveBeenCalledWith({
         type: 'issue-failed',
-        issueNumber: ISSUE_NUMBER,
+        workItemId: String(ISSUE_NUMBER),
         issueTitle: ISSUE_TITLE,
         error: 'Something went wrong',
         phase: 3,
@@ -80,7 +80,7 @@ describe('IssueLifecycleNotifier', () => {
       expect(manager.dispatch).toHaveBeenCalledOnce();
       expect(manager.dispatch).toHaveBeenCalledWith({
         type: 'issue-completed',
-        issueNumber: ISSUE_NUMBER,
+        workItemId: String(ISSUE_NUMBER),
         issueTitle: ISSUE_TITLE,
         success: true,
         duration: 12000,

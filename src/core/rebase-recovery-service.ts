@@ -33,12 +33,12 @@ export class RebaseRecoveryService {
       if (rebaseStartResult.conflictedFiles.length === 0) {
         this.logger.info(
           `Rebase paused for PR #${prNumber} with 0 conflicted files — continuing rebase without conflict-resolver`,
-          { issueNumber },
+          { workItemId: String(issueNumber) },
         );
       } else {
         this.logger.info(
           `Merge conflicts detected for PR #${prNumber}; launching conflict-resolver agent`,
-          { issueNumber, data: { conflictedFiles: rebaseStartResult.conflictedFiles } },
+          { workItemId: String(issueNumber), data: { conflictedFiles: rebaseStartResult.conflictedFiles } },
         );
 
         const conflictContextPath = await this.contextBuilder.build('conflict-resolver', {
@@ -51,7 +51,7 @@ export class RebaseRecoveryService {
         const resolverResult = await this.launcher.launchAgent(
           {
             agent: 'conflict-resolver',
-            issueNumber,
+            workItemId: String(issueNumber),
             phase: 0,
             contextPath: conflictContextPath,
             outputPath: join(progressDir, 'conflict-resolution-report.md'),
@@ -66,7 +66,7 @@ export class RebaseRecoveryService {
           this.logger.error(
             `Conflict-resolver agent failed for PR #${prNumber} (${detail})`,
             {
-              issueNumber,
+              workItemId: String(issueNumber),
               data: {
                 timedOut: resolverResult.timedOut,
                 exitCode: resolverResult.exitCode,
@@ -82,7 +82,7 @@ export class RebaseRecoveryService {
           this.logger.error(
             `Conflict-resolver agent for PR #${prNumber} exited successfully but produced no output at ${resolverResult.outputPath}`,
             {
-              issueNumber,
+              workItemId: String(issueNumber),
               data: {
                 outputPath: resolverResult.outputPath,
                 stderr: resolverResult.stderr?.slice(-300) ?? '',
@@ -100,7 +100,7 @@ export class RebaseRecoveryService {
       if (!continueResult.success) {
         this.logger.error(
           `Rebase --continue failed for PR #${prNumber}: ${continueResult.error ?? 'unknown error'}`,
-          { issueNumber, data: { conflictedFiles: continueResult.conflictedFiles } },
+          { workItemId: String(issueNumber), data: { conflictedFiles: continueResult.conflictedFiles } },
         );
         await this.worktreeManager.rebaseAbort(issueNumber);
         throw new Error(

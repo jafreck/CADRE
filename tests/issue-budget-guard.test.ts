@@ -7,15 +7,15 @@ import type { CheckpointState } from '@cadre-dev/framework/engine';
 
 function makeTokenTracker(overrides: {
   getTotal?: () => number;
-  getIssueTotal?: (issueNumber: number) => number;
-  checkIssueBudget?: (issueNumber: number, budget?: number) => 'ok' | 'warning' | 'exceeded';
+  getWorkItemTotal?: (workItemId: string) => number;
+  checkWorkItemBudget?: (workItemId: string, budget?: number) => 'ok' | 'warning' | 'exceeded';
   record?: () => void;
 } = {}): TokenTracker {
   return {
     record: vi.fn(),
     getTotal: vi.fn().mockReturnValue(0),
-    getIssueTotal: vi.fn().mockReturnValue(0),
-    checkIssueBudget: vi.fn().mockReturnValue('ok'),
+    getWorkItemTotal: vi.fn().mockReturnValue(0),
+    checkWorkItemBudget: vi.fn().mockReturnValue('ok'),
     ...overrides,
   } as unknown as TokenTracker;
 }
@@ -46,7 +46,7 @@ describe('IssueBudgetGuard', () => {
 
       guard.recordTokens('scout', 500);
 
-      expect(tracker.record).toHaveBeenCalledWith(ISSUE_NUMBER, 'scout', 1, 500, undefined, undefined);
+      expect(tracker.record).toHaveBeenCalledWith(String(ISSUE_NUMBER), 'scout', 1, 500, undefined, undefined);
       // allow async void to flush
       await Promise.resolve();
       expect(checkpoint.recordTokenUsage).toHaveBeenCalledWith('scout', 1, 500);
@@ -59,7 +59,7 @@ describe('IssueBudgetGuard', () => {
 
       guard.recordTokens('analyst', { input: 300, output: 200 });
 
-      expect(tracker.record).toHaveBeenCalledWith(ISSUE_NUMBER, 'analyst', 1, 500, 300, 200);
+      expect(tracker.record).toHaveBeenCalledWith(String(ISSUE_NUMBER), 'analyst', 1, 500, 300, 200);
     });
 
     it('does not record when tokens is null', () => {
@@ -83,9 +83,9 @@ describe('IssueBudgetGuard', () => {
       expect(tracker.record).not.toHaveBeenCalled();
     });
 
-    it('sets budgetExceeded=true when checkIssueBudget returns exceeded', () => {
+    it('sets budgetExceeded=true when checkWorkItemBudget returns exceeded', () => {
       const tracker = makeTokenTracker({
-        checkIssueBudget: vi.fn().mockReturnValue('exceeded'),
+        checkWorkItemBudget: vi.fn().mockReturnValue('exceeded'),
       });
       const guard = new IssueBudgetGuard(tracker, makeNotificationManager(), makeCheckpoint(), ISSUE_NUMBER, TOKEN_BUDGET);
 
@@ -96,8 +96,8 @@ describe('IssueBudgetGuard', () => {
 
     it('dispatches budget-warning notification exactly once on warning transition', async () => {
       const tracker = makeTokenTracker({
-        getIssueTotal: vi.fn().mockReturnValue(8_500),
-        checkIssueBudget: vi.fn().mockReturnValue('warning'),
+        getWorkItemTotal: vi.fn().mockReturnValue(8_500),
+        checkWorkItemBudget: vi.fn().mockReturnValue('warning'),
       });
       const notifier = makeNotificationManager();
       const guard = new IssueBudgetGuard(tracker, notifier, makeCheckpoint(), ISSUE_NUMBER, TOKEN_BUDGET);
@@ -109,15 +109,15 @@ describe('IssueBudgetGuard', () => {
 
       expect(notifier.dispatch).toHaveBeenCalledTimes(1);
       expect(notifier.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'budget-warning', scope: 'issue', issueNumber: ISSUE_NUMBER }),
+        expect.objectContaining({ type: 'budget-warning', scope: 'issue', workItemId: String(ISSUE_NUMBER) }),
       );
     });
 
     it('does not dispatch budget-warning when budget is exceeded (exceeded takes priority)', () => {
-      const checkIssueBudget = vi.fn()
+      const checkWorkItemBudget = vi.fn()
         .mockReturnValueOnce('exceeded')  // first call → exceeded
         .mockReturnValue('warning');       // subsequent calls → warning
-      const tracker = makeTokenTracker({ checkIssueBudget });
+      const tracker = makeTokenTracker({ checkWorkItemBudget });
       const notifier = makeNotificationManager();
       const guard = new IssueBudgetGuard(tracker, notifier, makeCheckpoint(), ISSUE_NUMBER, TOKEN_BUDGET);
 
@@ -136,7 +136,7 @@ describe('IssueBudgetGuard', () => {
 
     it('throws BudgetExceededError when budget is exceeded', () => {
       const tracker = makeTokenTracker({
-        checkIssueBudget: vi.fn().mockReturnValue('exceeded'),
+        checkWorkItemBudget: vi.fn().mockReturnValue('exceeded'),
       });
       const guard = new IssueBudgetGuard(tracker, makeNotificationManager(), makeCheckpoint(), ISSUE_NUMBER, TOKEN_BUDGET);
       guard.recordTokens('agent', 10_001);
@@ -145,7 +145,7 @@ describe('IssueBudgetGuard', () => {
 
     it('thrown error has correct name and message', () => {
       const tracker = makeTokenTracker({
-        checkIssueBudget: vi.fn().mockReturnValue('exceeded'),
+        checkWorkItemBudget: vi.fn().mockReturnValue('exceeded'),
       });
       const guard = new IssueBudgetGuard(tracker, makeNotificationManager(), makeCheckpoint(), ISSUE_NUMBER, TOKEN_BUDGET);
       guard.recordTokens('agent', 10_001);

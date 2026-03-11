@@ -81,7 +81,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
 
     const result = await launchWithRetry(ctx, 'pr-composer', {
       agent: 'pr-composer',
-      issueNumber: ctx.issue.number,
+      workItemId: String(ctx.issue.number),
       phase: 5,
       contextPath,
       outputPath: prContentPath,
@@ -187,7 +187,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       if (err.message?.includes('No commits between')) {
         ctx.services.logger.warn(
           `PR creation failed (no unique commits) for issue #${ctx.issue.number}; checking for already-merged PR`,
-          { issueNumber: ctx.issue.number },
+          { workItemId: String(ctx.issue.number) },
         );
         return null;
       }
@@ -201,7 +201,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       if (mergedPR) {
         ctx.services.logger.info(
           `Issue #${ctx.issue.number} branch already merged via PR #${mergedPR.number}`,
-          { issueNumber: ctx.issue.number },
+          { workItemId: String(ctx.issue.number) },
         );
         ctx.callbacks.setPR?.(mergedPR);
         return;
@@ -256,7 +256,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       const lintOutput = lintResult.stderr + lintResult.stdout;
       ctx.services.logger.warn(
         `Lint failed before push (round ${round + 1}/${maxRounds}), invoking fix-surgeon`,
-        { issueNumber: ctx.issue.number, phase: 5 },
+        { workItemId: String(ctx.issue.number), phase: 5 },
       );
 
       await this.invokeFixSurgeon(ctx, lintOutput, 'lint', round);
@@ -287,7 +287,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
     const fixResult = await ctx.services.launcher.launchAgent(
       {
         agent: 'fix-surgeon',
-        issueNumber: ctx.issue.number,
+        workItemId: String(ctx.issue.number),
         phase: 5,
         contextPath: fixContextPath,
         outputPath: ctx.worktree.path,
@@ -330,7 +330,7 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       await git.rebase([`origin/${ctx.config.baseBranch}`]);
       ctx.services.logger.info(
         `Rebased onto origin/${ctx.config.baseBranch} before push`,
-        { issueNumber: ctx.issue.number },
+        { workItemId: String(ctx.issue.number) },
       );
     } catch (err) {
       // Abort the failed rebase so the worktree is back to a clean state.
@@ -340,13 +340,13 @@ export class PRCompositionPhaseExecutor implements PhaseExecutor {
       if (ctx.callbacks.resetPhases) {
         ctx.services.logger.warn(
           `Rebase onto origin/${ctx.config.baseBranch} failed; resetting phases 3-4-5 for fresh implementation: ${String(err)}`,
-          { issueNumber: ctx.issue.number },
+          { workItemId: String(ctx.issue.number) },
         );
         await ctx.callbacks.resetPhases([3, 4, 5]);
       } else {
         ctx.services.logger.warn(
           `Rebase onto origin/${ctx.config.baseBranch} failed; no resetPhases callback available: ${String(err)}`,
-          { issueNumber: ctx.issue.number },
+          { workItemId: String(ctx.issue.number) },
         );
       }
 

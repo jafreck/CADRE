@@ -38,7 +38,7 @@ vi.mock('../src/core/issue/issue-notifier.js', () => ({
       notifyBudgetWarning: vi.fn().mockResolvedValue(undefined),
       notifyAmbiguities: mockNotifyAmbiguities,
       notify: vi.fn().mockImplementation(async (event: any) => {
-        if (event.type === 'ambiguity-detected') return mockNotifyAmbiguities(event.issueNumber, event.ambiguities);
+        if (event.type === 'ambiguity-detected') return mockNotifyAmbiguities(Number(event.workItemId), event.ambiguities);
       }),
     };
     return methods;
@@ -119,7 +119,7 @@ vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => {
     TokenTracker: vi.fn(() => ({
       record: vi.fn(),
       getTotal: vi.fn().mockReturnValue(0),
-      checkIssueBudget: vi.fn().mockReturnValue('ok'),
+      checkWorkItemBudget: vi.fn().mockReturnValue('ok'),
     })),
   };
 });

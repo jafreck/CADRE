@@ -35,7 +35,7 @@ export class PlanningPhaseExecutor implements PhaseExecutor {
 
     const plannerResult = await launchWithRetry(ctx, 'implementation-planner', {
       agent: 'implementation-planner',
-      issueNumber: ctx.issue.number,
+      workItemId: String(ctx.issue.number),
       phase: 2,
       contextPath: plannerContextPath,
       outputPath: join(ctx.io.progressDir, 'implementation-plan.md'),
@@ -67,7 +67,7 @@ export class PlanningPhaseExecutor implements PhaseExecutor {
     }
 
     ctx.services.logger.info(`Plan validated: ${sessions.length} sessions`, {
-      issueNumber: ctx.issue.number,
+      workItemId: String(ctx.issue.number),
       phase: 2,
     });
 

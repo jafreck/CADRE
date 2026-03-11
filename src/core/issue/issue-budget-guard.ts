@@ -36,7 +36,7 @@ export class IssueBudgetGuard {
 
     if (tokenCount != null && tokenCount > 0) {
       this.tokenTracker.record(
-        this.issueNumber,
+        String(this.issueNumber),
         agent,
         this.checkpoint.getState().currentPhase,
         tokenCount,
@@ -52,7 +52,7 @@ export class IssueBudgetGuard {
 
     if (
       !this._budgetExceeded &&
-      this.tokenTracker.checkIssueBudget(this.issueNumber, this.tokenBudget) === 'exceeded'
+      this.tokenTracker.checkWorkItemBudget(String(this.issueNumber), this.tokenBudget) === 'exceeded'
     ) {
       this._budgetExceeded = true;
     }
@@ -60,15 +60,15 @@ export class IssueBudgetGuard {
     if (
       !this.budgetWarningSent &&
       !this._budgetExceeded &&
-      this.tokenTracker.checkIssueBudget(this.issueNumber, this.tokenBudget) === 'warning'
+      this.tokenTracker.checkWorkItemBudget(String(this.issueNumber), this.tokenBudget) === 'warning'
     ) {
       this.budgetWarningSent = true;
-      const currentUsage = this.tokenTracker.getIssueTotal(this.issueNumber) ?? 0;
+      const currentUsage = this.tokenTracker.getWorkItemTotal(String(this.issueNumber)) ?? 0;
       const budget = this.tokenBudget ?? 0;
       void this.notificationManager.dispatch({
         type: 'budget-warning',
         scope: 'issue',
-        issueNumber: this.issueNumber,
+        workItemId: String(this.issueNumber),
         currentUsage,
         budget,
         percentUsed: budget > 0 ? Math.round((currentUsage / budget) * 100) : 0,
