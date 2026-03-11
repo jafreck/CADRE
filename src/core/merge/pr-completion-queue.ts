@@ -82,7 +82,7 @@ export class PullRequestCompletionQueue {
     this.logger.info(
       `Queued PR #${item.prNumber} for auto-completion`,
       {
-        issueNumber: item.issueNumber,
+        workItemId: String(item.issueNumber),
         data: {
           prUrl: item.prUrl,
           branch: item.branch,
@@ -197,7 +197,7 @@ export class PullRequestCompletionQueue {
       this.logger.info(
         `Auto-completed PR #${item.prNumber} into ${this.baseBranch} using ${this.mergeMethod} merge`,
         {
-          issueNumber: item.issueNumber,
+          workItemId: String(item.issueNumber),
           data: { prUrl: item.prUrl, branch: item.branch },
         },
       );
@@ -207,7 +207,7 @@ export class PullRequestCompletionQueue {
       this.logger.warn(
         `Auto-complete failed for PR #${item.prNumber}`,
         {
-          issueNumber: item.issueNumber,
+          workItemId: String(item.issueNumber),
           data: { prUrl: item.prUrl, branch: item.branch },
         },
       );
@@ -221,7 +221,7 @@ export class PullRequestCompletionQueue {
     this.logger.warn(
       `Skipping auto-complete for existing PR #${item.prNumber}: ${error}`,
       {
-        issueNumber: item.issueNumber,
+        workItemId: String(item.issueNumber),
         data: { prUrl: item.prUrl, branch: item.branch },
       },
     );

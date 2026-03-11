@@ -47,7 +47,7 @@ function makeLogger(): BackendLoggerLike {
 function makeInvocation(overrides: Partial<AgentInvocation> = {}): AgentInvocation {
   return {
     agent: 'code-writer',
-    issueNumber: 42,
+    workItemId: '42',
     phase: 3,
     contextPath: '/tmp/ctx.json',
     outputPath: '/tmp/output.md',

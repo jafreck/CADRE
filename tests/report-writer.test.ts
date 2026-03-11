@@ -54,7 +54,7 @@ const makeFleetResult = (
   totalDuration: 5000,
   tokenUsage: {
     total: 1500,
-    byIssue: { 1: 1500 },
+    byWorkItem: { '1': 1500 },
     byAgent: {},
     byPhase: { 1: 500, 2: 300, 3: 700 },
     recordCount: 1,
@@ -106,7 +106,7 @@ describe('ReportWriter', () => {
 
       expect(report.issues).toHaveLength(1);
       const issue = report.issues[0];
-      expect(issue.issueNumber).toBe(1);
+      expect(issue.workItemId).toBe('1');
       expect(issue.issueTitle).toBe('Fix bug');
       expect(issue.success).toBe(true);
       expect(issue.prNumber).toBe(10);
@@ -154,7 +154,7 @@ describe('ReportWriter', () => {
       const result = makeFleetResult({
         tokenUsage: {
           total: 1500,
-          byIssue: { 1: 1500 },
+          byWorkItem: { '1': 1500 },
           byAgent: {},
           byPhase: {},
         },
@@ -170,7 +170,7 @@ describe('ReportWriter', () => {
       const result = makeFleetResult({
         tokenUsage: {
           total: 1000,
-          byIssue: {},
+          byWorkItem: {},
           byAgent: {},
           byPhase: {},
         },
@@ -208,7 +208,7 @@ describe('ReportWriter', () => {
         failedIssues: [{ issueNumber: 2, error: 'Timeout' }],
         tokenUsage: {
           total: 2000,
-          byIssue: { 1: 1000, 2: 500 },
+          byWorkItem: { '1': 1000, '2': 500 },
           byAgent: {},
           byPhase: {},
         },
@@ -263,7 +263,7 @@ describe('ReportWriter', () => {
       expect(report.prCompletion.queued).toBe(3);
       expect(report.prCompletion.failed).toBe(1);
       expect(report.prCompletion.failures).toHaveLength(1);
-      expect(report.prCompletion.failures[0].issueNumber).toBe(12);
+      expect(report.prCompletion.failures[0].workItemId).toBe('12');
     });
 
     it('should default prCompletion to zeros when FleetResult omits it', () => {
@@ -472,68 +472,68 @@ describe('ReportWriter', () => {
 
   describe('formatIssueEntry (static)', () => {
     it('should include "Wave N" prefix when wave is present', () => {
-      const issue = { issueNumber: 1, issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0, wave: 2 };
+      const issue = { workItemId: '1', issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0, wave: 2 };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('Wave 2');
     });
 
     it('should not include Wave prefix when wave is absent', () => {
-      const issue = { issueNumber: 1, issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0 };
+      const issue = { workItemId: '1', issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0 };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).not.toContain('Wave');
     });
 
     it('should show success indicator for successful non-DAG issue', () => {
-      const issue = { issueNumber: 1, issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0 };
+      const issue = { workItemId: '1', issueTitle: 'Fix bug', success: true, tokens: 0, duration: 0 };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('✓');
       expect(line).not.toContain('FAILED');
     });
 
     it('should show FAILED for unsuccessful non-DAG issue', () => {
-      const issue = { issueNumber: 2, issueTitle: 'Broken', success: false, tokens: 0, duration: 0, error: 'Timeout' };
+      const issue = { workItemId: '2', issueTitle: 'Broken', success: false, tokens: 0, duration: 0, error: 'Timeout' };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('FAILED');
       expect(line).toContain('Timeout');
     });
 
     it('should display dep-blocked with ⊘ label', () => {
-      const issue = { issueNumber: 3, issueTitle: 'Blocked', success: false, tokens: 0, duration: 0, error: 'dep-blocked' };
+      const issue = { workItemId: '3', issueTitle: 'Blocked', success: false, tokens: 0, duration: 0, error: 'dep-blocked' };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('⊘ dep-blocked');
       expect(line).not.toContain('FAILED');
     });
 
     it('should display dep-failed with descriptive label', () => {
-      const issue = { issueNumber: 4, issueTitle: 'Dep failed', success: false, tokens: 0, duration: 0, error: 'dep-failed' };
+      const issue = { workItemId: '4', issueTitle: 'Dep failed', success: false, tokens: 0, duration: 0, error: 'dep-failed' };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('dep-failed');
       expect(line).not.toContain('FAILED');
     });
 
     it('should display dep-merge-conflict with descriptive label', () => {
-      const issue = { issueNumber: 5, issueTitle: 'Conflict', success: false, tokens: 0, duration: 0, error: 'dep-merge-conflict' };
+      const issue = { workItemId: '5', issueTitle: 'Conflict', success: false, tokens: 0, duration: 0, error: 'dep-merge-conflict' };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('dep-merge-conflict');
       expect(line).not.toContain('FAILED');
     });
 
     it('should display dep-build-broken with descriptive label', () => {
-      const issue = { issueNumber: 6, issueTitle: 'Build broken', success: false, tokens: 0, duration: 0, error: 'dep-build-broken' };
+      const issue = { workItemId: '6', issueTitle: 'Build broken', success: false, tokens: 0, duration: 0, error: 'dep-build-broken' };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('dep-build-broken');
       expect(line).not.toContain('FAILED');
     });
 
     it('should combine Wave prefix with DAG status label', () => {
-      const issue = { issueNumber: 7, issueTitle: 'Blocked', success: false, tokens: 0, duration: 0, wave: 1, error: 'dep-blocked' };
+      const issue = { workItemId: '7', issueTitle: 'Blocked', success: false, tokens: 0, duration: 0, wave: 1, error: 'dep-blocked' };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('Wave 1');
       expect(line).toContain('⊘ dep-blocked');
     });
 
     it('should include issue number and title in the line', () => {
-      const issue = { issueNumber: 42, issueTitle: 'My feature', success: true, tokens: 0, duration: 0 };
+      const issue = { workItemId: '42', issueTitle: 'My feature', success: true, tokens: 0, duration: 0 };
       const line = ReportWriter.formatIssueEntry(issue);
       expect(line).toContain('#42');
       expect(line).toContain('My feature');

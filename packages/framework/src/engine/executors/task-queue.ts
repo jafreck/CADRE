@@ -1,5 +1,11 @@
 import type { AgentSession } from '../../runtime/context/types.js';
 
+/** Minimal shape required by TaskQueue for DAG resolution. */
+export interface TaskLike {
+  id: string;
+  dependencies: string[];
+}
+
 function sessionFiles(session: AgentSession): string[] {
   const seen = new Set<string>();
   const files: string[] = [];
@@ -14,23 +20,29 @@ function sessionFiles(session: AgentSession): string[] {
   return files;
 }
 
-export class SessionQueue {
-  private readonly sessions: Map<string, AgentSession>;
+/**
+ * Generic task queue with DAG resolution, topological sort, and
+ * ready/complete/blocked state machine.
+ *
+ * `T` must have at least `{ id: string; dependencies: string[] }`.
+ */
+export class TaskQueue<T extends TaskLike = TaskLike> {
+  private readonly tasks: Map<string, T>;
   private readonly completed: Set<string> = new Set();
   private readonly blocked: Set<string> = new Set();
   private readonly inProgress: Set<string> = new Set();
 
-  constructor(sessions: AgentSession[]) {
-    this.sessions = new Map(sessions.map((s) => [s.id, s]));
+  constructor(tasks: T[]) {
+    this.tasks = new Map(tasks.map((t) => [t.id, t]));
     this.validate();
   }
 
   private validate(): void {
-    for (const session of this.sessions.values()) {
-      for (const dep of session.dependencies) {
-        if (!this.sessions.has(dep)) {
+    for (const task of this.tasks.values()) {
+      for (const dep of task.dependencies) {
+        if (!this.tasks.has(dep)) {
           throw new Error(
-            `Session ${session.id} depends on ${dep}, which does not exist`,
+            `Task ${task.id} depends on ${dep}, which does not exist`,
           );
         }
       }
@@ -39,63 +51,63 @@ export class SessionQueue {
     this.topologicalSort();
   }
 
-  getReady(): AgentSession[] {
-    const ready: AgentSession[] = [];
+  getReady(): T[] {
+    const ready: T[] = [];
 
-    for (const session of this.sessions.values()) {
-      if (this.completed.has(session.id)) continue;
-      if (this.blocked.has(session.id)) continue;
-      if (this.inProgress.has(session.id)) continue;
+    for (const task of this.tasks.values()) {
+      if (this.completed.has(task.id)) continue;
+      if (this.blocked.has(task.id)) continue;
+      if (this.inProgress.has(task.id)) continue;
 
-      const depsOk = session.dependencies.every(
+      const depsOk = task.dependencies.every(
         (dep) => this.completed.has(dep) || this.blocked.has(dep),
       );
       if (depsOk) {
-        ready.push(session);
+        ready.push(task);
       }
     }
 
     return ready;
   }
 
-  start(sessionId: string): void {
-    if (!this.sessions.has(sessionId)) {
-      throw new Error(`Unknown session: ${sessionId}`);
+  start(taskId: string): void {
+    if (!this.tasks.has(taskId)) {
+      throw new Error(`Unknown task: ${taskId}`);
     }
-    this.inProgress.add(sessionId);
+    this.inProgress.add(taskId);
   }
 
-  complete(sessionId: string): void {
-    if (!this.sessions.has(sessionId)) {
-      throw new Error(`Unknown session: ${sessionId}`);
+  complete(taskId: string): void {
+    if (!this.tasks.has(taskId)) {
+      throw new Error(`Unknown task: ${taskId}`);
     }
-    this.inProgress.delete(sessionId);
-    this.completed.add(sessionId);
+    this.inProgress.delete(taskId);
+    this.completed.add(taskId);
   }
 
-  markBlocked(sessionId: string): void {
-    if (!this.sessions.has(sessionId)) {
-      throw new Error(`Unknown session: ${sessionId}`);
+  markBlocked(taskId: string): void {
+    if (!this.tasks.has(taskId)) {
+      throw new Error(`Unknown task: ${taskId}`);
     }
-    this.inProgress.delete(sessionId);
-    this.blocked.add(sessionId);
+    this.inProgress.delete(taskId);
+    this.blocked.add(taskId);
   }
 
   isComplete(): boolean {
-    for (const session of this.sessions.values()) {
-      if (!this.completed.has(session.id) && !this.blocked.has(session.id)) {
+    for (const task of this.tasks.values()) {
+      if (!this.completed.has(task.id) && !this.blocked.has(task.id)) {
         return false;
       }
     }
     return true;
   }
 
-  getSession(sessionId: string): AgentSession | undefined {
-    return this.sessions.get(sessionId);
+  getTask(taskId: string): T | undefined {
+    return this.tasks.get(taskId);
   }
 
-  getAllSessions(): AgentSession[] {
-    return Array.from(this.sessions.values());
+  getAllTasks(): T[] {
+    return Array.from(this.tasks.values());
   }
 
   getCounts(): {
@@ -105,7 +117,7 @@ export class SessionQueue {
     inProgress: number;
     pending: number;
   } {
-    const total = this.sessions.size;
+    const total = this.tasks.size;
     return {
       total,
       completed: this.completed.size,
@@ -115,52 +127,69 @@ export class SessionQueue {
     };
   }
 
-  isTaskCompleted(sessionId: string): boolean {
-    return this.completed.has(sessionId);
+  isTaskCompleted(taskId: string): boolean {
+    return this.completed.has(taskId);
   }
 
   restoreState(completedTasks: string[], blockedTasks: string[]): void {
     for (const id of completedTasks) {
-      if (this.sessions.has(id)) {
+      if (this.tasks.has(id)) {
         this.completed.add(id);
       }
     }
     for (const id of blockedTasks) {
-      if (this.sessions.has(id)) {
+      if (this.tasks.has(id)) {
         this.blocked.add(id);
       }
     }
   }
 
-  topologicalSort(): AgentSession[] {
-    const sorted: AgentSession[] = [];
+  topologicalSort(): T[] {
+    const sorted: T[] = [];
     const visited = new Set<string>();
     const visiting = new Set<string>();
 
-    const visit = (sessionId: string): void => {
-      if (visited.has(sessionId)) return;
-      if (visiting.has(sessionId)) {
-        throw new Error(`Cycle detected in session dependencies involving: ${sessionId}`);
+    const visit = (taskId: string): void => {
+      if (visited.has(taskId)) return;
+      if (visiting.has(taskId)) {
+        throw new Error(`Cycle detected in task dependencies involving: ${taskId}`);
       }
 
-      visiting.add(sessionId);
-      const session = this.sessions.get(sessionId);
-      if (!session) return;
+      visiting.add(taskId);
+      const task = this.tasks.get(taskId);
+      if (!task) return;
 
-      for (const dep of session.dependencies) {
+      for (const dep of task.dependencies) {
         visit(dep);
       }
 
-      visiting.delete(sessionId);
-      visited.add(sessionId);
-      sorted.push(session);
+      visiting.delete(taskId);
+      visited.add(taskId);
+      sorted.push(task);
     };
 
-    for (const sessionId of this.sessions.keys()) {
-      visit(sessionId);
+    for (const taskId of this.tasks.keys()) {
+      visit(taskId);
     }
 
     return sorted;
+  }
+}
+
+/**
+ * AgentSession-specific queue with file-overlap collision detection.
+ * Extends TaskQueue<AgentSession> with batch collision and non-overlapping
+ * batch selection methods.
+ */
+export class SessionQueue extends TaskQueue<AgentSession> {
+  /** Backward-compatible alias for `getTask`. */
+  getSession(sessionId: string): AgentSession | undefined {
+    return this.getTask(sessionId);
+  }
+
+  /** Backward-compatible alias for `getAllTasks`. */
+  getAllSessions(): AgentSession[] {
+    return this.getAllTasks();
   }
 
   static detectBatchCollisions(sessions: AgentSession[]): string[] {
@@ -211,5 +240,3 @@ export class SessionQueue {
     return batch;
   }
 }
-
-export const TaskQueue = SessionQueue;

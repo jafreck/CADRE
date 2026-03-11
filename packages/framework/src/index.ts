@@ -56,6 +56,7 @@ export {
   type AgentLauncherLike,
   SessionQueue,
   TaskQueue,
+  type TaskLike,
   RetryExecutor,
   type RetryOptions,
   type RetryResult,

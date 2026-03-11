@@ -1,5 +1,5 @@
 export interface RunIssueSummary {
-  issueNumber: number;
+  workItemId: string;
   issueTitle: string;
   success: boolean;
   prNumber?: number;
@@ -26,7 +26,7 @@ export interface RunTotals {
 }
 
 export interface RunPrCompletionFailure {
-  issueNumber: number;
+  workItemId: string;
   issueTitle: string;
   prNumber: number;
   prUrl: string;
@@ -56,7 +56,7 @@ export interface CostReportPhaseEntry {
 }
 
 export interface CostReport {
-  issueNumber: number;
+  workItemId: string;
   generatedAt: string;
   totalTokens: number;
   inputTokens: number;

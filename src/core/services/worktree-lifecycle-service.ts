@@ -73,7 +73,7 @@ export class WorktreeLifecycleService {
     await this.provider.connect();
     try {
       for (const wt of worktrees) {
-        const locallyCompleted = state.issues[wt.issueNumber]?.status === 'completed';
+        const locallyCompleted = state.issues[String(wt.issueNumber)]?.status === 'completed';
 
         // Check whether the branch's PR is closed or merged on the platform
         let prDone = false;
@@ -86,7 +86,7 @@ export class WorktreeLifecycleService {
         } catch (err) {
           this.logger.warn(
             `Could not fetch PR state for issue #${wt.issueNumber} (branch ${wt.branch}): ${err}`,
-            { issueNumber: wt.issueNumber },
+            { workItemId: String(wt.issueNumber) },
           );
         }
 

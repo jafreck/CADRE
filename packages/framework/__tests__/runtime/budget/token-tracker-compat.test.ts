@@ -4,11 +4,11 @@ import { TokenTracker } from '../../../src/runtime/budget/token-tracker.js';
 describe('TokenTracker', () => {
   function setupTracker(): TokenTracker {
     const tracker = new TokenTracker();
-    tracker.record(42, 'issue-analyst', 1, 3000);
-    tracker.record(42, 'codebase-scout', 1, 4000);
-    tracker.record(42, 'implementation-planner', 2, 5000);
-    tracker.record(57, 'issue-analyst', 1, 2000);
-    tracker.record(57, 'codebase-scout', 1, 3000);
+    tracker.record('42', 'issue-analyst', 1, 3000);
+    tracker.record('42', 'codebase-scout', 1, 4000);
+    tracker.record('42', 'implementation-planner', 2, 5000);
+    tracker.record('57', 'issue-analyst', 1, 2000);
+    tracker.record('57', 'codebase-scout', 1, 3000);
     return tracker;
   }
 
@@ -24,16 +24,16 @@ describe('TokenTracker', () => {
     });
   });
 
-  describe('getIssueTotal', () => {
+  describe('getWorkItemTotal', () => {
     it('should return tokens for a specific issue', () => {
       const tracker = setupTracker();
-      expect(tracker.getIssueTotal(42)).toBe(12000);
-      expect(tracker.getIssueTotal(57)).toBe(5000);
+      expect(tracker.getWorkItemTotal('42')).toBe(12000);
+      expect(tracker.getWorkItemTotal('57')).toBe(5000);
     });
 
     it('should return 0 for unknown issue', () => {
       const tracker = setupTracker();
-      expect(tracker.getIssueTotal(999)).toBe(0);
+      expect(tracker.getWorkItemTotal('999')).toBe(0);
     });
   });
 
@@ -47,12 +47,12 @@ describe('TokenTracker', () => {
     });
   });
 
-  describe('getByIssue', () => {
+  describe('getByWorkItem', () => {
     it('should aggregate by issue', () => {
       const tracker = setupTracker();
-      const byIssue = tracker.getByIssue();
-      expect(byIssue[42]).toBe(12000);
-      expect(byIssue[57]).toBe(5000);
+      const byWorkItem = tracker.getByWorkItem();
+      expect(byWorkItem['42']).toBe(12000);
+      expect(byWorkItem['57']).toBe(5000);
     });
   });
 
@@ -89,17 +89,17 @@ describe('TokenTracker', () => {
     });
   });
 
-  describe('checkIssueBudget', () => {
+  describe('checkWorkItemBudget', () => {
     it('should return ok when no budget set', () => {
       const tracker = setupTracker();
-      expect(tracker.checkIssueBudget(42)).toBe('ok');
+      expect(tracker.checkWorkItemBudget('42')).toBe('ok');
     });
 
     it('should check per-issue budget', () => {
       const tracker = setupTracker();
-      expect(tracker.checkIssueBudget(42, 50000)).toBe('ok');
-      expect(tracker.checkIssueBudget(42, 14000)).toBe('warning');
-      expect(tracker.checkIssueBudget(42, 12000)).toBe('exceeded');
+      expect(tracker.checkWorkItemBudget('42', 50000)).toBe('ok');
+      expect(tracker.checkWorkItemBudget('42', 14000)).toBe('warning');
+      expect(tracker.checkWorkItemBudget('42', 12000)).toBe('exceeded');
     });
   });
 
@@ -110,7 +110,7 @@ describe('TokenTracker', () => {
       expect(summary.total).toBe(17000);
       expect(summary.recordCount).toBe(5);
       expect(Object.keys(summary.byAgent)).toHaveLength(3);
-      expect(Object.keys(summary.byIssue)).toHaveLength(2);
+      expect(Object.keys(summary.byWorkItem)).toHaveLength(2);
       expect(Object.keys(summary.byPhase)).toHaveLength(2);
     });
   });
@@ -124,7 +124,7 @@ describe('TokenTracker', () => {
       tracker2.importRecords(exported);
 
       expect(tracker2.getTotal()).toBe(17000);
-      expect(tracker2.getIssueTotal(42)).toBe(12000);
+      expect(tracker2.getWorkItemTotal('42')).toBe(12000);
     });
 
     it('should not share state between instances', () => {
@@ -135,7 +135,7 @@ describe('TokenTracker', () => {
       tracker2.importRecords(exported);
 
       // Add to original should not affect copy
-      tracker.record(42, 'code-writer', 3, 1000);
+      tracker.record('42', 'code-writer', 3, 1000);
       expect(tracker2.getTotal()).toBe(17000);
     });
   });
@@ -143,7 +143,7 @@ describe('TokenTracker', () => {
   describe('record with input/output', () => {
     it('should store input and output on TokenRecord when provided', () => {
       const tracker = new TokenTracker();
-      tracker.record(42, 'issue-analyst', 1, 3000, 1000, 2000);
+      tracker.record('42', 'issue-analyst', 1, 3000, 1000, 2000);
       const records = tracker.exportRecords();
       expect(records).toHaveLength(1);
       expect(records[0].input).toBe(1000);
@@ -153,7 +153,7 @@ describe('TokenTracker', () => {
 
     it('should leave input and output undefined when not provided', () => {
       const tracker = new TokenTracker();
-      tracker.record(42, 'issue-analyst', 1, 3000);
+      tracker.record('42', 'issue-analyst', 1, 3000);
       const records = tracker.exportRecords();
       expect(records[0].input).toBeUndefined();
       expect(records[0].output).toBeUndefined();

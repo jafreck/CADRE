@@ -58,13 +58,13 @@ vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
   })),
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue(undefined),
-    isIssueCompleted: vi.fn().mockReturnValue(false),
-    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    isWorkItemCompleted: vi.fn().mockReturnValue(false),
+    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     recordTokenUsage: vi.fn().mockResolvedValue(undefined),
     setDag: vi.fn().mockResolvedValue(undefined),
     markWaveComplete: vi.fn().mockResolvedValue(undefined),
-    getIssueStatus: vi.fn().mockReturnValue(null),
-    getAllIssueStatuses: vi.fn().mockReturnValue([]),
+    getWorkItemStatus: vi.fn().mockReturnValue(null),
+    getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
   })),
 }));
 vi.mock('@cadre-dev/framework/engine', () => ({
@@ -76,13 +76,13 @@ vi.mock('@cadre-dev/framework/engine', () => ({
   })),
   FleetCheckpointManager: vi.fn().mockImplementation(() => ({
     load: vi.fn().mockResolvedValue(undefined),
-    isIssueCompleted: vi.fn().mockReturnValue(false),
-    setIssueStatus: vi.fn().mockResolvedValue(undefined),
+    isWorkItemCompleted: vi.fn().mockReturnValue(false),
+    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     recordTokenUsage: vi.fn().mockResolvedValue(undefined),
     setDag: vi.fn().mockResolvedValue(undefined),
     markWaveComplete: vi.fn().mockResolvedValue(undefined),
-    getIssueStatus: vi.fn().mockReturnValue(null),
-    getAllIssueStatuses: vi.fn().mockReturnValue([]),
+    getWorkItemStatus: vi.fn().mockReturnValue(null),
+    getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
   })),
   FleetProgressWriter: vi.fn().mockImplementation(() => ({
     write: vi.fn().mockResolvedValue(undefined),
@@ -573,7 +573,7 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
       totalDuration: expect.any(Number),
       tokenUsage: expect.objectContaining({
         total: expect.any(Number),
-        byIssue: expect.any(Object),
+        byWorkItem: expect.any(Object),
         byAgent: expect.any(Object),
       }),
     });
@@ -1069,13 +1069,13 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
 
   it('records the issue as code-complete in the fleet checkpoint when skipping (PR not yet merged)', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatusMock = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatusMock = vi.fn().mockResolvedValue(undefined);
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       load: vi.fn().mockResolvedValue(undefined),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
-      setIssueStatus: setIssueStatusMock,
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus: setWorkItemStatusMock,
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getIssueStatus: vi.fn().mockReturnValue(null),
+      getWorkItemStatus: vi.fn().mockReturnValue(null),
     }));
 
     const config = makeConfig();
@@ -1099,13 +1099,13 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
     await fleet.run();
 
     // Should be code-complete, not completed — the PR hasn't been merged yet
-    const codeCompleteCall = setIssueStatusMock.mock.calls.find(
-      (args: unknown[]) => args[0] === 1 && args[1] === 'code-complete',
+    const codeCompleteCall = setWorkItemStatusMock.mock.calls.find(
+      (args: unknown[]) => args[0] === '1' && args[1] === 'code-complete',
     );
     expect(codeCompleteCall).toBeDefined();
     // Should NOT have been marked completed
-    const completedCall = setIssueStatusMock.mock.calls.find(
-      (args: unknown[]) => args[0] === 1 && args[1] === 'completed',
+    const completedCall = setWorkItemStatusMock.mock.calls.find(
+      (args: unknown[]) => args[0] === '1' && args[1] === 'completed',
     );
     expect(completedCall).toBeUndefined();
   });
@@ -1211,23 +1211,23 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
 
   it('on resume, queues and auto-completes existing open PRs and promotes to completed', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatusMock = vi.fn().mockResolvedValue(undefined);
-    const issueStatuses: Record<number, any> = {};
-    // Track setIssueStatus calls to feed back into getIssueStatus
-    setIssueStatusMock.mockImplementation(async (num: number, status: string, wt: string, branch: string, phase: number, title: string) => {
-      issueStatuses[num] = { status, worktreePath: wt, branchName: branch, lastPhase: phase, issueTitle: title };
+    const setWorkItemStatusMock = vi.fn().mockResolvedValue(undefined);
+    const issueStatuses: Record<string, any> = {};
+    // Track setWorkItemStatus calls to feed back into getWorkItemStatus
+    setWorkItemStatusMock.mockImplementation(async (id: string, status: string, wt: string, branch: string, phase: number, title: string) => {
+      issueStatuses[id] = { status, worktreePath: wt, branchName: branch, lastPhase: phase, issueTitle: title };
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       load: vi.fn().mockResolvedValue(undefined),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
-      setIssueStatus: setIssueStatusMock,
-      clearIssueStatus: vi.fn().mockResolvedValue(undefined),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus: setWorkItemStatusMock,
+      clearWorkItemStatus: vi.fn().mockResolvedValue(undefined),
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getIssueStatus: vi.fn().mockImplementation((num: number) => issueStatuses[num] ?? null),
+      getWorkItemStatus: vi.fn().mockImplementation((id: string) => issueStatuses[id] ?? null),
       setDag: vi.fn().mockResolvedValue(undefined),
       markWaveComplete: vi.fn().mockResolvedValue(undefined),
       getState: vi.fn().mockReturnValue({ completedWaves: [] }),
-      getAllIssueStatuses: vi.fn().mockReturnValue([]),
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
     }));
 
     const config = makeRuntimeConfig({
@@ -1292,12 +1292,12 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
     expect(worktreeManager.provision).not.toHaveBeenCalled();
 
     // All three issues should first be set to code-complete, then promoted to completed
-    for (const issueNum of [1, 2, 3]) {
-      const codeCompleteCall = setIssueStatusMock.mock.calls.find(
+    for (const issueNum of ['1', '2', '3']) {
+      const codeCompleteCall = setWorkItemStatusMock.mock.calls.find(
         (args: unknown[]) => args[0] === issueNum && args[1] === 'code-complete',
       );
       expect(codeCompleteCall).toBeDefined();
-      const completedCall = setIssueStatusMock.mock.calls.find(
+      const completedCall = setWorkItemStatusMock.mock.calls.find(
         (args: unknown[]) => args[0] === issueNum && args[1] === 'completed',
       );
       expect(completedCall).toBeDefined();
@@ -1536,10 +1536,10 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       load: vi.fn().mockResolvedValue(undefined),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getIssueStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-1' }),
+      getWorkItemStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-1' }),
     }));
 
     const config = makeConfig();
@@ -1616,14 +1616,14 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
       }),
     }));
 
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
       load: vi.fn().mockResolvedValue(undefined),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
-      setIssueStatus,
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus,
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getIssueStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-2' }),
+      getWorkItemStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-2' }),
     }));
 
     const config = makeConfig();
@@ -1643,11 +1643,11 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
 
     await fleet.run();
 
-    const codeCompleteCall = setIssueStatus.mock.calls.find(
+    const codeCompleteCall = setWorkItemStatus.mock.calls.find(
       ([, status]) => status === 'code-complete',
     );
     expect(codeCompleteCall).toBeDefined();
-    expect(codeCompleteCall![0]).toBe(2);
+    expect(codeCompleteCall![0]).toBe('2');
   });
 
   it('runReviewResponse() returns codeDoneNoPR as an empty array', async () => {
@@ -1694,15 +1694,15 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   function makeMockFleetCheckpoint(overrides: Partial<Record<string, any>> = {}) {
     return {
       load: vi.fn().mockResolvedValue(undefined),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
-      clearIssueStatus: vi.fn().mockResolvedValue(undefined),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      clearWorkItemStatus: vi.fn().mockResolvedValue(undefined),
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getIssueStatus: vi.fn().mockReturnValue(null),
+      getWorkItemStatus: vi.fn().mockReturnValue(null),
       setDag: vi.fn().mockResolvedValue(undefined),
       markWaveComplete: vi.fn().mockResolvedValue(undefined),
       getState: vi.fn().mockReturnValue({ completedWaves: [] }),
-      getAllIssueStatuses: vi.fn().mockReturnValue([]),
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
       ...overrides,
     };
   }
@@ -1734,7 +1734,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
     await fleet.run();
 
-    expect(mockCheckpoint.setDag).toHaveBeenCalledWith(depMap, [[1]]);
+    expect(mockCheckpoint.setDag).toHaveBeenCalledWith(depMap, [['1']]);
   });
 
   it('passes a resolver callback to provisionWithDeps when dag.onDependencyMergeConflict is resolve', async () => {
@@ -1843,7 +1843,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     expect(launcher.launchAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         agent: 'dep-conflict-resolver',
-        issueNumber: issue.number,
+        workItemId: String(issue.number),
         phase: 0,
       }),
       '/tmp/worktrees/deps-2',
@@ -1890,7 +1890,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     expect(resolved).toBe(false);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('dep-conflict-resolver failed'),
-      expect.objectContaining({ issueNumber: issue.number }),
+      expect.objectContaining({ workItemId: String(issue.number) }),
     );
   });
 
@@ -2013,12 +2013,12 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
   it('marks transitive dependents as dep-blocked when an issue fails with dep-merge-conflict', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
-      setIssueStatus,
+      setWorkItemStatus,
       // Return dep-merge-conflict for issue 1 after it fails
-      getIssueStatus: vi.fn().mockImplementation((num: number) => {
-        if (num === 1) return { status: 'dep-merge-conflict' };
+      getWorkItemStatus: vi.fn().mockImplementation((id: string) => {
+        if (id === '1') return { status: 'dep-merge-conflict' };
         return null;
       }),
     });
@@ -2060,8 +2060,8 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
     await fleet.run();
 
-    const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]) => num === 2 && status === 'dep-blocked',
+    const depBlockedCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]) => num === '2' && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
@@ -2070,7 +2070,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint({
       getState: vi.fn().mockReturnValue({ completedWaves: [] }),
-      isIssueCompleted: vi.fn().mockImplementation((num: number) => num === 1),
+      isWorkItemCompleted: vi.fn().mockImplementation((id: string) => id === '1'),
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -2213,10 +2213,10 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
   it('marks issue as dep-merge-conflict and propagates dep-blocked when autoMerge PR fails', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
-      setIssueStatus,
-      getIssueStatus: vi.fn().mockReturnValue(null),
+      setWorkItemStatus,
+      getWorkItemStatus: vi.fn().mockReturnValue(null),
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -2261,25 +2261,25 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
     await fleet.run();
 
     // issue1 should be marked dep-merge-conflict due to failed PR merge
-    const depMergeConflictCall = setIssueStatus.mock.calls.find(
-      ([num, status]) => num === 1 && status === 'dep-merge-conflict',
+    const depMergeConflictCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]) => num === '1' && status === 'dep-merge-conflict',
     );
     expect(depMergeConflictCall).toBeDefined();
 
     // issue2 should be marked dep-blocked
-    const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]) => num === 2 && status === 'dep-blocked',
+    const depBlockedCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]) => num === '2' && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
 
   it('propagates dep-blocked to dependents when an issue checkpoint has dep-failed status', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
-      setIssueStatus,
-      getIssueStatus: vi.fn().mockImplementation((num: number) => {
-        if (num === 1) return { status: 'dep-failed' };
+      setWorkItemStatus,
+      getWorkItemStatus: vi.fn().mockImplementation((id: string) => {
+        if (id === '1') return { status: 'dep-failed' };
         return null;
       }),
     });
@@ -2325,19 +2325,19 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
     await fleet.run();
 
-    const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]) => num === 2 && status === 'dep-blocked',
+    const depBlockedCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]) => num === '2' && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
 
   it('propagates dep-blocked to dependents when an issue checkpoint has dep-build-broken status', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpoint({
-      setIssueStatus,
-      getIssueStatus: vi.fn().mockImplementation((num: number) => {
-        if (num === 1) return { status: 'dep-build-broken' };
+      setWorkItemStatus,
+      getWorkItemStatus: vi.fn().mockImplementation((id: string) => {
+        if (id === '1') return { status: 'dep-build-broken' };
         return null;
       }),
     });
@@ -2383,8 +2383,8 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
     await fleet.run();
 
-    const depBlockedCall = setIssueStatus.mock.calls.find(
-      ([num, status]) => num === 2 && status === 'dep-blocked',
+    const depBlockedCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]) => num === '2' && status === 'dep-blocked',
     );
     expect(depBlockedCall).toBeDefined();
   });
@@ -2418,7 +2418,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
 
     await fleet.run();
 
-    expect(mockCheckpoint.setDag).toHaveBeenCalledWith(depMap, [[1, 2]]);
+    expect(mockCheckpoint.setDag).toHaveBeenCalledWith({ '2': ['1'] }, [['1', '2']]);
   });
 
   it('flat parallel dispatch is used when no dag is provided', async () => {
@@ -2458,28 +2458,28 @@ describe('FleetOrchestrator — resume reconciliation', () => {
   function makeMockFleetCheckpointForReconcile(overrides: Partial<Record<string, any>> = {}) {
     return {
       load: vi.fn().mockResolvedValue(undefined),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
-      clearIssueStatus: vi.fn().mockResolvedValue(undefined),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      clearWorkItemStatus: vi.fn().mockResolvedValue(undefined),
       recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getIssueStatus: vi.fn().mockReturnValue(null),
+      getWorkItemStatus: vi.fn().mockReturnValue(null),
       setDag: vi.fn().mockResolvedValue(undefined),
       markWaveComplete: vi.fn().mockResolvedValue(undefined),
       getState: vi.fn().mockReturnValue({ completedWaves: [] }),
-      getAllIssueStatuses: vi.fn().mockReturnValue([]),
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
       ...overrides,
     };
   }
 
   it('promotes dep-merge-conflict issues to completed when PR is merged', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      setIssueStatus,
-      getAllIssueStatuses: vi.fn().mockReturnValue([
+      setWorkItemStatus,
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([
         [16, { status: 'dep-merge-conflict', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
       ]),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -2544,19 +2544,19 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     await fleet.run();
 
     // Reconciliation should have promoted #16 from dep-merge-conflict to completed
-    const promotionCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 16 && status === 'completed',
+    const promotionCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]: [string, string]) => num === '16' && status === 'completed',
     );
     expect(promotionCall).toBeDefined();
   });
 
   it('does not reconcile when resume is false', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const getAllIssueStatuses = vi.fn().mockReturnValue([
+    const getAllWorkItemStatuses = vi.fn().mockReturnValue([
       [16, { status: 'dep-merge-conflict', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
     ]);
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      getAllIssueStatuses,
+      getAllWorkItemStatuses,
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -2576,16 +2576,16 @@ describe('FleetOrchestrator — resume reconciliation', () => {
 
     await fleet.run();
 
-    // getAllIssueStatuses should NOT have been called (no reconciliation)
-    expect(getAllIssueStatuses).not.toHaveBeenCalled();
+    // getAllWorkItemStatuses should NOT have been called (no reconciliation)
+    expect(getAllWorkItemStatuses).not.toHaveBeenCalled();
   });
 
   it('does not promote issues whose PRs are not merged', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      setIssueStatus,
-      getAllIssueStatuses: vi.fn().mockReturnValue([
+      setWorkItemStatus,
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([
         [16, { status: 'failed', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
       ]),
     });
@@ -2652,8 +2652,8 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     await fleet.run();
 
     // Reconciliation should NOT have promoted #16 (PR is open, not merged)
-    const reconcilePromotionCalls = setIssueStatus.mock.calls.filter(
-      ([num, status]: [number, string]) => num === 16 && status === 'completed',
+    const reconcilePromotionCalls = setWorkItemStatus.mock.calls.filter(
+      ([num, status]: [string, string]) => num === '16' && status === 'completed',
     );
     // There may be a 'completed' call from processIssue finding the open PR,
     // but the reconciliation itself should not have set it
@@ -2665,14 +2665,14 @@ describe('FleetOrchestrator — resume reconciliation', () => {
 
   it('clears dep-blocked issues when all dependencies are now completed', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
-    const clearIssueStatus = vi.fn().mockResolvedValue(undefined);
-    const isIssueCompleted = vi.fn().mockImplementation((num: number) => num === 16);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
+    const clearWorkItemStatus = vi.fn().mockResolvedValue(undefined);
+    const isWorkItemCompleted = vi.fn().mockImplementation((id: string) => id === '16');
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      setIssueStatus,
-      clearIssueStatus,
-      isIssueCompleted,
-      getAllIssueStatuses: vi.fn().mockReturnValue([
+      setWorkItemStatus,
+      clearWorkItemStatus,
+      isWorkItemCompleted,
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([
         [16, { status: 'completed', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
         [17, { status: 'dep-blocked', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 17' }],
       ]),
@@ -2739,7 +2739,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     await fleet.run();
 
     // Should have cleared the dep-blocked status for issue 17
-    expect(clearIssueStatus).toHaveBeenCalledWith(17);
+    expect(clearWorkItemStatus).toHaveBeenCalledWith(17);
 
     // Should have logged the clearing
     const clearLogCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls.filter(
@@ -2750,12 +2750,12 @@ describe('FleetOrchestrator — resume reconciliation', () => {
 
   it('does not clear dep-blocked when dependencies are still unresolved', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const clearIssueStatus = vi.fn().mockResolvedValue(undefined);
-    const isIssueCompleted = vi.fn().mockReturnValue(false); // dep 16 NOT completed
+    const clearWorkItemStatus = vi.fn().mockResolvedValue(undefined);
+    const isWorkItemCompleted = vi.fn().mockReturnValue(false); // dep 16 NOT completed
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      clearIssueStatus,
-      isIssueCompleted,
-      getAllIssueStatuses: vi.fn().mockReturnValue([
+      clearWorkItemStatus,
+      isWorkItemCompleted,
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([
         [16, { status: 'dep-merge-conflict', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
         [17, { status: 'dep-blocked', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 17' }],
       ]),
@@ -2810,24 +2810,24 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     await fleet.run();
 
     // dep-blocked should NOT have been cleared (dep 16 is still not completed)
-    expect(clearIssueStatus).not.toHaveBeenCalledWith(17);
+    expect(clearWorkItemStatus).not.toHaveBeenCalledWith(17);
   });
 
   it('retries merge for dep-merge-conflict issues with open PRs during reconciliation', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
-    const isIssueCompleted = vi.fn().mockReturnValue(false);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
+    const isWorkItemCompleted = vi.fn().mockReturnValue(false);
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      setIssueStatus,
-      isIssueCompleted,
-      getAllIssueStatuses: vi.fn().mockReturnValue([
+      setWorkItemStatus,
+      isWorkItemCompleted,
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([
         [16, { status: 'dep-merge-conflict', branchName: 'cadre/issue-16', worktreePath: '/tmp/wt/16', lastPhase: 5, issueTitle: 'Issue 16' }],
       ]),
     });
-    // After merge retry succeeds in Phase 2, isIssueCompleted should return true on re-check
-    isIssueCompleted.mockImplementation((num: number) => {
-      const calls = setIssueStatus.mock.calls;
-      return calls.some(([n, s]: [number, string]) => n === num && s === 'completed');
+    // After merge retry succeeds in Phase 2, isWorkItemCompleted should return true on re-check
+    isWorkItemCompleted.mockImplementation((id: string) => {
+      const calls = setWorkItemStatus.mock.calls;
+      return calls.some(([n, s]: [string, string]) => n === id && s === 'completed');
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -2903,8 +2903,8 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     expect((platform as any).mergePullRequest).toHaveBeenCalledWith(49, 'main', undefined);
 
     // Should have promoted to completed
-    const promotionCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 16 && status === 'completed',
+    const promotionCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]: [string, string]) => num === '16' && status === 'completed',
     );
     expect(promotionCall).toBeDefined();
 
@@ -2917,14 +2917,14 @@ describe('FleetOrchestrator — resume reconciliation', () => {
 
   it('derives branchName from worktreeManager when checkpoint has empty branchName', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      setIssueStatus,
-      getAllIssueStatuses: vi.fn().mockReturnValue([
+      setWorkItemStatus,
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([
         // branchName is empty — simulates pre-fix checkpoint data
         [20, { status: 'dep-merge-conflict', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 20' }],
       ]),
-      isIssueCompleted: vi.fn().mockReturnValue(false),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -2997,20 +2997,20 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     expect(worktreeManager.resolveBranchName).toHaveBeenCalledWith(20, 'Issue 20');
 
     // Should have promoted #20 to completed using the derived branchName
-    const promotionCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 20 && status === 'completed',
+    const promotionCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]: [string, string]) => num === '20' && status === 'completed',
     );
     expect(promotionCall).toBeDefined();
-    // The branchName in the setIssueStatus call should be the derived one
+    // The branchName in the setWorkItemStatus call should be the derived one
     expect(promotionCall![3]).toBe('cadre/issue-20-issue-20');
   });
 
   it('processIssue detects already-merged PRs and skips re-processing', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    const setIssueStatus = vi.fn().mockResolvedValue(undefined);
+    const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
-      setIssueStatus,
-      getAllIssueStatuses: vi.fn().mockReturnValue([]),
+      setWorkItemStatus,
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
     });
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
 
@@ -3044,8 +3044,8 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     // No worktree should have been provisioned
     expect(worktreeManager.provision).not.toHaveBeenCalled();
     // Checkpoint should show completed
-    const completedCall = setIssueStatus.mock.calls.find(
-      ([num, status]: [number, string]) => num === 1 && status === 'completed',
+    const completedCall = setWorkItemStatus.mock.calls.find(
+      ([num, status]: [string, string]) => num === '1' && status === 'completed',
     );
     expect(completedCall).toBeDefined();
   });

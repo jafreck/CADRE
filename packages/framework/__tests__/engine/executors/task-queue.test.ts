@@ -29,8 +29,8 @@ function makeSession(
 const makeTask = makeSession;
 
 describe('SessionQueue (also exported as TaskQueue)', () => {
-  it('TaskQueue is an alias for SessionQueue', () => {
-    expect(TaskQueue).toBe(SessionQueue);
+  it('SessionQueue extends TaskQueue', () => {
+    expect(new SessionQueue([]) instanceof TaskQueue).toBe(true);
   });
 });
 
@@ -160,9 +160,9 @@ describe('TaskQueue', () => {
 
     it('should throw on unknown session operations', () => {
       const queue = new TaskQueue([makeSession('session-001')]);
-      expect(() => queue.start('session-999')).toThrow('Unknown session');
-      expect(() => queue.complete('session-999')).toThrow('Unknown session');
-      expect(() => queue.markBlocked('session-999')).toThrow('Unknown session');
+      expect(() => queue.start('session-999')).toThrow('Unknown task');
+      expect(() => queue.complete('session-999')).toThrow('Unknown task');
+      expect(() => queue.markBlocked('session-999')).toThrow('Unknown task');
     });
   });
 
@@ -208,7 +208,7 @@ describe('TaskQueue', () => {
         makeTask('session-003', [], ['src/c.ts']),
       ];
 
-      const collisions = TaskQueue.detectBatchCollisions(sessions);
+      const collisions = SessionQueue.detectBatchCollisions(sessions);
       expect(collisions).toEqual([]);
     });
 
@@ -218,7 +218,7 @@ describe('TaskQueue', () => {
         makeTask('session-002', [], ['src/a.ts']),
       ];
 
-      const collisions = TaskQueue.detectBatchCollisions(sessions);
+      const collisions = SessionQueue.detectBatchCollisions(sessions);
       expect(collisions).toHaveLength(1);
       expect(collisions[0]).toContain('src/a.ts');
       expect(collisions[0]).toContain('session-001');
@@ -232,7 +232,7 @@ describe('TaskQueue', () => {
         makeTask('session-003', [], ['src/b.ts']),
       ];
 
-      const collisions = TaskQueue.detectBatchCollisions(sessions);
+      const collisions = SessionQueue.detectBatchCollisions(sessions);
       expect(collisions).toHaveLength(2);
       const combined = collisions.join('\n');
       expect(combined).toContain('src/a.ts');
@@ -246,19 +246,19 @@ describe('TaskQueue', () => {
         makeTask('session-003', [], ['src/shared.ts']),
       ];
 
-      const collisions = TaskQueue.detectBatchCollisions(sessions);
+      const collisions = SessionQueue.detectBatchCollisions(sessions);
       // Pairs: (001,002), (001,003), (002,003)
       expect(collisions).toHaveLength(3);
     });
 
     it('should return empty array for an empty session list', () => {
-      const collisions = TaskQueue.detectBatchCollisions([]);
+      const collisions = SessionQueue.detectBatchCollisions([]);
       expect(collisions).toEqual([]);
     });
 
     it('should return empty array for a single-session batch', () => {
       const sessions = [makeTask('session-001', [], ['src/a.ts'])];
-      const collisions = TaskQueue.detectBatchCollisions(sessions);
+      const collisions = SessionQueue.detectBatchCollisions(sessions);
       expect(collisions).toEqual([]);
     });
 
@@ -268,7 +268,7 @@ describe('TaskQueue', () => {
         makeTask('session-002', [], ['src/b.ts', 'tests/foo.test.ts']),
       ];
 
-      const collisions = TaskQueue.detectBatchCollisions(sessions);
+      const collisions = SessionQueue.detectBatchCollisions(sessions);
       expect(collisions).toHaveLength(1);
       expect(collisions[0]).toContain('tests/foo.test.ts');
       expect(collisions[0]).toContain('session-001');
@@ -281,7 +281,7 @@ describe('TaskQueue', () => {
         makeTask('session-002', [], ['src/b.ts']),
       ];
 
-      const collisions = TaskQueue.detectBatchCollisions(sessions);
+      const collisions = SessionQueue.detectBatchCollisions(sessions);
       expect(collisions).toHaveLength(1);
       expect(collisions[0]).toContain('src/b.ts');
       expect(collisions[0]).not.toContain('src/a.ts');
@@ -296,7 +296,7 @@ describe('TaskQueue', () => {
         makeTask('session-003', [], ['src/a.ts']), // overlaps with session-001
       ];
 
-      const batch = TaskQueue.selectNonOverlappingBatch(sessions, 10);
+      const batch = SessionQueue.selectNonOverlappingBatch(sessions, 10);
       const batchIds = batch.map((t) => t.id);
 
       expect(batchIds).toContain('session-001');
@@ -311,12 +311,12 @@ describe('TaskQueue', () => {
         makeTask('session-003', [], ['src/c.ts']),
       ];
 
-      const batch = TaskQueue.selectNonOverlappingBatch(sessions, 2);
+      const batch = SessionQueue.selectNonOverlappingBatch(sessions, 2);
       expect(batch.length).toBe(2);
     });
 
     it('should handle empty input', () => {
-      const batch = TaskQueue.selectNonOverlappingBatch([], 5);
+      const batch = SessionQueue.selectNonOverlappingBatch([], 5);
       expect(batch.length).toBe(0);
     });
   });

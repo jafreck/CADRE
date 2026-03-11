@@ -130,7 +130,7 @@ describe('ReviewDiscoveryService', () => {
 
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('42'),
-        expect.objectContaining({ issueNumber: 42 }),
+        expect.objectContaining({ workItemId: '42' }),
       );
     });
 
@@ -296,7 +296,7 @@ describe('ReviewDiscoveryService', () => {
       expect(result.actionableComments).toEqual([]);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('could not fetch PR comments'),
-        expect.objectContaining({ issueNumber: 1 }),
+        expect.objectContaining({ workItemId: '1' }),
       );
     });
 
@@ -313,7 +313,7 @@ describe('ReviewDiscoveryService', () => {
       expect(isSkipResult(results[0])).toBe(false);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('could not fetch PR reviews'),
-        expect.objectContaining({ issueNumber: 1 }),
+        expect.objectContaining({ workItemId: '1' }),
       );
     });
 

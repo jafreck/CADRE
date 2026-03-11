@@ -30,7 +30,7 @@ vi.mock('../../src/core/fleet/fleet-orchestrator.js', () => ({
       failedIssues: [],
       codeDoneNoPR: [],
       totalDuration: 100,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
     }),
     runReviewResponse: vi.fn().mockResolvedValue({
       success: true,
@@ -39,7 +39,7 @@ vi.mock('../../src/core/fleet/fleet-orchestrator.js', () => ({
       failedIssues: [],
       codeDoneNoPR: [],
       totalDuration: 100,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
     }),
   })),
 }));
@@ -524,7 +524,7 @@ describe('RunCoordinator', () => {
           failedIssues: [],
           codeDoneNoPR: [],
           totalDuration: 5000,
-          tokenUsage: { total: 100, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+          tokenUsage: { total: 100, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
         }),
       }));
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());
@@ -541,7 +541,7 @@ describe('RunCoordinator', () => {
           failedIssues: [{ issueNumber: 1, error: 'build failed' }],
           codeDoneNoPR: [],
           totalDuration: 5000,
-          tokenUsage: { total: 100, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+          tokenUsage: { total: 100, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
         }),
       }));
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());

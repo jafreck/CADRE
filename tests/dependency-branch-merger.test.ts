@@ -282,7 +282,7 @@ describe('DependencyBranchMerger', () => {
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('merge commit failed'),
-        expect.objectContaining({ issueNumber: 42 }),
+        expect.objectContaining({ workItemId: '42' }),
       );
     });
   });

@@ -105,7 +105,7 @@ export class GitHubProvider implements PlatformProvider {
         issues.push(detail);
       } catch (err) {
         this.logger.warn(`Failed to fetch details for issue #${issueNumber}: ${err}`, {
-          issueNumber,
+          workItemId: String(issueNumber),
         });
       }
     }

@@ -5,11 +5,11 @@ export class TokenTracker {
   private records: TokenRecord[] = [];
 
   /**
-   * Record usage for a specific issue + agent + phase.
+   * Record usage for an agent + phase, optionally scoped to a work item.
    */
-  record(issueNumber: number, agent: string, phase: number, tokens: number, input?: number, output?: number): void {
+  record(workItemId: string | undefined, agent: string, phase: number, tokens: number, input?: number, output?: number): void {
     this.records.push({
-      issueNumber,
+      workItemId,
       agent,
       phase,
       tokens,
@@ -27,11 +27,11 @@ export class TokenTracker {
   }
 
   /**
-   * Get usage for a specific issue.
+   * Get usage for a specific work item.
    */
-  getIssueTotal(issueNumber: number): number {
+  getWorkItemTotal(workItemId: string): number {
     return this.records
-      .filter((r) => r.issueNumber === issueNumber)
+      .filter((r) => r.workItemId === workItemId)
       .reduce((sum, r) => sum + r.tokens, 0);
   }
 
@@ -47,14 +47,16 @@ export class TokenTracker {
   }
 
   /**
-   * Get usage broken down by issue.
+   * Get usage broken down by work item.
    */
-  getByIssue(): Record<number, number> {
-    const byIssue: Record<number, number> = {};
+  getByWorkItem(): Record<string, number> {
+    const byWorkItem: Record<string, number> = {};
     for (const r of this.records) {
-      byIssue[r.issueNumber] = (byIssue[r.issueNumber] ?? 0) + r.tokens;
+      if (r.workItemId != null) {
+        byWorkItem[r.workItemId] = (byWorkItem[r.workItemId] ?? 0) + r.tokens;
+      }
     }
-    return byIssue;
+    return byWorkItem;
   }
 
   /**
@@ -80,11 +82,11 @@ export class TokenTracker {
   }
 
   /**
-   * Check per-issue budget threshold.
+   * Check per-work-item budget threshold.
    */
-  checkIssueBudget(issueNumber: number, budget?: number): 'ok' | 'warning' | 'exceeded' {
+  checkWorkItemBudget(workItemId: string, budget?: number): 'ok' | 'warning' | 'exceeded' {
     if (!budget) return 'ok';
-    const total = this.getIssueTotal(issueNumber);
+    const total = this.getWorkItemTotal(workItemId);
     if (total >= budget) return 'exceeded';
     if (total >= budget * 0.8) return 'warning';
     return 'ok';
@@ -96,7 +98,7 @@ export class TokenTracker {
   getSummary(): TokenSummary {
     return {
       total: this.getTotal(),
-      byIssue: this.getByIssue(),
+      byWorkItem: this.getByWorkItem(),
       byAgent: this.getByAgent(),
       byPhase: this.getByPhase(),
       recordCount: this.records.length,
@@ -119,7 +121,7 @@ export class TokenTracker {
 }
 
 export interface TokenRecord {
-  issueNumber: number;
+  workItemId?: string;
   agent: string;
   phase: number;
   tokens: number;
@@ -130,7 +132,7 @@ export interface TokenRecord {
 
 export interface TokenSummary {
   total: number;
-  byIssue: Record<number, number>;
+  byWorkItem: Record<string, number>;
   byAgent: Record<string, number>;
   byPhase: Record<number, number>;
   recordCount: number;

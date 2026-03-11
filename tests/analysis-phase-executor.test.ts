@@ -232,7 +232,7 @@ describe('AnalysisPhaseExecutor', () => {
         .toHaveBeenCalledWith(
           expect.objectContaining({
             agent: 'issue-analyst',
-            issueNumber: 42,
+            workItemId: '42',
             phase: 1,
             contextPath: '/progress/analyst-ctx.json',
             outputPath: join('/tmp/progress', 'analysis.md'),
@@ -264,7 +264,7 @@ describe('AnalysisPhaseExecutor', () => {
         .toHaveBeenCalledWith(
           expect.objectContaining({
             agent: 'codebase-scout',
-            issueNumber: 42,
+            workItemId: '42',
             phase: 1,
             contextPath: '/progress/scout-ctx.json',
             outputPath: join('/tmp/progress', 'scout-report.md'),
@@ -433,7 +433,7 @@ describe('AnalysisPhaseExecutor', () => {
       expect((ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn)
         .toHaveBeenCalledWith(
           expect.stringContaining('continuing without scout report'),
-          expect.objectContaining({ issueNumber: 42, phase: 1 }),
+          expect.objectContaining({ workItemId: '42', phase: 1 }),
         );
     });
 
@@ -456,7 +456,7 @@ describe('AnalysisPhaseExecutor', () => {
       expect((ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info)
         .toHaveBeenCalledWith(
           expect.stringContaining('Skipping codebase-scout'),
-          expect.objectContaining({ issueNumber: 42, phase: 1 }),
+          expect.objectContaining({ workItemId: '42', phase: 1 }),
         );
     });
 

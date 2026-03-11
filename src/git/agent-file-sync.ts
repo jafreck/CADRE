@@ -77,12 +77,12 @@ export class AgentFileSync {
         await writeFile(excludePath, updated, 'utf-8');
         this.logger.debug(
           `Added ${entriesToAdd.join(', ')} to worktree git exclude`,
-          { issueNumber },
+          { workItemId: String(issueNumber) },
         );
       }
     } catch {
       // Non-fatal: CommitManager.unstageArtifacts provides the secondary guard.
-      this.logger.debug('Could not write worktree git exclude; relying on unstageArtifacts', { issueNumber });
+      this.logger.debug('Could not write worktree git exclude; relying on unstageArtifacts', { workItemId: String(issueNumber) });
     }
   }
 
@@ -186,7 +186,7 @@ export class AgentFileSync {
     if (!(await exists(this.cacheDir))) {
       this.logger.debug(
         `Agent cache ${this.cacheDir} does not exist — skipping agent sync (run buildAgentCache first)`,
-        { issueNumber },
+        { workItemId: String(issueNumber) },
       );
       return [];
     }
@@ -239,7 +239,7 @@ export class AgentFileSync {
     if (syncedRelPaths.length > 0) {
       this.logger.debug(
         `Symlinked ${syncedRelPaths.length} agent file(s) from cache → ${destDir}`,
-        { issueNumber },
+        { workItemId: String(issueNumber) },
       );
     }
     return syncedRelPaths;

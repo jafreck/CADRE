@@ -89,13 +89,13 @@ export class DependencyBranchMerger {
                 await depsGit.raw(['commit', '--no-edit']);
                 this.logger.info(
                   `Resolved dependency merge conflict for issue #${issueNumber} while merging '${depBranch}'`,
-                  { issueNumber, data: { depBranch, depsBranch, conflictedFiles } },
+                  { workItemId: String(issueNumber), data: { depBranch, depsBranch, conflictedFiles } },
                 );
                 continue;
               } catch {
                 this.logger.warn(
                   `Dependency conflict resolver completed but merge commit failed for issue #${issueNumber}; falling back to dep-merge-conflict`,
-                  { issueNumber, data: { depBranch } },
+                  { workItemId: String(issueNumber), data: { depBranch } },
                 );
               }
             }

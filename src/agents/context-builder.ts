@@ -291,7 +291,7 @@ export class ContextBuilder {
 
     const context: AgentContext = {
       agent,
-      issueNumber: args.issueNumber,
+      workItemId: String(args.issueNumber),
       projectName: this.config.projectName,
       repository: this.config.repository,
       worktreePath: args.worktreePath,
@@ -357,7 +357,7 @@ export class ContextBuilder {
     await atomicWriteJSON(contextPath, context);
 
     this.logger.debug(`Built context for ${agent}`, {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { contextPath, outputPath: context.outputPath },
     });
 

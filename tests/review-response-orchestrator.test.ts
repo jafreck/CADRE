@@ -201,7 +201,7 @@ describe('ReviewResponseOrchestrator — run() skipping logic', () => {
 
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining('42'),
-      expect.objectContaining({ issueNumber: 42 }),
+      expect.objectContaining({ workItemId: '42' }),
     );
   });
 
@@ -364,7 +364,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
     await orchestrator.run([1]);
 
     expect(launchAgent).toHaveBeenCalledWith(
-      expect.objectContaining({ agent: 'conflict-resolver', issueNumber: 1 }),
+      expect.objectContaining({ agent: 'conflict-resolver', workItemId: '1' }),
       '/tmp/worktree/1',
     );
   });
@@ -421,7 +421,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
     expect(result.processed).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('exit 1'),
-      expect.objectContaining({ issueNumber: 1 }),
+      expect.objectContaining({ workItemId: '1' }),
     );
   });
 
@@ -451,7 +451,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
     expect(result.failed).toBe(1);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('timed out after 300000ms'),
-      expect.objectContaining({ issueNumber: 1 }),
+      expect.objectContaining({ workItemId: '1' }),
     );
   });
 
@@ -492,7 +492,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
     expect(result.processed).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('produced no output'),
-      expect.objectContaining({ issueNumber: 1 }),
+      expect.objectContaining({ workItemId: '1' }),
     );
   });
 
@@ -524,7 +524,7 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
     expect(result.processed).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('Rebase --continue failed'),
-      expect.objectContaining({ issueNumber: 1, data: expect.objectContaining({ conflictedFiles: ['src/foo.ts'] }) }),
+      expect.objectContaining({ workItemId: '1', data: expect.objectContaining({ conflictedFiles: ['src/foo.ts'] }) }),
     );
   });
 
@@ -791,7 +791,7 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
     expect(result.succeeded).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('push error'),
-      expect.objectContaining({ issueNumber: 1 }),
+      expect.objectContaining({ workItemId: '1' }),
     );
   });
 
@@ -821,7 +821,7 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
     expect(result.succeeded).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('update error'),
-      expect.objectContaining({ issueNumber: 1 }),
+      expect.objectContaining({ workItemId: '1' }),
     );
   });
 
@@ -850,7 +850,7 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
     expect(result.succeeded).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('pipeline error'),
-      expect.objectContaining({ issueNumber: 1 }),
+      expect.objectContaining({ workItemId: '1' }),
     );
   });
 

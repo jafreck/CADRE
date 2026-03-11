@@ -99,7 +99,7 @@ export class WorktreeProvisioner {
     // Check if worktree already exists
     if (await exists(worktreePath)) {
       this.logger.info(`Worktree already exists for issue #${issueNumber}`, {
-        issueNumber,
+        workItemId: String(issueNumber),
         data: { path: worktreePath, branch },
       });
 
@@ -133,7 +133,7 @@ export class WorktreeProvisioner {
 
         const baseCommit = await this.getBaseCommit(worktreePath);
         this.logger.info(`Resumed worktree for issue #${issueNumber} from remote branch`, {
-          issueNumber,
+          workItemId: String(issueNumber),
           data: { path: worktreePath, branch },
         });
 
@@ -149,7 +149,7 @@ export class WorktreeProvisioner {
 
       this.logger.info(
         `No remote branch found for issue #${issueNumber} on resume; provisioning fresh`,
-        { issueNumber, data: { branch } },
+        { workItemId: String(issueNumber), data: { branch } },
       );
     }
 
@@ -164,7 +164,7 @@ export class WorktreeProvisioner {
     if (!branchExists) {
       await this.git.branch([branch, baseCommit.trim()]);
       this.logger.info(`Created branch ${branch} from ${baseCommit.trim().slice(0, 8)}`, {
-        issueNumber,
+        workItemId: String(issueNumber),
       });
     }
 
@@ -177,7 +177,7 @@ export class WorktreeProvisioner {
     const syncedAgentFiles = await this.agentFileSync.syncAgentFiles(worktreePath, issueNumber);
 
     this.logger.info(`Provisioned worktree for issue #${issueNumber}`, {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { path: worktreePath, branch, baseCommit: baseCommit.trim().slice(0, 8) },
     });
 
@@ -211,7 +211,7 @@ export class WorktreeProvisioner {
     // Return existing worktree if already on disk
     if (await exists(worktreePath)) {
       this.logger.info(`Worktree already exists for issue #${issueNumber}`, {
-        issueNumber,
+        workItemId: String(issueNumber),
         data: { path: worktreePath, branch: issueBranch },
       });
       const syncedAgentFiles = await this.agentFileSync.syncAgentFiles(worktreePath, issueNumber);
@@ -250,7 +250,7 @@ export class WorktreeProvisioner {
     const syncedAgentFiles = await this.agentFileSync.syncAgentFiles(worktreePath, issueNumber);
 
     this.logger.info(`Provisioned worktree with deps for issue #${issueNumber}`, {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { path: worktreePath, branch: issueBranch, depsBranch, baseCommit: baseCommit.trim().slice(0, 8) },
     });
 
@@ -275,7 +275,7 @@ export class WorktreeProvisioner {
     // Return existing worktree if already on disk
     if (await exists(worktreePath)) {
       this.logger.info(`Worktree already exists for issue #${issueNumber}`, {
-        issueNumber,
+        workItemId: String(issueNumber),
         data: { path: worktreePath, branch },
       });
 
@@ -293,7 +293,7 @@ export class WorktreeProvisioner {
 
     // Fetch the remote branch so it's available locally
     await this.git.fetch('origin', branch);
-    this.logger.debug(`Fetched origin/${branch}`, { issueNumber });
+    this.logger.debug(`Fetched origin/${branch}`, { workItemId: String(issueNumber) });
 
     // Add the worktree checked out to the remote branch
     await ensureDir(this.worktreeRoot);
@@ -308,7 +308,7 @@ export class WorktreeProvisioner {
     const baseCommit = await this.getBaseCommit(worktreePath);
 
     this.logger.info(`Provisioned worktree from branch ${branch} for issue #${issueNumber}`, {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { path: worktreePath, branch, baseCommit: baseCommit.slice(0, 8) },
     });
 
@@ -446,7 +446,7 @@ export class WorktreeProvisioner {
       const conflictedFiles = await this.getConflictedFiles(worktreePath);
       this.logger.warn(
         `Issue #${issueNumber}: rebase is already paused from a previous run — resuming with ${conflictedFiles.length} conflicted file(s) (fetch skipped)`,
-        { issueNumber, data: { conflictedFiles, gitDir } },
+        { workItemId: String(issueNumber), data: { conflictedFiles, gitDir } },
       );
       return { status: 'conflict', conflictedFiles, worktreePath };
     }
@@ -455,14 +455,14 @@ export class WorktreeProvisioner {
 
     try {
       await worktreeGit.rebase([`origin/${this.baseBranch}`]);
-      this.logger.info(`Rebased worktree cleanly for issue #${issueNumber}`, { issueNumber });
+      this.logger.info(`Rebased worktree cleanly for issue #${issueNumber}`, { workItemId: String(issueNumber) });
       return { status: 'clean' };
     } catch {
       // Rebase is paused at the first conflicting commit — do NOT abort.
       const conflictedFiles = await this.getConflictedFiles(worktreePath);
       this.logger.info(
         `Rebase paused for issue #${issueNumber}: ${conflictedFiles.length} conflicted file(s)`,
-        { issueNumber, data: { conflictedFiles } },
+        { workItemId: String(issueNumber), data: { conflictedFiles } },
       );
       return { status: 'conflict', conflictedFiles, worktreePath };
     }
@@ -482,7 +482,7 @@ export class WorktreeProvisioner {
       await worktreeGit.raw(['add', '-A']);
       // GIT_EDITOR=true prevents git from opening an editor for the commit message.
       await worktreeGit.env({ ...process.env, GIT_EDITOR: 'true' }).rebase(['--continue']);
-      this.logger.info(`Rebase continued successfully for issue #${issueNumber}`, { issueNumber });
+      this.logger.info(`Rebase continued successfully for issue #${issueNumber}`, { workItemId: String(issueNumber) });
       return { success: true };
     } catch (err) {
       // Check whether there are still unresolved conflict markers remaining.
@@ -490,7 +490,7 @@ export class WorktreeProvisioner {
       if (stillConflicted.length > 0) {
         this.logger.error(
           `Rebase --continue failed for issue #${issueNumber}: ${stillConflicted.length} file(s) still have conflict markers: ${stillConflicted.join(', ')}`,
-          { issueNumber, data: { conflictedFiles: stillConflicted } },
+          { workItemId: String(issueNumber), data: { conflictedFiles: stillConflicted } },
         );
         return {
           success: false,
@@ -504,14 +504,14 @@ export class WorktreeProvisioner {
       if (errStr.includes('no rebase in progress')) {
         this.logger.info(
           `Rebase for issue #${issueNumber} was already completed by the agent — treating as success`,
-          { issueNumber },
+          { workItemId: String(issueNumber) },
         );
         return { success: true };
       }
       // Unexpected git error (e.g. new conflicts on the next commit in the rebase queue).
       this.logger.error(
         `Rebase --continue failed for issue #${issueNumber}: ${err}`,
-        { issueNumber },
+        { workItemId: String(issueNumber) },
       );
       return { success: false, error: String(err) };
     }
@@ -525,7 +525,7 @@ export class WorktreeProvisioner {
     const worktreeGit = simpleGit(worktreePath);
     try {
       await worktreeGit.rebase(['--abort']);
-      this.logger.info(`Rebase aborted for issue #${issueNumber}`, { issueNumber });
+      this.logger.info(`Rebase aborted for issue #${issueNumber}`, { workItemId: String(issueNumber) });
     } catch {
       // May already be aborted / not in a rebase state.
     }

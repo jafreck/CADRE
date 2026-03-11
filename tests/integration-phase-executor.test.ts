@@ -291,7 +291,7 @@ describe('IntegrationPhaseExecutor', () => {
       expect(
         (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
-        expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 4 }),
+        expect.objectContaining({ agent: 'fix-surgeon', workItemId: '42', phase: 4 }),
         '/tmp/worktree',
       );
     });
@@ -310,7 +310,7 @@ describe('IntegrationPhaseExecutor', () => {
       expect(
         (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
-        expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 4 }),
+        expect.objectContaining({ agent: 'fix-surgeon', workItemId: '42', phase: 4 }),
         '/tmp/worktree',
       );
     });

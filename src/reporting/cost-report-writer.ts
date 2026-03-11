@@ -12,9 +12,10 @@ export class CostReportWriter {
    * Build a CostReport from TokenTracker records.
    */
   build(issueNumber: number, tokenTracker: TokenTracker, model: string): CostReport {
+    const workItemId = String(issueNumber);
     const records = tokenTracker
       .exportRecords()
-      .filter((r) => r.issueNumber === issueNumber);
+      .filter((r) => r.workItemId === workItemId);
 
     // Aggregate byAgent
     const agentMap = new Map<
@@ -82,7 +83,7 @@ export class CostReportWriter {
         : this.costEstimator.estimate(totalTokens, model);
 
     return {
-      issueNumber,
+      workItemId,
       generatedAt: new Date().toISOString(),
       totalTokens,
       inputTokens: overallCost.inputTokens,

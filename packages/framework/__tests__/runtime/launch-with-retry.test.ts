@@ -33,7 +33,7 @@ function makeLogger(): LoggerLike & BackendLoggerLike {
 function makeInvocation(overrides: Partial<AgentInvocation> = {}): AgentInvocation {
   return {
     agent: 'code-writer',
-    issueNumber: 42,
+    workItemId: '42',
     phase: 3,
     contextPath: '/tmp/ctx.json',
     outputPath: '/tmp/output.md',
@@ -249,7 +249,7 @@ describe('launchWithRetry', () => {
     await launchWithRetry(
       launcher,
       {
-        invocation: makeInvocation({ issueNumber: 99, agent: 'reviewer', phase: 5 }),
+        invocation: makeInvocation({ workItemId: '99', agent: 'reviewer', phase: 5 }),
         worktreePath: '/tmp/worktree',
         maxAttempts: 1,
         baseDelayMs: 1,
@@ -258,7 +258,7 @@ describe('launchWithRetry', () => {
       logger,
     );
 
-    expect(tokenTracker.getIssueTotal(99)).toBe(300);
+    expect(tokenTracker.getWorkItemTotal('99')).toBe(300);
     expect(tokenTracker.getByAgent()).toEqual({ reviewer: 300 });
     expect(tokenTracker.getByPhase()).toEqual({ 5: 300 });
   });

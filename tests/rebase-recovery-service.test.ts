@@ -90,7 +90,7 @@ describe('RebaseRecoveryService', () => {
       expect(launcher.launchAgent).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'conflict-resolver',
-          issueNumber: 1,
+          workItemId: '1',
           phase: 0,
         }),
         '/tmp/worktree/1',
@@ -115,7 +115,7 @@ describe('RebaseRecoveryService', () => {
       expect(wm.rebaseContinue).toHaveBeenCalledWith(1);
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('0 conflicted files'),
-        expect.objectContaining({ issueNumber: 1 }),
+        expect.objectContaining({ workItemId: '1' }),
       );
     });
 
@@ -147,7 +147,7 @@ describe('RebaseRecoveryService', () => {
       expect(wm.rebaseAbort).toHaveBeenCalledWith(1);
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('exit 1'),
-        expect.objectContaining({ issueNumber: 1 }),
+        expect.objectContaining({ workItemId: '1' }),
       );
     });
 
@@ -208,7 +208,7 @@ describe('RebaseRecoveryService', () => {
       expect(wm.rebaseAbort).toHaveBeenCalledWith(1);
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('produced no output'),
-        expect.objectContaining({ issueNumber: 1 }),
+        expect.objectContaining({ workItemId: '1' }),
       );
     });
 
@@ -236,7 +236,7 @@ describe('RebaseRecoveryService', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Rebase --continue failed'),
         expect.objectContaining({
-          issueNumber: 1,
+          workItemId: '1',
           data: expect.objectContaining({ conflictedFiles: ['src/foo.ts'] }),
         }),
       );

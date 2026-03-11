@@ -29,26 +29,26 @@ const mockNotifierMethods = {
     // methods still pass while the orchestrator goes through dispatch.
     switch (event.type) {
       case 'issue-started':
-        return mockNotifierMethods.notifyStart((event as any).issueNumber, (event as any).issueTitle);
+        return mockNotifierMethods.notifyStart(Number((event as any).workItemId), (event as any).issueTitle);
       case 'phase-completed':
-        return mockNotifierMethods.notifyPhaseComplete((event as any).issueNumber, (event as any).phase, (event as any).phaseName, (event as any).duration);
+        return mockNotifierMethods.notifyPhaseComplete(Number((event as any).workItemId), (event as any).phase, (event as any).phaseName, (event as any).duration);
       case 'issue-completed':
-        return mockNotifierMethods.notifyComplete((event as any).issueNumber, (event as any).issueTitle, (event as any).prUrl, (event as any).tokenUsage);
+        return mockNotifierMethods.notifyComplete(Number((event as any).workItemId), (event as any).issueTitle, (event as any).prUrl, (event as any).tokenUsage);
       case 'issue-failed':
         return mockNotifierMethods.notifyFailed(
-          (event as any).issueNumber,
+          Number((event as any).workItemId),
           (event as any).issueTitle,
           (event as any).phaseName ? { id: (event as any).phase, name: (event as any).phaseName } : undefined,
           (event as any).failedTask,
           (event as any).error,
         );
       case 'budget-warning':
-        if ((event as any).scope === 'issue' && (event as any).issueNumber != null) {
-          return mockNotifierMethods.notifyBudgetWarning((event as any).issueNumber, (event as any).currentUsage, (event as any).budget);
+        if ((event as any).scope === 'issue' && (event as any).workItemId != null) {
+          return mockNotifierMethods.notifyBudgetWarning(Number((event as any).workItemId), (event as any).currentUsage, (event as any).budget);
         }
         return;
       case 'ambiguity-detected':
-        return mockNotifierMethods.notifyAmbiguities((event as any).issueNumber, (event as any).ambiguities);
+        return mockNotifierMethods.notifyAmbiguities(Number((event as any).workItemId), (event as any).ambiguities);
       default:
         return;
     }
@@ -278,7 +278,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
       await orchestrator.run();
 
       expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'issue-started', issueNumber: 42 }),
+        expect.objectContaining({ type: 'issue-started', workItemId: '42' }),
       );
     });
 
@@ -302,7 +302,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
 
       expect(result.success).toBe(true);
       expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'issue-completed', issueNumber: 42, success: true }),
+        expect.objectContaining({ type: 'issue-completed', workItemId: '42', success: true }),
       );
     });
 
@@ -397,7 +397,7 @@ describe('IssueOrchestrator – notification dispatch', () => {
 
       expect(result.success).toBe(false);
       expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'issue-failed', issueNumber: 42 }),
+        expect.objectContaining({ type: 'issue-failed', workItemId: '42' }),
       );
     });
 
@@ -526,26 +526,26 @@ describe('IssueOrchestrator notifier integration', () => {
     mockNotifierMethods.notify.mockImplementation(async (event: { type: string }) => {
       switch (event.type) {
         case 'issue-started':
-          return mockNotifierMethods.notifyStart((event as any).issueNumber, (event as any).issueTitle);
+          return mockNotifierMethods.notifyStart(Number((event as any).workItemId), (event as any).issueTitle);
         case 'phase-completed':
-          return mockNotifierMethods.notifyPhaseComplete((event as any).issueNumber, (event as any).phase, (event as any).phaseName, (event as any).duration);
+          return mockNotifierMethods.notifyPhaseComplete(Number((event as any).workItemId), (event as any).phase, (event as any).phaseName, (event as any).duration);
         case 'issue-completed':
-          return mockNotifierMethods.notifyComplete((event as any).issueNumber, (event as any).issueTitle, (event as any).prUrl, (event as any).tokenUsage);
+          return mockNotifierMethods.notifyComplete(Number((event as any).workItemId), (event as any).issueTitle, (event as any).prUrl, (event as any).tokenUsage);
         case 'issue-failed':
           return mockNotifierMethods.notifyFailed(
-            (event as any).issueNumber,
+            Number((event as any).workItemId),
             (event as any).issueTitle,
             (event as any).phaseName ? { id: (event as any).phase, name: (event as any).phaseName } : undefined,
             (event as any).failedTask,
             (event as any).error,
           );
         case 'budget-warning':
-          if ((event as any).scope === 'issue' && (event as any).issueNumber != null) {
-            return mockNotifierMethods.notifyBudgetWarning((event as any).issueNumber, (event as any).currentUsage, (event as any).budget);
+          if ((event as any).scope === 'issue' && (event as any).workItemId != null) {
+            return mockNotifierMethods.notifyBudgetWarning(Number((event as any).workItemId), (event as any).currentUsage, (event as any).budget);
           }
           return;
         case 'ambiguity-detected':
-          return mockNotifierMethods.notifyAmbiguities((event as any).issueNumber, (event as any).ambiguities);
+          return mockNotifierMethods.notifyAmbiguities(Number((event as any).workItemId), (event as any).ambiguities);
         default:
           return;
       }

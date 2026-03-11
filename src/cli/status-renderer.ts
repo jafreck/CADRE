@@ -58,7 +58,7 @@ export function renderFleetStatus(
   const rows: string[][] = [];
   for (const [issueNumStr, issue] of Object.entries(state.issues)) {
     const issueNum = Number(issueNumStr);
-    const tokens = state.tokenUsage.byIssue[issueNum] ?? 0;
+    const tokens = state.tokenUsage.byWorkItem[issueNumStr] ?? 0;
     const costEst = estimator.estimate(tokens, model);
     const costStr = tokens > 0 ? `$${costEst.totalCost.toFixed(4)}` : '—';
     const phaseIdx = Math.max(0, issue.lastPhase - 1);

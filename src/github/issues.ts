@@ -40,7 +40,7 @@ export class IssueFetcher {
    * Fetch full details for a single issue (including comments).
    */
   async fetchIssue(issueNumber: number): Promise<IssueDetail> {
-    this.logger.debug(`Fetching issue #${issueNumber}`, { issueNumber });
+    this.logger.debug(`Fetching issue #${issueNumber}`, { workItemId: String(issueNumber) });
 
     const raw = await this.api.getIssue(issueNumber);
     return this.parseIssue(raw);
@@ -69,7 +69,7 @@ export class IssueFetcher {
         issues.push(detail);
       } catch (err) {
         this.logger.warn(`Failed to fetch details for issue #${issueNumber}: ${err}`, {
-          issueNumber,
+          workItemId: String(issueNumber),
         });
       }
     }
@@ -89,7 +89,7 @@ export class IssueFetcher {
           const issue = await this.fetchIssue(id);
           issues.push(issue);
         } catch (err) {
-          this.logger.error(`Failed to fetch issue #${id}: ${err}`, { issueNumber: id });
+          this.logger.error(`Failed to fetch issue #${id}: ${err}`, { workItemId: String(id) });
         }
       }
       return issues;

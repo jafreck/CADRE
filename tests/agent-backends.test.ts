@@ -214,12 +214,12 @@ describe('CopilotBackend', () => {
     expect(result.outputExists).toBe(false);
   });
 
-  it('should set CADRE_ISSUE_NUMBER env var', async () => {
+  it('should set CADRE_WORK_ITEM_ID env var', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    await backend.invoke(makeInvocation({ issueNumber: 99 }), '/tmp/worktree');
+    await backend.invoke(makeInvocation({ workItemId: '99' }), '/tmp/worktree');
     const [, , opts] = mockSpawnProcess.mock.calls[0];
-    expect(opts.env?.['CADRE_ISSUE_NUMBER']).toBe('99');
+    expect(opts.env?.['CADRE_WORK_ITEM_ID']).toBe('99');
   });
 
   it('should set CADRE_WORKTREE_PATH env var', async () => {
@@ -444,12 +444,12 @@ describe('ClaudeBackend', () => {
     expect(result.tokenUsage).toBe(0);
   });
 
-  it('should set CADRE_ISSUE_NUMBER env var', async () => {
+  it('should set CADRE_WORK_ITEM_ID env var', async () => {
     const backend = new ClaudeBackend(config, logger as never);
     setupSpawn(makeProcessResult());
-    await backend.invoke(makeInvocation({ issueNumber: 77 }), '/tmp/worktree');
+    await backend.invoke(makeInvocation({ workItemId: '77' }), '/tmp/worktree');
     const [, , opts] = mockSpawnProcess.mock.calls[0];
-    expect(opts.env?.['CADRE_ISSUE_NUMBER']).toBe('77');
+    expect(opts.env?.['CADRE_WORK_ITEM_ID']).toBe('77');
   });
 
   it('should set CADRE_WORKTREE_PATH env var', async () => {

@@ -29,16 +29,16 @@ export class WorktreeCleaner {
     const worktreePath = this.getWorktreePath(issueNumber);
 
     if (!(await exists(worktreePath))) {
-      this.logger.debug(`Worktree for issue #${issueNumber} already removed`, { issueNumber });
+      this.logger.debug(`Worktree for issue #${issueNumber} already removed`, { workItemId: String(issueNumber) });
       return;
     }
 
     try {
       await this.git.raw(['worktree', 'remove', worktreePath, '--force']);
-      this.logger.info(`Removed worktree for issue #${issueNumber}`, { issueNumber });
+      this.logger.info(`Removed worktree for issue #${issueNumber}`, { workItemId: String(issueNumber) });
     } catch (err) {
       this.logger.error(`Failed to remove worktree for issue #${issueNumber}: ${err}`, {
-        issueNumber,
+        workItemId: String(issueNumber),
       });
       throw err;
     }

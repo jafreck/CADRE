@@ -156,26 +156,26 @@ export class IssueNotifier implements NotificationProvider {
   async notify(event: CadreEvent): Promise<void> {
     switch (event.type) {
       case 'issue-started':
-        return this.notifyStart(event.issueNumber, event.issueTitle);
+        return this.notifyStart(Number(event.workItemId), event.issueTitle);
       case 'phase-completed':
-        return this.notifyPhaseComplete(event.issueNumber, event.phase, event.phaseName, event.duration);
+        return this.notifyPhaseComplete(Number(event.workItemId), event.phase, event.phaseName, event.duration);
       case 'issue-completed':
-        return this.notifyComplete(event.issueNumber, event.issueTitle, event.prUrl, event.tokenUsage);
+        return this.notifyComplete(Number(event.workItemId), event.issueTitle, event.prUrl, event.tokenUsage);
       case 'issue-failed':
         return this.notifyFailed(
-          event.issueNumber,
+          Number(event.workItemId),
           event.issueTitle,
           event.phaseName ? { id: event.phase, name: event.phaseName } : undefined,
           event.failedTask,
           event.error,
         );
       case 'budget-warning':
-        if (event.scope === 'issue' && event.issueNumber != null) {
-          return this.notifyBudgetWarning(event.issueNumber, event.currentUsage, event.budget);
+        if (event.scope === 'issue' && event.workItemId != null) {
+          return this.notifyBudgetWarning(Number(event.workItemId), event.currentUsage, event.budget);
         }
         return;
       case 'ambiguity-detected':
-        return this.notifyAmbiguities(event.issueNumber, event.ambiguities);
+        return this.notifyAmbiguities(Number(event.workItemId), event.ambiguities);
       default:
         // Ignore events this provider doesn't handle
         return;
@@ -187,7 +187,7 @@ export class IssueNotifier implements NotificationProvider {
       await this.platform.addIssueComment(issueNumber, body);
     } catch (err) {
       this.logger.warn(`Failed to post issue comment to #${issueNumber}: ${err}`, {
-        issueNumber,
+        workItemId: String(issueNumber),
       });
     }
   }

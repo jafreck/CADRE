@@ -29,7 +29,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     if (lintResult.exitCode !== 0) {
       ctx.services.logger.warn(
         `Completed phase 4 no longer passes lint; resetting phases 3-4`,
-        { issueNumber: ctx.issue.number, phase: this.id },
+        { workItemId: String(ctx.issue.number), phase: this.id },
       );
       await ctx.callbacks.resetPhases?.([3, 4]);
       return false;
@@ -223,7 +223,7 @@ export class IntegrationPhaseExecutor implements PhaseExecutor {
     const fixResult = await ctx.services.launcher.launchAgent(
       {
         agent: 'fix-surgeon',
-        issueNumber: ctx.issue.number,
+        workItemId: String(ctx.issue.number),
         phase: 4,
         contextPath: fixContextPath,
         outputPath: ctx.worktree.path,

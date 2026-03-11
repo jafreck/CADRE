@@ -71,14 +71,14 @@ export class GateCoordinator {
 
     if (result.status === 'warn') {
       for (const w of result.warnings) {
-        this.logger.warn(`Gate phase ${phaseId}: ${w}`, { issueNumber: this.issueNumber, phase: phaseId });
+        this.logger.warn(`Gate phase ${phaseId}: ${w}`, { workItemId: String(this.issueNumber), phase: phaseId });
       }
       await this.progressWriter.appendEvent(
         `Gate phase ${phaseId}: passed with ${result.warnings.length} warning(s)`,
       );
     } else if (result.status === 'fail') {
       for (const e of result.errors) {
-        this.logger.error(`Gate phase ${phaseId}: ${e}`, { issueNumber: this.issueNumber, phase: phaseId });
+        this.logger.error(`Gate phase ${phaseId}: ${e}`, { workItemId: String(this.issueNumber), phase: phaseId });
       }
       await this.progressWriter.appendEvent(`Gate phase ${phaseId} failed: ${result.errors.join('; ')}`);
     } else {
@@ -104,7 +104,7 @@ export class GateCoordinator {
     if (data === null) {
       this.logger.warn(
         `analysis.md for issue #${this.issueNumber} has no cadre-json block; ambiguities will not be reported`,
-        { issueNumber: this.issueNumber },
+        { workItemId: String(this.issueNumber) },
       );
       return [];
     }
@@ -118,7 +118,7 @@ export class GateCoordinator {
     } catch (err) {
       this.logger.warn(
         `Failed to parse cadre-json block in analysis.md for issue #${this.issueNumber}: ${err}`,
-        { issueNumber: this.issueNumber },
+        { workItemId: String(this.issueNumber) },
       );
       return [];
     }
