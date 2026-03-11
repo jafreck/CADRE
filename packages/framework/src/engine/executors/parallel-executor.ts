@@ -8,6 +8,13 @@ import type { Logger } from '../../core/logger.js';
  */
 export class ParallelExecutor {
   private readonly limit: ReturnType<typeof pLimit>;
+  private _activeConcurrency = 0;
+  private _peakConcurrency = 0;
+
+  /** High-water mark of concurrent agent launches observed so far. */
+  get peakConcurrency(): number {
+    return this._peakConcurrency;
+  }
 
   constructor(
     private readonly launcher: AgentLauncherLike,
@@ -37,18 +44,26 @@ export class ParallelExecutor {
           }
 
           this.logger.debug(`Parallel executor: launching ${invocation.agent}`, {
-            issueNumber: invocation.issueNumber,
+            workItemId: invocation.workItemId,
             sessionId: invocation.sessionId,
           });
 
-          return this.launcher.launchAgent(invocation, worktreePath);
+          this._activeConcurrency++;
+          if (this._activeConcurrency > this._peakConcurrency) {
+            this._peakConcurrency = this._activeConcurrency;
+          }
+          try {
+            return await this.launcher.launchAgent(invocation, worktreePath);
+          } finally {
+            this._activeConcurrency--;
+          }
         }),
       ),
     );
 
     const succeeded = results.filter((r) => r.success).length;
     const failed = results.filter((r) => !r.success).length;
-    this.logger.info(`Parallel executor: ${succeeded} succeeded, ${failed} failed`);
+    this.logger.info(`Parallel executor: ${succeeded} succeeded, ${failed} failed (peak concurrency: ${this._peakConcurrency})`);
 
     return results;
   }
@@ -59,7 +74,17 @@ export class ParallelExecutor {
   ): Promise<AgentResult[]> {
     const settled = await Promise.allSettled(
       invocations.map((invocation) =>
-        this.limit(() => this.launcher.launchAgent(invocation, worktreePath)),
+        this.limit(async () => {
+          this._activeConcurrency++;
+          if (this._activeConcurrency > this._peakConcurrency) {
+            this._peakConcurrency = this._activeConcurrency;
+          }
+          try {
+            return await this.launcher.launchAgent(invocation, worktreePath);
+          } finally {
+            this._activeConcurrency--;
+          }
+        }),
       ),
     );
 

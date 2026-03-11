@@ -10,18 +10,25 @@ const DEFAULT_COSTS: Record<string, { input: number; output: number }> = {
   'default': { input: 0.003, output: 0.015 },
 };
 
+/** Cache hits are discounted by 90% for both Claude and GPT-4o. */
+const DEFAULT_CACHE_DISCOUNT = 0.9;
+
 export interface CostEstimatorConfig {
   costOverrides?: Record<string, { input: number; output: number }>;
   /** Default input/output token split ratio when only total tokens are known. Defaults to 0.75. */
   defaultInputRatio?: number;
+  /** Discount multiplier for cached input tokens (0-1). Defaults to 0.9 (90% off). */
+  cacheDiscount?: number;
 }
 
 export interface CostEstimate {
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens?: number;
   inputCost: number;
   outputCost: number;
+  cacheSavings?: number;
   totalCost: number;
   model: string;
 }
@@ -29,10 +36,12 @@ export interface CostEstimate {
 export class CostEstimator {
   private readonly costs: Record<string, { input: number; output: number }>;
   private readonly inputRatio: number;
+  private readonly cacheDiscount: number;
 
   constructor(config: CostEstimatorConfig = {}) {
     this.costs = { ...DEFAULT_COSTS };
     this.inputRatio = config.defaultInputRatio ?? 0.75;
+    this.cacheDiscount = config.cacheDiscount ?? DEFAULT_CACHE_DISCOUNT;
 
     if (config.costOverrides) {
       for (const [model, cost] of Object.entries(config.costOverrides)) {
@@ -75,6 +84,38 @@ export class CostEstimator {
       outputTokens,
       inputCost,
       outputCost,
+      totalCost: inputCost + outputCost,
+      model: model ?? 'default',
+    };
+  }
+
+  /**
+   * Estimate cost with cached input token awareness.
+   * Cached tokens are discounted (default 90% off) to avoid overestimating costs.
+   */
+  estimateWithCache(
+    inputTokens: number,
+    outputTokens: number,
+    cachedInputTokens: number,
+    model?: string,
+  ): CostEstimate {
+    const cost = this.costs[model ?? 'default'] ?? this.costs['default'];
+    const freshInputTokens = inputTokens - cachedInputTokens;
+    const freshInputCost = (freshInputTokens / 1000) * cost.input;
+    const cachedInputCost = (cachedInputTokens / 1000) * cost.input * (1 - this.cacheDiscount);
+    const inputCost = freshInputCost + cachedInputCost;
+    const outputCost = (outputTokens / 1000) * cost.output;
+    const fullPriceInputCost = (inputTokens / 1000) * cost.input;
+    const cacheSavings = fullPriceInputCost - inputCost;
+
+    return {
+      totalTokens: inputTokens + outputTokens,
+      inputTokens,
+      outputTokens,
+      cachedInputTokens,
+      inputCost,
+      outputCost,
+      cacheSavings,
       totalCost: inputCost + outputCost,
       model: model ?? 'default',
     };

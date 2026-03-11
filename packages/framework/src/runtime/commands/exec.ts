@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { platform } from 'node:os';
 
 export interface ProcessResult {
   exitCode: number | null;
@@ -6,6 +7,8 @@ export interface ProcessResult {
   stderr: string;
   signal: NodeJS.Signals | null;
   timedOut: boolean;
+  /** Elapsed wall-clock time in milliseconds. */
+  duration: number;
 }
 
 export interface SpawnOpts {
@@ -59,6 +62,7 @@ export function spawnProcess(
     const stderrChunks: Buffer[] = [];
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const startTime = Date.now();
 
     if (opts.timeout && opts.timeout > 0) {
       timer = setTimeout(() => {
@@ -92,6 +96,7 @@ export function spawnProcess(
         stderr: Buffer.concat(stderrChunks).toString('utf-8'),
         signal,
         timedOut,
+        duration: Date.now() - startTime,
       });
     });
 
@@ -103,6 +108,7 @@ export function spawnProcess(
         stderr: err.message,
         signal: null,
         timedOut,
+        duration: Date.now() - startTime,
       });
     });
   });
@@ -159,4 +165,36 @@ export function killAllTrackedProcesses(): void {
 
 export function getTrackedProcessCount(): number {
   return activeProcesses.size;
+}
+
+/**
+ * Resolve the login-shell environment by spawning `bash -lc 'env'`
+ * (or `zsh -lc` on macOS). The result is cached after the first call.
+ *
+ * Useful alongside `stripVSCodeEnv` for normalizing the execution
+ * environment when running from VS Code, containers, or CI.
+ */
+let _loginShellEnvCache: Record<string, string> | null = null;
+
+export async function resolveLoginShellEnv(): Promise<Record<string, string>> {
+  if (_loginShellEnvCache) return _loginShellEnvCache;
+
+  const shell = platform() === 'darwin' ? 'zsh' : 'bash';
+  const result = await exec(shell, ['-lc', 'env'], { timeout: 10_000 });
+
+  const env: Record<string, string> = {};
+  for (const line of result.stdout.split('\n')) {
+    const idx = line.indexOf('=');
+    if (idx > 0) {
+      env[line.slice(0, idx)] = line.slice(idx + 1);
+    }
+  }
+
+  _loginShellEnvCache = env;
+  return env;
+}
+
+/** Reset the cached login shell env (for testing). */
+export function _resetLoginShellEnvCache(): void {
+  _loginShellEnvCache = null;
 }

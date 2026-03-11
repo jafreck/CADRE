@@ -43,7 +43,7 @@ describe('FleetProgressWriter', () => {
 
   function makeIssue(overrides: Partial<IssueProgressInfo> = {}): IssueProgressInfo {
     return {
-      issueNumber: 1,
+      workItemId: '1',
       issueTitle: 'Test Issue',
       status: 'not-started',
       currentPhase: 0,
@@ -55,7 +55,7 @@ describe('FleetProgressWriter', () => {
   it('should emit 💸 emoji for budget-exceeded status', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 1, status: 'budget-exceeded' }),
+      makeIssue({ workItemId: '1', status: 'budget-exceeded' }),
     ];
 
     await writer.write(issues, [], { current: 1000 });
@@ -67,9 +67,9 @@ describe('FleetProgressWriter', () => {
   it('should count budget-exceeded issues in fleet summary', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 1, status: 'completed' }),
-      makeIssue({ issueNumber: 2, status: 'budget-exceeded' }),
-      makeIssue({ issueNumber: 3, status: 'budget-exceeded' }),
+      makeIssue({ workItemId: '1', status: 'completed' }),
+      makeIssue({ workItemId: '2', status: 'budget-exceeded' }),
+      makeIssue({ workItemId: '3', status: 'budget-exceeded' }),
     ];
 
     await writer.write(issues, [], { current: 5000 });
@@ -82,8 +82,8 @@ describe('FleetProgressWriter', () => {
   it('should show 0 budget-exceeded when none present', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 1, status: 'completed' }),
-      makeIssue({ issueNumber: 2, status: 'failed' }),
+      makeIssue({ workItemId: '1', status: 'completed' }),
+      makeIssue({ workItemId: '2', status: 'failed' }),
     ];
 
     await writer.write(issues, [], { current: 500 });
@@ -95,12 +95,12 @@ describe('FleetProgressWriter', () => {
   it('should include all statuses in fleet summary line', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 1, status: 'completed' }),
-      makeIssue({ issueNumber: 2, status: 'in-progress' }),
-      makeIssue({ issueNumber: 3, status: 'failed' }),
-      makeIssue({ issueNumber: 4, status: 'blocked' }),
-      makeIssue({ issueNumber: 5, status: 'not-started' }),
-      makeIssue({ issueNumber: 6, status: 'budget-exceeded' }),
+      makeIssue({ workItemId: '1', status: 'completed' }),
+      makeIssue({ workItemId: '2', status: 'in-progress' }),
+      makeIssue({ workItemId: '3', status: 'failed' }),
+      makeIssue({ workItemId: '4', status: 'blocked' }),
+      makeIssue({ workItemId: '5', status: 'not-started' }),
+      makeIssue({ workItemId: '6', status: 'budget-exceeded' }),
     ];
 
     await writer.write(issues, [], { current: 2000 });
@@ -118,12 +118,12 @@ describe('FleetProgressWriter', () => {
   it('should show correct emojis for all statuses', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 1, status: 'not-started' }),
-      makeIssue({ issueNumber: 2, status: 'in-progress' }),
-      makeIssue({ issueNumber: 3, status: 'completed' }),
-      makeIssue({ issueNumber: 4, status: 'failed' }),
-      makeIssue({ issueNumber: 5, status: 'blocked' }),
-      makeIssue({ issueNumber: 6, status: 'budget-exceeded' }),
+      makeIssue({ workItemId: '1', status: 'not-started' }),
+      makeIssue({ workItemId: '2', status: 'in-progress' }),
+      makeIssue({ workItemId: '3', status: 'completed' }),
+      makeIssue({ workItemId: '4', status: 'failed' }),
+      makeIssue({ workItemId: '5', status: 'blocked' }),
+      makeIssue({ workItemId: '6', status: 'budget-exceeded' }),
     ];
 
     await writer.write(issues, [], { current: 100 });
@@ -148,10 +148,10 @@ describe('FleetProgressWriter', () => {
   it('should include PR links in the issues table', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 42, status: 'completed', prNumber: 99 }),
+      makeIssue({ workItemId: '42', status: 'completed', prNumber: 99 }),
     ];
 
-    await writer.write(issues, [{ issueNumber: 42, prNumber: 99, url: 'http://example.com/99' }], { current: 0 });
+    await writer.write(issues, [{ workItemId: '42', prNumber: 99, url: 'http://example.com/99' }], { current: 0 });
 
     const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
     expect(content).toContain('#99');
@@ -171,7 +171,7 @@ describe('FleetProgressWriter', () => {
   it('should emit ⚠️ emoji for code-complete status', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 10, status: 'code-complete', branch: 'cadre/issue-10' }),
+      makeIssue({ workItemId: '10', status: 'code-complete', branch: 'cadre/issue-10' }),
     ];
 
     await writer.write(issues, [], { current: 0 });
@@ -183,22 +183,22 @@ describe('FleetProgressWriter', () => {
   it('should include Code Complete — PR Needed section when an issue has code-complete status', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 11, issueTitle: 'Fix auth bug', status: 'code-complete', branch: 'cadre/issue-11' }),
+      makeIssue({ workItemId: '11', issueTitle: 'Fix auth bug', status: 'code-complete', branch: 'cadre/issue-11' }),
     ];
 
     await writer.write(issues, [], { current: 0 });
 
     const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
     expect(content).toContain('## Code Complete — PR Needed');
-    expect(content).toContain('#11 Fix auth bug');
+    expect(content).toContain('11 Fix auth bug');
     expect(content).toContain('cadre/issue-11');
   });
 
   it('should NOT include Code Complete — PR Needed section when no issues have code-complete status', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 1, status: 'completed' }),
-      makeIssue({ issueNumber: 2, status: 'failed' }),
+      makeIssue({ workItemId: '1', status: 'completed' }),
+      makeIssue({ workItemId: '2', status: 'failed' }),
     ];
 
     await writer.write(issues, [], { current: 0 });
@@ -210,26 +210,26 @@ describe('FleetProgressWriter', () => {
   it('should list all code-complete issues in the Code Complete section with their branch names', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 20, issueTitle: 'Issue A', status: 'code-complete', branch: 'cadre/issue-20' }),
-      makeIssue({ issueNumber: 21, issueTitle: 'Issue B', status: 'code-complete', branch: 'cadre/issue-21' }),
-      makeIssue({ issueNumber: 22, issueTitle: 'Issue C', status: 'completed' }),
+      makeIssue({ workItemId: '20', issueTitle: 'Issue A', status: 'code-complete', branch: 'cadre/issue-20' }),
+      makeIssue({ workItemId: '21', issueTitle: 'Issue B', status: 'code-complete', branch: 'cadre/issue-21' }),
+      makeIssue({ workItemId: '22', issueTitle: 'Issue C', status: 'completed' }),
     ];
 
     await writer.write(issues, [], { current: 0 });
 
     const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
-    expect(content).toContain('#20 Issue A');
+    expect(content).toContain('20 Issue A');
     expect(content).toContain('cadre/issue-20');
-    expect(content).toContain('#21 Issue B');
+    expect(content).toContain('21 Issue B');
     expect(content).toContain('cadre/issue-21');
     // completed issue should not appear in the Code Complete section
-    expect(content).not.toContain('#22 Issue C — branch');
+    expect(content).not.toContain('22 Issue C — branch');
   });
 
   it('should use "unknown" as branch name when branch is undefined for code-complete issues', async () => {
     const writer = new FleetProgressWriter(tempDir, logger);
     const issues: IssueProgressInfo[] = [
-      makeIssue({ issueNumber: 30, issueTitle: 'No Branch', status: 'code-complete' }),
+      makeIssue({ workItemId: '30', issueTitle: 'No Branch', status: 'code-complete' }),
     ];
 
     await writer.write(issues, [], { current: 0 });
@@ -258,7 +258,7 @@ describe('phaseNames', () => {
     const tempDir = join(tmpdir(), `cadre-phase-names-test-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
     try {
-      const writer = new IssueProgressWriter(tempDir, 1, 'Test', logger);
+      const writer = new IssueProgressWriter(tempDir, '1', 'Test', logger);
       await writer.write([], 1, [], 0);
       const content = await readFile(join(tempDir, 'progress.md'), 'utf-8');
       for (const name of phaseNames) {
@@ -273,7 +273,7 @@ describe('phaseNames', () => {
 describe('IssueProgressInfo status type', () => {
   it('should accept budget-exceeded as a valid status', () => {
     const info: IssueProgressInfo = {
-      issueNumber: 7,
+      workItemId: '7',
       issueTitle: 'Budget issue',
       status: 'budget-exceeded',
       currentPhase: 2,
@@ -284,7 +284,7 @@ describe('IssueProgressInfo status type', () => {
 
   it('should accept code-complete as a valid status', () => {
     const info: IssueProgressInfo = {
-      issueNumber: 8,
+      workItemId: '8',
       issueTitle: 'Code complete issue',
       status: 'code-complete',
       currentPhase: 4,
@@ -303,7 +303,7 @@ describe('IssueProgressWriter – Gate Results section', () => {
     mockLogger = makeMockLogger();
     tempDir = join(tmpdir(), `cadre-progress-gate-test-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
-    writer = new IssueProgressWriter(tempDir, 42, 'Test Issue', mockLogger);
+    writer = new IssueProgressWriter(tempDir, '42', 'Test Issue', mockLogger);
   });
 
   afterEach(async () => {

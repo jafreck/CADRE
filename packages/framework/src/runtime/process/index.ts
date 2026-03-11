@@ -8,4 +8,6 @@ export {
   trackProcess,
   killAllTrackedProcesses,
   getTrackedProcessCount,
+  resolveLoginShellEnv,
+  _resetLoginShellEnvCache,
 } from '../commands/exec.js';

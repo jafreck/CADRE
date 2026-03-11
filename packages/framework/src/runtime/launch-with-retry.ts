@@ -60,7 +60,7 @@ export async function launchWithRetry(
     const usage = retryResult.result.tokenUsage;
     const tokens = typeof usage === 'number' ? usage : 0;
     tokenTracker.record(
-      options.invocation.issueNumber,
+      options.invocation.workItemId,
       options.invocation.agent,
       options.invocation.phase,
       tokens,

@@ -5,9 +5,9 @@ import type { TokenRecord, TokenSummary } from '../../../src/runtime/budget/toke
 describe('TokenTracker (agent-runtime)', () => {
   function setupTracker(): TokenTracker {
     const tracker = new TokenTracker();
-    tracker.record(1, 'alpha', 1, 100);
-    tracker.record(1, 'beta', 2, 200);
-    tracker.record(2, 'alpha', 1, 300, 100, 200);
+    tracker.record('1', 'alpha', 1, 100);
+    tracker.record('1', 'beta', 2, 200);
+    tracker.record('2', 'alpha', 1, 300, 100, 200);
     return tracker;
   }
 
@@ -21,15 +21,15 @@ describe('TokenTracker (agent-runtime)', () => {
     });
   });
 
-  describe('getIssueTotal', () => {
+  describe('getWorkItemTotal', () => {
     it('should return tokens for a known issue', () => {
       const tracker = setupTracker();
-      expect(tracker.getIssueTotal(1)).toBe(300);
-      expect(tracker.getIssueTotal(2)).toBe(300);
+      expect(tracker.getWorkItemTotal('1')).toBe(300);
+      expect(tracker.getWorkItemTotal('2')).toBe(300);
     });
 
     it('should return 0 for an unknown issue', () => {
-      expect(setupTracker().getIssueTotal(999)).toBe(0);
+      expect(setupTracker().getWorkItemTotal('999')).toBe(0);
     });
   });
 
@@ -41,11 +41,11 @@ describe('TokenTracker (agent-runtime)', () => {
     });
   });
 
-  describe('getByIssue', () => {
+  describe('getByWorkItem', () => {
     it('should aggregate tokens by issue number', () => {
-      const byIssue = setupTracker().getByIssue();
-      expect(byIssue[1]).toBe(300);
-      expect(byIssue[2]).toBe(300);
+      const byWorkItem = setupTracker().getByWorkItem();
+      expect(byWorkItem['1']).toBe(300);
+      expect(byWorkItem['2']).toBe(300);
     });
   });
 
@@ -88,22 +88,22 @@ describe('TokenTracker (agent-runtime)', () => {
     });
   });
 
-  describe('checkIssueBudget', () => {
+  describe('checkWorkItemBudget', () => {
     it('should return ok when no budget is set', () => {
-      expect(setupTracker().checkIssueBudget(1)).toBe('ok');
+      expect(setupTracker().checkWorkItemBudget('1')).toBe('ok');
     });
 
     it('should return ok when under 80%', () => {
-      expect(setupTracker().checkIssueBudget(1, 10000)).toBe('ok');
+      expect(setupTracker().checkWorkItemBudget('1', 10000)).toBe('ok');
     });
 
     it('should return warning at 80% threshold', () => {
       // issue 1 has 300; 300 / 375 = 0.8
-      expect(setupTracker().checkIssueBudget(1, 375)).toBe('warning');
+      expect(setupTracker().checkWorkItemBudget('1', 375)).toBe('warning');
     });
 
     it('should return exceeded when at budget', () => {
-      expect(setupTracker().checkIssueBudget(1, 300)).toBe('exceeded');
+      expect(setupTracker().checkWorkItemBudget('1', 300)).toBe('exceeded');
     });
   });
 
@@ -113,7 +113,7 @@ describe('TokenTracker (agent-runtime)', () => {
       expect(summary.total).toBe(600);
       expect(summary.recordCount).toBe(3);
       expect(Object.keys(summary.byAgent)).toHaveLength(2);
-      expect(Object.keys(summary.byIssue)).toHaveLength(2);
+      expect(Object.keys(summary.byWorkItem)).toHaveLength(2);
       expect(Object.keys(summary.byPhase)).toHaveLength(2);
     });
   });
@@ -127,7 +127,7 @@ describe('TokenTracker (agent-runtime)', () => {
       tracker2.importRecords(exported);
 
       expect(tracker2.getTotal()).toBe(600);
-      expect(tracker2.getIssueTotal(1)).toBe(300);
+      expect(tracker2.getWorkItemTotal('1')).toBe(300);
     });
 
     it('should produce independent copies of the records array', () => {
@@ -136,7 +136,7 @@ describe('TokenTracker (agent-runtime)', () => {
       const tracker2 = new TokenTracker();
       tracker2.importRecords(exported);
 
-      tracker.record(1, 'gamma', 3, 500);
+      tracker.record('1', 'gamma', 3, 500);
       expect(tracker2.getTotal()).toBe(600);
     });
 
@@ -150,7 +150,7 @@ describe('TokenTracker (agent-runtime)', () => {
 
     it('should export records with undefined input/output when not provided', () => {
       const records = setupTracker().exportRecords();
-      const withoutIO = records.find((r) => r.agent === 'alpha' && r.issueNumber === 1);
+      const withoutIO = records.find((r) => r.agent === 'alpha' && r.workItemId === '1');
       expect(withoutIO!.input).toBeUndefined();
       expect(withoutIO!.output).toBeUndefined();
     });
@@ -159,7 +159,7 @@ describe('TokenTracker (agent-runtime)', () => {
   describe('record with input/output tokens', () => {
     it('should store input and output on the record', () => {
       const tracker = new TokenTracker();
-      tracker.record(10, 'agent', 1, 500, 200, 300);
+      tracker.record('10', 'agent', 1, 500, 200, 300);
       const records = tracker.exportRecords();
       expect(records[0].input).toBe(200);
       expect(records[0].output).toBe(300);
@@ -170,7 +170,7 @@ describe('TokenTracker (agent-runtime)', () => {
   describe('timestamp', () => {
     it('should include an ISO timestamp on each record', () => {
       const tracker = new TokenTracker();
-      tracker.record(1, 'test', 1, 100);
+      tracker.record('1', 'test', 1, 100);
       const records = tracker.exportRecords();
       expect(records[0].timestamp).toBeTruthy();
       // Validate ISO 8601 format

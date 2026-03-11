@@ -46,7 +46,7 @@ export interface FailedTask {
 }
 
 export interface CheckpointState {
-  issueNumber: number;
+  workItemId: string;
   version: number;
   currentPhase: number;
   currentTask: string | null;
@@ -70,6 +70,8 @@ export interface CheckpointState {
   startedAt: string;
   lastCheckpoint: string;
   resumeCount: number;
+  /** Number of InvocationMetric records persisted for this work item. */
+  metricsCount: number;
 }
 
 // ── Fleet Checkpoint ──
@@ -87,13 +89,13 @@ export interface FleetIssueStatus {
 export interface FleetCheckpointState {
   projectName: string;
   version: number;
-  issues: Record<number, FleetIssueStatus>;
-  tokenUsage: { total: number; byIssue: Record<number, number> };
+  issues: Record<string, FleetIssueStatus>;
+  tokenUsage: { total: number; byWorkItem: Record<string, number> };
   startedAt: string;
   lastCheckpoint: string;
   resumeCount: number;
-  dag?: Record<number, number[]>;
-  waves?: number[][];
+  dag?: Record<string, string[]>;
+  waves?: string[][];
   completedWaves?: number[];
 }
 
@@ -128,8 +130,8 @@ export class CheckpointManager {
       try {
         this.state = await this.store.readJSON<CheckpointState>(this.checkpointPath);
         this.state.resumeCount += 1;
-        this.logger.info(`Loaded checkpoint for issue #${issueNumber}`, {
-          issueNumber: Number(issueNumber),
+        this.logger.info(`Loaded checkpoint for work item ${issueNumber}`, {
+          workItemId: issueNumber,
           data: {
             currentPhase: this.state.currentPhase,
             completedPhases: this.state.completedPhases,
@@ -141,7 +143,7 @@ export class CheckpointManager {
         return this.state;
       } catch (err) {
         this.logger.warn(`Failed to load checkpoint, trying backup`, {
-          issueNumber: Number(issueNumber),
+          workItemId: issueNumber,
         });
         // Try backup
         if (await this.store.exists(this.backupPath)) {
@@ -152,7 +154,7 @@ export class CheckpointManager {
             return this.state;
           } catch {
             this.logger.warn(`Backup checkpoint also corrupt, starting fresh`, {
-              issueNumber: Number(issueNumber),
+              workItemId: issueNumber,
             });
           }
         }
@@ -160,14 +162,14 @@ export class CheckpointManager {
     }
 
     // Initialize new checkpoint
-    this.state = this.createEmpty(Number(issueNumber));
+    this.state = this.createEmpty(issueNumber);
     await this.save();
     return this.state;
   }
 
-  private createEmpty(issueNumber: number): CheckpointState {
+  private createEmpty(workItemId: string): CheckpointState {
     return {
-      issueNumber,
+      workItemId,
       version: 1,
       currentPhase: 0,
       currentTask: null,
@@ -185,6 +187,7 @@ export class CheckpointManager {
       startedAt: new Date().toISOString(),
       lastCheckpoint: new Date().toISOString(),
       resumeCount: 0,
+      metricsCount: 0,
     };
   }
 
@@ -376,6 +379,16 @@ export class CheckpointManager {
   }
 
   /**
+   * Increment the metrics counter and persist.
+   * Call this after each InvocationMetric is written to the collector.
+   */
+  async incrementMetricsCount(): Promise<void> {
+    if (!this.state) throw new Error('Checkpoint not loaded');
+    this.state.metricsCount = (this.state.metricsCount ?? 0) + 1;
+    await this.save();
+  }
+
+  /**
    * Check if a task was already completed.
    */
   isTaskCompleted(taskId: string): boolean {
@@ -506,7 +519,7 @@ export class FleetCheckpointManager {
       projectName: this.projectName,
       version: 1,
       issues: {},
-      tokenUsage: { total: 0, byIssue: {} },
+      tokenUsage: { total: 0, byWorkItem: {} },
       startedAt: new Date().toISOString(),
       lastCheckpoint: new Date().toISOString(),
       resumeCount: 0,
@@ -520,8 +533,8 @@ export class FleetCheckpointManager {
     return this.state;
   }
 
-  async setIssueStatus(
-    issueNumber: number,
+  async setWorkItemStatus(
+    workItemId: string,
     status: FleetIssueStatus['status'],
     worktreePath: string,
     branchName: string,
@@ -530,7 +543,7 @@ export class FleetCheckpointManager {
     error?: string,
   ): Promise<void> {
     if (!this.state) throw new Error('Fleet checkpoint not loaded');
-    this.state.issues[issueNumber] = {
+    this.state.issues[workItemId] = {
       status,
       issueTitle,
       worktreePath,
@@ -542,7 +555,7 @@ export class FleetCheckpointManager {
     await this.save();
   }
 
-  async setDag(dag: Record<number, number[]>, waves: number[][]): Promise<void> {
+  async setDag(dag: Record<string, string[]>, waves: string[][]): Promise<void> {
     if (!this.state) throw new Error('Fleet checkpoint not loaded');
     this.state.dag = dag;
     this.state.waves = waves;
@@ -559,28 +572,28 @@ export class FleetCheckpointManager {
     await this.save();
   }
 
-  async recordTokenUsage(issueNumber: number, tokens: number): Promise<void> {
+  async recordTokenUsage(workItemId: string, tokens: number): Promise<void> {
     if (!this.state) throw new Error('Fleet checkpoint not loaded');
     this.state.tokenUsage.total += tokens;
-    this.state.tokenUsage.byIssue[issueNumber] =
-      (this.state.tokenUsage.byIssue[issueNumber] ?? 0) + tokens;
+    this.state.tokenUsage.byWorkItem[workItemId] =
+      (this.state.tokenUsage.byWorkItem[workItemId] ?? 0) + tokens;
     await this.save();
   }
 
-  getIssueStatus(issueNumber: number): FleetIssueStatus | undefined {
-    return this.state?.issues[issueNumber];
+  getWorkItemStatus(workItemId: string): FleetIssueStatus | undefined {
+    return this.state?.issues[workItemId];
   }
 
-  /** Return all issue statuses as [issueNumber, status] pairs. */
-  getAllIssueStatuses(): Array<[number, FleetIssueStatus]> {
+  /** Return all work item statuses as [workItemId, status] pairs. */
+  getAllWorkItemStatuses(): Array<[string, FleetIssueStatus]> {
     if (!this.state) return [];
     return Object.entries(this.state.issues).map(
-      ([num, status]) => [Number(num), status] as [number, FleetIssueStatus],
+      ([id, status]) => [id, status] as [string, FleetIssueStatus],
     );
   }
 
-  isIssueCompleted(issueNumber: number): boolean {
-    const status = this.state?.issues[issueNumber]?.status;
+  isWorkItemCompleted(workItemId: string): boolean {
+    const status = this.state?.issues[workItemId]?.status;
     return status === 'completed' || status === 'budget-exceeded';
     // Note: 'code-complete' intentionally returns false — the issue still needs a PR.
     // Note: 'dep-blocked' intentionally returns false — the dependency may have been
@@ -593,9 +606,9 @@ export class FleetCheckpointManager {
    * transient failure states (e.g. dep-blocked) when their blockers have been
    * resolved.
    */
-  async clearIssueStatus(issueNumber: number): Promise<void> {
+  async clearWorkItemStatus(workItemId: string): Promise<void> {
     if (!this.state) throw new Error('Fleet checkpoint not loaded');
-    delete this.state.issues[issueNumber];
+    delete this.state.issues[workItemId];
     await this.save();
   }
 
