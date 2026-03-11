@@ -16,6 +16,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/.cadre/**',
+      'cadre-worktrees/**',
     ],
     coverage: {
       provider: 'v8',
