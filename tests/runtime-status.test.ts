@@ -38,7 +38,7 @@ vi.mock('@cadre-dev/framework/notifications', () => ({
 
 vi.mock('../src/core/fleet/fleet-orchestrator.js', () => ({
   FleetOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({ success: true, issues: [], prsCreated: [], failedIssues: [], totalDuration: 0, tokenUsage: { total: 0, byIssue: {}, byAgent: {} } }),
+    run: vi.fn().mockResolvedValue({ success: true, issues: [], prsCreated: [], failedIssues: [], totalDuration: 0, tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} } }),
   })),
 }));
 
@@ -80,11 +80,11 @@ vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
       load: vi.fn().mockResolvedValue({
         projectName: 'test-project',
         issues: {},
-        tokenUsage: { total: 0, byIssue: {} },
+        tokenUsage: { total: 0, byWorkItem: {} },
         lastCheckpoint: '',
         resumeCount: 0,
       }),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     })),
     CheckpointManager: vi.fn().mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({
@@ -206,7 +206,7 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
         updatedAt: new Date().toISOString(),
       },
     },
-    tokenUsage: { total: 1000, byIssue: { 42: 1000 } },
+    tokenUsage: { total: 1000, byWorkItem: { 42: 1000 } },
     lastCheckpoint: new Date().toISOString(),
     resumeCount: 2,
   };
@@ -217,7 +217,7 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
     mockExists.mockResolvedValue(true);
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(fleetState),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
     mockRenderFleetStatus.mockReturnValue('fleet status table');
   });
@@ -260,7 +260,7 @@ describe('CadreRuntime.status() — with issueNumber, issue NOT in fleet checkpo
   const fleetState = {
     projectName: 'test-project',
     issues: {},
-    tokenUsage: { total: 0, byIssue: {} },
+    tokenUsage: { total: 0, byWorkItem: {} },
     lastCheckpoint: new Date().toISOString(),
     resumeCount: 0,
   };
@@ -271,7 +271,7 @@ describe('CadreRuntime.status() — with issueNumber, issue NOT in fleet checkpo
     mockExists.mockResolvedValue(true);
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(fleetState),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
   });
 
@@ -317,7 +317,7 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint missi
   const fleetState = {
     projectName: 'test-project',
     issues: { 5: issueStatus },
-    tokenUsage: { total: 0, byIssue: {} },
+    tokenUsage: { total: 0, byWorkItem: {} },
     lastCheckpoint: new Date().toISOString(),
     resumeCount: 0,
   };
@@ -331,7 +331,7 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint missi
       .mockResolvedValueOnce(false); // per-issue checkpoint.json does not exist
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(fleetState),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
   });
 
@@ -376,7 +376,7 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint prese
   const fleetState = {
     projectName: 'test-project',
     issues: { 7: issueStatus },
-    tokenUsage: { total: 500, byIssue: { 7: 500 } },
+    tokenUsage: { total: 500, byWorkItem: { 7: 500 } },
     lastCheckpoint: new Date().toISOString(),
     resumeCount: 1,
   };
@@ -408,7 +408,7 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint prese
     mockExists.mockResolvedValue(true);
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(fleetState),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
     MockCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(issueCheckpointState),
@@ -466,7 +466,7 @@ describe('CadreRuntime.status() — with issueNumber, CheckpointManager.load() t
   const fleetState = {
     projectName: 'test-project',
     issues: { 8: issueStatus },
-    tokenUsage: { total: 0, byIssue: {} },
+    tokenUsage: { total: 0, byWorkItem: {} },
     lastCheckpoint: new Date().toISOString(),
     resumeCount: 0,
   };
@@ -480,7 +480,7 @@ describe('CadreRuntime.status() — with issueNumber, CheckpointManager.load() t
 
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue(fleetState),
-      setIssueStatus: vi.fn().mockResolvedValue(undefined),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
     }));
 
     MockCheckpointManager.mockImplementation(() => ({
@@ -514,7 +514,7 @@ describe('CadreRuntime.status() — with issueNumber, CheckpointManager.load() t
   });
 });
 
-describe('CadreRuntime.reset() — setIssueStatus call-sites pass issueTitle', () => {
+describe('CadreRuntime.reset() — setWorkItemStatus call-sites pass issueTitle', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
   let mockSetIssueStatus: ReturnType<typeof vi.fn>;
 
@@ -531,11 +531,11 @@ describe('CadreRuntime.reset() — setIssueStatus call-sites pass issueTitle', (
   function setUpCheckpoint(issues: Record<number, { status: string; issueTitle?: string }>) {
     MockFleetCheckpointManager.mockImplementation(() => ({
       load: vi.fn().mockResolvedValue({ issues }),
-      setIssueStatus: mockSetIssueStatus,
+      setWorkItemStatus: mockSetIssueStatus,
     }));
   }
 
-  it('calls setIssueStatus with not-started and issueTitle when resetting a single issue', async () => {
+  it('calls setWorkItemStatus with not-started and issueTitle when resetting a single issue', async () => {
     setUpCheckpoint({
       42: { status: 'in-progress', issueTitle: 'Fix the login bug' },
     });
@@ -544,7 +544,7 @@ describe('CadreRuntime.reset() — setIssueStatus call-sites pass issueTitle', (
     await runtime.reset(42);
 
     expect(mockSetIssueStatus).toHaveBeenCalledOnce();
-    expect(mockSetIssueStatus).toHaveBeenCalledWith(42, 'not-started', '', '', 0, 'Fix the login bug');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith('42', 'not-started', '', '', 0, 'Fix the login bug');
   });
 
   it('falls back to empty string issueTitle when issue has no title in state', async () => {
@@ -555,7 +555,7 @@ describe('CadreRuntime.reset() — setIssueStatus call-sites pass issueTitle', (
     const runtime = new CadreRuntime(makeConfig());
     await runtime.reset(7);
 
-    expect(mockSetIssueStatus).toHaveBeenCalledWith(7, 'not-started', '', '', 0, '');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith('7', 'not-started', '', '', 0, '');
   });
 
   it('passes empty worktreePath, branchName, and lastPhase=0 when resetting a single issue', async () => {
@@ -573,7 +573,7 @@ describe('CadreRuntime.reset() — setIssueStatus call-sites pass issueTitle', (
     expect(lastPhase).toBe(0);
   });
 
-  it('calls setIssueStatus for every issue when resetting the whole fleet', async () => {
+  it('calls setWorkItemStatus for every issue when resetting the whole fleet', async () => {
     setUpCheckpoint({
       1: { status: 'completed', issueTitle: 'Issue one' },
       2: { status: 'failed', issueTitle: 'Issue two' },
@@ -584,12 +584,12 @@ describe('CadreRuntime.reset() — setIssueStatus call-sites pass issueTitle', (
     await runtime.reset();
 
     expect(mockSetIssueStatus).toHaveBeenCalledTimes(3);
-    expect(mockSetIssueStatus).toHaveBeenCalledWith(1, 'not-started', '', '', 0, 'Issue one');
-    expect(mockSetIssueStatus).toHaveBeenCalledWith(2, 'not-started', '', '', 0, 'Issue two');
-    expect(mockSetIssueStatus).toHaveBeenCalledWith(3, 'not-started', '', '', 0, 'Issue three');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith('1', 'not-started', '', '', 0, 'Issue one');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith('2', 'not-started', '', '', 0, 'Issue two');
+    expect(mockSetIssueStatus).toHaveBeenCalledWith('3', 'not-started', '', '', 0, 'Issue three');
   });
 
-  it('does not call setIssueStatus when resetting fleet with no issues', async () => {
+  it('does not call setWorkItemStatus when resetting fleet with no issues', async () => {
     setUpCheckpoint({});
 
     const runtime = new CadreRuntime(makeConfig());

@@ -78,7 +78,7 @@ export class CadreRuntime {
       failedIssues: [],
       codeDoneNoPR: [],
       totalDuration: 0,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
       prCompletion: {
         queued: 0,
         failed: 0,

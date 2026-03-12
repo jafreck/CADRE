@@ -26,7 +26,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       const readySessions = queue.getReady();
       if (readySessions.length === 0) {
         ctx.services.logger.warn('No ready sessions but queue not complete — possible deadlock', {
-          issueNumber: ctx.issue.number,
+          workItemId: String(ctx.issue.number),
         });
         break;
       }
@@ -34,7 +34,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
       // Select non-overlapping batch
       const batch = SessionQueue.selectNonOverlappingBatch(readySessions, maxParallel);
       ctx.services.logger.info(`Implementation batch: ${batch.map((s) => s.id).join(', ')}`, {
-        issueNumber: ctx.issue.number,
+        workItemId: String(ctx.issue.number),
         phase: 3,
       });
 
@@ -48,7 +48,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
     const counts = queue.getCounts();
     ctx.services.logger.info(
       `Implementation complete: ${counts.completed}/${counts.total} sessions (${counts.blocked} blocked)`,
-      { issueNumber: ctx.issue.number, phase: 3 },
+      { workItemId: String(ctx.issue.number), phase: 3 },
     );
 
     if (counts.blocked > 0 && counts.completed === 0) {
@@ -105,7 +105,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           const writerResult = await ctx.services.launcher.launchAgent(
             {
               agent: 'code-writer',
-              issueNumber: ctx.issue.number,
+              workItemId: String(ctx.issue.number),
               phase: 3,
               sessionId: session.id,
               contextPath: writerContextPath,
@@ -150,7 +150,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 const buildFixResult = await ctx.services.launcher.launchAgent(
                   {
                     agent: 'fix-surgeon',
-                    issueNumber: ctx.issue.number,
+                    workItemId: String(ctx.issue.number),
                     phase: 3,
                     sessionId: session.id,
                     contextPath: buildFixContextPath,
@@ -178,7 +178,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           if (session.testable === false) {
             ctx.services.logger.info(
               `Skipping test-writer for session ${session.id} (testable: false)`,
-              { issueNumber: ctx.issue.number, sessionId: session.id },
+              { workItemId: String(ctx.issue.number), sessionId: session.id },
             );
           } else {
             const testWriterContextPath = await ctx.services.contextBuilder.build('test-writer', {
@@ -193,7 +193,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
             const testResult = await ctx.services.launcher.launchAgent(
               {
                 agent: 'test-writer',
-                issueNumber: ctx.issue.number,
+                workItemId: String(ctx.issue.number),
                 phase: 3,
                 sessionId: session.id,
                 contextPath: testWriterContextPath,
@@ -240,7 +240,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
           const reviewResult = await ctx.services.launcher.launchAgent(
             {
               agent: 'code-reviewer',
-              issueNumber: ctx.issue.number,
+              workItemId: String(ctx.issue.number),
               phase: 3,
               sessionId: session.id,
               contextPath: reviewerContextPath,
@@ -269,7 +269,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 if (err instanceof ZodError) {
                   const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
                   ctx.services.logger.warn(`Review validation failed (will retry): ${msg}`, {
-                    issueNumber: ctx.issue.number,
+                    workItemId: String(ctx.issue.number),
                     sessionId: session.id,
                   });
                 }
@@ -309,7 +309,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 const fixResult = await ctx.services.launcher.launchAgent(
                   {
                     agent: 'fix-surgeon',
-                    issueNumber: ctx.issue.number,
+                    workItemId: String(ctx.issue.number),
                     phase: 3,
                     sessionId: session.id,
                     contextPath: fixContextPath,
@@ -361,7 +361,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
   private async executeWholePrReview(sessions: AgentSession[], ctx: PhaseContext): Promise<void> {
     ctx.services.logger.info('[Whole-PR review] Starting post-implementation review', {
-      issueNumber: ctx.issue.number,
+      workItemId: String(ctx.issue.number),
       phase: 3,
     });
 
@@ -421,7 +421,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               const reviewResult = await ctx.services.launcher.launchAgent(
                 {
                   agent: 'whole-pr-reviewer',
-                  issueNumber: ctx.issue.number,
+                  workItemId: String(ctx.issue.number),
                   phase: 3,
                   contextPath: reviewerContextPath,
                   outputPath: join(ctx.io.progressDir, 'whole-pr-review.md'),
@@ -434,7 +434,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
               if (!reviewResult.success) {
                 ctx.services.logger.warn('[Whole-PR review] Reviewer agent did not succeed; skipping', {
-                  issueNumber: ctx.issue.number,
+                  workItemId: String(ctx.issue.number),
                   phase: 3,
                 });
                 flowCtx.context.done = true;
@@ -444,7 +444,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               const reviewPath = join(ctx.io.progressDir, 'whole-pr-review.md');
               if (!(await exists(reviewPath))) {
                 ctx.services.logger.warn('[Whole-PR review] No output file produced; skipping', {
-                  issueNumber: ctx.issue.number,
+                  workItemId: String(ctx.issue.number),
                   phase: 3,
                 });
                 flowCtx.context.done = true;
@@ -457,7 +457,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               } catch (err) {
                 ctx.services.logger.warn(
                   `[Whole-PR review] Failed to parse review output: ${(err as Error).message}`,
-                  { issueNumber: ctx.issue.number, phase: 3 },
+                  { workItemId: String(ctx.issue.number), phase: 3 },
                 );
                 flowCtx.context.done = true;
                 return { verdict: 'skip' };
@@ -465,7 +465,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
               if (review.verdict !== 'needs-fixes') {
                 ctx.services.logger.info('[Whole-PR review] Verdict: pass', {
-                  issueNumber: ctx.issue.number,
+                  workItemId: String(ctx.issue.number),
                   phase: 3,
                 });
                 flowCtx.context.done = true;
@@ -474,13 +474,13 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
               ctx.services.logger.info(
                 `[Whole-PR review] Verdict: needs-fixes (attempt ${attempt + 1}/${maxRetries + 1})`,
-                { issueNumber: ctx.issue.number, phase: 3 },
+                { workItemId: String(ctx.issue.number), phase: 3 },
               );
 
               if (attempt >= maxRetries) {
                 ctx.services.logger.warn(
                   `[Whole-PR review] Max retries (${maxRetries}) exceeded; continuing to phase 4`,
-                  { issueNumber: ctx.issue.number, phase: 3 },
+                  { workItemId: String(ctx.issue.number), phase: 3 },
                 );
                 flowCtx.context.done = true;
                 return { verdict: 'max-retries' };
@@ -511,7 +511,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
               const fixResult = await ctx.services.launcher.launchAgent(
                 {
                   agent: 'fix-surgeon',
-                  issueNumber: ctx.issue.number,
+                  workItemId: String(ctx.issue.number),
                   phase: 3,
                   sessionId: 'whole-pr',
                   contextPath: fixContextPath,
@@ -525,7 +525,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
               if (!fixResult.success) {
                 ctx.services.logger.warn('[Whole-PR review] Fix surgeon failed; aborting review loop', {
-                  issueNumber: ctx.issue.number,
+                  workItemId: String(ctx.issue.number),
                   phase: 3,
                 });
                 flowCtx.context.done = true;
@@ -541,7 +541,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
               ctx.services.logger.info(
                 `[Whole-PR review] Fix applied successfully (round ${flowCtx.context.attempt + 1})`,
-                { issueNumber: ctx.issue.number, phase: 3 },
+                { workItemId: String(ctx.issue.number), phase: 3 },
               );
 
               flowCtx.context.attempt += 1;

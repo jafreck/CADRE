@@ -9,7 +9,7 @@ vi.mock('@cadre-dev/framework/engine', () => ({
     load: vi.fn().mockResolvedValue({
       projectName: 'test-project',
       issues: {},
-      tokenUsage: { total: 0, byIssue: {} },
+      tokenUsage: { total: 0, byWorkItem: {} },
       lastCheckpoint: '',
       resumeCount: 0,
     }),
@@ -131,7 +131,7 @@ describe('StatusService', () => {
           updatedAt: new Date().toISOString(),
         },
       },
-      tokenUsage: { total: 1000, byIssue: { 42: 1000 } },
+      tokenUsage: { total: 1000, byWorkItem: { 42: 1000 } },
       lastCheckpoint: new Date().toISOString(),
       resumeCount: 2,
     };
@@ -177,7 +177,7 @@ describe('StatusService', () => {
         load: vi.fn().mockResolvedValue({
           projectName: 'test-project',
           issues: {},
-          tokenUsage: { total: 0, byIssue: {} },
+          tokenUsage: { total: 0, byWorkItem: {} },
           lastCheckpoint: '',
           resumeCount: 0,
         }),
@@ -217,7 +217,7 @@ describe('StatusService', () => {
         load: vi.fn().mockResolvedValue({
           projectName: 'test-project',
           issues: { 5: issueStatus },
-          tokenUsage: { total: 0, byIssue: {} },
+          tokenUsage: { total: 0, byWorkItem: {} },
           lastCheckpoint: '',
           resumeCount: 0,
         }),
@@ -275,7 +275,7 @@ describe('StatusService', () => {
         load: vi.fn().mockResolvedValue({
           projectName: 'test-project',
           issues: { 7: issueStatus },
-          tokenUsage: { total: 500, byIssue: { 7: 500 } },
+          tokenUsage: { total: 500, byWorkItem: { 7: 500 } },
           lastCheckpoint: new Date().toISOString(),
           resumeCount: 1,
         }),
@@ -314,7 +314,7 @@ describe('StatusService', () => {
         load: vi.fn().mockResolvedValue({
           projectName: 'test-project',
           issues: { 8: { status: 'in-progress', issueTitle: 'Broken' } },
-          tokenUsage: { total: 0, byIssue: {} },
+          tokenUsage: { total: 0, byWorkItem: {} },
           lastCheckpoint: '',
           resumeCount: 0,
         }),

@@ -247,7 +247,7 @@ describe('ImplementationPhaseExecutor', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'code-writer',
-          issueNumber: 42,
+          workItemId: '42',
           phase: 3,
           sessionId: 'session-001',
         }),
@@ -263,7 +263,7 @@ describe('ImplementationPhaseExecutor', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'test-writer',
-          issueNumber: 42,
+          workItemId: '42',
           phase: 3,
           sessionId: 'session-001',
         }),
@@ -279,7 +279,7 @@ describe('ImplementationPhaseExecutor', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'code-reviewer',
-          issueNumber: 42,
+          workItemId: '42',
           phase: 3,
           sessionId: 'session-001',
         }),
@@ -326,7 +326,7 @@ describe('ImplementationPhaseExecutor', () => {
         (ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info,
       ).toHaveBeenCalledWith(
         expect.stringContaining('Implementation complete'),
-        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+        expect.objectContaining({ workItemId: '42', phase: 3 }),
       );
     });
 
@@ -560,7 +560,7 @@ describe('ImplementationPhaseExecutor', () => {
       expect(
         (ctx.services.launcher as never as { launchAgent: ReturnType<typeof vi.fn> }).launchAgent,
       ).toHaveBeenCalledWith(
-        expect.objectContaining({ agent: 'fix-surgeon', issueNumber: 42, phase: 3, sessionId: 'session-001' }),
+        expect.objectContaining({ agent: 'fix-surgeon', workItemId: '42', phase: 3, sessionId: 'session-001' }),
         '/tmp/worktree',
       );
     });
@@ -1563,7 +1563,7 @@ describe('ImplementationPhaseExecutor', () => {
         (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
       ).toHaveBeenCalledWith(
         expect.stringContaining('Max retries'),
-        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+        expect.objectContaining({ workItemId: '42', phase: 3 }),
       );
     });
 
@@ -1615,7 +1615,7 @@ describe('ImplementationPhaseExecutor', () => {
         (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
       ).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse review output'),
-        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+        expect.objectContaining({ workItemId: '42', phase: 3 }),
       );
     });
 
@@ -1655,7 +1655,7 @@ describe('ImplementationPhaseExecutor', () => {
         (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
       ).toHaveBeenCalledWith(
         expect.stringContaining('Reviewer agent did not succeed'),
-        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+        expect.objectContaining({ workItemId: '42', phase: 3 }),
       );
     });
 
@@ -1683,7 +1683,7 @@ describe('ImplementationPhaseExecutor', () => {
         (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
       ).toHaveBeenCalledWith(
         expect.stringContaining('No output file produced'),
-        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+        expect.objectContaining({ workItemId: '42', phase: 3 }),
       );
     });
 
@@ -1727,7 +1727,7 @@ describe('ImplementationPhaseExecutor', () => {
         (ctx.services.logger as never as { warn: ReturnType<typeof vi.fn> }).warn,
       ).toHaveBeenCalledWith(
         expect.stringContaining('Fix surgeon failed'),
-        expect.objectContaining({ issueNumber: 42, phase: 3 }),
+        expect.objectContaining({ workItemId: '42', phase: 3 }),
       );
 
       // Should not have launched a second whole-pr-reviewer after the fix-surgeon failure

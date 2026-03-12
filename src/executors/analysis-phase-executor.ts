@@ -35,7 +35,7 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
     // Launch issue-analyst
     const analystResult = await launchWithRetry(ctx, 'issue-analyst', {
       agent: 'issue-analyst',
-      issueNumber: ctx.issue.number,
+      workItemId: String(ctx.issue.number),
       phase: 1,
       contextPath: analystContextPath,
       outputPath: join(ctx.io.progressDir, 'analysis.md'),
@@ -66,7 +66,7 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
       // Launch codebase-scout
       const scoutResult = await launchWithRetry(ctx, 'codebase-scout', {
         agent: 'codebase-scout',
-        issueNumber: ctx.issue.number,
+        workItemId: String(ctx.issue.number),
         phase: 1,
         contextPath: scoutContextPath,
         outputPath: join(ctx.io.progressDir, 'scout-report.md'),
@@ -78,13 +78,13 @@ export class AnalysisPhaseExecutor implements PhaseExecutor {
         }
         ctx.services.logger.warn(
           `Codebase scout failed but scoutPolicy is ${scoutPolicy}; continuing without scout report: ${scoutResult.error}`,
-          { issueNumber: ctx.issue.number, phase: 1 },
+          { workItemId: String(ctx.issue.number), phase: 1 },
         );
       }
     } else {
       ctx.services.logger.info(
         `Skipping codebase-scout due to issue-analyst scoutPolicy=${scoutPolicy}`,
-        { issueNumber: ctx.issue.number, phase: 1 },
+        { workItemId: String(ctx.issue.number), phase: 1 },
       );
     }
 

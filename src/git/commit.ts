@@ -43,7 +43,7 @@ export class CommitManager {
     // Check if there's anything to commit
     const status = await this.git.status();
     if (status.staged.length === 0) {
-      this.logger.debug('Nothing to commit — working tree clean', { issueNumber });
+      this.logger.debug('Nothing to commit — working tree clean', { workItemId: String(issueNumber) });
       return '';
     }
 
@@ -63,7 +63,7 @@ export class CommitManager {
 
     const sha = result.commit || '';
     this.logger.info(`Committed: ${sha.slice(0, 8)} — ${fullMessage.split('\n')[0]}`, {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { sha, filesChanged: status.staged.length },
     });
 
@@ -92,7 +92,7 @@ export class CommitManager {
     }
     this.logger.debug(
       `Unstaged ${artifactPatterns.length} artifact pattern(s)`,
-      { issueNumber },
+      { workItemId: String(issueNumber) },
     );
   }
 
@@ -106,7 +106,7 @@ export class CommitManager {
 
     const status = await this.git.status();
     if (status.staged.length === 0) {
-      this.logger.debug('Nothing to commit after staging specific files', { issueNumber });
+      this.logger.debug('Nothing to commit after staging specific files', { workItemId: String(issueNumber) });
       return '';
     }
 

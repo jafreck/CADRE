@@ -54,7 +54,7 @@ export class PullRequestCreator {
     const prUrl = (result.html_url as string) ?? (result.url as string) ?? '';
 
     this.logger.info(`Created PR #${prNumber}: ${prUrl}`, {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { prNumber, prUrl, title },
     });
 

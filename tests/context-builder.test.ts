@@ -745,7 +745,7 @@ describe('ContextBuilder', () => {
   });
 
   describe('build() common fields', () => {
-    it('should set agent, issueNumber, projectName, repository, worktreePath, and config.commands', async () => {
+    it('should set agent, workItemId, projectName, repository, worktreePath, and config.commands', async () => {
       await builder.build('issue-analyst', {
         issueNumber: 42,
         worktreePath: '/tmp/worktree',
@@ -754,7 +754,7 @@ describe('ContextBuilder', () => {
       });
       const ctx = captureWrittenContext();
       expect(ctx.agent).toBe('issue-analyst');
-      expect(ctx.issueNumber).toBe(42);
+      expect(ctx.workItemId).toBe('42');
       expect(ctx.projectName).toBe('test-project');
       expect(ctx.repository).toBe('owner/repo');
       expect(ctx.worktreePath).toBe('/tmp/worktree');

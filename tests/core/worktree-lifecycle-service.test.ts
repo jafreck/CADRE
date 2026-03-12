@@ -15,7 +15,7 @@ vi.mock('@cadre-dev/framework/engine', () => ({
     load: vi.fn().mockResolvedValue({
       projectName: 'test-project',
       issues: {},
-      tokenUsage: { total: 0, byIssue: {} },
+      tokenUsage: { total: 0, byWorkItem: {} },
       lastCheckpoint: '',
       resumeCount: 0,
     }),

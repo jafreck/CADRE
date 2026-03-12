@@ -57,7 +57,7 @@ export class LoreIndexBuilder {
     if (!this.loreConfig.enabled) return false;
 
     this.logger.info('Building Lore index for worktree', {
-      issueNumber,
+      workItemId: String(issueNumber),
       data: { worktreePath },
     });
 
@@ -76,13 +76,13 @@ export class LoreIndexBuilder {
       if (result.exitCode !== 0) {
         this.logger.warn(
           `Lore index build failed (exit ${result.exitCode}): ${result.stderr}`,
-          { issueNumber, data: { duration, exitCode: result.exitCode } },
+          { workItemId: String(issueNumber), data: { duration, exitCode: result.exitCode } },
         );
         return false;
       }
 
       this.logger.info(`Lore index built in ${duration}ms`, {
-        issueNumber,
+        workItemId: String(issueNumber),
         data: { duration },
       });
       return true;
@@ -90,7 +90,7 @@ export class LoreIndexBuilder {
       const duration = Date.now() - startTime;
       this.logger.warn(
         `Lore index build error: ${err}`,
-        { issueNumber, data: { duration } },
+        { workItemId: String(issueNumber), data: { duration } },
       );
       return false;
     }

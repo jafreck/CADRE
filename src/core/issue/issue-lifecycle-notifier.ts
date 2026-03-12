@@ -13,7 +13,7 @@ export class IssueLifecycleNotifier {
   async notifyIssueStarted(worktreePath: string): Promise<void> {
     await this.notificationManager.dispatch({
       type: 'issue-started',
-      issueNumber: this.issueNumber,
+      workItemId: String(this.issueNumber),
       issueTitle: this.issueTitle,
       worktreePath,
     });
@@ -22,7 +22,7 @@ export class IssueLifecycleNotifier {
   async notifyPhaseCompleted(phase: number, phaseName: string, duration: number): Promise<void> {
     await this.notificationManager.dispatch({
       type: 'phase-completed',
-      issueNumber: this.issueNumber,
+      workItemId: String(this.issueNumber),
       phase,
       phaseName,
       duration,
@@ -32,7 +32,7 @@ export class IssueLifecycleNotifier {
   async notifyIssueFailed(error: string, phase: number, phaseName?: string): Promise<void> {
     await this.notificationManager.dispatch({
       type: 'issue-failed',
-      issueNumber: this.issueNumber,
+      workItemId: String(this.issueNumber),
       issueTitle: this.issueTitle,
       error,
       phase,
@@ -43,7 +43,7 @@ export class IssueLifecycleNotifier {
   async notifyIssueCompleted(success: boolean, duration: number, tokenUsage: number): Promise<void> {
     await this.notificationManager.dispatch({
       type: 'issue-completed',
-      issueNumber: this.issueNumber,
+      workItemId: String(this.issueNumber),
       issueTitle: this.issueTitle,
       success,
       duration,

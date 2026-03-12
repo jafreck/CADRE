@@ -48,7 +48,7 @@ function buildEnv(
 
   env = stripVSCodeEnv(env);
 
-  env['CADRE_ISSUE_NUMBER'] = String(invocation.issueNumber);
+  env['CADRE_WORK_ITEM_ID'] = invocation.workItemId;
   env['CADRE_WORKTREE_PATH'] = worktreePath;
   env['CADRE_PHASE'] = String(invocation.phase);
   if (invocation.sessionId) {
@@ -115,7 +115,7 @@ async function writeAgentLog(
   try {
     const logContent = [
       `=== Agent: ${invocation.agent} ===`,
-      `=== Issue: #${invocation.issueNumber} ===`,
+      `=== Work Item: ${invocation.workItemId} ===`,
       `=== Phase: ${invocation.phase} ===`,
       invocation.sessionId ? `=== Session: ${invocation.sessionId} ===` : '',
       `=== Started: ${new Date(startTime).toISOString()} ===`,
@@ -158,7 +158,7 @@ async function runInvokePipeline(
   options?: AgentInvocationOptions,
 ): Promise<AgentResult> {
   const startTime = Date.now();
-  const logDir = join(worktreePath, '.cadre', 'issues', String(invocation.issueNumber), 'logs');
+  const logDir = join(worktreePath, '.cadre', 'issues', invocation.workItemId, 'logs');
   await ensureDir(logDir);
 
   const timestamp = Date.now();
@@ -166,7 +166,7 @@ async function runInvokePipeline(
   const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${timestamp}.log`);
 
   logger.info(`Launching agent (${backendName}): ${invocation.agent}`, {
-    issueNumber: invocation.issueNumber,
+    workItemId: invocation.workItemId,
     phase: invocation.phase,
     sessionId: invocation.sessionId,
   });
@@ -191,7 +191,7 @@ async function runInvokePipeline(
 
   if (success) {
     logger.info(`Agent ${invocation.agent} completed in ${duration}ms`, {
-      issueNumber: invocation.issueNumber,
+      workItemId: invocation.workItemId,
       phase: invocation.phase,
       sessionId: invocation.sessionId,
       data: { tokenUsage, outputExists },
@@ -200,7 +200,7 @@ async function runInvokePipeline(
     logger.error(
       failureMessage ?? `Agent ${invocation.agent} failed (exit: ${processResult.exitCode}, timeout: ${processResult.timedOut})`,
       {
-        issueNumber: invocation.issueNumber,
+        workItemId: invocation.workItemId,
         phase: invocation.phase,
         sessionId: invocation.sessionId,
         data: { stderr: processResult.stderr.slice(0, 500) },

@@ -21,7 +21,7 @@ describe('FleetResult.tokenUsage', () => {
   it('should accept a TokenSummary with byPhase and recordCount', () => {
     const tokenSummary: TokenSummary = {
       total: 8000,
-      byIssue: { 42: 8000 },
+      byWorkItem: { '42': 8000 },
       byAgent: { 'code-writer': 8000 },
       byPhase: { 3: 8000 },
       recordCount: 2,
@@ -43,7 +43,7 @@ describe('FleetResult.tokenUsage', () => {
   it('should accept an empty TokenSummary with zero values', () => {
     const emptyTokenUsage: TokenSummary = {
       total: 0,
-      byIssue: {},
+      byWorkItem: {},
       byAgent: {},
       byPhase: {},
       recordCount: 0,
@@ -72,7 +72,7 @@ describe('FleetResult.codeDoneNoPR', () => {
       failedIssues: [],
       codeDoneNoPR: [],
       totalDuration: 0,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
     };
     expect(result.codeDoneNoPR).toEqual([]);
   });
@@ -88,7 +88,7 @@ describe('FleetResult.codeDoneNoPR', () => {
         { issueNumber: 12, branch: 'cadre/issue-12' },
       ],
       totalDuration: 1000,
-      tokenUsage: { total: 0, byIssue: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
     };
     expect(result.codeDoneNoPR).toHaveLength(2);
     expect(result.codeDoneNoPR[0]).toEqual({ issueNumber: 7, branch: 'cadre/issue-7' });
@@ -108,7 +108,7 @@ describe('CadreRuntime.emptyResult()', () => {
     expect(result.totalDuration).toBe(0);
     expect(result.tokenUsage).toMatchObject({
       total: 0,
-      byIssue: {},
+      byWorkItem: {},
       byAgent: {},
       byPhase: {},
       recordCount: 0,

@@ -89,16 +89,19 @@ export class FleetScheduler {
     this.logger.info(
       `DAG plan: ${waveNumbers.map((w, i) => `Wave ${i} → [${w.map((n) => `#${n}`).join(', ')}]`).join(' | ')}`,
     );
-    await this.fleetCheckpoint.setDag(effectiveDepMap, waveNumbers);
+    await this.fleetCheckpoint.setDag(
+      Object.fromEntries(Object.entries(effectiveDepMap).map(([k, v]) => [String(k), v.map(String)])),
+      waveNumbers.map((w) => w.map(String)),
+    );
 
     // ── Identify resumed (already-completed) issues ────────────────────
     const issueMap = new Map(this.issues.map((i) => [i.number, i]));
     const completedFromResume = new Set<number>();
     if (this.config.options.resume) {
       for (const issue of this.issues) {
-        if (this.fleetCheckpoint.isIssueCompleted(issue.number)) {
+        if (this.fleetCheckpoint.isWorkItemCompleted(String(issue.number))) {
           completedFromResume.add(issue.number);
-          this.logger.info(`Resume: issue #${issue.number} already completed`, { issueNumber: issue.number });
+          this.logger.info(`Resume: issue #${issue.number} already completed`, { workItemId: String(issue.number) });
         }
       }
     }
@@ -131,7 +134,7 @@ export class FleetScheduler {
 
           // Check for dep-related failure statuses set during execution
           const depFailureStatuses = new Set(['dep-failed', 'dep-merge-conflict', 'dep-build-broken']);
-          const cpStatus = this.fleetCheckpoint.getIssueStatus(issue.number);
+          const cpStatus = this.fleetCheckpoint.getWorkItemStatus(String(issue.number));
           const isFailure = !result.success || (cpStatus && depFailureStatuses.has(cpStatus.status));
 
           if (isFailure) {
@@ -231,9 +234,9 @@ export class FleetScheduler {
 
     if (!merged) {
       // Preserve the branch name so reconciliation can find the PR on next resume
-      const existing = this.fleetCheckpoint.getIssueStatus(issueNumber);
-      await this.fleetCheckpoint.setIssueStatus(
-        issueNumber,
+      const existing = this.fleetCheckpoint.getWorkItemStatus(String(issueNumber));
+      await this.fleetCheckpoint.setWorkItemStatus(
+        String(issueNumber),
         'dep-merge-conflict',
         existing?.worktreePath ?? '',
         pr.headBranch,

@@ -130,7 +130,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
     const phaseDef = getPhase(pid)!;
     if (phaseDef.critical) {
       deps.logger.error(`Critical phase ${pid} failed, aborting pipeline`, {
-        issueNumber: deps.issue.number, phase: pid,
+        workItemId: String(deps.issue.number), phase: pid,
       });
       throw new PipelineHaltError(
         result.error ?? `Phase ${pid} ${isRetry ? 'retry ' : ''}failed`,
@@ -162,7 +162,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
       onSkip: async (_ctx) => {
         const pid = executor.id;
         deps.logger.info(`Skipping completed phase ${pid}: ${executor.name}`, {
-          issueNumber: deps.issue.number, phase: pid,
+          workItemId: String(deps.issue.number), phase: pid,
         });
         deps.phases.push(skipResult(executor));
         return { skipped: true, phaseId: pid };
@@ -211,7 +211,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
         if (attempt > maxGateRetries) {
           deps.logger.error(
             `Gate still failing for phase ${pid} after ${maxGateRetries} retries; aborting`,
-            { issueNumber: deps.issue.number, phase: pid },
+            { workItemId: String(deps.issue.number), phase: pid },
           );
           await deps.progressWriter.appendEvent(
             `Pipeline aborted: gate still failing for phase ${pid} after ${maxGateRetries} retries`,
@@ -224,7 +224,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
 
         deps.logger.warn(
           `Gate failed for phase ${pid} (attempt ${attempt}/${maxGateRetries}); retrying`,
-          { issueNumber: deps.issue.number, phase: pid },
+          { workItemId: String(deps.issue.number), phase: pid },
         );
         await deps.progressWriter.appendEvent(
           `Phase ${pid} gate failed; retrying phase (attempt ${attempt}/${maxGateRetries})`,
@@ -244,7 +244,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
 
         if (!shouldRerun) {
           deps.logger.info(`Skipping completed phase ${pid}: ${executor.name}`, {
-            issueNumber: deps.issue.number, phase: pid,
+            workItemId: String(deps.issue.number), phase: pid,
           });
           deps.phases.push(skipResult(executor));
           return skipResult(executor);
@@ -266,13 +266,13 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
       const ambiguities = await gateCoordinator.readAmbiguities();
       for (const ambiguity of ambiguities) {
         deps.logger.warn(`Ambiguity in issue #${deps.issue.number}: ${ambiguity}`, {
-          issueNumber: deps.issue.number,
+          workItemId: String(deps.issue.number),
         });
       }
       if (ambiguities.length > 0) {
         await deps.notificationManager.dispatch({
           type: 'ambiguity-detected',
-          issueNumber: deps.issue.number,
+          workItemId: String(deps.issue.number),
           ambiguities,
         });
       }
@@ -314,7 +314,7 @@ export function createPhaseActions(deps: PhaseActionDeps): PhaseActions {
           }
         } catch (err) {
           deps.logger.warn(`Failed to commit after phase ${pid}: ${err}`, {
-            issueNumber: deps.issue.number,
+            workItemId: String(deps.issue.number),
           });
         }
       }

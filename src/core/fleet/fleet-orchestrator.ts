@@ -104,7 +104,7 @@ export class FleetOrchestrator {
         // the same cycle are not yet promoted to 'completed' in the fleet
         // checkpoint, so without this combined check, Wave-1 PRs would be
         // incorrectly blocked when Wave-0 PRs merged in the same drain.
-        const status = this.fleetCheckpoint.getIssueStatus(dependencyIssueNumber)?.status;
+        const status = this.fleetCheckpoint.getWorkItemStatus(String(dependencyIssueNumber))?.status;
         if (status === 'completed') return true;
         return this.prCompletionQueue.isIssueCompleted(dependencyIssueNumber);
       },
@@ -145,7 +145,7 @@ export class FleetOrchestrator {
 
     // Filter out already completed issues on resume
     const issuesToProcess = this.config.options.resume
-      ? this.issues.filter((issue) => !this.fleetCheckpoint.isIssueCompleted(issue.number))
+      ? this.issues.filter((issue) => !this.fleetCheckpoint.isWorkItemCompleted(String(issue.number)))
       : this.issues;
 
     if (issuesToProcess.length < this.issues.length) {
@@ -181,10 +181,10 @@ export class FleetOrchestrator {
     // 'code-complete' so the next resume run can retry them.
     const mergedIssueNumbers = this.prCompletionQueue.getCompletedIssueNumbers();
     for (const issueNumber of mergedIssueNumbers) {
-      const current = this.fleetCheckpoint.getIssueStatus(issueNumber);
+      const current = this.fleetCheckpoint.getWorkItemStatus(String(issueNumber));
       if (current && current.status === 'code-complete') {
-        await this.fleetCheckpoint.setIssueStatus(
-          issueNumber,
+        await this.fleetCheckpoint.setWorkItemStatus(
+          String(issueNumber),
           'completed',
           current.worktreePath,
           current.branchName,
@@ -193,7 +193,7 @@ export class FleetOrchestrator {
         );
         this.logger.info(
           `Promoted issue #${issueNumber} from code-complete to completed after PR merge`,
-          { issueNumber },
+          { workItemId: String(issueNumber) },
         );
       }
     }
@@ -266,14 +266,15 @@ export class FleetOrchestrator {
       'failed',
     ]);
 
-    const allStatuses = this.fleetCheckpoint.getAllIssueStatuses();
+    const allStatuses = this.fleetCheckpoint.getAllWorkItemStatuses();
 
     // Helper: resolve branchName from checkpoint or derive from issue metadata
     const issueMap = new Map(this.issues.map((i) => [i.number, i]));
-    const resolveBranch = (issueNumber: number, stored: string): string => {
+    const resolveBranch = (workItemId: string, stored: string): string => {
       if (stored) return stored;
-      const issue = issueMap.get(issueNumber);
-      return this.worktreeManager.resolveBranchName(issueNumber, issue?.title);
+      const issueNum = Number(workItemId);
+      const issue = issueMap.get(issueNum);
+      return this.worktreeManager.resolveBranchName(issueNum, issue?.title);
     };
 
     const toReconcile = allStatuses.filter(
@@ -305,9 +306,9 @@ export class FleetOrchestrator {
           if (merged) {
             this.logger.info(
               `Reconciliation: issue #${issueNumber} has merged PR #${merged.number} — promoting '${issueStatus.status}' → 'completed'`,
-              { issueNumber },
+              { workItemId: issueNumber },
             );
-            await this.fleetCheckpoint.setIssueStatus(
+            await this.fleetCheckpoint.setWorkItemStatus(
               issueNumber,
               'completed',
               issueStatus.worktreePath,
@@ -320,7 +321,7 @@ export class FleetOrchestrator {
         } catch (err) {
           this.logger.warn(
             `Reconciliation: could not check PR state for issue #${issueNumber}: ${err}`,
-            { issueNumber },
+            { workItemId: issueNumber },
           );
         }
       }
@@ -333,7 +334,7 @@ export class FleetOrchestrator {
     let mergeRetried = 0;
     for (const [issueNumber, issueStatus] of conflictIssues) {
       // Skip if already promoted in Phase 1
-      if (this.fleetCheckpoint.isIssueCompleted(issueNumber)) continue;
+      if (this.fleetCheckpoint.isWorkItemCompleted(issueNumber)) continue;
       const branch = resolveBranch(issueNumber, issueStatus.branchName);
       try {
         const prs = await this.platform.listPullRequests({
@@ -345,21 +346,21 @@ export class FleetOrchestrator {
 
         this.logger.info(
           `Reconciliation: retrying merge for issue #${issueNumber} PR #${openPR.number}`,
-          { issueNumber },
+          { workItemId: issueNumber },
         );
         const helper = new MergeRetryHelper(this.platform, this.logger, this.config.baseBranch);
         const merged = await helper.mergeWithRetry({
           prNumber: openPR.number,
           prUrl: openPR.url,
           branch,
-          issueNumber,
+          issueNumber: Number(issueNumber),
         });
         if (merged) {
           this.logger.info(
             `Reconciliation: merge succeeded for issue #${issueNumber} PR #${openPR.number} — promoting to 'completed'`,
-            { issueNumber },
+            { workItemId: issueNumber },
           );
-          await this.fleetCheckpoint.setIssueStatus(
+          await this.fleetCheckpoint.setWorkItemStatus(
             issueNumber,
             'completed',
             issueStatus.worktreePath,
@@ -372,12 +373,12 @@ export class FleetOrchestrator {
         } else {
           this.logger.info(
             `Reconciliation: merge still failing for issue #${issueNumber} PR #${openPR.number}; will re-process`,
-            { issueNumber },
+            { workItemId: issueNumber },
           );
           // Backfill the resolved branchName into the checkpoint so future
           // reconciliation cycles don't need to re-derive it.
           if (!issueStatus.branchName && branch) {
-            await this.fleetCheckpoint.setIssueStatus(
+            await this.fleetCheckpoint.setWorkItemStatus(
               issueNumber,
               issueStatus.status,
               issueStatus.worktreePath,
@@ -390,7 +391,7 @@ export class FleetOrchestrator {
       } catch (err) {
         this.logger.warn(
           `Reconciliation: could not retry merge for issue #${issueNumber}: ${err}`,
-          { issueNumber },
+          { workItemId: issueNumber },
         );
       }
     }
@@ -402,14 +403,14 @@ export class FleetOrchestrator {
     let cleared = 0;
     if (depBlockedIssues.length > 0 && this.dagDepMap) {
       for (const [issueNumber] of depBlockedIssues) {
-        const deps = this.dagDepMap[issueNumber] ?? [];
-        const allDepsCompleted = deps.every((dep) => this.fleetCheckpoint.isIssueCompleted(dep));
+        const deps = this.dagDepMap[Number(issueNumber)] ?? [];
+        const allDepsCompleted = deps.every((dep) => this.fleetCheckpoint.isWorkItemCompleted(String(dep)));
         if (allDepsCompleted) {
           this.logger.info(
             `Reconciliation: clearing dep-blocked for issue #${issueNumber} — all dependencies now completed`,
-            { issueNumber },
+            { workItemId: issueNumber },
           );
-          await this.fleetCheckpoint.clearIssueStatus(issueNumber);
+          await this.fleetCheckpoint.clearWorkItemStatus(issueNumber);
           cleared++;
         }
       }
@@ -423,7 +424,7 @@ export class FleetOrchestrator {
     let codeCompleteReconciled = 0;
     for (const [issueNumber, issueStatus] of codeCompleteWithError) {
       // Skip if already promoted in Phase 1
-      if (this.fleetCheckpoint.isIssueCompleted(issueNumber)) continue;
+      if (this.fleetCheckpoint.isWorkItemCompleted(issueNumber)) continue;
       const branch = resolveBranch(issueNumber, issueStatus.branchName);
       try {
         const prs = await this.platform.listPullRequests({ head: branch, state: 'all' });
@@ -438,18 +439,18 @@ export class FleetOrchestrator {
           // Re-enqueue to completion queue for merge
           this.logger.info(
             `Reconciliation: re-enqueuing code-complete issue #${issueNumber} (PR #${openPR.number}) to completion queue`,
-            { issueNumber },
+            { workItemId: issueNumber },
           );
           this.prCompletionQueue.enqueue({
-            issueNumber,
+            issueNumber: Number(issueNumber),
             issueTitle: issueStatus.issueTitle,
             prNumber: openPR.number,
             prUrl: openPR.url,
             branch,
-            dependencyIssueNumbers: this.dagDepMap?.[issueNumber] ?? [],
+            dependencyIssueNumbers: this.dagDepMap?.[Number(issueNumber)] ?? [],
           });
           // Clear the error so it won't be re-reconciled
-          await this.fleetCheckpoint.setIssueStatus(
+          await this.fleetCheckpoint.setWorkItemStatus(
             issueNumber,
             'code-complete',
             issueStatus.worktreePath,
@@ -463,9 +464,9 @@ export class FleetOrchestrator {
           // so the pipeline re-runs PR creation on the next resume.
           this.logger.info(
             `Reconciliation: no PR found for code-complete issue #${issueNumber}; clearing for re-entry`,
-            { issueNumber },
+            { workItemId: issueNumber },
           );
-          await this.fleetCheckpoint.clearIssueStatus(issueNumber);
+          await this.fleetCheckpoint.clearWorkItemStatus(issueNumber);
 
           // Also reset per-issue checkpoint phase 5 if the progress dir exists
           const progressDir = issueStatus.worktreePath
@@ -474,16 +475,16 @@ export class FleetOrchestrator {
           if (await exists(progressDir)) {
             try {
               const issueCheckpoint = new CheckpointManager(progressDir, this.logger);
-              await issueCheckpoint.load(String(issueNumber));
+              await issueCheckpoint.load(issueNumber);
               await issueCheckpoint.resetPhases([5]);
               this.logger.info(
                 `Reconciliation: reset phase 5 for issue #${issueNumber}`,
-                { issueNumber },
+                { workItemId: issueNumber },
               );
             } catch (cpErr) {
               this.logger.warn(
                 `Reconciliation: could not reset per-issue checkpoint for issue #${issueNumber}: ${cpErr}`,
-                { issueNumber },
+                { workItemId: issueNumber },
               );
             }
           }
@@ -492,7 +493,7 @@ export class FleetOrchestrator {
       } catch (err) {
         this.logger.warn(
           `Reconciliation: could not reconcile code-complete issue #${issueNumber}: ${err}`,
-          { issueNumber },
+          { workItemId: issueNumber },
         );
       }
     }
@@ -527,7 +528,7 @@ export class FleetOrchestrator {
       if (!(await exists(worktreePath))) {
         this.logger.info(
           `Provisioning worktree for conflict resolution on PR #${item.prNumber} (issue #${item.issueNumber})`,
-          { issueNumber: item.issueNumber },
+          { workItemId: String(item.issueNumber) },
         );
         const wtInfo = await this.worktreeManager.provisionFromBranch(item.issueNumber, item.branch);
         worktreePath = wtInfo.path;
@@ -543,7 +544,7 @@ export class FleetOrchestrator {
         if (conflictedFiles.length === 0) {
           this.logger.warn(
             `PR #${item.prNumber} reported dirty merge state, but no conflicted files were detected`,
-            { issueNumber: item.issueNumber },
+            { workItemId: String(item.issueNumber) },
           );
           return false;
         }
@@ -553,7 +554,7 @@ export class FleetOrchestrator {
         if (realConflicts.length === 0) {
           this.logger.info(
             `All ${conflictedFiles.length} conflicted file(s) for PR #${item.prNumber} are cadre artifacts — auto-resolving`,
-            { issueNumber: item.issueNumber },
+            { workItemId: String(item.issueNumber) },
           );
           for (const f of conflictedFiles) {
             await git.raw(['checkout', '--theirs', f]).catch(() => {});
@@ -578,7 +579,7 @@ export class FleetOrchestrator {
           const resolverResult = await this.launcher.launchAgent(
             {
               agent: 'conflict-resolver',
-              issueNumber: item.issueNumber,
+              workItemId: String(item.issueNumber),
               phase: 5,
               contextPath,
               outputPath: join(progressDir, 'merge-conflict-resolution-report.md'),
@@ -589,7 +590,7 @@ export class FleetOrchestrator {
           if (!resolverResult.success) {
             this.logger.warn(
               `conflict-resolver failed for PR #${item.prNumber}`,
-              { issueNumber: item.issueNumber },
+              { workItemId: String(item.issueNumber) },
             );
             return false;
           }
@@ -604,7 +605,7 @@ export class FleetOrchestrator {
           if (remaining.length > 0) {
             this.logger.warn(
               `conflict-resolver left ${remaining.length} unresolved file(s) for PR #${item.prNumber}`,
-              { issueNumber: item.issueNumber },
+              { workItemId: String(item.issueNumber) },
             );
             return false;
           }
@@ -622,7 +623,7 @@ export class FleetOrchestrator {
       await git.push('origin', item.branch, ['--force-with-lease']);
       this.logger.info(
         `Resolved merge conflicts for PR #${item.prNumber} and pushed`,
-        { issueNumber: item.issueNumber },
+        { workItemId: String(item.issueNumber) },
       );
       return true;
     };
@@ -694,10 +695,10 @@ export class FleetOrchestrator {
     // Abort early if fleet budget was already exceeded by a completed issue
     if (this.fleetBudgetExceeded) {
       this.logger.warn(`Skipping issue #${issue.number}: fleet budget exceeded`, {
-        issueNumber: issue.number,
+        workItemId: String(issue.number),
       });
-      await this.fleetCheckpoint.setIssueStatus(
-        issue.number,
+      await this.fleetCheckpoint.setWorkItemStatus(
+        String(issue.number),
         'budget-exceeded',
         '',
         '',
@@ -719,7 +720,7 @@ export class FleetOrchestrator {
     }
 
     this.logger.info(`Processing issue #${issue.number}: ${issue.title}`, {
-      issueNumber: issue.number,
+      workItemId: String(issue.number),
     });
 
     try {
@@ -730,7 +731,7 @@ export class FleetOrchestrator {
         if (existingPR !== null) {
           this.logger.info(
             `Skipping issue #${issue.number}: existing open PR found at ${existingPR.url}`,
-            { issueNumber: issue.number },
+            { workItemId: String(issue.number) },
           );
           this.prCompletionQueue.enqueue({
             issueNumber: issue.number,
@@ -744,8 +745,8 @@ export class FleetOrchestrator {
           // promote to 'completed' only after the PR is actually merged.
           // If auto-complete is disabled the queue is a no-op and the PR
           // stays open, so code-complete is still the correct status.
-          await this.fleetCheckpoint.setIssueStatus(
-            issue.number,
+          await this.fleetCheckpoint.setWorkItemStatus(
+            String(issue.number),
             'code-complete',
             '',
             branchName,
@@ -770,10 +771,10 @@ export class FleetOrchestrator {
         if (mergedPR) {
           this.logger.info(
             `Skipping issue #${issue.number}: PR #${mergedPR.number} is already merged`,
-            { issueNumber: issue.number },
+            { workItemId: String(issue.number) },
           );
-          await this.fleetCheckpoint.setIssueStatus(
-            issue.number,
+          await this.fleetCheckpoint.setWorkItemStatus(
+            String(issue.number),
             'completed',
             '',
             branchName,
@@ -794,7 +795,7 @@ export class FleetOrchestrator {
       } catch (prErr) {
         this.logger.warn(
           `Could not check for existing PR for issue #${issue.number}: ${prErr}`,
-          { issueNumber: issue.number },
+          { workItemId: String(issue.number) },
         );
       }
 
@@ -818,10 +819,10 @@ export class FleetOrchestrator {
               const error = String(err);
               this.logger.warn(
                 `Dependency merge conflict for issue #${issue.number}: ${error}`,
-                { issueNumber: issue.number },
+                { workItemId: String(issue.number) },
               );
-              await this.fleetCheckpoint.setIssueStatus(
-                issue.number,
+              await this.fleetCheckpoint.setWorkItemStatus(
+                String(issue.number),
                 'dep-merge-conflict',
                 '',
                 branchName,
@@ -858,8 +859,8 @@ export class FleetOrchestrator {
       }
 
       // 3. Update fleet checkpoint
-      await this.fleetCheckpoint.setIssueStatus(
-        issue.number,
+      await this.fleetCheckpoint.setWorkItemStatus(
+        String(issue.number),
         'in-progress',
         worktree.path,
         worktree.branch,
@@ -903,7 +904,7 @@ export class FleetOrchestrator {
         checkpoint,
         this.launcher,
         this.platform,
-        this.logger.child(issue.number, join(this.cadreDir, 'logs')),
+        this.logger.child(String(issue.number), join(this.cadreDir, 'logs')),
         this.notifications,
         () => this.worktreeManager.resyncAgentFiles(worktree.path, issue.number).then(() => {}),
       );
@@ -923,8 +924,8 @@ export class FleetOrchestrator {
           : result.codeComplete
             ? 'code-complete'
             : 'failed';
-      await this.fleetCheckpoint.setIssueStatus(
-        issue.number,
+      await this.fleetCheckpoint.setWorkItemStatus(
+        String(issue.number),
         status,
         worktree.path,
         worktree.branch,
@@ -950,8 +951,8 @@ export class FleetOrchestrator {
 
       // 8. Record token usage
       if (result.tokenUsage !== null) {
-        this.tokenTracker.record(issue.number, 'total', 0, result.tokenUsage);
-        await this.fleetCheckpoint.recordTokenUsage(issue.number, result.tokenUsage);
+        this.tokenTracker.record(String(issue.number), 'total', 0, result.tokenUsage);
+        await this.fleetCheckpoint.recordTokenUsage(String(issue.number), result.tokenUsage);
       }
 
       // 9. Check budget
@@ -987,9 +988,9 @@ export class FleetOrchestrator {
     } catch (err) {
       if (err instanceof RemoteBranchMissingError) {
         const error = `Skipping issue #${issue.number}: remote branch is missing — ${err.message}`;
-        this.logger.warn(error, { issueNumber: issue.number });
-        await this.fleetCheckpoint.setIssueStatus(
-          issue.number,
+        this.logger.warn(error, { workItemId: String(issue.number) });
+        await this.fleetCheckpoint.setWorkItemStatus(
+          String(issue.number),
           'failed',
           '',
           '',
@@ -1010,11 +1011,11 @@ export class FleetOrchestrator {
 
       const error = String(err);
       this.logger.error(`Issue #${issue.number} failed: ${error}`, {
-        issueNumber: issue.number,
+        workItemId: String(issue.number),
       });
 
-      await this.fleetCheckpoint.setIssueStatus(
-        issue.number,
+      await this.fleetCheckpoint.setWorkItemStatus(
+        String(issue.number),
         'failed',
         '',
         '',
@@ -1045,7 +1046,7 @@ export class FleetOrchestrator {
 
     this.logger.info(
       `DAG dependency merge conflict detected for issue #${issue.number}; launching dep-conflict-resolver`,
-      { issueNumber: issue.number, data: { conflictedFiles: context.conflictedFiles, conflictingBranch: context.conflictingBranch } },
+      { workItemId: String(issue.number), data: { conflictedFiles: context.conflictedFiles, conflictingBranch: context.conflictingBranch } },
     );
 
     const conflictContextPath = await this.contextBuilder.build('dep-conflict-resolver', {
@@ -1060,7 +1061,7 @@ export class FleetOrchestrator {
     const resolverResult = await this.launcher.launchAgent(
       {
         agent: 'dep-conflict-resolver',
-        issueNumber: issue.number,
+        workItemId: String(issue.number),
         phase: 0,
         contextPath: conflictContextPath,
         outputPath: join(progressDir, 'dep-conflict-resolution-report.md'),
@@ -1072,7 +1073,7 @@ export class FleetOrchestrator {
       this.logger.warn(
         `dep-conflict-resolver failed for issue #${issue.number}; proceeding with dep-merge-conflict fallback`,
         {
-          issueNumber: issue.number,
+          workItemId: String(issue.number),
           data: {
             timedOut: resolverResult.timedOut,
             exitCode: resolverResult.exitCode,
@@ -1084,7 +1085,7 @@ export class FleetOrchestrator {
     }
 
     this.logger.info(`dep-conflict-resolver completed for issue #${issue.number}`, {
-      issueNumber: issue.number,
+      workItemId: String(issue.number),
       data: { outputPath: resolverResult.outputPath },
     });
     return true;
@@ -1094,9 +1095,9 @@ export class FleetOrchestrator {
    * Mark a single issue as dep-blocked in the fleet checkpoint and return a failed IssueResult.
    */
   private async markIssueDepBlocked(issue: IssueDetail): Promise<IssueResult> {
-    this.logger.info(`Marking issue #${issue.number} as dep-blocked`, { issueNumber: issue.number });
-    await this.fleetCheckpoint.setIssueStatus(
-      issue.number,
+    this.logger.info(`Marking issue #${issue.number} as dep-blocked`, { workItemId: String(issue.number) });
+    await this.fleetCheckpoint.setWorkItemStatus(
+      String(issue.number),
       'dep-blocked',
       '',
       '',

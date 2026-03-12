@@ -173,7 +173,7 @@ describe('PlanningPhaseExecutor', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'implementation-planner',
-          issueNumber: 42,
+          workItemId: '42',
           phase: 2,
           contextPath: '/progress/planner-ctx.json',
           outputPath: join('/tmp/progress', 'implementation-plan.md'),
@@ -217,7 +217,7 @@ describe('PlanningPhaseExecutor', () => {
         (ctx.services.logger as never as { info: ReturnType<typeof vi.fn> }).info,
       ).toHaveBeenCalledWith(
         expect.stringContaining('2 sessions'),
-        expect.objectContaining({ issueNumber: 42, phase: 2 }),
+        expect.objectContaining({ workItemId: '42', phase: 2 }),
       );
     });
   });

@@ -9,8 +9,8 @@
 export interface AgentInvocation {
   /** Which agent to launch. */
   agent: string;
-  /** The issue number this invocation is for. */
-  issueNumber: number;
+  /** The work item identifier. */
+  workItemId: string;
   /** Current pipeline phase. */
   phase: number;
   /** Optional session ID (for Implementation phase). */
@@ -114,7 +114,7 @@ export interface PhaseResult {
  *  for compile-time safety on `payload`. */
 export interface AgentContext<TPayload = Record<string, unknown>> {
   agent: string;
-  issueNumber: number;
+  workItemId: string;
   projectName: string;
   repository: string;
   worktreePath: string;

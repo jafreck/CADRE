@@ -8,7 +8,7 @@ export interface LogEntry {
   timestamp: string;
   level: LogLevel;
   source: string;
-  issueNumber?: number;
+  workItemId?: string;
   phase?: number;
   taskId?: string;
   message: string;
@@ -33,19 +33,19 @@ export interface RunCompletedEvent {
 export interface RunInterruptedEvent {
   type: 'fleet-interrupted';
   signal: string;
-  issuesInProgress: number[];
+  workItemsInProgress: string[];
 }
 
 export interface WorkUnitStartedEvent {
   type: 'issue-started';
-  issueNumber: number;
+  workItemId: string;
   issueTitle: string;
   worktreePath: string;
 }
 
 export interface WorkUnitCompletedEvent {
   type: 'issue-completed';
-  issueNumber: number;
+  workItemId: string;
   issueTitle: string;
   success: boolean;
   prNumber?: number;
@@ -56,7 +56,7 @@ export interface WorkUnitCompletedEvent {
 
 export interface WorkUnitFailedEvent {
   type: 'issue-failed';
-  issueNumber: number;
+  workItemId: string;
   issueTitle: string;
   error: string;
   phase: number;
@@ -66,14 +66,14 @@ export interface WorkUnitFailedEvent {
 
 export interface StageStartedEvent {
   type: 'phase-started';
-  issueNumber: number;
+  workItemId: string;
   phase: number;
   phaseName: string;
 }
 
 export interface StageCompletedEvent {
   type: 'phase-completed';
-  issueNumber: number;
+  workItemId: string;
   phase: number;
   phaseName: string;
   duration: number;
@@ -81,7 +81,7 @@ export interface StageCompletedEvent {
 
 export interface StageSkippedEvent {
   type: 'phase-skipped';
-  issueNumber: number;
+  workItemId: string;
   phase: number;
   reason: string;
 }
@@ -89,7 +89,7 @@ export interface StageSkippedEvent {
 export interface AgentLaunchedEvent {
   type: 'agent-launched';
   agent: string;
-  issueNumber: number;
+  workItemId: string;
   taskId?: string;
   worktreePath: string;
 }
@@ -97,7 +97,7 @@ export interface AgentLaunchedEvent {
 export interface AgentCompletedEvent {
   type: 'agent-completed';
   agent: string;
-  issueNumber: number;
+  workItemId: string;
   taskId?: string;
   exitCode: number;
   duration: number;
@@ -107,7 +107,7 @@ export interface AgentCompletedEvent {
 export interface AgentFailedEvent {
   type: 'agent-failed';
   agent: string;
-  issueNumber: number;
+  workItemId: string;
   taskId?: string;
   error: string;
   timedOut: boolean;
@@ -123,21 +123,21 @@ export interface AgentOutputEvent {
 
 export interface WorkStepStartedEvent {
   type: 'task-started';
-  issueNumber: number;
+  workItemId: string;
   taskId: string;
   taskName: string;
 }
 
 export interface WorkStepCompletedEvent {
   type: 'task-completed';
-  issueNumber: number;
+  workItemId: string;
   taskId: string;
   duration: number;
 }
 
 export interface WorkStepBlockedEvent {
   type: 'task-blocked';
-  issueNumber: number;
+  workItemId: string;
   taskId: string;
   reason: string;
   retryCount: number;
@@ -145,7 +145,7 @@ export interface WorkStepBlockedEvent {
 
 export interface WorkStepRetryEvent {
   type: 'task-retry';
-  issueNumber: number;
+  workItemId: string;
   taskId: string;
   attempt: number;
   maxAttempts: number;
@@ -154,20 +154,20 @@ export interface WorkStepRetryEvent {
 
 export interface GitCommitEvent {
   type: 'git-commit';
-  issueNumber: number;
+  workItemId: string;
   sha: string;
   message: string;
 }
 
 export interface GitPushEvent {
   type: 'git-push';
-  issueNumber: number;
+  workItemId: string;
   branch: string;
 }
 
 export interface PRCreatedEvent {
   type: 'pr-created';
-  issueNumber: number;
+  workItemId: string;
   prNumber: number;
   prUrl: string;
 }
@@ -196,14 +196,14 @@ export interface IsolationCapabilityDowngradeEvent {
 
 export interface AmbiguityDetectedEvent {
   type: 'ambiguity-detected';
-  issueNumber: number;
+  workItemId: string;
   ambiguities: string[];
 }
 
 export interface BudgetWarningEvent {
   type: 'budget-warning';
   scope: 'fleet' | 'issue';
-  issueNumber?: number;
+  workItemId?: string;
   currentUsage: number;
   budget: number;
   percentUsed: number;
@@ -212,7 +212,7 @@ export interface BudgetWarningEvent {
 export interface BudgetExceededEvent {
   type: 'budget-exceeded';
   scope: 'fleet' | 'issue';
-  issueNumber?: number;
+  workItemId?: string;
   currentUsage: number;
   budget: number;
 }

@@ -303,7 +303,7 @@ describe('IssueNotifier', () => {
   describe('notify() – NotificationProvider adapter', () => {
     it('should dispatch issue-started to notifyStart', async () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
-      await notifier.notify({ type: 'issue-started', issueNumber: 7, issueTitle: 'My Issue', worktreePath: '/tmp' });
+      await notifier.notify({ type: 'issue-started', workItemId: '7', issueTitle: 'My Issue', worktreePath: '/tmp' });
       expect(platform.addIssueComment).toHaveBeenCalledOnce();
       const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(issueNum).toBe(7);
@@ -312,7 +312,7 @@ describe('IssueNotifier', () => {
 
     it('should dispatch phase-completed to notifyPhaseComplete', async () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
-      await notifier.notify({ type: 'phase-completed', issueNumber: 5, phase: 2, phaseName: 'Planning', duration: 3500 });
+      await notifier.notify({ type: 'phase-completed', workItemId: '5', phase: 2, phaseName: 'Planning', duration: 3500 });
       expect(platform.addIssueComment).toHaveBeenCalledOnce();
       const [issueNum, body] = (platform.addIssueComment as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(issueNum).toBe(5);
@@ -324,7 +324,7 @@ describe('IssueNotifier', () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
       await notifier.notify({
         type: 'issue-completed',
-        issueNumber: 10,
+        workItemId: '10',
         issueTitle: 'Feature X',
         success: true,
         duration: 5000,
@@ -342,7 +342,7 @@ describe('IssueNotifier', () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
       await notifier.notify({
         type: 'issue-failed',
-        issueNumber: 3,
+        workItemId: '3',
         issueTitle: 'Broken',
         error: 'crash',
         phase: 2,
@@ -359,7 +359,7 @@ describe('IssueNotifier', () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
       await notifier.notify({
         type: 'issue-failed',
-        issueNumber: 3,
+        workItemId: '3',
         issueTitle: 'Broken',
         error: 'budget exceeded',
         phase: 1,
@@ -375,7 +375,7 @@ describe('IssueNotifier', () => {
       await notifier.notify({
         type: 'budget-warning',
         scope: 'issue',
-        issueNumber: 7,
+        workItemId: '7',
         currentUsage: 8000,
         budget: 10000,
         percentUsed: 80,
@@ -402,7 +402,7 @@ describe('IssueNotifier', () => {
       const notifier = new IssueNotifier(makeConfig(), platform, logger);
       await notifier.notify({
         type: 'ambiguity-detected',
-        issueNumber: 12,
+        workItemId: '12',
         ambiguities: ['Ambiguity one', 'Ambiguity two'],
       });
       expect(platform.addIssueComment).toHaveBeenCalledOnce();
@@ -420,7 +420,7 @@ describe('IssueNotifier', () => {
 
     it('should respect enabled=false for dispatched events', async () => {
       const notifier = new IssueNotifier(makeConfig({ enabled: false }), platform, logger);
-      await notifier.notify({ type: 'issue-started', issueNumber: 1, issueTitle: 'X', worktreePath: '/tmp' });
+      await notifier.notify({ type: 'issue-started', workItemId: '1', issueTitle: 'X', worktreePath: '/tmp' });
       expect(platform.addIssueComment).not.toHaveBeenCalled();
     });
   });

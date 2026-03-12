@@ -40,7 +40,7 @@ export class ReportWriter {
 
     // Map per-issue results to RunIssueSummary
     const issueSummaries: RunIssueSummary[] = result.issues.map((ir) => ({
-      issueNumber: ir.issueNumber,
+      workItemId: String(ir.issueNumber),
       issueTitle: ir.issueTitle,
       success: ir.success,
       prNumber: ir.pr?.number,
@@ -83,7 +83,10 @@ export class ReportWriter {
     const prCompletion = {
       queued: result.prCompletion?.queued ?? 0,
       failed: result.prCompletion?.failed ?? 0,
-      failures: result.prCompletion?.failures ?? [],
+      failures: (result.prCompletion?.failures ?? []).map((f) => ({
+        ...f,
+        workItemId: String(f.issueNumber),
+      })),
     };
 
     return {
@@ -157,7 +160,7 @@ export class ReportWriter {
       parts.push(`[Wave ${issue.wave}]`);
     }
 
-    parts.push(`#${issue.issueNumber}: ${issue.issueTitle}`);
+    parts.push(`#${issue.workItemId}: ${issue.issueTitle}`);
 
     if (issue.error && issue.error in DAG_STATUS_LABELS) {
       parts.push(`— ${DAG_STATUS_LABELS[issue.error]}`);

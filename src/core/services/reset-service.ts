@@ -23,16 +23,16 @@ export class ResetService {
 
     if (issueNumber) {
       this.logger.info(`Resetting issue #${issueNumber}`, {
-        issueNumber,
+        workItemId: String(issueNumber),
         data: { fromPhase },
       });
-      await checkpointManager.setIssueStatus(issueNumber, 'not-started', '', '', 0, state.issues[issueNumber]?.issueTitle ?? '');
+      await checkpointManager.setWorkItemStatus(String(issueNumber), 'not-started', '', '', 0, state.issues[String(issueNumber)]?.issueTitle ?? '');
       console.log(`Reset issue #${issueNumber}`);
     } else {
       this.logger.info('Resetting entire fleet');
       // Clear all issue statuses
       for (const num of Object.keys(state.issues)) {
-        await checkpointManager.setIssueStatus(Number(num), 'not-started', '', '', 0, state.issues[Number(num)]?.issueTitle ?? '');
+        await checkpointManager.setWorkItemStatus(num, 'not-started', '', '', 0, state.issues[num]?.issueTitle ?? '');
       }
       console.log('Reset all issues');
     }

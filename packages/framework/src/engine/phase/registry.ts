@@ -14,7 +14,7 @@ export interface PhaseDefinition {
   critical: boolean;
   /** Commit type for per-phase commits (e.g. 'chore', 'feat', 'fix'). */
   commitType?: string;
-  /** Commit message template. Use `{issueNumber}` as a placeholder. */
+  /** Commit message template. Use `{workItemId}` as a placeholder. */
   commitMessage?: string;
 }
 
@@ -32,7 +32,7 @@ export interface PhaseManifestEntry<TContext extends PhaseContext = PhaseContext
   critical: boolean;
   /** Commit type for per-phase commits (e.g. 'chore', 'feat', 'fix'). */
   commitType?: string;
-  /** Commit message template. Use `{issueNumber}` as a placeholder. */
+  /** Commit message template. Use `{workItemId}` as a placeholder. */
   commitMessage?: string;
   /** Whether this phase is included in the review-response pipeline. */
   includeInReviewResponse: boolean;

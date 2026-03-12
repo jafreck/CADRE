@@ -47,7 +47,7 @@ export class Logger {
     const ts = entry.timestamp.slice(11, 23);
     const levelTag = entry.level.toUpperCase().padEnd(5);
     const ctx = [
-      entry.issueNumber != null ? `#${entry.issueNumber}` : null,
+      entry.workItemId != null ? `#${entry.workItemId}` : null,
       entry.phase != null ? `P${entry.phase}` : null,
       entry.taskId ?? null,
     ]
@@ -99,7 +99,7 @@ export class Logger {
   private buildEntry(
     level: LogLevel,
     message: string,
-    context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> },
+    context?: { workItemId?: string; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> },
   ): LogEntry {
     return {
       timestamp: new Date().toISOString(),
@@ -110,19 +110,19 @@ export class Logger {
     };
   }
 
-  debug(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
+  debug(message: string, context?: { workItemId?: string; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('debug', message, context));
   }
 
-  info(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
+  info(message: string, context?: { workItemId?: string; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('info', message, context));
   }
 
-  warn(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
+  warn(message: string, context?: { workItemId?: string; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('warn', message, context));
   }
 
-  error(message: string, context?: { issueNumber?: number; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
+  error(message: string, context?: { workItemId?: string; phase?: number; taskId?: string; sessionId?: string; data?: Record<string, unknown> }): void {
     void this.writeEntry(this.buildEntry('error', message, context));
   }
 
@@ -134,16 +134,16 @@ export class Logger {
     );
   }
 
-  child(issueNumber: number, logDir?: string): Logger {
+  child(workItemId: string, logDir?: string): Logger {
     return new Logger({
       logDir: logDir ?? this.opts.logDir,
       level: this.opts.level,
       console: this.opts.console,
-      source: `issue-${issueNumber}`,
+      source: `workitem-${workItemId}`,
     });
   }
 
-  agentLogger(agentName: string, issueNumber: number, logDir: string): Logger {
+  agentLogger(agentName: string, workItemId: string, logDir: string): Logger {
     return new Logger({
       logDir,
       level: 'debug',

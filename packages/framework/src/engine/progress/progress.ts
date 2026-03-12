@@ -15,13 +15,13 @@ export const phaseNames = [
 ] as const;
 
 export interface PullRequestRef {
-  issueNumber: number;
+  workItemId: string;
   prNumber: number;
   url: string;
 }
 
 export interface IssueProgressInfo {
-  issueNumber: number;
+  workItemId: string;
   issueTitle: string;
   status: 'not-started' | 'in-progress' | 'completed' | 'failed' | 'blocked' | 'budget-exceeded' | 'code-complete' | 'dep-failed' | 'dep-merge-conflict' | 'dep-build-broken' | 'dep-blocked';
   currentPhase: number;
@@ -93,14 +93,14 @@ export class FleetProgressWriter {
         'dep-build-broken': '❌',
         'dep-blocked': '🚫',
       }[issue.status];
-      md += `\n| #${issue.issueNumber} | ${issue.issueTitle} | ${statusEmoji} ${issue.status} | ${issue.currentPhase}/${issue.totalPhases} | ${prLink} |`;
+      md += `\n| ${issue.workItemId} | ${issue.issueTitle} | ${statusEmoji} ${issue.status} | ${issue.currentPhase}/${issue.totalPhases} | ${prLink} |`;
     }
 
     const codeCompleteIssues = issues.filter((i) => i.status === 'code-complete');
     if (codeCompleteIssues.length > 0) {
       md += `\n\n## Code Complete — PR Needed\n\n`;
       for (const issue of codeCompleteIssues) {
-        md += `- #${issue.issueNumber} ${issue.issueTitle} — branch: \`${issue.branch ?? 'unknown'}\`\n`;
+        md += `- ${issue.workItemId} ${issue.issueTitle} — branch: \`${issue.branch ?? 'unknown'}\`\n`;
       }
     }
 
@@ -134,7 +134,7 @@ export class IssueProgressWriter {
 
   constructor(
     private readonly progressDir: string,
-    private readonly issueNumber: number,
+    private readonly workItemId: string,
     private readonly issueTitle: string,
     private readonly logger: Logger,
   ) {
@@ -156,7 +156,7 @@ export class IssueProgressWriter {
     const activePhaseNames = customPhaseNames ?? phaseNames;
     const totalPhases = activePhaseNames.length;
 
-    let md = `# Issue #${this.issueNumber}: ${this.issueTitle}\n\n`;
+    let md = `# Work Item ${this.workItemId}: ${this.issueTitle}\n\n`;
     md += `## Pipeline Status\n`;
     md += `- **Current Phase**: ${currentPhase}/${totalPhases}\n`;
     md += `- **Token Usage**: ${tokenUsage.toLocaleString()}\n`;

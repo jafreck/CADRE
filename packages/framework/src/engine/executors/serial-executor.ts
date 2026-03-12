@@ -24,7 +24,7 @@ export class SerialExecutor {
       const invocation = invocations[i];
 
       this.logger.debug(`Serial executor: launching ${invocation.agent} (${i + 1}/${invocations.length})`, {
-        issueNumber: invocation.issueNumber,
+        workItemId: invocation.workItemId,
         sessionId: invocation.sessionId,
       });
 
@@ -33,7 +33,7 @@ export class SerialExecutor {
 
       if (!result.success && opts?.stopOnFailure) {
         this.logger.warn(`Serial executor: stopping due to failure in ${invocation.agent}`, {
-          issueNumber: invocation.issueNumber,
+          workItemId: invocation.workItemId,
         });
         break;
       }

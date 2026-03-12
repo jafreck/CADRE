@@ -10,6 +10,8 @@ export type {
   PhaseResult,
   WorkItemComment,
   WorkItem,
+  CondensedWorkItemComponent,
+  CondensedWorkItemGraph,
 } from './types.js';
 export { CyclicDependencyError } from './types.js';
 
@@ -59,6 +61,7 @@ export {
 
 // Scheduler
 export { WorkItemDag } from './scheduler/issue-dag.js';
+export { condenseWorkItemGraph } from './scheduler/graph-condensation.js';
 
 // Progress
 export type { PullRequestRef, IssueProgressInfo } from './progress/progress.js';
@@ -71,5 +74,5 @@ export {
 // === From execution ===
 export { ParallelExecutor } from './executors/parallel-executor.js';
 export { SerialExecutor, type AgentLauncherLike } from './executors/serial-executor.js';
-export { SessionQueue, TaskQueue } from './executors/task-queue.js';
+export { SessionQueue, TaskQueue, type TaskLike } from './executors/task-queue.js';
 export { RetryExecutor, type RetryOptions, type RetryResult, type LoggerLike } from './executors/retry.js';

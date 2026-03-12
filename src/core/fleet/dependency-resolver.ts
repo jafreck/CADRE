@@ -126,7 +126,7 @@ export class DependencyResolver {
     const result = await this.launcher.launchAgent(
       {
         agent: 'dependency-analyst',
-        issueNumber: 0,
+        workItemId: '0',
         phase: 1,
         contextPath,
         outputPath,

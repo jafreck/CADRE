@@ -17,7 +17,7 @@ export function makeMockCheckpoint(
   return {
     load: vi.fn().mockResolvedValue({}),
     getState: vi.fn().mockReturnValue({
-      issueNumber: 42,
+      workItemId: '42',
       currentPhase: 1,
       completedPhases: completedPhaseIds,
       completedTasks: [],

@@ -223,7 +223,7 @@ describe('PRCompositionPhaseExecutor', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           agent: 'pr-composer',
-          issueNumber: 42,
+          workItemId: '42',
           phase: 5,
           contextPath: '/progress/composer-ctx.json',
           outputPath: join('/tmp/progress', 'pr-content.md'),

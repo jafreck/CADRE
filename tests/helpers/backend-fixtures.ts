@@ -54,7 +54,7 @@ export function makeConfig(overrides: Partial<{
 export function makeInvocation(overrides: Partial<AgentInvocation> = {}): AgentInvocation {
   return {
     agent: 'code-writer',
-    issueNumber: 42,
+    workItemId: '42',
     phase: 3,
     sessionId: 'session-001',
     contextPath: '/tmp/worktree/.cadre/issues/42/contexts/ctx.json',

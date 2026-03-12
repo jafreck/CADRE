@@ -15,6 +15,15 @@ export * from './backend/factory.js';
 export * from './launcher/agent-launcher.js';
 export * from './process/index.js';
 export * from './launch-with-retry.js';
+export {
+  launchAgentWithEvents,
+  JsonlMetricsCollector,
+  type EventLogger,
+  type InvocationMetric,
+  type MetricsCollector,
+  type LaunchAgentWithEventsOptions,
+  type LaunchAgentWithEventsResult,
+} from './launch-with-events.js';
 
 export type {
   MountSpec,
@@ -40,6 +49,12 @@ export type { NegotiationOptions } from './negotiation.js';
 export { extractFailures } from './commands/parse-failures.js';
 export { type RegressionResult, computeRegressions } from './commands/regression.js';
 export { execShell } from './commands/exec.js';
+export { classifyError, type ErrorClass } from './commands/classify-error.js';
+export {
+  runCommandWithRecovery,
+  type RunCommandWithRecoveryOptions,
+  type RunCommandWithRecoveryResult,
+} from './commands/recovery.js';
 export {
   type VerifyCommandConfig,
   type VerifyCommandResult,
