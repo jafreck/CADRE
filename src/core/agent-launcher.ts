@@ -5,6 +5,7 @@ import { AGENT_DEFINITIONS } from '../agents/types.js';
 import { statOrNull } from '../util/fs.js';
 import { Logger } from '@cadre-dev/framework/core';
 import { type AgentBackend } from '../agents/backend.js';
+import { type AgentInvocationOptions } from '@cadre-dev/framework/runtime';
 import { createAgentBackend } from '../agents/backend-factory.js';
 
 /**
@@ -51,7 +52,7 @@ export class AgentLauncher {
   /**
    * Launch an agent in the context of a specific worktree.
    */
-  async launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
-    return this.backend.invoke(invocation, worktreePath) as Promise<AgentResult>;
+  async launchAgent(invocation: AgentInvocation, worktreePath: string, options?: AgentInvocationOptions): Promise<AgentResult> {
+    return this.backend.invoke(invocation, worktreePath, options) as Promise<AgentResult>;
   }
 }

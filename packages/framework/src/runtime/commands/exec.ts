@@ -16,6 +16,7 @@ export interface SpawnOpts {
   env?: Record<string, string | undefined>;
   timeout?: number;
   shell?: string | boolean;
+  onData?: (chunk: string, stream: 'stdout' | 'stderr') => void;
 }
 
 /**
@@ -85,8 +86,14 @@ export function spawnProcess(
       }, opts.timeout);
     }
 
-    child.stdout?.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdoutChunks.push(chunk);
+      opts.onData?.(chunk.toString('utf-8'), 'stdout');
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+      opts.onData?.(chunk.toString('utf-8'), 'stderr');
+    });
 
     child.on('close', (code, signal) => {
       if (timer) clearTimeout(timer);

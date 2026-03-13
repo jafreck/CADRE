@@ -91,6 +91,20 @@ describe('FleetEventBus', () => {
     });
   });
 
+  describe('dispatchAgentOutput', () => {
+    it('should dispatch an agent-output event with the correct payload', async () => {
+      await bus.dispatchAgentOutput(42, 'code-writer', 'hello chunk', 'stdout');
+      expect(notifications.dispatch).toHaveBeenCalledTimes(1);
+      expect(notifications.dispatch).toHaveBeenCalledWith({
+        type: 'agent-output',
+        issueNumber: 42,
+        agent: 'code-writer',
+        chunk: 'hello chunk',
+        stream: 'stdout',
+      });
+    });
+  });
+
   describe('middleware', () => {
     it('runs function middleware before notification dispatch', async () => {
       const calls: string[] = [];

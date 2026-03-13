@@ -33,10 +33,14 @@ export interface BackendRuntimeConfig {
   };
 }
 
+export interface AgentInvocationOptions {
+  onData?: (chunk: string, stream: 'stdout' | 'stderr') => void;
+}
+
 export interface AgentBackend {
   name: string;
   init(): Promise<void>;
-  invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult>;
+  invoke(invocation: AgentInvocation, worktreePath: string, options?: AgentInvocationOptions): Promise<AgentResult>;
 }
 
 export type BackendFactory = (config: BackendRuntimeConfig, logger: BackendLoggerLike) => AgentBackend;

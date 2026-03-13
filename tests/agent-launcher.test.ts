@@ -7,6 +7,7 @@ import { AGENT_DEFINITIONS } from '../src/agents/types.js';
 import { Logger } from '@cadre-dev/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 import type { AgentInvocation } from '../src/agents/types.js';
+import type { AgentInvocationOptions } from '@cadre-dev/framework/runtime';
 
 vi.mock('../src/agents/backend-factory.js', () => ({
   createAgentBackend: vi.fn(),
@@ -121,7 +122,7 @@ describe('AgentLauncher', () => {
     const invocation = makeInvocation();
     await launcher.launchAgent(invocation, '/tmp/worktree');
     expect(mockBackend.invoke).toHaveBeenCalledOnce();
-    expect(mockBackend.invoke).toHaveBeenCalledWith(invocation, '/tmp/worktree');
+    expect(mockBackend.invoke).toHaveBeenCalledWith(invocation, '/tmp/worktree', undefined);
   });
 
   it('should return the result from backend.invoke()', async () => {
@@ -139,6 +140,17 @@ describe('AgentLauncher', () => {
     const result = await launcher.launchAgent(makeInvocation(), '/tmp/worktree');
     expect(result.success).toBe(false);
     expect(result.error).toBe('agent failed');
+  });
+
+  it('should forward options with onData callback to backend.invoke()', async () => {
+    const launcher = new AgentLauncher(mockConfig, mockLogger);
+    const invocation = makeInvocation();
+    const onData: AgentInvocationOptions['onData'] = vi.fn();
+    const options: AgentInvocationOptions = { onData };
+
+    await launcher.launchAgent(invocation, '/tmp/worktree', options);
+
+    expect(mockBackend.invoke).toHaveBeenCalledWith(invocation, '/tmp/worktree', options);
   });
 
   it('should propagate errors thrown by backend.init()', async () => {

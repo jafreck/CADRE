@@ -9,6 +9,7 @@ import {
   type BackendLoggerLike,
   type BackendRuntimeConfig,
   type AgentBackend,
+  type AgentInvocationOptions,
 } from './contract.js';
 
 export type { AgentBackend, BackendLoggerLike, BackendRuntimeConfig } from './contract.js';
@@ -154,6 +155,7 @@ async function runInvokePipeline(
   backendName: string,
   timeout: number,
   detectSuccess: (r: ProcessResult) => { success: boolean; error?: string; failureMessage?: string },
+  options?: AgentInvocationOptions,
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const logDir = join(worktreePath, '.cadre', 'issues', invocation.workItemId, 'logs');
@@ -174,6 +176,7 @@ async function runInvokePipeline(
     cwd: worktreePath,
     env,
     timeout,
+    onData: options?.onData,
   });
 
   trackProcess(child);
@@ -256,7 +259,7 @@ export class CopilotBackend implements AgentBackend {
     this.logger.debug(`CopilotBackend initialized (cli: ${this.cliCommand})`);
   }
 
-  async invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
+  async invoke(invocation: AgentInvocation, worktreePath: string, options?: AgentInvocationOptions): Promise<AgentResult> {
     const prompt = `Read your context file at: ${invocation.contextPath}`;
     const args = [
       '--agent', invocation.agent,
@@ -290,6 +293,7 @@ export class CopilotBackend implements AgentBackend {
             : undefined,
         };
       },
+      options,
     );
   }
 }
@@ -318,7 +322,7 @@ export class ClaudeBackend implements AgentBackend {
     this.logger.debug(`ClaudeBackend initialized (cli: ${this.cliCommand})`);
   }
 
-  async invoke(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
+  async invoke(invocation: AgentInvocation, worktreePath: string, options?: AgentInvocationOptions): Promise<AgentResult> {
     const prompt = `Read your context file at: ${invocation.contextPath}`;
     const args = [
       '-p', prompt,
@@ -345,6 +349,7 @@ export class ClaudeBackend implements AgentBackend {
           error: success ? undefined : r.stderr || `Exit code: ${r.exitCode}`,
         };
       },
+      options,
     );
   }
 }

@@ -113,6 +113,14 @@ export interface AgentFailedEvent {
   timedOut: boolean;
 }
 
+export interface AgentOutputEvent {
+  type: 'agent-output';
+  issueNumber: number;
+  agent: string;
+  chunk: string;
+  stream: 'stdout' | 'stderr';
+}
+
 export interface WorkStepStartedEvent {
   type: 'task-started';
   workItemId: string;
@@ -238,6 +246,7 @@ export type FrameworkLifecycleEvent =
   | AgentLaunchedEvent
   | AgentCompletedEvent
   | AgentFailedEvent
+  | AgentOutputEvent
   | IsolationSessionStartedEvent
   | IsolationSessionEndedEvent
   | IsolationCapabilityDowngradeEvent;

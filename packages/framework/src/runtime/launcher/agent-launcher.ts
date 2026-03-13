@@ -1,7 +1,7 @@
 import { resolve, join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import type { AgentInvocation, AgentResult } from '../context/types.js';
-import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend } from '../backend/contract.js';
+import type { BackendRuntimeConfig, BackendLoggerLike, AgentBackend, AgentInvocationOptions } from '../backend/contract.js';
 import { createAgentBackend } from '../backend/factory.js';
 
 /** Metadata describing a single agent (for validateAgentFiles). */
@@ -61,7 +61,7 @@ export class AgentLauncher {
   /**
    * Launch an agent in the context of a specific worktree.
    */
-  async launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
-    return this.backend.invoke(invocation, worktreePath);
+  async launchAgent(invocation: AgentInvocation, worktreePath: string, options?: AgentInvocationOptions): Promise<AgentResult> {
+    return this.backend.invoke(invocation, worktreePath, options);
   }
 }

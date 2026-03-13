@@ -128,6 +128,16 @@ export class FleetEventBus {
     });
   }
 
+  async dispatchAgentOutput(issueNumber: number, agent: string, chunk: string, stream: 'stdout' | 'stderr'): Promise<void> {
+    await this.dispatchEvent({
+      type: 'agent-output',
+      issueNumber,
+      agent,
+      chunk,
+      stream,
+    });
+  }
+
   async appendFleetStarted(issueCount: number): Promise<void> {
     await this.fleetProgress.appendEvent(
       `Fleet started: ${issueCount} issues`,
