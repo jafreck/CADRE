@@ -7,25 +7,21 @@ import type {
   CadreSemanticEvent,
   CadreDomainEvent,
   RunStartedEvent,
+  RunCompletedEvent,
+  RunInterruptedEvent,
   WorkUnitStartedEvent,
+  WorkUnitCompletedEvent,
+  WorkUnitFailedEvent,
   StageStartedEvent,
+  StageCompletedEvent,
+  StageSkippedEvent,
   WorkStepStartedEvent,
-  FleetStartedEvent,
-  FleetCompletedEvent,
-  FleetInterruptedEvent,
-  IssueStartedEvent,
-  IssueCompletedEvent,
-  IssueFailedEvent,
-  PhaseStartedEvent,
-  PhaseCompletedEvent,
-  PhaseSkippedEvent,
+  WorkStepCompletedEvent,
+  WorkStepBlockedEvent,
+  WorkStepRetryEvent,
   AgentLaunchedEvent,
   AgentCompletedEvent,
   AgentFailedEvent,
-  TaskStartedEvent,
-  TaskCompletedEvent,
-  TaskBlockedEvent,
-  TaskRetryEvent,
   GitCommitEvent,
   GitPushEvent,
   PRCreatedEvent,
@@ -52,15 +48,15 @@ function narrowEvent<T extends CadreEvent['type']>(
 
 describe('CadreEvent type definitions', () => {
   describe('Fleet events', () => {
-    it('FleetStartedEvent has required fields', () => {
-      const event: FleetStartedEvent = { type: 'fleet-started', issueCount: 3, maxParallel: 2 };
+    it('RunStartedEvent has required fields', () => {
+      const event: RunStartedEvent = { type: 'fleet-started', issueCount: 3, maxParallel: 2 };
       expect(event.type).toBe('fleet-started');
       expect(event.issueCount).toBe(3);
       expect(event.maxParallel).toBe(2);
     });
 
-    it('FleetCompletedEvent has required fields', () => {
-      const event: FleetCompletedEvent = {
+    it('RunCompletedEvent has required fields', () => {
+      const event: RunCompletedEvent = {
         type: 'fleet-completed',
         success: true,
         prsCreated: 2,
@@ -72,8 +68,8 @@ describe('CadreEvent type definitions', () => {
       expect(event.success).toBe(true);
     });
 
-    it('FleetInterruptedEvent carries signal and active issues', () => {
-      const event: FleetInterruptedEvent = {
+    it('RunInterruptedEvent carries signal and active issues', () => {
+      const event: RunInterruptedEvent = {
         type: 'fleet-interrupted',
         signal: 'SIGINT',
         issuesInProgress: [1, 2],
@@ -85,8 +81,8 @@ describe('CadreEvent type definitions', () => {
   });
 
   describe('Issue events', () => {
-    it('IssueStartedEvent has required fields', () => {
-      const event: IssueStartedEvent = {
+    it('WorkUnitStartedEvent has required fields', () => {
+      const event: WorkUnitStartedEvent = {
         type: 'issue-started',
         issueNumber: 42,
         issueTitle: 'Fix login',
@@ -95,8 +91,8 @@ describe('CadreEvent type definitions', () => {
       expect(event.type).toBe('issue-started');
     });
 
-    it('IssueCompletedEvent has optional prNumber and prUrl', () => {
-      const withPR: IssueCompletedEvent = {
+    it('WorkUnitCompletedEvent has optional prNumber and prUrl', () => {
+      const withPR: WorkUnitCompletedEvent = {
         type: 'issue-completed',
         issueNumber: 42,
         issueTitle: 'Fix login',
@@ -108,7 +104,7 @@ describe('CadreEvent type definitions', () => {
       };
       expect(withPR.prNumber).toBe(101);
 
-      const noPR: IssueCompletedEvent = {
+      const noPR: WorkUnitCompletedEvent = {
         type: 'issue-completed',
         issueNumber: 43,
         issueTitle: 'Fix logout',
@@ -119,8 +115,8 @@ describe('CadreEvent type definitions', () => {
       expect(noPR.prNumber).toBeUndefined();
     });
 
-    it('IssueFailedEvent captures phase and optional phaseName', () => {
-      const event: IssueFailedEvent = {
+    it('WorkUnitFailedEvent captures phase and optional phaseName', () => {
+      const event: WorkUnitFailedEvent = {
         type: 'issue-failed',
         issueNumber: 7,
         issueTitle: 'Broken feature',
@@ -135,8 +131,8 @@ describe('CadreEvent type definitions', () => {
   });
 
   describe('Phase events', () => {
-    it('PhaseStartedEvent has phase number and name', () => {
-      const event: PhaseStartedEvent = {
+    it('StageStartedEvent has phase number and name', () => {
+      const event: StageStartedEvent = {
         type: 'phase-started',
         issueNumber: 1,
         phase: 1,
@@ -145,8 +141,8 @@ describe('CadreEvent type definitions', () => {
       expect(event.phase).toBe(1);
     });
 
-    it('PhaseCompletedEvent includes duration', () => {
-      const event: PhaseCompletedEvent = {
+    it('StageCompletedEvent includes duration', () => {
+      const event: StageCompletedEvent = {
         type: 'phase-completed',
         issueNumber: 1,
         phase: 2,
@@ -156,8 +152,8 @@ describe('CadreEvent type definitions', () => {
       expect(event.duration).toBe(4200);
     });
 
-    it('PhaseSkippedEvent has a reason', () => {
-      const event: PhaseSkippedEvent = {
+    it('StageSkippedEvent has a reason', () => {
+      const event: StageSkippedEvent = {
         type: 'phase-skipped',
         issueNumber: 1,
         phase: 3,
@@ -203,8 +199,8 @@ describe('CadreEvent type definitions', () => {
   });
 
   describe('Task events', () => {
-    it('TaskStartedEvent has taskId and taskName', () => {
-      const event: TaskStartedEvent = {
+    it('WorkStepStartedEvent has taskId and taskName', () => {
+      const event: WorkStepStartedEvent = {
         type: 'task-started',
         issueNumber: 2,
         taskId: 'task-1',
@@ -213,8 +209,8 @@ describe('CadreEvent type definitions', () => {
       expect(event.taskName).toBe('Write tests');
     });
 
-    it('TaskCompletedEvent has duration', () => {
-      const event: TaskCompletedEvent = {
+    it('WorkStepCompletedEvent has duration', () => {
+      const event: WorkStepCompletedEvent = {
         type: 'task-completed',
         issueNumber: 2,
         taskId: 'task-1',
@@ -223,8 +219,8 @@ describe('CadreEvent type definitions', () => {
       expect(event.duration).toBe(300);
     });
 
-    it('TaskBlockedEvent has reason and retryCount', () => {
-      const event: TaskBlockedEvent = {
+    it('WorkStepBlockedEvent has reason and retryCount', () => {
+      const event: WorkStepBlockedEvent = {
         type: 'task-blocked',
         issueNumber: 2,
         taskId: 'task-1',
@@ -234,8 +230,8 @@ describe('CadreEvent type definitions', () => {
       expect(event.retryCount).toBe(1);
     });
 
-    it('TaskRetryEvent has attempt and maxAttempts', () => {
-      const event: TaskRetryEvent = {
+    it('WorkStepRetryEvent has attempt and maxAttempts', () => {
+      const event: WorkStepRetryEvent = {
         type: 'task-retry',
         issueNumber: 2,
         taskId: 'task-1',
@@ -470,31 +466,8 @@ describe('CadreEvent type definitions', () => {
       expect(runtime.type).toBe('git-push');
     });
 
-    it('keeps deprecated Cadre/Fleet/Issue/Phase/Task aliases compatible', () => {
-      const fleetAlias: FleetStartedEvent = { type: 'fleet-started', issueCount: 1, maxParallel: 1 };
-      const issueAlias: IssueStartedEvent = {
-        type: 'issue-started',
-        issueNumber: 7,
-        issueTitle: 'Alias',
-        worktreePath: '/tmp/alias',
-      };
-      const phaseAlias: PhaseStartedEvent = {
-        type: 'phase-started',
-        issueNumber: 7,
-        phase: 1,
-        phaseName: 'Analysis',
-      };
-      const taskAlias: TaskStartedEvent = {
-        type: 'task-started',
-        issueNumber: 7,
-        taskId: 'task-a',
-        taskName: 'Do thing',
-      };
-      const cadreAlias: CadreEvent = fleetAlias;
-
-      expect(issueAlias.type).toBe('issue-started');
-      expect(phaseAlias.type).toBe('phase-started');
-      expect(taskAlias.type).toBe('task-started');
+    it('CadreEvent alias remains compatible with RuntimeEvent', () => {
+      const cadreAlias: CadreEvent = { type: 'fleet-started', issueCount: 1, maxParallel: 1 };
       expect(cadreAlias.type).toBe('fleet-started');
     });
   });

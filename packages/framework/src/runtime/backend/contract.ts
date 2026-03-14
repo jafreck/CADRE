@@ -68,18 +68,18 @@ export function getAgentBackendOptions<TOptions extends object = BackendOptions>
 ): TOptions | undefined {
   const normalizedName = ensureValidAgentBackendName(backendName, 'name');
   const explicit = config.agent.backends?.[normalizedName];
-  const legacy = normalizedName === 'copilot'
+  const builtin = normalizedName === 'copilot'
     ? config.agent.copilot
     : normalizedName === 'claude'
       ? config.agent.claude
       : undefined;
 
   assertBackendOptionsShape(normalizedName, 'generic', explicit);
-  assertBackendOptionsShape(normalizedName, 'legacy', legacy);
+  assertBackendOptionsShape(normalizedName, 'built-in', builtin);
 
-  if (explicit && legacy) {
-    return { ...legacy, ...explicit } as TOptions;
+  if (explicit && builtin) {
+    return { ...builtin, ...explicit } as TOptions;
   }
 
-  return (explicit ?? legacy) as TOptions | undefined;
+  return (explicit ?? builtin) as TOptions | undefined;
 }

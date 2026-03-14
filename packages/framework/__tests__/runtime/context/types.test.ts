@@ -8,11 +8,6 @@ import type {
   GateResult,
   PhaseResult,
   AgentContext,
-  WorkUnitId,
-  StageIndex,
-  WorkUnitInvocation,
-  StageResult,
-  WorkUnitContext,
 } from '../../../src/runtime/context/types.js';
 
 /**
@@ -164,40 +159,4 @@ describe('Agent runtime types (agent-runtime)', () => {
     expect(ctx.outputSchema).toBeUndefined();
   });
 
-  it('should support neutral work-unit/stage aliases', () => {
-    const workUnitId: WorkUnitId = 42;
-    const stageIndex: StageIndex = 2;
-
-    const invocation: WorkUnitInvocation = {
-      agent: 'alias-agent',
-      issueNumber: workUnitId,
-      phase: stageIndex,
-      contextPath: '/tmp/ctx.json',
-      outputPath: '/tmp/out.json',
-    };
-
-    const result: StageResult = {
-      phase: stageIndex,
-      phaseName: 'Implementation',
-      success: true,
-      duration: 120,
-      tokenUsage: null,
-    };
-
-    const context: WorkUnitContext = {
-      agent: 'alias-agent',
-      issueNumber: workUnitId,
-      projectName: 'demo',
-      repository: 'owner/repo',
-      worktreePath: '/tmp/wt',
-      phase: stageIndex,
-      config: { commands: {} },
-      inputFiles: [],
-      outputPath: '/tmp/out.json',
-    };
-
-    expect(invocation.issueNumber).toBe(42);
-    expect(result.phase).toBe(2);
-    expect(context.phase).toBe(2);
-  });
 });
