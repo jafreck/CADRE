@@ -1,5 +1,5 @@
 import { join, relative } from 'node:path';
-import { readFile, writeFile, readdir, symlink, unlink, lstat } from 'node:fs/promises';
+import { readFile, writeFile, readdir, symlink, lstat, rename } from 'node:fs/promises';
 import { Logger } from '@cadre-dev/framework/core';
 import { exists, ensureDir } from '../util/fs.js';
 import { AGENT_DEFINITIONS } from '../agents/types.js';
@@ -224,10 +224,12 @@ export class AgentFileSync {
       }
 
       if (existingIsSymlink) {
-        await unlink(linkPath);
+        const tmpPath = linkPath + '.cadre-tmp';
+        await symlink(target, tmpPath);
+        await rename(tmpPath, linkPath);
+      } else {
+        await symlink(target, linkPath);
       }
-
-      await symlink(target, linkPath);
 
       const destRelPath = relative(worktreePath, linkPath);
       const lsOutput = await git.raw(['ls-files', destRelPath]);

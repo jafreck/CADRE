@@ -123,10 +123,14 @@ export class DependencyBranchMerger {
       mergeSucceeded = true;
     } finally {
       // Always clean up the temporary deps worktree
-      await this.git.raw(['worktree', 'remove', depsWorktreePath, '--force']).catch(() => {});
+      await this.git.raw(['worktree', 'remove', depsWorktreePath, '--force']).catch((err) => {
+        this.logger.warn(`Failed to remove deps worktree ${depsWorktreePath}: ${err}`);
+      });
       // On failure, delete the deps branch so retries can recreate it cleanly
       if (!mergeSucceeded) {
-        await this.git.branch(['-D', depsBranch]).catch(() => {});
+        await this.git.branch(['-D', depsBranch]).catch((err) => {
+          this.logger.warn(`Failed to delete deps branch ${depsBranch}: ${err}`);
+        });
       }
     }
 

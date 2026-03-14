@@ -95,7 +95,7 @@ describe('BranchManager', () => {
       const mockGit = (await import('simple-git')).simpleGit('/tmp/repo') as ReturnType<typeof import('simple-git').simpleGit>;
       (mockGit.branch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('branch not found'));
 
-      await expect(manager.deleteLocal('cadre/issue-42')).resolves.toBeUndefined();
+      await expect(manager.deleteLocal('cadre/issue-42')).resolves.toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to delete local branch'),
       );
@@ -116,7 +116,7 @@ describe('BranchManager', () => {
       const mockGit = (await import('simple-git')).simpleGit('/tmp/repo') as ReturnType<typeof import('simple-git').simpleGit>;
       (mockGit.push as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('remote not found'));
 
-      await expect(manager.deleteRemote('cadre/issue-42')).resolves.toBeUndefined();
+      await expect(manager.deleteRemote('cadre/issue-42')).resolves.toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to delete remote branch'),
       );

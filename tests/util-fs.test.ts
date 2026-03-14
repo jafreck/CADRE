@@ -12,6 +12,7 @@ vi.mock('node:fs/promises', () => ({
   access: vi.fn(),
   readdir: vi.fn(),
   stat: vi.fn(),
+  realpath: vi.fn(async (p: string) => p),
 }));
 
 import * as fsPromises from 'node:fs/promises';

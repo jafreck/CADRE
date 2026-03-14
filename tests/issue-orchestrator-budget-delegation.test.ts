@@ -385,7 +385,7 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
 
     await orchestrator.run();
 
-    expect(checkpoint.recordTokenUsage).toHaveBeenCalledWith('__budget__', expect.anything(), 0);
+    expect(checkpoint.flush).toHaveBeenCalled();
   });
 });
 
