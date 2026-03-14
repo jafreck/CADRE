@@ -995,6 +995,7 @@ export class FleetOrchestrator {
           '',
           '',
           0,
+          issue.title,
           error,
         );
         return {

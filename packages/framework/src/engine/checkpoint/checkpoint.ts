@@ -480,6 +480,7 @@ export class FleetCheckpointManager {
     if (await this.store.exists(this.checkpointPath)) {
       try {
         this.state = await this.store.readJSON<FleetCheckpointState>(this.checkpointPath);
+        this.migrateState();
         this.state.resumeCount += 1;
         this.logger.info('Loaded fleet checkpoint', {
           data: {
@@ -506,6 +507,7 @@ export class FleetCheckpointManager {
             `Migrating legacy fleet checkpoint from ${legacyPath} to ${this.checkpointPath}`,
           );
           this.state = legacy;
+          this.migrateState();
           this.state.resumeCount += 1;
           await this.save();
           return this.state;
@@ -531,6 +533,30 @@ export class FleetCheckpointManager {
   getState(): FleetCheckpointState {
     if (!this.state) throw new Error('Fleet checkpoint not loaded');
     return this.state;
+  }
+
+  /**
+   * Migrate legacy checkpoint state fields to the current schema.
+   * - Renames `byIssue` → `byWorkItem` in tokenUsage.
+   * - Ensures `tokenUsage` and `tokenUsage.byWorkItem` exist.
+   */
+  private migrateState(): void {
+    if (!this.state) return;
+    if (!this.state.tokenUsage) {
+      this.state.tokenUsage = { total: 0, byWorkItem: {} };
+    } else {
+      const tu = this.state.tokenUsage as Record<string, unknown>;
+      if (!this.state.tokenUsage.byWorkItem && tu.byIssue) {
+        this.state.tokenUsage.byWorkItem = tu.byIssue as Record<string, number>;
+        delete tu.byIssue;
+      }
+      if (!this.state.tokenUsage.byWorkItem) {
+        this.state.tokenUsage.byWorkItem = {};
+      }
+    }
+    if (!this.state.issues) {
+      this.state.issues = {};
+    }
   }
 
   async setWorkItemStatus(
