@@ -182,16 +182,6 @@ export class TaskQueue<T extends TaskLike = TaskLike> {
  * batch selection methods.
  */
 export class SessionQueue extends TaskQueue<AgentSession> {
-  /** Backward-compatible alias for `getTask`. */
-  getSession(sessionId: string): AgentSession | undefined {
-    return this.getTask(sessionId);
-  }
-
-  /** Backward-compatible alias for `getAllTasks`. */
-  getAllSessions(): AgentSession[] {
-    return this.getAllTasks();
-  }
-
   static detectBatchCollisions(sessions: AgentSession[]): string[] {
     const fileToSessions = new Map<string, string[]>();
 
