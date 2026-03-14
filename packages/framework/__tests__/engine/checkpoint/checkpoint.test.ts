@@ -838,4 +838,64 @@ describe('FleetCheckpointManager', () => {
     // Clean up
     await rm(legacyPath, { force: true });
   });
+
+  it('should migrate byIssue to byWorkItem when loading legacy checkpoint', async () => {
+    const legacyState = {
+      projectName: 'my-project',
+      version: 1,
+      issues: {},
+      tokenUsage: { total: 100, byIssue: { '42': 50, '99': 50 } },
+      startedAt: '2026-01-01T00:00:00.000Z',
+      lastCheckpoint: '2026-01-01T00:00:00.000Z',
+      resumeCount: 0,
+    };
+    await writeFile(join(tempDir, 'fleet-checkpoint.json'), JSON.stringify(legacyState));
+
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+
+    expect(state.tokenUsage.byWorkItem).toEqual({ '42': 50, '99': 50 });
+    expect((state.tokenUsage as Record<string, unknown>).byIssue).toBeUndefined();
+
+    // recordTokenUsage should work without crashing
+    await manager.recordTokenUsage('42', 10);
+    expect(state.tokenUsage.byWorkItem['42']).toBe(60);
+  });
+
+  it('should initialize byWorkItem when tokenUsage has neither byWorkItem nor byIssue', async () => {
+    const legacyState = {
+      projectName: 'my-project',
+      version: 1,
+      issues: {},
+      tokenUsage: { total: 0 },
+      startedAt: '2026-01-01T00:00:00.000Z',
+      lastCheckpoint: '2026-01-01T00:00:00.000Z',
+      resumeCount: 0,
+    };
+    await writeFile(join(tempDir, 'fleet-checkpoint.json'), JSON.stringify(legacyState));
+
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+
+    expect(state.tokenUsage.byWorkItem).toEqual({});
+    await manager.recordTokenUsage('192', 100);
+    expect(state.tokenUsage.byWorkItem['192']).toBe(100);
+  });
+
+  it('should initialize tokenUsage when missing from legacy checkpoint', async () => {
+    const legacyState = {
+      projectName: 'my-project',
+      version: 1,
+      issues: {},
+      startedAt: '2026-01-01T00:00:00.000Z',
+      lastCheckpoint: '2026-01-01T00:00:00.000Z',
+      resumeCount: 0,
+    };
+    await writeFile(join(tempDir, 'fleet-checkpoint.json'), JSON.stringify(legacyState));
+
+    const manager = new FleetCheckpointManager(tempDir, 'my-project', mockLogger);
+    const state = await manager.load();
+
+    expect(state.tokenUsage).toEqual({ total: 0, byWorkItem: {} });
+  });
 });
