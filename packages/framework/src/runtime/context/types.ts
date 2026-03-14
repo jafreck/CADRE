@@ -135,30 +135,3 @@ export interface AgentContext<TPayload = Record<string, unknown>> {
   payload?: TPayload;
   outputSchema?: Record<string, unknown>;
 }
-
-/** Neutral alias for orchestration scope IDs. */
-export type WorkUnitId = number;
-/** Neutral alias for orchestration stage index. */
-export type StageIndex = number;
-
-/**
- * Neutral alias for `AgentInvocation`.
- *
- * Keeps the existing wire shape for compatibility while providing
- * domain-neutral naming at framework boundaries.
- */
-export type WorkUnitInvocation = AgentInvocation;
-
-/**
- * Neutral alias for `PhaseResult`.
- *
- * The payload remains unchanged for backward compatibility.
- */
-export type StageResult = PhaseResult;
-
-/**
- * Neutral alias for `AgentContext`.
- *
- * The payload remains unchanged for backward compatibility.
- */
-export type WorkUnitContext<TPayload = Record<string, unknown>> = AgentContext<TPayload>;

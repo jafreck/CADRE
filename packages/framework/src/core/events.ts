@@ -265,78 +265,7 @@ export type RuntimeEvent =
  */
 export type CadreEvent = RuntimeEvent;
 
-/**
- * @deprecated Use `RunStartedEvent`.
- */
-export type FleetStartedEvent = RunStartedEvent;
-/**
- * @deprecated Use `RunCompletedEvent`.
- */
-export type FleetCompletedEvent = RunCompletedEvent;
-/**
- * @deprecated Use `RunInterruptedEvent`.
- */
-export type FleetInterruptedEvent = RunInterruptedEvent;
 
-/**
- * @deprecated Use `WorkUnitStartedEvent`.
- */
-export type IssueStartedEvent = WorkUnitStartedEvent;
-/**
- * @deprecated Use `WorkUnitCompletedEvent`.
- */
-export type IssueCompletedEvent = WorkUnitCompletedEvent;
-/**
- * @deprecated Use `WorkUnitFailedEvent`.
- */
-export type IssueFailedEvent = WorkUnitFailedEvent;
-
-/**
- * @deprecated Use `StageStartedEvent`.
- */
-export type PhaseStartedEvent = StageStartedEvent;
-/**
- * @deprecated Use `StageCompletedEvent`.
- */
-export type PhaseCompletedEvent = StageCompletedEvent;
-/**
- * @deprecated Use `StageSkippedEvent`.
- */
-export type PhaseSkippedEvent = StageSkippedEvent;
-
-/**
- * @deprecated Use `WorkStepStartedEvent`.
- */
-export type TaskStartedEvent = WorkStepStartedEvent;
-/**
- * @deprecated Use `WorkStepCompletedEvent`.
- */
-export type TaskCompletedEvent = WorkStepCompletedEvent;
-/**
- * @deprecated Use `WorkStepBlockedEvent`.
- */
-export type TaskBlockedEvent = WorkStepBlockedEvent;
-/**
- * @deprecated Use `WorkStepRetryEvent`.
- */
-export type TaskRetryEvent = WorkStepRetryEvent;
-
-/**
- * @deprecated Use `RunLifecycleEvent`.
- */
-export type FleetLifecycleEvent = RunLifecycleEvent;
-/**
- * @deprecated Use `WorkUnitLifecycleEvent`.
- */
-export type CadreIssueLifecycleEvent = WorkUnitLifecycleEvent;
-/**
- * @deprecated Use `StageLifecycleEvent`.
- */
-export type CadrePhaseLifecycleEvent = StageLifecycleEvent;
-/**
- * @deprecated Use `WorkStepLifecycleEvent`.
- */
-export type CadreTaskLifecycleEvent = WorkStepLifecycleEvent;
 
 export type CadreDomainEvent =
   | WorkUnitLifecycleEvent

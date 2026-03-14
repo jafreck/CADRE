@@ -28,12 +28,12 @@ describe('backend contract helpers', () => {
     expect(() => ensureValidAgentBackendName('  ', 'selection')).toThrow(/must be a non-empty string/);
   });
 
-  it('reads legacy built-in backend options', () => {
+  it('reads built-in backend options', () => {
     const options = getAgentBackendOptions<{ cliCommand?: string; agentDir?: string }>(makeConfig(), 'copilot');
     expect(options).toEqual({ cliCommand: 'copilot', agentDir: '.github/agents' });
   });
 
-  it('merges generic backend options over legacy options', () => {
+  it('merges generic backend options over built-in options', () => {
     const config = makeConfig();
     config.agent.backends = {
       copilot: {
