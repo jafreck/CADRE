@@ -225,7 +225,10 @@ export class GitHubAPI {
     for (const comment of data) {
       if (!comment.in_reply_to_id) {
         rootComments.push(comment);
-        if (!threadComments.has(comment.id)) {
+        const existing = threadComments.get(comment.id);
+        if (existing) {
+          existing.unshift(comment);
+        } else {
           threadComments.set(comment.id, [comment]);
         }
       } else {

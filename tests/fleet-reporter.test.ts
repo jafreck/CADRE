@@ -156,7 +156,7 @@ describe('FleetReporter', () => {
 
       expect(result.success).toBe(false);
       expect(result.failedIssues).toHaveLength(1);
-      expect(result.failedIssues[0].issueNumber).toBe(0);
+      expect(result.failedIssues[0].issueNumber).toBe(1);
       expect(result.failedIssues[0].error).toContain('Unexpected crash');
     });
 

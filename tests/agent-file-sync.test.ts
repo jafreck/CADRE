@@ -11,6 +11,7 @@ vi.mock('node:fs/promises', () => ({
   symlink: vi.fn().mockResolvedValue(undefined),
   unlink: vi.fn().mockResolvedValue(undefined),
   lstat: vi.fn().mockRejectedValue(new Error('ENOENT')),
+  rename: vi.fn().mockResolvedValue(undefined),
 }));
 
 const { mockRaw } = vi.hoisted(() => ({
@@ -241,7 +242,7 @@ describe('AgentFileSync', () => {
       );
     });
 
-    it('replaces existing symlinks', async () => {
+    it('replaces existing symlinks atomically', async () => {
       vi.mocked(fsUtils.exists).mockResolvedValue(true);
       vi.mocked(fsp.readdir as ReturnType<typeof vi.fn>).mockResolvedValue(['code-writer.agent.md']);
       vi.mocked(fsp.lstat as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -252,8 +253,14 @@ describe('AgentFileSync', () => {
       const sync = new AgentFileSync('/tmp/agents', 'copilot', mockLogger, '/tmp/state');
       await sync.syncAgentFiles('/tmp/worktree', 1);
 
-      expect(fsp.unlink).toHaveBeenCalled();
-      expect(fsp.symlink).toHaveBeenCalled();
+      expect(fsp.symlink).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringContaining('.cadre-tmp'),
+      );
+      expect(fsp.rename).toHaveBeenCalledWith(
+        expect.stringContaining('.cadre-tmp'),
+        expect.stringContaining('.github/agents/code-writer.agent.md'),
+      );
     });
 
     it('skips regular files (target repo may own them)', async () => {

@@ -906,7 +906,9 @@ export class FleetOrchestrator {
         this.platform,
         this.logger.child(String(issue.number), join(this.cadreDir, 'logs')),
         this.notifications,
-        () => this.worktreeManager.resyncAgentFiles(worktree.path, issue.number).then(() => {}),
+        () => this.worktreeManager.resyncAgentFiles(worktree.path, issue.number).then(() => {}).catch((err: unknown) => {
+          this.logger.warn(`Failed to resync agent files for issue #${issue.number}: ${err}`);
+        }),
       );
 
       // 6. Run the 5-phase pipeline

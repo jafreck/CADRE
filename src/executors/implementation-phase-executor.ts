@@ -25,8 +25,18 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
     while (!queue.isComplete()) {
       const readySessions = queue.getReady();
       if (readySessions.length === 0) {
+        // Mark all remaining non-completed sessions as blocked
+        const allSessions = queue.getAllTasks();
+        const stuckIds: string[] = [];
+        for (const s of allSessions) {
+          if (!queue.isTaskCompleted(s.id)) {
+            queue.markBlocked(s.id);
+            stuckIds.push(s.id);
+          }
+        }
         ctx.services.logger.warn('No ready sessions but queue not complete — possible deadlock', {
           workItemId: String(ctx.issue.number),
+          data: { stuckSessions: stuckIds },
         });
         break;
       }
@@ -40,9 +50,14 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
 
       // Process batch (sessions can run concurrently if they don't share files)
       const batchPromises = batch.map((session) => this.executeSession(session, queue, ctx));
-      await Promise.all(batchPromises);
+      const batchResults = await Promise.allSettled(batchPromises);
+      const batchErrors = batchResults.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
 
       await ctx.callbacks.updateProgress();
+
+      if (batchErrors.length > 0) {
+        throw batchErrors[0].reason;
+      }
     }
 
     const counts = queue.getCounts();

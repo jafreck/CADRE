@@ -430,6 +430,13 @@ export class CheckpointManager {
   }
 
   /**
+   * Flush in-memory state to disk without recording any agent/token data.
+   */
+  async flush(): Promise<void> {
+    await this.save();
+  }
+
+  /**
    * Persist the checkpoint atomically, serialized to prevent concurrent writes.
    */
   private async save(): Promise<void> {
