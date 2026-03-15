@@ -277,6 +277,7 @@ function indexFlow<TContext = Record<string, unknown>>(flow: FlowDefinition<TCon
         visit(node.try);
         if (node.finally) visit(node.finally);
       }
+      // subflow nodes are opaque — child flow nodes are not indexed in parent
     }
   };
 
