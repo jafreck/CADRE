@@ -8,6 +8,21 @@ export interface LoggerLike {
   error(message: string, context?: Record<string, unknown>): void;
 }
 
+/**
+ * Branded sentinel returned by onExhausted to request one more attempt
+ * of the original fn() instead of providing a recovery result directly.
+ */
+export interface RetryOriginal {
+  readonly __brand: 'RetryOriginal';
+  readonly retryOriginal: true;
+}
+
+export const RETRY_ORIGINAL: RetryOriginal = Object.freeze({ __brand: 'RetryOriginal' as const, retryOriginal: true as const });
+
+function isRetryOriginal<T>(value: T | RetryOriginal | null): value is RetryOriginal {
+  return value !== null && typeof value === 'object' && '__brand' in value && (value as RetryOriginal).__brand === 'RetryOriginal';
+}
+
 export interface RetryOptions<T> {
   /** The operation to retry. */
   fn: (attempt: number) => Promise<T>;
@@ -17,10 +32,15 @@ export interface RetryOptions<T> {
   baseDelayMs?: number;
   /** Maximum delay in ms. */
   maxDelayMs?: number;
-  /** Called on each retry. */
-  onRetry?: (attempt: number, error: unknown) => void;
-  /** Called when all retries exhausted. Returns recovery result if successful. */
-  onExhausted?: (error: unknown) => Promise<T | null>;
+  /** Called on each retry. May be async. */
+  onRetry?: (attempt: number, error: unknown) => void | Promise<void>;
+  /**
+   * Called when all retries exhausted.
+   * Return a recovered value, RETRY_ORIGINAL to re-run fn() one more time, or null to give up.
+   */
+  onExhausted?: (error: unknown) => Promise<T | RetryOriginal | null>;
+  /** Override the default exponential-backoff delay calculation. */
+  computeDelay?: (attempt: number, error: unknown, defaults: { baseDelayMs: number; maxDelayMs: number }) => number;
   /** Description for logging. */
   description?: string;
 }
@@ -50,6 +70,7 @@ export class RetryExecutor {
       maxDelayMs = 30_000,
       onRetry,
       onExhausted,
+      computeDelay,
       description = 'operation',
     } = opts;
 
@@ -68,18 +89,19 @@ export class RetryExecutor {
         lastError = err;
 
         if (attempt < maxAttempts) {
-          // Calculate delay with exponential backoff + jitter
-          const delay = Math.min(
-            baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * baseDelayMs,
-            maxDelayMs,
-          );
+          const delay = computeDelay
+            ? computeDelay(attempt, err, { baseDelayMs, maxDelayMs })
+            : Math.min(
+                baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * baseDelayMs,
+                maxDelayMs,
+              );
 
           this.logger.warn(
             `${description}: attempt ${attempt}/${maxAttempts} failed, retrying in ${Math.round(delay)}ms`,
             { data: { error: String(err) } },
           );
 
-          onRetry?.(attempt, err);
+          await onRetry?.(attempt, err);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
@@ -91,6 +113,26 @@ export class RetryExecutor {
 
       try {
         const recovered = await onExhausted(lastError);
+        if (isRetryOriginal(recovered)) {
+          this.logger.info(`${description}: recovery requested retry of original operation`);
+          try {
+            const retryResult = await fn(maxAttempts + 1);
+            return {
+              success: true,
+              result: retryResult,
+              attempts: maxAttempts + 1,
+              recoveryUsed: true,
+            };
+          } catch (retryErr) {
+            this.logger.error(`${description}: post-recovery retry failed: ${retryErr}`);
+            return {
+              success: false,
+              attempts: maxAttempts + 1,
+              recoveryUsed: true,
+              error: String(retryErr),
+            };
+          }
+        }
         if (recovered !== null) {
           this.logger.info(`${description}: recovery succeeded`);
           return {

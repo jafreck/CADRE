@@ -58,6 +58,8 @@ export {
   TaskQueue,
   type TaskLike,
   RetryExecutor,
+  RETRY_ORIGINAL,
+  type RetryOriginal,
   type RetryOptions,
   type RetryResult,
   type LoggerLike,

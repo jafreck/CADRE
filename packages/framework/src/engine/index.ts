@@ -75,4 +75,4 @@ export {
 export { ParallelExecutor } from './executors/parallel-executor.js';
 export { SerialExecutor, type AgentLauncherLike } from './executors/serial-executor.js';
 export { SessionQueue, TaskQueue, type TaskLike } from './executors/task-queue.js';
-export { RetryExecutor, type RetryOptions, type RetryResult, type LoggerLike } from './executors/retry.js';
+export { RetryExecutor, RETRY_ORIGINAL, type RetryOriginal, type RetryOptions, type RetryResult, type LoggerLike } from './executors/retry.js';

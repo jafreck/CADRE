@@ -48,5 +48,5 @@ export class SerialExecutor {
 }
 
 export interface AgentLauncherLike {
-  launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult>;
+  launchAgent(invocation: AgentInvocation, worktreePath?: string): Promise<AgentResult>;
 }

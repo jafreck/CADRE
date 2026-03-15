@@ -109,3 +109,44 @@ describe('extractCadreJsonWithError (agent-runtime)', () => {
     expect(result.parseError!.length).toBeGreaterThan(0);
   });
 });
+
+describe('custom marker support', () => {
+  function wrapCustom(json: string, marker: string): string {
+    return `\`\`\`${marker}\n${json}\n\`\`\``;
+  }
+
+  it('should extract a block with a custom marker', () => {
+    const content = wrapCustom('{"ok": true}', 'aamf-json');
+    expect(extractCadreJson(content, undefined, 'aamf-json')).toEqual({ ok: true });
+  });
+
+  it('should not match the wrong marker', () => {
+    const content = wrapCustom('{"ok": true}', 'aamf-json');
+    expect(extractCadreJson(content)).toBeNull();
+  });
+
+  it('should apply quote recovery heuristic to custom markers', () => {
+    const raw = '{"title": "Fix the "foo" parser", "body": "ok"}';
+    const content = wrapCustom(raw, 'my-json');
+    expect(extractCadreJson(content, undefined, 'my-json')).toEqual({
+      title: 'Fix the "foo" parser',
+      body: 'ok',
+    });
+  });
+
+  it('should report correct marker name in error messages', () => {
+    const result = extractCadreJsonWithError('no block here', 'custom-marker');
+    expect(result.parseError).toBe('No custom-marker block found');
+  });
+
+  it('should default to cadre-json when no marker is specified', () => {
+    expect(extractCadreJson(wrap('{"a": 1}'))).toEqual({ a: 1 });
+  });
+
+  it('extractCadreJsonWithError should accept custom marker', () => {
+    const content = wrapCustom('{"x": 42}', 'test-json');
+    const result = extractCadreJsonWithError(content, 'test-json');
+    expect(result.parsed).toEqual({ x: 42 });
+    expect(result.parseError).toBeNull();
+  });
+});
