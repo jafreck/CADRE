@@ -10,6 +10,7 @@ import {
   sequence,
   map,
   catchError,
+  subflow,
   gatedStep,
 } from '../../src/flow/dsl.js';
 
@@ -222,6 +223,46 @@ describe('flow DSL builders', () => {
       // No overlapping IDs between a and b
       const overlap = aIds.filter((id) => bIds.includes(id));
       expect(overlap).toEqual([]);
+    });
+  });
+
+  describe('subflow', () => {
+    it('creates a subflow node with kind, flow, and contextMap', () => {
+      const childFlow = defineFlow('child', [step({ id: 'c1', run: () => 1 })]);
+      const node = subflow({
+        id: 'sub1',
+        name: 'Nested Flow',
+        flow: childFlow,
+        contextMap: () => ({}),
+      });
+      expect(node.kind).toBe('subflow');
+      expect(node.id).toBe('sub1');
+      expect(node.name).toBe('Nested Flow');
+      expect(node.flow).toBe(childFlow);
+      expect(typeof node.contextMap).toBe('function');
+    });
+
+    it('accepts a thunk for lazy flow resolution', () => {
+      const node = subflow({
+        id: 'sub2',
+        flow: () => defineFlow('dynamic', [step({ id: 'd1', run: () => 'ok' })]),
+        contextMap: () => ({}),
+      });
+      expect(node.kind).toBe('subflow');
+      expect(typeof node.flow).toBe('function');
+    });
+
+    it('supports dependsOn and runnerOptions', () => {
+      const childFlow = defineFlow('child', [step({ id: 'c1', run: () => 1 })]);
+      const node = subflow({
+        id: 'sub3',
+        flow: childFlow,
+        contextMap: () => ({}),
+        dependsOn: ['prev'],
+        runnerOptions: { concurrency: 2 },
+      });
+      expect(node.dependsOn).toEqual(['prev']);
+      expect(node.runnerOptions).toEqual({ concurrency: 2 });
     });
   });
 });

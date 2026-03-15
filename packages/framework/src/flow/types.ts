@@ -148,6 +148,17 @@ export interface FlowCatchNode<TContext = Record<string, unknown>> extends FlowN
   finally?: FlowNode<TContext>[];
 }
 
+export interface FlowSubflowNode<TContext = Record<string, unknown>, TChildContext = Record<string, unknown>>
+  extends FlowNodeBase<TContext> {
+  kind: 'subflow';
+  /** The child flow definition, or a thunk that produces one. */
+  flow: FlowDefinition<TChildContext> | ((ctx: FlowExecutionContext<TContext>) => MaybePromise<FlowDefinition<TChildContext>>);
+  /** Map parent context/inputs to the child flow's context. */
+  contextMap: (ctx: FlowExecutionContext<TContext>, input: unknown) => MaybePromise<TChildContext>;
+  /** Optional runner options for the child flow. */
+  runnerOptions?: FlowRunnerOptions<TChildContext>;
+}
+
 export type FlowNode<TContext = Record<string, unknown>> =
   | FlowStepNode<TContext>
   | FlowGateNode<TContext>
@@ -156,7 +167,8 @@ export type FlowNode<TContext = Record<string, unknown>> =
   | FlowParallelNode<TContext>
   | FlowSequenceNode<TContext>
   | FlowMapNode<TContext>
-  | FlowCatchNode<TContext>;
+  | FlowCatchNode<TContext>
+  | FlowSubflowNode<TContext>;
 
 export interface FlowDefinition<TContext = Record<string, unknown>> {
   id: string;
