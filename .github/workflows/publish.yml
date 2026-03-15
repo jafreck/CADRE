@@ -20,17 +20,20 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.22.1"
+          node-version: "22"
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
 
-      - run: npm ci
+      - name: Install latest npm
+        run: npm install -g npm@latest
+
+      - run: npm install --legacy-peer-deps
       - run: npm run build
       - run: npm test
 
-      # Trusted publishing: OIDC auth, no NPM_TOKEN needed.
-      # Requires npm 11.5.1+ (ships with Node 22.14.0+).
-      # Provenance attestations are generated automatically.
+      # Trusted publishing: OIDC auth via --provenance, no NPM_TOKEN needed.
       # Configure at: npmjs.com → @cadre-dev/cadre → Settings → Trusted Publisher
       #   Organization/user: jafreck
       #   Repository: CADRE
       #   Workflow filename: publish.yml
-      - run: npm publish --access public
+      - run: npm publish --provenance --access public
