@@ -9,6 +9,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: npm
     # Skip framework-only releases — those are handled by publish-framework.yml
     if: ${{ !startsWith(github.event.release.tag_name, 'framework-v') }}
     permissions:

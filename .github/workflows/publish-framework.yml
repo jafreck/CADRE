@@ -10,6 +10,7 @@ jobs:
   publish-framework:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: npm
     permissions:
       contents: read
       id-token: write # Required for OIDC trusted publishing
