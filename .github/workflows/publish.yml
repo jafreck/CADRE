@@ -27,9 +27,9 @@ jobs:
       - run: npm test
 
       # Trusted publishing: OIDC auth, no NPM_TOKEN needed.
-      # Provenance attestations are generated automatically.
+      # --provenance triggers OIDC-based auth and generates provenance attestations.
       # Configure at: npmjs.com → @cadre-dev/cadre → Settings → Trusted Publisher
       #   Organization/user: jafreck
       #   Repository: CADRE
       #   Workflow filename: publish.yml
-      - run: npm publish --access public
+      - run: npm publish --access public --provenance
