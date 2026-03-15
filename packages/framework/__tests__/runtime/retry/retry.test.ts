@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RetryExecutor, type LoggerLike, type RetryOptions, type RetryResult } from '../../../src/runtime/retry/retry.js';
+import { RetryExecutor, RETRY_ORIGINAL, type LoggerLike, type RetryOptions, type RetryResult } from '../../../src/runtime/retry/retry.js';
 
 function makeLogger(): LoggerLike {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -197,5 +197,142 @@ describe('RetryExecutor', () => {
     });
 
     expect(attempts).toEqual([1, 2]);
+  });
+
+  describe('async onRetry', () => {
+    it('should await an async onRetry callback before the delay', async () => {
+      const order: string[] = [];
+      const onRetry = vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        order.push('onRetry-done');
+      });
+
+      let attempt = 0;
+      await executor.execute({
+        fn: async () => {
+          attempt++;
+          if (attempt < 2) throw new Error('fail');
+          order.push('fn-success');
+          return 'ok';
+        },
+        maxAttempts: 2,
+        baseDelayMs: 1,
+        onRetry,
+      });
+
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['onRetry-done', 'fn-success']);
+    });
+
+    it('should still work with a sync onRetry callback', async () => {
+      const onRetry = vi.fn();
+      let attempt = 0;
+      await executor.execute({
+        fn: async () => {
+          attempt++;
+          if (attempt < 2) throw new Error('fail');
+          return 'ok';
+        },
+        maxAttempts: 2,
+        baseDelayMs: 1,
+        onRetry,
+      });
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('computeDelay', () => {
+    it('should use computeDelay when provided', async () => {
+      const computeDelay = vi.fn(() => 1);
+      let attempt = 0;
+
+      await executor.execute({
+        fn: async () => {
+          attempt++;
+          if (attempt < 3) throw new Error('fail');
+          return 'ok';
+        },
+        maxAttempts: 3,
+        baseDelayMs: 1000,
+        maxDelayMs: 30000,
+        computeDelay,
+      });
+
+      expect(computeDelay).toHaveBeenCalledTimes(2);
+      expect(computeDelay).toHaveBeenCalledWith(1, expect.any(Error), { baseDelayMs: 1000, maxDelayMs: 30000 });
+      expect(computeDelay).toHaveBeenCalledWith(2, expect.any(Error), { baseDelayMs: 1000, maxDelayMs: 30000 });
+    });
+
+    it('should allow error-adaptive delays', async () => {
+      const start = Date.now();
+      let attempt = 0;
+
+      await executor.execute({
+        fn: async () => {
+          attempt++;
+          if (attempt < 3) throw new Error('infra-503');
+          return 'ok';
+        },
+        maxAttempts: 3,
+        baseDelayMs: 10000, // default would be slow
+        computeDelay: (_attempt, error) => {
+          // fast retry for infra errors
+          if (String(error).includes('infra')) return 1;
+          return 5000;
+        },
+      });
+
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(200); // should be near-instant, not 10s+
+    });
+  });
+
+  describe('onExhausted with RETRY_ORIGINAL', () => {
+    it('should retry the original fn one more time when onExhausted returns RETRY_ORIGINAL', async () => {
+      let attempt = 0;
+      const result = await executor.execute({
+        fn: async (a) => {
+          attempt++;
+          // Fail on first 2 attempts, succeed on 3rd (the retry-original)
+          if (attempt <= 2) throw new Error('fail');
+          return `success-attempt-${a}`;
+        },
+        maxAttempts: 2,
+        baseDelayMs: 1,
+        onExhausted: async () => RETRY_ORIGINAL,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('success-attempt-3');
+      expect(result.attempts).toBe(3);
+      expect(result.recoveryUsed).toBe(true);
+    });
+
+    it('should fail when RETRY_ORIGINAL retry also fails', async () => {
+      const result = await executor.execute({
+        fn: async () => { throw new Error('always fail'); },
+        maxAttempts: 1,
+        baseDelayMs: 1,
+        onExhausted: async () => RETRY_ORIGINAL,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(2);
+      expect(result.recoveryUsed).toBe(true);
+      expect(result.error).toContain('always fail');
+    });
+
+    it('should still support direct recovery values alongside RETRY_ORIGINAL', async () => {
+      const result = await executor.execute({
+        fn: async () => { throw new Error('fail'); },
+        maxAttempts: 1,
+        baseDelayMs: 1,
+        onExhausted: async () => 'direct-recovery',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('direct-recovery');
+      expect(result.recoveryUsed).toBe(true);
+    });
   });
 });
