@@ -56,9 +56,9 @@
   },
   "devDependencies": {
     "@types/node": "^25",
-    "@vitest/coverage-v8": "^2",
+    "@vitest/coverage-v8": "^4",
     "tsx": "^4",
     "typescript": "^5.9",
-    "vitest": "^2"
+    "vitest": "^4"
   }
 }
