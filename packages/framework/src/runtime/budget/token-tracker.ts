@@ -4,6 +4,9 @@
 export class TokenTracker {
   private records: TokenRecord[] = [];
 
+  /** Baseline accumulators loaded via loadFromAggregates(). */
+  private baseline = { total: 0, byPhase: {} as Record<number, number>, byAgent: {} as Record<string, number> };
+
   /**
    * Record usage for an agent + phase, optionally scoped to a work item.
    */
@@ -23,7 +26,7 @@ export class TokenTracker {
    * Get total usage across all issues.
    */
   getTotal(): number {
-    return this.records.reduce((sum, r) => sum + r.tokens, 0);
+    return this.baseline.total + this.records.reduce((sum, r) => sum + r.tokens, 0);
   }
 
   /**
@@ -39,7 +42,7 @@ export class TokenTracker {
    * Get usage broken down by agent.
    */
   getByAgent(): Record<string, number> {
-    const byAgent: Record<string, number> = {};
+    const byAgent: Record<string, number> = { ...this.baseline.byAgent };
     for (const r of this.records) {
       byAgent[r.agent] = (byAgent[r.agent] ?? 0) + r.tokens;
     }
@@ -63,7 +66,7 @@ export class TokenTracker {
    * Get usage broken down by phase.
    */
   getByPhase(): Record<number, number> {
-    const byPhase: Record<number, number> = {};
+    const byPhase: Record<number, number> = { ...this.baseline.byPhase };
     for (const r of this.records) {
       byPhase[r.phase] = (byPhase[r.phase] ?? 0) + r.tokens;
     }
@@ -117,6 +120,33 @@ export class TokenTracker {
    */
   importRecords(records: TokenRecord[]): void {
     this.records = [...records];
+  }
+
+  /**
+   * Restore state from pre-aggregated totals (e.g. from a checkpoint that
+   * only persisted summaries, not individual records).
+   *
+   * Adds to the internal baseline so that getTotal(), getByPhase(), and
+   * getByAgent() reflect the provided aggregates. Can be called multiple
+   * times; values accumulate.
+   */
+  loadFromAggregates(data: {
+    total: number;
+    byPhase?: Record<number, number>;
+    byAgent?: Record<string, number>;
+  }): void {
+    this.baseline.total += data.total;
+    if (data.byPhase) {
+      for (const [phase, tokens] of Object.entries(data.byPhase)) {
+        const key = Number(phase);
+        this.baseline.byPhase[key] = (this.baseline.byPhase[key] ?? 0) + tokens;
+      }
+    }
+    if (data.byAgent) {
+      for (const [agent, tokens] of Object.entries(data.byAgent)) {
+        this.baseline.byAgent[agent] = (this.baseline.byAgent[agent] ?? 0) + tokens;
+      }
+    }
   }
 }
 

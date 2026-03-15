@@ -1,7 +1,8 @@
 import type { ZodType } from 'zod';
 
 /**
- * Extract and JSON-parse the first ```cadre-json``` fenced block from content.
+ * Extract and JSON-parse the first fenced block with the given marker from content.
+ * Defaults to ```cadre-json``` when no marker is specified.
  * Returns the parsed value, or null if no such block exists or the JSON is invalid.
  *
  * When a Zod `schema` is provided the parsed value is validated against it and
@@ -12,10 +13,10 @@ import type { ZodType } from 'zod';
  * This prevents false matches against ``` sequences embedded inside JSON string values
  * as escape sequences (e.g. `\n```ts` stored as two chars `\n` + backtick-backtick-backtick).
  */
-export function extractCadreJson<T>(content: string, schema: ZodType<T>): T | null;
-export function extractCadreJson(content: string): unknown | null;
-export function extractCadreJson<T>(content: string, schema?: ZodType<T>): T | unknown | null {
-  const { parsed } = extractCadreJsonWithError(content);
+export function extractCadreJson<T>(content: string, schema: ZodType<T>, marker?: string): T | null;
+export function extractCadreJson(content: string, schema?: undefined, marker?: string): unknown | null;
+export function extractCadreJson<T>(content: string, schema?: ZodType<T>, marker?: string): T | unknown | null {
+  const { parsed } = extractCadreJsonWithError(content, marker);
   if (parsed === null) return null;
   if (schema) return schema.parse(parsed);
   return parsed;
@@ -28,9 +29,11 @@ export function extractCadreJson<T>(content: string, schema?: ZodType<T>): T | u
  * Returns `{ parsed: value, parseError: null }` on success, or
  * `{ parsed: null, parseError: "…message…" }` on failure.
  */
-export function extractCadreJsonWithError(content: string): { parsed: unknown | null; parseError: string | null } {
-  const match = content.match(/```cadre-json[ \t]*\n([\s\S]*?)\n```[ \t]*(\n|$)/);
-  if (!match) return { parsed: null, parseError: 'No cadre-json block found' };
+export function extractCadreJsonWithError(content: string, marker = 'cadre-json'): { parsed: unknown | null; parseError: string | null } {
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('```' + escaped + '[ \\t]*\\n([\\s\\S]*?)\\n```[ \\t]*(\\n|$)');
+  const match = content.match(re);
+  if (!match) return { parsed: null, parseError: `No ${marker} block found` };
   const raw = match[1].trim();
   try {
     return { parsed: JSON.parse(raw), parseError: null };

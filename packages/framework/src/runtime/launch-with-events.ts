@@ -36,12 +36,31 @@ export interface InvocationMetric {
   taskId?: string;
   model?: string;
   tokens: number;
+  /** Input token count (when breakdown is available). */
+  inputTokens?: number;
+  /** Output token count (when breakdown is available). */
+  outputTokens?: number;
+  /** Cached input tokens (prompt cache hits). */
+  cachedTokens?: number;
   cost?: number;
   routing?: { mode?: string; complexity?: string; reason?: string };
   duration: number;
   success: boolean;
+  /** Invocation outcome with finer granularity than boolean success. */
+  status?: 'success' | 'failed' | 'cancelled' | 'timed-out';
   exitCode: number | null;
+  /** ISO timestamp when the invocation started. */
+  startTime: string;
+  /** ISO timestamp when the invocation completed (same as legacy `timestamp`). */
   timestamp: string;
+  /** Which attempt this was (1-based), when executed inside a retry loop. */
+  attemptNumber?: number;
+  /** Total attempts configured, when executed inside a retry loop. */
+  maxAttempts?: number;
+  /** Whether this invocation was a retry of a previously failed attempt. */
+  wasRetry?: boolean;
+  /** Consumer-specific metric metadata. */
+  extensions?: Record<string, unknown>;
 }
 
 /**
@@ -66,7 +85,7 @@ export class JsonlMetricsCollector implements MetricsCollector {
 }
 
 export interface AgentLauncherLike {
-  launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult>;
+  launchAgent(invocation: AgentInvocation, worktreePath?: string): Promise<AgentResult>;
 }
 
 // ── Options / Result ──
@@ -101,6 +120,18 @@ function extractTotalTokens(usage: AgentResult['tokenUsage']): number {
   if (typeof usage === 'number') return usage;
   if (usage && typeof usage === 'object') return (usage as TokenUsageDetail).input + (usage as TokenUsageDetail).output;
   return 0;
+}
+
+function extractTokenBreakdown(usage: AgentResult['tokenUsage']): { inputTokens?: number; outputTokens?: number; cachedTokens?: number } {
+  if (usage && typeof usage === 'object') {
+    const detail = usage as TokenUsageDetail;
+    return {
+      inputTokens: detail.input,
+      outputTokens: detail.output,
+      cachedTokens: detail.cachedInput,
+    };
+  }
+  return {};
 }
 
 // ── Core ──
@@ -167,9 +198,20 @@ export async function launchAgentWithEvents(
   }
 
   // 3. Cost estimation + metric recording
-  const costEstimate = costEstimator
-    ? costEstimator.estimate(tokens, model)
-    : undefined;
+  const breakdown = extractTokenBreakdown(result.tokenUsage);
+  let costEstimate: CostEstimate | undefined;
+  if (costEstimator) {
+    // Use detailed estimation when input/output breakdown is available
+    if (breakdown.inputTokens != null && breakdown.outputTokens != null) {
+      costEstimate = breakdown.cachedTokens != null
+        ? costEstimator.estimateWithCache(breakdown.inputTokens, breakdown.outputTokens, breakdown.cachedTokens, model)
+        : costEstimator.estimateDetailed(breakdown.inputTokens, breakdown.outputTokens, model);
+    } else {
+      costEstimate = costEstimator.estimate(tokens, model);
+    }
+  }
+
+  const startIso = new Date(startTime).toISOString();
 
   const metric: InvocationMetric = {
     invocationId,
@@ -180,11 +222,16 @@ export async function launchAgentWithEvents(
     taskId: invocation.sessionId,
     model,
     tokens,
+    inputTokens: breakdown.inputTokens,
+    outputTokens: breakdown.outputTokens,
+    cachedTokens: breakdown.cachedTokens,
     cost: costEstimate?.totalCost,
     routing,
     duration,
     success: result.success,
+    status: result.timedOut ? 'timed-out' : result.success ? 'success' : 'failed',
     exitCode: result.exitCode,
+    startTime: startIso,
     timestamp: new Date().toISOString(),
   };
 

@@ -177,4 +177,66 @@ describe('TokenTracker (agent-runtime)', () => {
       expect(new Date(records[0].timestamp).toISOString()).toBe(records[0].timestamp);
     });
   });
+
+  describe('loadFromAggregates', () => {
+    it('should restore total from aggregates', () => {
+      const tracker = new TokenTracker();
+      tracker.loadFromAggregates({ total: 5000 });
+      expect(tracker.getTotal()).toBe(5000);
+    });
+
+    it('should restore byAgent from aggregates', () => {
+      const tracker = new TokenTracker();
+      tracker.loadFromAggregates({
+        total: 5000,
+        byAgent: { alpha: 3000, beta: 2000 },
+      });
+      expect(tracker.getTotal()).toBe(5000);
+      const byAgent = tracker.getByAgent();
+      expect(byAgent['alpha']).toBe(3000);
+      expect(byAgent['beta']).toBe(2000);
+    });
+
+    it('should restore byPhase from aggregates', () => {
+      const tracker = new TokenTracker();
+      tracker.loadFromAggregates({
+        total: 5000,
+        byPhase: { 1: 3000, 2: 2000 },
+      });
+      expect(tracker.getTotal()).toBe(5000);
+      const byPhase = tracker.getByPhase();
+      expect(byPhase[1]).toBe(3000);
+      expect(byPhase[2]).toBe(2000);
+    });
+
+    it('should combine with subsequent record() calls', () => {
+      const tracker = new TokenTracker();
+      tracker.loadFromAggregates({ total: 1000, byAgent: { alpha: 1000 } });
+      tracker.record('1', 'alpha', 1, 500);
+      expect(tracker.getTotal()).toBe(1500);
+      expect(tracker.getByAgent()['alpha']).toBe(1500);
+    });
+
+    it('should accumulate across multiple loadFromAggregates calls', () => {
+      const tracker = new TokenTracker();
+      tracker.loadFromAggregates({ total: 1000, byAgent: { alpha: 1000 } });
+      tracker.loadFromAggregates({ total: 2000, byAgent: { alpha: 500, beta: 1500 } });
+      expect(tracker.getTotal()).toBe(3000);
+      expect(tracker.getByAgent()['alpha']).toBe(1500);
+      expect(tracker.getByAgent()['beta']).toBe(1500);
+    });
+
+    it('should not affect workItem tracking (aggregates have no workItemId)', () => {
+      const tracker = new TokenTracker();
+      tracker.loadFromAggregates({ total: 5000 });
+      expect(tracker.getByWorkItem()).toEqual({});
+      expect(tracker.getWorkItemTotal('1')).toBe(0);
+    });
+
+    it('should affect budget checks', () => {
+      const tracker = new TokenTracker();
+      tracker.loadFromAggregates({ total: 900 });
+      expect(tracker.checkFleetBudget(1000)).toBe('warning');
+    });
+  });
 });

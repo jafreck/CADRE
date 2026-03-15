@@ -20,14 +20,19 @@ export interface SpawnOpts {
 
 /**
  * Strip VS Code IPC environment variables to ensure truly headless execution.
+ * Pass additionalPrefixes to strip extra keys/prefixes beyond the built-in list.
  */
-export function stripVSCodeEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+export function stripVSCodeEnv(
+  env: Record<string, string | undefined>,
+  additionalPrefixes?: string[],
+): Record<string, string | undefined> {
   const stripped = { ...env };
   const prefixes = [
     'VSCODE_',
     'ELECTRON_',
     'TERM_PROGRAM_VERSION',
     'ORIGINAL_XDG_CURRENT_DESKTOP',
+    ...(additionalPrefixes ?? []),
   ];
   for (const key of Object.keys(stripped)) {
     if (prefixes.some(p => key.startsWith(p))) {

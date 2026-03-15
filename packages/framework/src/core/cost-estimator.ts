@@ -14,6 +14,13 @@ const DEFAULT_COSTS: Record<string, { input: number; output: number }> = {
 const DEFAULT_CACHE_DISCOUNT = 0.9;
 
 export interface CostEstimatorConfig {
+  /**
+   * Complete model pricing table. When provided, replaces the built-in
+   * defaults entirely (caller owns the full table).
+   * Should include a 'default' entry as fallback.
+   */
+  models?: Record<string, { input: number; output: number }>;
+  /** Merge-style overrides applied on top of the base table (built-in or `models`). */
   costOverrides?: Record<string, { input: number; output: number }>;
   /** Default input/output token split ratio when only total tokens are known. Defaults to 0.75. */
   defaultInputRatio?: number;
@@ -39,7 +46,8 @@ export class CostEstimator {
   private readonly cacheDiscount: number;
 
   constructor(config: CostEstimatorConfig = {}) {
-    this.costs = { ...DEFAULT_COSTS };
+    // If `models` is provided, use it as the base; otherwise use built-in defaults.
+    this.costs = config.models ? { ...config.models } : { ...DEFAULT_COSTS };
     this.inputRatio = config.defaultInputRatio ?? 0.75;
     this.cacheDiscount = config.cacheDiscount ?? DEFAULT_CACHE_DISCOUNT;
 
