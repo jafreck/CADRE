@@ -50,12 +50,6 @@ export class CommitManager {
     // Format message
     const fullMessage = this.formatMessage(message, issueNumber, type);
 
-    // Build commit options
-    const commitOpts: string[] = ['-m', fullMessage];
-    if (this.config.sign) {
-      commitOpts.push('-S');
-    }
-
     const result = await this.git.commit(fullMessage, undefined, {
       '--no-verify': null,
       ...(this.config.sign ? { '-S': null } : {}),

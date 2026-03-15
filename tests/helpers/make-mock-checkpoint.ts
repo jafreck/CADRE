@@ -43,6 +43,7 @@ export function makeMockCheckpoint(
     failTask: vi.fn().mockResolvedValue(undefined),
     blockTask: vi.fn().mockResolvedValue(undefined),
     recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+    flush: vi.fn().mockResolvedValue(undefined),
     recordGateResult: vi.fn().mockResolvedValue(undefined),
     setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
     startSubTask: vi.fn().mockResolvedValue(undefined),

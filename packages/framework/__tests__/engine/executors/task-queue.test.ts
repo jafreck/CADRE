@@ -25,7 +25,7 @@ function makeSession(
   };
 }
 
-// Alias for backward-compat tests — TaskQueue is SessionQueue
+// makeTask aliases makeSession for use in TaskQueue tests
 const makeTask = makeSession;
 
 describe('SessionQueue (also exported as TaskQueue)', () => {

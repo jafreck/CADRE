@@ -34,7 +34,8 @@ export class FleetReporter {
     const failedIssues: Array<{ issueNumber: number; error: string }> = [];
     const codeDoneNoPR: Array<{ issueNumber: number; branch: string }> = [];
 
-    for (const result of results) {
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
       if (result.status === 'fulfilled') {
         issueResults.push(result.value);
 
@@ -58,7 +59,7 @@ export class FleetReporter {
         }
       } else {
         failedIssues.push({
-          issueNumber: 0,
+          issueNumber: this.issues[i]?.number ?? 0,
           error: String(result.reason),
         });
       }

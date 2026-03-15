@@ -252,7 +252,7 @@ export class IssueOrchestrator {
       if (this.isBudgetExceededError(err)) {
         const cpState = this.checkpoint.getState();
         cpState.budgetExceeded = true;
-        await this.checkpoint.recordTokenUsage('__budget__', cpState.currentPhase, 0);
+        await this.checkpoint.flush();
         await this.progressWriter.appendEvent('Pipeline aborted: token budget exceeded');
         await this.dispatchNotification({
           type: 'issue-failed',

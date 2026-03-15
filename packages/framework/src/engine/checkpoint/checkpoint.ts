@@ -2,7 +2,7 @@
  * Checkpoint management for per-issue and fleet-level pipeline state.
  */
 
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { atomicWriteJSON, readJSON, exists, ensureDir, copyFile } from '../util/fs.js';
 import type { Logger, GateResult, TokenRecord } from '../types.js';
 
@@ -372,7 +372,7 @@ export class CheckpointManager {
 
   /**
    * Load detailed token records from the checkpoint.
-   * Returns an empty array when the field is absent (migration safety).
+   * Returns an empty array when the field is absent.
    */
   loadTokenRecords(): TokenRecord[] {
     return this.state?.tokenRecords ?? [];
@@ -427,6 +427,13 @@ export class CheckpointManager {
    */
   isSubTaskCompleted(subTaskId: string): boolean {
     return this.state?.subTasks?.[subTaskId] === true;
+  }
+
+  /**
+   * Flush in-memory state to disk without recording any agent/token data.
+   */
+  async flush(): Promise<void> {
+    await this.save();
   }
 
   /**
@@ -495,28 +502,6 @@ export class FleetCheckpointManager {
       }
     }
 
-    // Migration: check for a legacy checkpoint at the parent directory
-    // (before stateDir was namespaced by projectName). If it exists and
-    // belongs to this project, copy it to the new location.
-    const legacyPath = join(dirname(this.cadreDir), 'fleet-checkpoint.json');
-    if (legacyPath !== this.checkpointPath && (await this.store.exists(legacyPath))) {
-      try {
-        const legacy = await this.store.readJSON<FleetCheckpointState>(legacyPath);
-        if (legacy.projectName === this.projectName) {
-          this.logger.info(
-            `Migrating legacy fleet checkpoint from ${legacyPath} to ${this.checkpointPath}`,
-          );
-          this.state = legacy;
-          this.migrateState();
-          this.state.resumeCount += 1;
-          await this.save();
-          return this.state;
-        }
-      } catch {
-        // Legacy file is unreadable — ignore and start fresh
-      }
-    }
-
     this.state = {
       projectName: this.projectName,
       version: 1,
@@ -536,8 +521,7 @@ export class FleetCheckpointManager {
   }
 
   /**
-   * Migrate legacy checkpoint state fields to the current schema.
-   * - Renames `byIssue` → `byWorkItem` in tokenUsage.
+   * Ensure checkpoint state fields exist.
    * - Ensures `tokenUsage` and `tokenUsage.byWorkItem` exist.
    */
   private migrateState(): void {
@@ -545,11 +529,6 @@ export class FleetCheckpointManager {
     if (!this.state.tokenUsage) {
       this.state.tokenUsage = { total: 0, byWorkItem: {} };
     } else {
-      const tu = this.state.tokenUsage as Record<string, unknown>;
-      if (!this.state.tokenUsage.byWorkItem && tu.byIssue) {
-        this.state.tokenUsage.byWorkItem = tu.byIssue as Record<string, number>;
-        delete tu.byIssue;
-      }
       if (!this.state.tokenUsage.byWorkItem) {
         this.state.tokenUsage.byWorkItem = {};
       }

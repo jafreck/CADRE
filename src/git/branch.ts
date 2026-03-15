@@ -25,24 +25,28 @@ export class BranchManager {
   /**
    * Delete a local branch.
    */
-  async deleteLocal(branchName: string): Promise<void> {
+  async deleteLocal(branchName: string): Promise<boolean> {
     try {
       await this.git.branch(['-D', branchName]);
       this.logger.debug(`Deleted local branch ${branchName}`);
+      return true;
     } catch (err) {
       this.logger.warn(`Failed to delete local branch ${branchName}: ${err}`);
+      return false;
     }
   }
 
   /**
    * Delete a remote branch.
    */
-  async deleteRemote(branchName: string): Promise<void> {
+  async deleteRemote(branchName: string): Promise<boolean> {
     try {
       await this.git.push(['origin', '--delete', branchName]);
       this.logger.debug(`Deleted remote branch ${branchName}`);
+      return true;
     } catch (err) {
       this.logger.warn(`Failed to delete remote branch ${branchName}: ${err}`);
+      return false;
     }
   }
 

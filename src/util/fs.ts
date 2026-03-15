@@ -1,4 +1,4 @@
-import { writeFile, rename, mkdir, readFile, access, readdir, stat } from 'node:fs/promises';
+import { writeFile, rename, mkdir, readFile, access, readdir, stat, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -67,8 +67,14 @@ export async function readFileOrNull(filePath: string): Promise<string | null> {
 export async function listFilesRecursive(dirPath: string, relativeTo?: string): Promise<string[]> {
   const base = relativeTo ?? dirPath;
   const results: string[] = [];
+  const visited = new Set<string>();
+  const rootReal = await realpath(dirPath);
 
   async function walk(current: string): Promise<void> {
+    const real = await realpath(current);
+    if (visited.has(real)) return;
+    if (!real.startsWith(rootReal)) return;
+    visited.add(real);
     const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = join(current, entry.name);
