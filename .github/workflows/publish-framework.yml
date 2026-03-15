@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22.22.1"
+          registry-url: "https://registry.npmjs.org"
 
       - run: npm ci
 
@@ -28,6 +29,10 @@ jobs:
 
       - name: Run framework tests
         run: npx vitest run --exclude 'tests/e2e-*.test.ts'
+
+      # Remove the _authToken line that actions/setup-node adds to .npmrc
+      # so npm falls back to OIDC for trusted publishing.
+      - run: sed -i '/_authToken/d' ~/.npmrc
 
       # Trusted publishing: OIDC auth, no NPM_TOKEN needed.
       # Requires npm 11.5.1+ (ships with Node 22.14.0+).
