@@ -10,6 +10,7 @@ export {
   sequence,
   map,
   catchError,
+  subflow,
   gatedStep,
 } from './dsl.js';
 
@@ -35,6 +36,7 @@ export type {
   FlowSequenceNode,
   FlowMapNode,
   FlowCatchNode,
+  FlowSubflowNode,
   FlowDefinition,
   FlowExecutionContext,
   FlowRunResult,

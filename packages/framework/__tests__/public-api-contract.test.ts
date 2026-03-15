@@ -183,6 +183,7 @@ describe('framework package contract', () => {
       'spawnProcess',
       'step',
       'stripVSCodeEnv',
+      'subflow',
       'trackProcess',
       'unregisterAgentBackendFactory',
       'unregisterGatePlugin',
@@ -297,6 +298,7 @@ describe('framework package contract', () => {
       'phaseGateAsFlowGate',
       'sequence',
       'step',
+      'subflow',
       'validateFlowContracts',
     ]);
 
