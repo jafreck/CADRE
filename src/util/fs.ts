@@ -1,53 +1,18 @@
-import { writeFile, rename, mkdir, readFile, access, readdir, stat, realpath } from 'node:fs/promises';
+/**
+ * Filesystem utilities for cadre.
+ *
+ * Core utilities (atomicWriteFile, atomicWriteJSON, readJSON, exists, ensureDir)
+ * are re-exported from @cadre-dev/framework/util/fs.
+ * Cadre-specific helpers are defined locally below.
+ */
+
+import { readFile, readdir, stat, realpath, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
 
-/**
- * Atomically write a file by writing to a temp location first, then renaming.
- * This prevents partial/corrupt writes on crash.
- */
-export async function atomicWriteFile(filePath: string, data: string): Promise<void> {
-  const dir = dirname(filePath);
-  await mkdir(dir, { recursive: true });
-  const tmpPath = join(dir, `.tmp-${randomUUID()}`);
-  await writeFile(tmpPath, data, 'utf-8');
-  await rename(tmpPath, filePath);
-}
+// ── Re-exported from framework ──
+export { atomicWriteFile, atomicWriteJSON, readJSON, exists, ensureDir, copyFile } from '@cadre-dev/framework/util/fs';
 
-/**
- * Atomically write a JSON file with pretty printing.
- */
-export async function atomicWriteJSON(filePath: string, data: unknown): Promise<void> {
-  await atomicWriteFile(filePath, JSON.stringify(data, null, 2) + '\n');
-}
-
-/**
- * Read a JSON file and parse it.
- */
-export async function readJSON<T = unknown>(filePath: string): Promise<T> {
-  const content = await readFile(filePath, 'utf-8');
-  return JSON.parse(content) as T;
-}
-
-/**
- * Check if a file or directory exists.
- */
-export async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Ensure a directory exists, creating it recursively if needed.
- */
-export async function ensureDir(dirPath: string): Promise<void> {
-  await mkdir(dirPath, { recursive: true });
-}
+// ── Cadre-specific helpers ──
 
 /**
  * Read a file as string, returning null if it doesn't exist.
@@ -62,7 +27,7 @@ export async function readFileOrNull(filePath: string): Promise<string | null> {
 
 /**
  * Get a flat listing of all files under a directory, recursively.
- * Returns relative paths.
+ * Returns relative paths. Skips node_modules and .git.
  */
 export async function listFilesRecursive(dirPath: string, relativeTo?: string): Promise<string[]> {
   const base = relativeTo ?? dirPath;
@@ -103,7 +68,7 @@ export async function readTextFile(filePath: string): Promise<string> {
  * Write a text file, ensuring directory exists.
  */
 export async function writeTextFile(filePath: string, content: string): Promise<void> {
-  await ensureDir(dirname(filePath));
+  await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, content, 'utf-8');
 }
 

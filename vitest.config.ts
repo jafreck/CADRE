@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^@cadre-dev\/framework$/, replacement: resolve(__dirname, 'packages/framework/src/index.ts') },
+      { find: /^@cadre-dev\/framework\/util\/fs$/, replacement: resolve(__dirname, 'packages/framework/src/engine/util/fs.ts') },
       {
         find: /^@cadre-dev\/framework\/(.+)$/,
         replacement: `${resolve(__dirname, 'packages/framework/src')}/$1/index.ts`,

@@ -17,6 +17,7 @@
     "baseUrl": ".",
     "paths": {
       "@cadre-dev/framework": ["packages/framework/src/index.ts"],
+      "@cadre-dev/framework/util/fs": ["packages/framework/src/engine/util/fs.ts"],
       "@cadre-dev/framework/*": [
         "packages/framework/src/*/index.ts",
         "packages/framework/src/*"
