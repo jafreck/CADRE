@@ -110,9 +110,9 @@ export function catchError<TContext = Record<string, unknown>>(
  * })
  * ```
  */
-export function subflow<TContext = Record<string, unknown>, TChildContext = Record<string, unknown>>(
-  config: Omit<FlowSubflowNode<TContext, TChildContext>, 'kind'>,
-): FlowSubflowNode<TContext, TChildContext> {
+export function subflow<TContext = Record<string, unknown>, TChildContext = Record<string, unknown>, TInput = unknown>(
+  config: Omit<FlowSubflowNode<TContext, TChildContext, TInput>, 'kind'>,
+): FlowSubflowNode<TContext, TChildContext, TInput> {
   return { kind: 'subflow', ...config };
 }
 

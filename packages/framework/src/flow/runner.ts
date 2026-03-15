@@ -618,17 +618,17 @@ export class FlowRunner<TContext = Record<string, unknown>> {
           ? await node.flow(context)
           : node.flow;
         const childContext = await node.contextMap(context, resolvedInput);
-        const childRunner = new FlowRunner<Record<string, unknown>>();
-        const childOptions = node.runnerOptions ?? {};
+        const childRunner = new FlowRunner();
+        const childOptions: FlowRunnerOptions = { ...(node.runnerOptions ?? {}) };
         // Propagate abort signal from parent
         if (state.options.signal && !childOptions.signal) {
           childOptions.signal = state.options.signal;
         }
-        const result = await childRunner.run(
-          childFlow as FlowDefinition<Record<string, unknown>>,
-          childContext as Record<string, unknown>,
-          childOptions as FlowRunnerOptions<Record<string, unknown>>,
-        );
+        // Inherit continueOnError from parent when not explicitly set
+        if (state.options.continueOnError && childOptions.continueOnError === undefined) {
+          childOptions.continueOnError = state.options.continueOnError;
+        }
+        const result = await childRunner.run(childFlow, childContext, childOptions);
         if (result.status === 'failed' && result.error) {
           throw result.error;
         }
