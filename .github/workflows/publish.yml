@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "22.22.1"
           registry-url: "https://registry.npmjs.org"
 
       - run: npm ci
@@ -28,7 +28,7 @@ jobs:
       - run: npm test
 
       # Trusted publishing: OIDC auth, no NPM_TOKEN needed.
-      # Requires npm 11.5.1+ (ships with Node 24).
+      # Requires npm 11.5.1+ (ships with Node 22.14.0+).
       # Provenance attestations are generated automatically.
       # Configure at: npmjs.com → @cadre-dev/cadre → Settings → Trusted Publisher
       #   Organization/user: jafreck
