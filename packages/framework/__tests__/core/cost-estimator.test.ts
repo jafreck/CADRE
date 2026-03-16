@@ -88,4 +88,58 @@ describe('CostEstimator', () => {
       expect(result.outputCost).toBeCloseTo(0.005, 4);
     });
   });
+
+  describe('replaceable model table', () => {
+    it('should replace built-in defaults when models config is provided', () => {
+      const custom = new CostEstimator({
+        models: {
+          'my-model': { input: 0.001, output: 0.002 },
+          'default': { input: 0.001, output: 0.002 },
+        },
+      });
+
+      // Built-in gpt-4o should not be available
+      const gptResult = custom.estimate(1000, 'gpt-4o');
+      // Falls back to 'default' which is now our custom default
+      expect(gptResult.inputCost).toBeCloseTo(0.75 * 0.001, 6);
+
+      // Custom model should work
+      const myResult = custom.estimate(1000, 'my-model');
+      expect(myResult.inputCost).toBeCloseTo(0.75 * 0.001, 6);
+      expect(myResult.outputCost).toBeCloseTo(0.25 * 0.002, 6);
+    });
+
+    it('should allow costOverrides on top of a custom models table', () => {
+      const custom = new CostEstimator({
+        models: {
+          'base-model': { input: 0.001, output: 0.002 },
+          'default': { input: 0.001, output: 0.002 },
+        },
+        costOverrides: {
+          'override-model': { input: 0.01, output: 0.02 },
+        },
+      });
+
+      const baseResult = custom.estimate(1000, 'base-model');
+      expect(baseResult.inputCost).toBeCloseTo(0.75 * 0.001, 6);
+
+      const overrideResult = custom.estimate(1000, 'override-model');
+      expect(overrideResult.inputCost).toBeCloseTo(0.75 * 0.01, 6);
+    });
+  });
+
+  describe('estimateWithCache', () => {
+    it('should discount cached input tokens', () => {
+      const result = estimator.estimateWithCache(10000, 2000, 5000, 'gpt-4o');
+      expect(result.cachedInputTokens).toBe(5000);
+      expect(result.cacheSavings).toBeGreaterThan(0);
+      // Fresh: 5000 * 0.005/1K = 0.025
+      // Cached: 5000 * 0.005/1K * 0.1 = 0.0025
+      // Total input: 0.0275
+      expect(result.inputCost).toBeCloseTo(0.0275, 4);
+      expect(result.totalCost).toBeLessThan(
+        estimator.estimateDetailed(10000, 2000, 'gpt-4o').totalCost,
+      );
+    });
+  });
 });

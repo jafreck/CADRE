@@ -38,6 +38,10 @@ const expectedExports: Record<string, { types: string; default: string }> = {
     types: './dist/notifications/index.d.ts',
     default: './dist/notifications/index.js',
   },
+  './util/fs': {
+    types: './dist/engine/util/fs.d.ts',
+    default: './dist/engine/util/fs.js',
+  },
 };
 
 const expectedTypesVersions = {
@@ -47,6 +51,7 @@ const expectedTypesVersions = {
     engine: ['dist/engine/index.d.ts'],
     flow: ['dist/flow/index.d.ts'],
     notifications: ['dist/notifications/index.d.ts'],
+    'util/fs': ['dist/engine/util/fs.d.ts'],
   },
 };
 
@@ -111,6 +116,7 @@ describe('framework package contract', () => {
       'PhaseRegistry',
       'PreRunValidationSuite',
       'ProviderRegistry',
+      'RETRY_ORIGINAL',
       'RetryExecutor',
       'SerialExecutor',
       'SessionQueue',
@@ -183,6 +189,7 @@ describe('framework package contract', () => {
       'spawnProcess',
       'step',
       'stripVSCodeEnv',
+      'subflow',
       'trackProcess',
       'unregisterAgentBackendFactory',
       'unregisterGatePlugin',
@@ -211,6 +218,7 @@ describe('framework package contract', () => {
       'HostSession',
       'JsonlMetricsCollector',
       'ProviderRegistry',
+      'RETRY_ORIGINAL',
       'RetryExecutor',
       'TokenTracker',
       '_resetLoginShellEnvCache',
@@ -257,6 +265,7 @@ describe('framework package contract', () => {
       'IssueProgressWriter',
       'ParallelExecutor',
       'PhaseRegistry',
+      'RETRY_ORIGINAL',
       'RetryExecutor',
       'SerialExecutor',
       'SessionQueue',
@@ -297,6 +306,7 @@ describe('framework package contract', () => {
       'phaseGateAsFlowGate',
       'sequence',
       'step',
+      'subflow',
       'validateFlowContracts',
     ]);
 

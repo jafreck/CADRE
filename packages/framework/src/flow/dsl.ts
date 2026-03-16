@@ -10,6 +10,7 @@ import type {
   FlowParallelNode,
   FlowSequenceNode,
   FlowStepNode,
+  FlowSubflowNode,
   MaybePromise,
 } from './types.js';
 
@@ -90,6 +91,29 @@ export function catchError<TContext = Record<string, unknown>>(
   config: Omit<FlowCatchNode<TContext>, 'kind'>,
 ): FlowCatchNode<TContext> {
   return { kind: 'catch', ...config };
+}
+
+/**
+ * Create a subflow node that delegates to a child FlowDefinition.
+ *
+ * The child flow runs as a nested execution under the parent. Outputs from
+ * the child flow are returned as the node's output. The `contextMap` function
+ * bridges the parent context to the child context.
+ *
+ * @example
+ * ```ts
+ * subflow({
+ *   id: 'nested-analysis',
+ *   flow: analysisFlow,
+ *   contextMap: (ctx) => ({ payload: ctx.context.payload }),
+ *   dependsOn: ['previous-step'],
+ * })
+ * ```
+ */
+export function subflow<TContext = Record<string, unknown>, TChildContext = Record<string, unknown>, TInput = unknown>(
+  config: Omit<FlowSubflowNode<TContext, TChildContext, TInput>, 'kind'>,
+): FlowSubflowNode<TContext, TChildContext, TInput> {
+  return { kind: 'subflow', ...config };
 }
 
 /**

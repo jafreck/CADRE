@@ -13,6 +13,7 @@
 - `sequence({ id }, nodes)` — auto-wires `dependsOn` to the previous sibling
 - `map({ id, do, concurrency?, input?, dependsOn? })` — dynamic fan-out over collections
 - `catchError({ id, try, catch, finally? })` — try/catch/finally error handling
+- `subflow({ id, flow, contextMap, runnerOptions?, input?, dependsOn? })` — nested flow as a node
 - `gatedStep({ id, maxRetries, shouldExecute, run, evaluate })` — convenience combinator for step + gate + retry loop
 
 ## Data Routing References
@@ -97,6 +98,39 @@ const result = await runner.run(flow, context, {
 
 // result.status: 'completed' | 'failed' | 'cancelled' | 'timed-out'
 ```
+
+## Subflow (Nested Flow as a Node)
+
+The `subflow()` DSL node delegates execution to a child `FlowDefinition`. The child flow runs via a nested `FlowRunner` and its outputs are returned as the node's output. Child step IDs are scoped to the child flow and do not collide with parent IDs.
+
+```ts
+import { defineFlow, step, subflow, fromStep, fromContext, FlowRunner } from '@cadre-dev/framework/flow';
+
+const analysisFlow = defineFlow<{ issueNumber: number }>('analysis', [
+  step({
+    id: 'scan',
+    input: fromContext('issueNumber'),
+    run: (_ctx, num) => ({ files: ['src/index.ts'], issue: num }),
+  }),
+]);
+
+const pipeline = defineFlow<{ issue: number }>('pipeline', [
+  step({ id: 'prepare', run: () => ({ ready: true }) }),
+  subflow({
+    id: 'run-analysis',
+    flow: analysisFlow,
+    contextMap: (ctx) => ({ issueNumber: ctx.context.issue }),
+    dependsOn: ['prepare'],
+  }),
+]);
+
+const result = await new FlowRunner<{ issue: number }>().run(pipeline, { issue: 42 });
+// result.outputs['run-analysis'] → { flowId: 'analysis', status: 'completed', outputs: { scan: { files: [...], issue: 42 } } }
+```
+
+The `flow` property accepts either a `FlowDefinition` or a thunk `(ctx) => FlowDefinition` for lazy/dynamic resolution. The `contextMap` function bridges the parent execution context to the child's context. An optional `runnerOptions` property forwards configuration (hooks, concurrency, etc.) to the child runner.
+
+Abort signals from the parent are automatically propagated to the child. If the child flow fails, the error propagates to the parent.
 
 ## Concurrent Execution Mode
 

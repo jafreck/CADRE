@@ -613,6 +613,35 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         }
         return { output: tryOutput, caught: caughtError?.message };
       }
+      case 'subflow': {
+        const childFlow = typeof node.flow === 'function'
+          ? await node.flow(context)
+          : node.flow;
+        const childContext = await node.contextMap(context, resolvedInput);
+        const childRunner = new FlowRunner();
+        const childOptions: FlowRunnerOptions = { ...(node.runnerOptions ?? {}) };
+        // Propagate abort signal from parent
+        if (state.options.signal && !childOptions.signal) {
+          childOptions.signal = state.options.signal;
+        }
+        // Inherit continueOnError from parent when not explicitly set
+        if (state.options.continueOnError && childOptions.continueOnError === undefined) {
+          childOptions.continueOnError = state.options.continueOnError;
+        }
+        const result = await childRunner.run(childFlow, childContext, childOptions);
+        if (result.status === 'failed' && result.error) {
+          throw result.error;
+        }
+        if (result.status === 'cancelled' || result.status === 'timed-out') {
+          throw new FlowExecutionError(
+            `Subflow '${childFlow.id}' ${result.status}`,
+            state.flow.id,
+            node.id,
+            executionId,
+          );
+        }
+        return { flowId: result.flowId, status: result.status, outputs: result.outputs };
+      }
       default: {
         const _exhaustive: never = node;
         throw new Error(`Unsupported node kind ${(_exhaustive as { kind?: string }).kind ?? 'unknown'}`);
@@ -829,6 +858,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
           visit(node.try);
           if (node.finally) visit(node.finally);
         }
+        // subflow nodes are opaque — child flow nodes are not indexed in parent
       }
     };
     visit(nodes);
@@ -851,6 +881,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         if (node.kind === 'sequence') { collectIds(node.nodes); }
         if (node.kind === 'parallel') { for (const b of Object.values(node.branches)) collectIds(b); }
         if (node.kind === 'catch') { collectIds(node.try); if (node.finally) collectIds(node.finally); }
+        // subflow nodes are opaque — child node IDs are not in parent scope
       }
     };
     collectIds(flow.nodes);
@@ -867,6 +898,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         if (node.kind === 'sequence') { checkDeps(node.nodes); }
         if (node.kind === 'parallel') { for (const b of Object.values(node.branches)) checkDeps(b); }
         if (node.kind === 'catch') { checkDeps(node.try); if (node.finally) checkDeps(node.finally); }
+        // subflow nodes are opaque — no child deps to check in parent scope
       }
     };
     checkDeps(flow.nodes);

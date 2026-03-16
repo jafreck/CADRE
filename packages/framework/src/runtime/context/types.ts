@@ -21,6 +21,10 @@ export interface AgentInvocation {
   outputPath: string;
   /** Timeout in ms (overrides default). */
   timeout?: number;
+  /** Override the model for this invocation (for per-invocation routing, A/B testing, or fallback). */
+  modelOverride?: string;
+  /** Consumer-specific metadata. Avoids perpetual type widening for domain-specific fields. */
+  extensions?: Record<string, unknown>;
 }
 
 /** Detailed token usage split by input/output tokens and model. */
@@ -28,6 +32,8 @@ export interface TokenUsageDetail {
   input: number;
   output: number;
   model: string;
+  /** Cached input tokens (prompt cache hits). Reported by Claude and GPT-4o. */
+  cachedInput?: number;
 }
 
 /** Result of an agent invocation. */
@@ -54,6 +60,8 @@ export interface AgentResult {
   outputExists: boolean;
   /** Error message if the agent failed. */
   error?: string;
+  /** Consumer-specific result metadata. Avoids perpetual type widening for domain-specific fields. */
+  extensions?: Record<string, unknown>;
 }
 
 /** A discrete unit of work within an agent session. */

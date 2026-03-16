@@ -1,5 +1,5 @@
 import type { AgentInvocation, AgentResult } from './context/types.js';
-import type { RetryOptions, RetryResult } from './retry/retry.js';
+import type { RetryOptions, RetryResult, RetryOriginal } from './retry/retry.js';
 import { RetryExecutor, type LoggerLike } from './retry/retry.js';
 import { TokenTracker } from './budget/token-tracker.js';
 import { AgentLauncher } from './launcher/agent-launcher.js';
@@ -17,10 +17,12 @@ export interface LaunchWithRetryOptions {
   baseDelayMs?: number;
   /** Maximum delay in ms. */
   maxDelayMs?: number;
-  /** Called on each retry. */
-  onRetry?: (attempt: number, error: unknown) => void;
-  /** Called when all retries exhausted. Returns recovery result if successful. */
-  onExhausted?: (error: unknown) => Promise<AgentResult | null>;
+  /** Called on each retry. May be async. */
+  onRetry?: (attempt: number, error: unknown) => void | Promise<void>;
+  /** Called when all retries exhausted. Returns recovery result, RETRY_ORIGINAL, or null. */
+  onExhausted?: (error: unknown) => Promise<AgentResult | RetryOriginal | null>;
+  /** Override the default delay calculation. */
+  computeDelay?: (attempt: number, error: unknown, defaults: { baseDelayMs: number; maxDelayMs: number }) => number;
   /** Description for logging. */
   description?: string;
 }
@@ -50,6 +52,7 @@ export async function launchWithRetry(
     maxDelayMs: options.maxDelayMs,
     onRetry: options.onRetry,
     onExhausted: options.onExhausted,
+    computeDelay: options.computeDelay,
     description: options.description ?? `agent ${options.invocation.agent}`,
   };
 
