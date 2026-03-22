@@ -269,6 +269,12 @@ export class CopilotBackend implements AgentBackend {
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }
+    // Forward MCP server configs to agent subprocess
+    if (invocation.mcpServers) {
+      for (const [name, cfg] of Object.entries(invocation.mcpServers)) {
+        args.push('--additional-mcp-config', JSON.stringify({ [name]: { url: cfg.url } }));
+      }
+    }
     const timeout = invocation.timeout ?? this.defaultTimeout;
     return runInvokePipeline(
       this.cliCommand,
@@ -327,6 +333,12 @@ export class ClaudeBackend implements AgentBackend {
     ];
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
+    }
+    // Forward MCP server configs to agent subprocess
+    if (invocation.mcpServers) {
+      for (const [name, cfg] of Object.entries(invocation.mcpServers)) {
+        args.push('--mcp-config', JSON.stringify({ [name]: { type: 'url', url: cfg.url } }));
+      }
     }
     const timeout = invocation.timeout ?? this.defaultTimeout;
     return runInvokePipeline(
