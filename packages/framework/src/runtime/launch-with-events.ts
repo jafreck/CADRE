@@ -59,8 +59,6 @@ export interface InvocationMetric {
   maxAttempts?: number;
   /** Whether this invocation was a retry of a previously failed attempt. */
   wasRetry?: boolean;
-  /** Consumer-specific metric metadata. */
-  extensions?: Record<string, unknown>;
 }
 
 /**
