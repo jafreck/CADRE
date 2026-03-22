@@ -5,6 +5,7 @@ import type {
   IsolationCapabilities,
   IsolationPolicy,
   IsolationProvider,
+  IsolationProviderHealthCheckResult,
   IsolationSession,
 } from '@cadre-dev/framework/runtime';
 import type { KataSessionConfig } from './types.js';
@@ -19,6 +20,7 @@ export interface KataAdapter {
   execInSandbox(sessionId: string, command: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }>;
   stopSandbox(sessionId: string): Promise<void>;
   destroySandbox(sessionId: string): Promise<void>;
+  healthCheck?(): Promise<{ healthy: boolean; version?: string }>;
 }
 
 /** Default stub adapter — all operations are no-ops returning empty results. */
@@ -35,25 +37,69 @@ export class StubKataAdapter implements KataAdapter {
   async stopSandbox(_sessionId: string): Promise<void> {}
 
   async destroySandbox(_sessionId: string): Promise<void> {}
+
+  async healthCheck(): Promise<{ healthy: boolean; version?: string }> {
+    return { healthy: true, version: 'stub' };
+  }
 }
 
 /** IsolationSession backed by a Kata sandbox. */
 class KataSession implements IsolationSession {
   readonly sessionId: string;
   private readonly adapter: KataAdapter;
+  private destroyed = false;
 
   constructor(sessionId: string, adapter: KataAdapter) {
     this.sessionId = sessionId;
     this.adapter = adapter;
   }
 
-  async exec(command: string, args: string[], _options?: ExecOptions): Promise<ExecResult> {
-    const result = await this.adapter.execInSandbox(this.sessionId, [command, ...args]);
-    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+  async exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult> {
+    if (this.destroyed) {
+      throw new Error(`KataSession ${this.sessionId} has been destroyed`);
+    }
+
+    // Build the command array, wrapping for cwd/env if needed
+    let cmd: string[];
+    if (options?.cwd && options?.env) {
+      const envPairs = Object.entries(options.env).map(([k, v]) => `${k}=${v}`);
+      cmd = ['env', ...envPairs, 'sh', '-c', `cd ${options.cwd} && exec "$@"`, '--', command, ...args];
+    } else if (options?.cwd) {
+      cmd = ['sh', '-c', `cd ${options.cwd} && exec "$@"`, '--', command, ...args];
+    } else if (options?.env) {
+      const envPairs = Object.entries(options.env).map(([k, v]) => `${k}=${v}`);
+      cmd = ['env', ...envPairs, command, ...args];
+    } else {
+      cmd = [command, ...args];
+    }
+
+    const execPromise = this.adapter.execInSandbox(this.sessionId, cmd);
+
+    if (options?.timeoutMs != null) {
+      const timeoutPromise = new Promise<ExecResult>((resolve) => {
+        setTimeout(() => {
+          resolve({ exitCode: 124, stdout: '', stderr: 'Command timed out', timedOut: true });
+        }, options.timeoutMs!);
+      });
+      return Promise.race([execPromise, timeoutPromise]);
+    }
+
+    return execPromise;
   }
 
   async destroy(): Promise<void> {
-    await this.adapter.destroySandbox(this.sessionId);
+    if (this.destroyed) return;
+    this.destroyed = true;
+    try {
+      await this.adapter.stopSandbox(this.sessionId);
+    } catch {
+      // Ignore stop errors
+    }
+    try {
+      await this.adapter.destroySandbox(this.sessionId);
+    } catch {
+      // Ignore destroy errors
+    }
   }
 }
 
@@ -78,6 +124,21 @@ export class KataProvider implements IsolationProvider {
       secrets: false,
       resources: true,
     };
+  }
+
+  async healthCheck(): Promise<IsolationProviderHealthCheckResult> {
+    if (typeof this.adapter.healthCheck !== 'function') {
+      return { healthy: true, message: 'Adapter does not support health checks (assumed healthy)' };
+    }
+    try {
+      const result = await this.adapter.healthCheck();
+      if (result.healthy) {
+        return { healthy: true, message: 'Kata runtime reachable', details: { version: result.version } };
+      }
+      return { healthy: false, message: 'Kata runtime not reachable' };
+    } catch {
+      return { healthy: false, message: 'Kata runtime health check failed' };
+    }
   }
 
   /**

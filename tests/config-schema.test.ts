@@ -1031,6 +1031,43 @@ describe('CadreConfigSchema', () => {
       expect(result.isolation.policyProfile).toBe('default');
       expect(result.isolation.allowFallbackToHost).toBe(false);
     });
+
+    it('should accept kata options with backend and image', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        isolation: {
+          provider: 'kata',
+          kata: { backend: 'docker', image: 'ubuntu:22.04' },
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.isolation.kata?.backend).toBe('docker');
+        expect(result.data.isolation.kata?.image).toBe('ubuntu:22.04');
+      }
+    });
+
+    it('should default kata.backend to nerdctl', () => {
+      const result = CadreConfigSchema.parse({
+        ...validConfig,
+        isolation: {
+          provider: 'kata',
+          kata: {},
+        },
+      });
+      expect(result.isolation.kata?.backend).toBe('nerdctl');
+    });
+
+    it('should reject invalid kata.backend value', () => {
+      const result = CadreConfigSchema.safeParse({
+        ...validConfig,
+        isolation: {
+          provider: 'kata',
+          kata: { backend: 'podman' },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });
 

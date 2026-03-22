@@ -36,6 +36,18 @@ describe('createProviderRegistry', () => {
     expect(provider.name).toBe('kata');
   });
 
+  it('resolves kata provider with docker backend', () => {
+    const reg = createProviderRegistry({ kata: { backend: 'docker', image: 'ubuntu:22.04' } });
+    const provider = reg.resolve('kata');
+    expect(provider.name).toBe('kata');
+  });
+
+  it('resolves kata provider with nerdctl backend by default', () => {
+    const reg = createProviderRegistry({ kata: { image: 'alpine:3' } });
+    const provider = reg.resolve('kata');
+    expect(provider.name).toBe('kata');
+  });
+
   it('defaults to host when no override or config is given', () => {
     const reg = createProviderRegistry();
     const provider = reg.resolve();
