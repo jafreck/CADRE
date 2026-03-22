@@ -241,4 +241,52 @@ describe('DockerProvider', () => {
       expect(session.sessionId).toBe('container-xyz');
     });
   });
+
+  describe('healthCheck()', () => {
+    it('returns healthy result when runner succeeds', async () => {
+      const runner = vi.fn(async (_args: string[]) => ({
+        exitCode: 0,
+        stdout: '24.0.7\n',
+        stderr: '',
+      }));
+      const provider = new DockerProvider({ image: 'ubuntu:22.04', runner });
+      const result = await provider.healthCheck();
+      expect(result.healthy).toBe(true);
+      expect(result.message).toBe('Docker daemon reachable');
+      expect(result.details).toEqual({ version: '24.0.7' });
+    });
+
+    it('returns unhealthy result when runner returns non-zero exit code', async () => {
+      const runner = vi.fn(async (_args: string[]) => ({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'Cannot connect to the Docker daemon',
+      }));
+      const provider = new DockerProvider({ image: 'ubuntu:22.04', runner });
+      const result = await provider.healthCheck();
+      expect(result.healthy).toBe(false);
+      expect(result.message).toBe('Cannot connect to the Docker daemon');
+    });
+
+    it('returns unhealthy result when runner throws', async () => {
+      const runner = vi.fn(async (_args: string[]) => {
+        throw new Error('ENOENT: docker not found');
+      });
+      const provider = new DockerProvider({ image: 'ubuntu:22.04', runner });
+      const result = await provider.healthCheck();
+      expect(result.healthy).toBe(false);
+      expect(result.message).toBe('ENOENT: docker not found');
+    });
+
+    it('uses the injected runner (not always the default)', async () => {
+      const runner = vi.fn(async (_args: string[]) => ({
+        exitCode: 0,
+        stdout: '25.0.0\n',
+        stderr: '',
+      }));
+      const provider = new DockerProvider({ image: 'ubuntu:22.04', runner });
+      await provider.healthCheck();
+      expect(runner).toHaveBeenCalledWith(['info', '--format', '{{.ServerVersion}}']);
+    });
+  });
 });
