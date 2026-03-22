@@ -67,6 +67,8 @@ export const AgentConfigSchema = z.object({
     .object({
       cliCommand: z.string().default('copilot'),
       agentDir: z.string().default('agents'),
+      allowAllTools: z.boolean().default(true),
+      allowAllPaths: z.boolean().default(true),
       costOverrides: z
         .record(
           z.string(),
@@ -84,6 +86,7 @@ export const AgentConfigSchema = z.object({
       cliCommand: z.string().default('claude'),
       /** Directory where Claude subagent files live. */
       agentDir: z.string().default('agents'),
+      allowedTools: z.string().default('Bash,Read,Write,Edit,MultiEdit,Glob,Grep,TodoRead,TodoWrite,mcp__*'),
     })
     .default({}),
 });

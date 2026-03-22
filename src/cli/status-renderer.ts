@@ -42,7 +42,7 @@ export function renderFleetStatus(
   copilotConfig?: NonNullable<CadreConfig['agent']>['copilot'],
 ): string {
   const estimator = new CostEstimator(
-    copilotConfig ?? { cliCommand: 'copilot', agentDir: '.github/agents' },
+    copilotConfig ? { costOverrides: copilotConfig.costOverrides } : {},
   );
 
   const totalTokens = state.tokenUsage.total;

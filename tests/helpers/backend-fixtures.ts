@@ -23,6 +23,9 @@ export function makeConfig(overrides: Partial<{
   timeout: number;
   extraPath: string[];
   claudeCli: string;
+  allowAllTools: boolean;
+  allowAllPaths: boolean;
+  allowedTools: string;
 }> = {}) {
   return makeRuntimeConfig({
     copilot: {
@@ -38,10 +41,13 @@ export function makeConfig(overrides: Partial<{
       copilot: {
         cliCommand: overrides.cliCommand ?? 'copilot',
         agentDir: overrides.agentDir ?? '.github/agents',
+        allowAllTools: overrides.allowAllTools ?? true,
+        allowAllPaths: overrides.allowAllPaths ?? true,
       },
       claude: {
         cliCommand: overrides.claudeCli ?? 'claude',
         agentDir: overrides.agentDir ?? '.github/agents',
+        allowedTools: overrides.allowedTools ?? 'Bash,Read,Write,Edit,MultiEdit,Glob,Grep,TodoRead,TodoWrite,mcp__*',
       },
     },
     environment: {
