@@ -16,10 +16,16 @@ export interface BackendAgentConfig {
     cliCommand?: string;
     agentDir?: string;
     costOverrides?: Record<string, unknown>;
+    /** Pass --allow-all-tools to the Copilot CLI. Must be explicitly enabled. */
+    allowAllTools?: boolean;
+    /** Pass --allow-all-paths to the Copilot CLI. Must be explicitly enabled. */
+    allowAllPaths?: boolean;
   };
   claude?: BackendOptions & {
     cliCommand?: string;
     agentDir?: string;
+    /** Comma-separated tool names for --allowedTools. When omitted, --allowedTools is not passed. */
+    allowedTools?: string;
   };
 }
 

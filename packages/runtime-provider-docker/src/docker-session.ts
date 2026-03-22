@@ -27,6 +27,17 @@ export class DockerSession implements IsolationSession {
       }
     }
     execArgs.push(this.opts.containerId, command, ...args);
+
+    if (options?.timeoutMs != null) {
+      const runnerPromise = this.opts.runner(execArgs);
+      const timeoutPromise = new Promise<ExecResult>((resolve) => {
+        setTimeout(() => {
+          resolve({ exitCode: 124, stdout: '', stderr: 'Command timed out', timedOut: true });
+        }, options.timeoutMs!);
+      });
+      return Promise.race([runnerPromise, timeoutPromise]);
+    }
+
     return this.opts.runner(execArgs);
   }
 
