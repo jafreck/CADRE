@@ -44,4 +44,9 @@ describe('index public exports', () => {
     expect(indexExports.StubKataAdapter).toBeDefined();
     expect(typeof indexExports.StubKataAdapter).toBe('function');
   });
+
+  it('should export DockerKataAdapter', () => {
+    expect(indexExports.DockerKataAdapter).toBeDefined();
+    expect(typeof indexExports.DockerKataAdapter).toBe('function');
+  });
 });

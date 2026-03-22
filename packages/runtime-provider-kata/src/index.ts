@@ -5,3 +5,5 @@ export type { KataAdapter } from './kata-provider.js';
 export { createKataProvider } from './registry.js';
 export { NerdctlKataAdapter } from './nerdctl-adapter.js';
 export type { NerdctlKataAdapterOptions } from './nerdctl-adapter.js';
+export { DockerKataAdapter } from './docker-kata-adapter.js';
+export type { DockerKataAdapterOptions } from './docker-kata-adapter.js';

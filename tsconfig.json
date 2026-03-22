@@ -20,7 +20,9 @@
       "@cadre-dev/framework/*": [
         "packages/framework/src/*/index.ts",
         "packages/framework/src/*"
-      ]
+      ],
+      "@cadre-dev/runtime-provider-kata": ["packages/runtime-provider-kata/src/index.ts"],
+      "@cadre-dev/runtime-provider-docker": ["packages/runtime-provider-docker/src/index.ts"]
     }
   },
   "include": [

@@ -1,13 +1,20 @@
 import { ProviderRegistry } from '@cadre-dev/framework/runtime';
 import { HostProvider } from '@cadre-dev/framework/runtime';
 import { DockerProvider } from '@cadre-dev/runtime-provider-docker';
-import { KataProvider } from '@cadre-dev/runtime-provider-kata';
+import { KataProvider, NerdctlKataAdapter, DockerKataAdapter } from '@cadre-dev/runtime-provider-kata';
 
 export interface ProviderLoaderOptions {
   /** Docker image to use for Docker provider sessions. */
   dockerImage?: string;
   /** Worktree path to mount in Docker sessions. */
   worktreePath?: string;
+  /** Kata-specific options. */
+  kata?: {
+    /** CLI backend: 'nerdctl' or 'docker'. */
+    backend?: 'nerdctl' | 'docker';
+    /** Container image for Kata sessions. */
+    image?: string;
+  };
 }
 
 /**
@@ -37,8 +44,14 @@ export function createProviderRegistry(options: ProviderLoaderOptions = {}): Pro
     });
   });
 
-  // Kata provider — lazy
-  registry.registerFactory('kata', () => new KataProvider());
+  // Kata provider — lazy, backend selects CLI (nerdctl vs docker)
+  registry.registerFactory('kata', () => {
+    const image = options.kata?.image ?? 'alpine:3';
+    const adapter = options.kata?.backend === 'docker'
+      ? new DockerKataAdapter({ image })
+      : new NerdctlKataAdapter({ image });
+    return new KataProvider(adapter);
+  });
 
   return registry;
 }

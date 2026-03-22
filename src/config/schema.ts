@@ -22,6 +22,10 @@ const IsolationConfigSchema = z
     /** Kata Containers-specific options (used when provider is 'kata'). */
     kata: z
       .object({
+        /** CLI backend: 'nerdctl' (containerd-native) or 'docker' (Docker CLI with --runtime). */
+        backend: z.enum(['nerdctl', 'docker']).default('nerdctl'),
+        /** Container image to use for Kata sessions (e.g., 'alpine:3'). */
+        image: z.string().optional(),
         /** Path to the Kata runtime binary (e.g., /usr/bin/kata-runtime). */
         runtimePath: z.string().optional(),
       })
