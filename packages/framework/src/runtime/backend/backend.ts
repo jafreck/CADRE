@@ -16,10 +16,13 @@ export type { AgentBackend, BackendLoggerLike, BackendRuntimeConfig } from './co
 interface CopilotBackendOptions {
   cliCommand?: string;
   agentDir?: string;
+  allowAllTools?: boolean;
+  allowAllPaths?: boolean;
 }
 
 interface ClaudeBackendOptions {
   cliCommand?: string;
+  allowedTools?: string;
 }
 
 async function fsExists(path: string): Promise<boolean> {
@@ -240,6 +243,8 @@ export class CopilotBackend implements AgentBackend {
   private readonly agentDir: string;
   private readonly defaultTimeout: number;
   private readonly defaultModel: string | undefined;
+  private readonly allowAllTools: boolean;
+  private readonly allowAllPaths: boolean;
 
   constructor(
     private readonly config: BackendRuntimeConfig,
@@ -250,6 +255,8 @@ export class CopilotBackend implements AgentBackend {
     this.agentDir = options?.agentDir?.trim() || '.github/agents';
     this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
+    this.allowAllTools = options?.allowAllTools ?? false;
+    this.allowAllPaths = options?.allowAllPaths ?? false;
   }
 
   async init(): Promise<void> {
@@ -261,11 +268,11 @@ export class CopilotBackend implements AgentBackend {
     const args = [
       '--agent', invocation.agent,
       '-p', prompt,
-      '--allow-all-tools',
-      '--allow-all-paths',
       '--no-ask-user',
       '-s',
     ];
+    if (this.allowAllTools) args.push('--allow-all-tools');
+    if (this.allowAllPaths) args.push('--allow-all-paths');
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }
@@ -309,6 +316,7 @@ export class ClaudeBackend implements AgentBackend {
   private readonly cliCommand: string;
   private readonly defaultTimeout: number;
   private readonly defaultModel: string | undefined;
+  private readonly allowedTools: string | undefined;
 
   constructor(
     private readonly config: BackendRuntimeConfig,
@@ -318,6 +326,7 @@ export class ClaudeBackend implements AgentBackend {
     this.cliCommand = options?.cliCommand?.trim() || 'claude';
     this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
+    this.allowedTools = options?.allowedTools;
   }
 
   async init(): Promise<void> {
@@ -328,9 +337,11 @@ export class ClaudeBackend implements AgentBackend {
     const prompt = `Read your context file at: ${invocation.contextPath}`;
     const args = [
       '-p', prompt,
-      '--allowedTools', 'Bash,Read,Write,Edit,MultiEdit,Glob,Grep,TodoRead,TodoWrite,mcp__*',
-      '--output-format', 'json',
     ];
+    if (this.allowedTools) {
+      args.push('--allowedTools', this.allowedTools);
+    }
+    args.push('--output-format', 'json');
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }
