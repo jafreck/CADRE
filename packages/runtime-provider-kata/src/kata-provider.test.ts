@@ -194,7 +194,7 @@ describe('KataProvider', () => {
     });
 
     it('returns assumed-healthy when adapter has no healthCheck method', async () => {
-      delete (adapter as Record<string, unknown>)['healthCheck'];
+      delete (adapter as unknown as Record<string, unknown>)['healthCheck'];
       const result = await provider.healthCheck();
       expect(result.healthy).toBe(true);
       expect(result.message).toContain('assumed healthy');
