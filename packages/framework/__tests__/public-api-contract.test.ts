@@ -196,6 +196,7 @@ describe('framework package contract', () => {
       'unregisterNotificationProviderFactory',
       'validateFlowContracts',
       'verifyCommand',
+      'writeAgentLog',
     ]);
 
     expect(Object.keys(coreApi).sort()).toEqual([
@@ -254,6 +255,7 @@ describe('framework package contract', () => {
       'trackProcess',
       'unregisterAgentBackendFactory',
       'verifyCommand',
+      'writeAgentLog',
     ]);
 
     expect(Object.keys(engineApi).sort()).toEqual([

@@ -299,14 +299,11 @@ describe('CopilotBackend', () => {
     expect(pathVal.indexOf('/custom/bin')).toBeLessThan(pathVal.indexOf('/extra/bin') + 10);
   });
 
-  it('should write a log file for the invocation', async () => {
+  it('should not write a log file for the invocation', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult({ stdout: 'some output', stderr: 'some error' }));
     await backend.invoke(makeInvocation(), '/tmp/worktree');
-    expect(mockWriteFile).toHaveBeenCalledOnce();
-    const [logPath, content] = mockWriteFile.mock.calls[0];
-    expect(String(logPath)).toContain('/tmp/worktree');
-    expect(String(content)).toContain('some output');
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 
   it('should return tokenUsage=0 when stdout has no token info', async () => {
@@ -526,13 +523,11 @@ describe('ClaudeBackend', () => {
     expect(mockTrackProcess).toHaveBeenCalledWith(fakeChild);
   });
 
-  it('should write a log file for the invocation', async () => {
+  it('should not write a log file for the invocation', async () => {
     const backend = new ClaudeBackend(config, logger as never);
     setupSpawn(makeProcessResult({ stdout: 'claude output', stderr: '' }));
     await backend.invoke(makeInvocation(), '/tmp/worktree');
-    expect(mockWriteFile).toHaveBeenCalledOnce();
-    const [, content] = mockWriteFile.mock.calls[0];
-    expect(String(content)).toContain('claude output');
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 
   it('should use invocation.timeout when provided', async () => {
