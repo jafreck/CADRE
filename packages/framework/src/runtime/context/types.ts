@@ -23,8 +23,8 @@ export interface AgentInvocation {
   timeout?: number;
   /** Override the model for this invocation (for per-invocation routing, A/B testing, or fallback). */
   modelOverride?: string;
-  /** MCP servers to forward to the agent CLI subprocess. Key = server name, value = server config. */
-  mcpServers?: Record<string, { url: string }>;
+  /** MCP servers to forward to the agent CLI subprocess. Key = server name, value = backend-specific server config. */
+  mcpServers?: Record<string, Record<string, unknown>>;
 }
 
 /** Detailed token usage split by input/output tokens and model. */

@@ -6,6 +6,7 @@ import { statOrNull } from '../util/fs.js';
 import { Logger } from '@cadre-dev/framework/core';
 import { type AgentBackend } from '../agents/backend.js';
 import { createAgentBackend } from '../agents/backend-factory.js';
+import { writeAgentLog } from '@cadre-dev/framework/runtime';
 
 /**
  * Spawns agent invocations as headless child processes via the configured backend.
@@ -52,6 +53,9 @@ export class AgentLauncher {
    * Launch an agent in the context of a specific worktree.
    */
   async launchAgent(invocation: AgentInvocation, worktreePath: string): Promise<AgentResult> {
-    return this.backend.invoke(invocation, worktreePath) as Promise<AgentResult>;
+    const result = await this.backend.invoke(invocation, worktreePath) as AgentResult;
+    const logDir = join(this.config.logsDir, invocation.workItemId, 'logs');
+    await writeAgentLog(logDir, invocation, result);
+    return result;
   }
 }

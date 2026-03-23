@@ -15,6 +15,8 @@ export interface RuntimeConfig extends Omit<CadreConfig, 'stateDir' | 'worktreeR
   readonly worktreeRoot: string;
   /** Always present (CadreConfigSchema defaults this object). */
   readonly agent: NonNullable<CadreConfig['agent']>;
+  /** Directory for agent invocation logs. */
+  readonly logsDir: string;
 }
 
 export class ConfigLoadError extends Error {
@@ -134,6 +136,7 @@ export async function loadConfig(configPath: string): Promise<RuntimeConfig> {
     repoPath: resolvedRepoPath,
     stateDir: resolvedStateDir,
     worktreeRoot: resolvedWorktreeRoot,
+    logsDir: join(resolvedStateDir, 'issues'),
     agent,
   };
 

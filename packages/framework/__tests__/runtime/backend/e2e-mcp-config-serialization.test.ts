@@ -94,7 +94,7 @@ describe('e2e: MCP config serialization through backend invoke pipeline', () => 
       const backend = new CopilotBackend(makeCopilotConfig(), makeLogger());
 
       await backend.invoke(
-        makeInvocation({ mcpServers: { 'aamf-kb': { url: 'http://localhost:9000/sse' } } }),
+        makeInvocation({ mcpServers: { 'aamf-kb': { type: 'http', url: 'http://localhost:9000/sse' } } }),
         '/tmp/worktree',
       );
 
@@ -107,11 +107,11 @@ describe('e2e: MCP config serialization through backend invoke pipeline', () => 
 
       // The Copilot CLI requires the top-level mcpServers wrapper
       expect(mcpPayload).toEqual({
-        mcpServers: { 'aamf-kb': { url: 'http://localhost:9000/sse' } },
+        mcpServers: { 'aamf-kb': { type: 'http', url: 'http://localhost:9000/sse' } },
       });
       // Ensure the old broken format (without wrapper) is NOT used
       expect(mcpPayload).not.toEqual({
-        'aamf-kb': { url: 'http://localhost:9000/sse' },
+        'aamf-kb': { type: 'http', url: 'http://localhost:9000/sse' },
       });
     });
 
@@ -122,8 +122,8 @@ describe('e2e: MCP config serialization through backend invoke pipeline', () => 
       await backend.invoke(
         makeInvocation({
           mcpServers: {
-            'aamf-kb': { url: 'http://localhost:9000/sse' },
-            'docs-server': { url: 'http://localhost:9001/sse' },
+            'aamf-kb': { type: 'http', url: 'http://localhost:9000/sse' },
+            'docs-server': { type: 'http', url: 'http://localhost:9001/sse' },
           },
         }),
         '/tmp/worktree',
@@ -183,12 +183,12 @@ describe('e2e: MCP config serialization through backend invoke pipeline', () => 
       };
     }
 
-    it('should serialize MCP config with type: url for --mcp-config (no mcpServers wrapper)', async () => {
+    it('should pass through MCP config with type: url for --mcp-config (no mcpServers wrapper)', async () => {
       setupSpawn();
       const backend = new ClaudeBackend(makeClaudeConfig(), makeLogger());
 
       await backend.invoke(
-        makeInvocation({ mcpServers: { 'aamf-kb': { url: 'http://localhost:9000/sse' } } }),
+        makeInvocation({ mcpServers: { 'aamf-kb': { type: 'url', url: 'http://localhost:9000/sse' } } }),
         '/tmp/worktree',
       );
 
@@ -199,7 +199,7 @@ describe('e2e: MCP config serialization through backend invoke pipeline', () => 
       expect(mcpIdx).toBeGreaterThanOrEqual(0);
       const mcpPayload = JSON.parse(args[mcpIdx + 1]);
 
-      // Claude uses {name: {type: 'url', url: ...}} format (no mcpServers wrapper)
+      // Claude passes config through as-is, no mcpServers wrapper
       expect(mcpPayload).toEqual({
         'aamf-kb': { type: 'url', url: 'http://localhost:9000/sse' },
       });
