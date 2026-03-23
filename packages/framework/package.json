@@ -1,6 +1,6 @@
 {
   "name": "@cadre-dev/framework",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Consolidated framework for CADRE agent orchestration",
   "license": "MIT",
   "author": "Jacob Freck",
