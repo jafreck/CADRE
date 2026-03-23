@@ -279,7 +279,7 @@ export class CopilotBackend implements AgentBackend {
     // Forward MCP server configs to agent subprocess
     if (invocation.mcpServers) {
       for (const [name, cfg] of Object.entries(invocation.mcpServers)) {
-        args.push('--additional-mcp-config', JSON.stringify({ [name]: { url: cfg.url } }));
+        args.push('--additional-mcp-config', JSON.stringify({ mcpServers: { [name]: { url: cfg.url } } }));
       }
     }
     const timeout = invocation.timeout ?? this.defaultTimeout;
