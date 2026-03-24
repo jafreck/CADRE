@@ -54,6 +54,21 @@ describe('loadConfig – agent configuration', () => {
     expect(config.agent.copilot.cliCommand).toBe('gh copilot');
   });
 
+  it('should preserve explicit agent.copilot.effort', async () => {
+    setupFs({
+      ...BASE_CONFIG,
+      agent: {
+        ...BASE_CONFIG.agent,
+        copilot: {
+          ...BASE_CONFIG.agent.copilot,
+          effort: 'xhigh',
+        },
+      },
+    });
+    const config = await loadConfig('/tmp/repo/cadre.config.json');
+    expect(config.agent.copilot.effort).toBe('xhigh');
+  });
+
   it('should preserve explicit agent.model', async () => {
     setupFs(BASE_CONFIG);
     const config = await loadConfig('/tmp/repo/cadre.config.json');

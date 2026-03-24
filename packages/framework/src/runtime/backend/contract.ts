@@ -3,6 +3,8 @@ import type { LoggerLike } from '../retry/retry.js';
 
 export type BackendOptions = Record<string, unknown>;
 
+export type CopilotEffortLevel = 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface BackendLoggerLike extends LoggerLike {
   debug(message: string, context?: Record<string, unknown>): void;
 }
@@ -16,6 +18,8 @@ export interface BackendAgentConfig {
     cliCommand?: string;
     agentDir?: string;
     costOverrides?: Record<string, unknown>;
+    /** Pass --effort to the Copilot CLI. When omitted, the CLI default is used. */
+    effort?: CopilotEffortLevel;
     /** Pass --allow-all-tools to the Copilot CLI. Must be explicitly enabled. */
     allowAllTools?: boolean;
     /** Pass --allow-all-paths to the Copilot CLI. Must be explicitly enabled. */

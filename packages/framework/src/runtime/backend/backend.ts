@@ -9,6 +9,7 @@ import {
   type BackendLoggerLike,
   type BackendRuntimeConfig,
   type AgentBackend,
+  type CopilotEffortLevel,
 } from './contract.js';
 
 export type { AgentBackend, BackendLoggerLike, BackendRuntimeConfig } from './contract.js';
@@ -16,6 +17,7 @@ export type { AgentBackend, BackendLoggerLike, BackendRuntimeConfig } from './co
 interface CopilotBackendOptions {
   cliCommand?: string;
   agentDir?: string;
+  effort?: CopilotEffortLevel;
   allowAllTools?: boolean;
   allowAllPaths?: boolean;
 }
@@ -240,6 +242,7 @@ export class CopilotBackend implements AgentBackend {
   private readonly agentDir: string;
   private readonly defaultTimeout: number;
   private readonly defaultModel: string | undefined;
+  private readonly effort: CopilotEffortLevel | undefined;
   private readonly allowAllTools: boolean;
   private readonly allowAllPaths: boolean;
 
@@ -252,6 +255,7 @@ export class CopilotBackend implements AgentBackend {
     this.agentDir = options?.agentDir?.trim() || '.github/agents';
     this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
+    this.effort = options?.effort;
     this.allowAllTools = options?.allowAllTools ?? false;
     this.allowAllPaths = options?.allowAllPaths ?? false;
   }
@@ -270,6 +274,9 @@ export class CopilotBackend implements AgentBackend {
     ];
     if (this.allowAllTools) args.push('--allow-all-tools');
     if (this.allowAllPaths) args.push('--allow-all-paths');
+    if (this.effort) {
+      args.push('--effort', this.effort);
+    }
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }

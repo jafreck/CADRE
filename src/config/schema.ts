@@ -59,6 +59,8 @@ const NotificationsConfigSchema = z
 
 export type NotificationsConfig = z.infer<typeof NotificationsConfigSchema>;
 
+const CopilotEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
+
 export const AgentConfigSchema = z.object({
   /** Which AI backend to use for agent invocations. */
   backend: z.string().min(1).default('copilot'),
@@ -73,6 +75,8 @@ export const AgentConfigSchema = z.object({
       agentDir: z.string().default('agents'),
       allowAllTools: z.boolean().default(true),
       allowAllPaths: z.boolean().default(true),
+      /** Reasoning effort level to pass to the Copilot CLI via --effort. */
+      effort: CopilotEffortSchema.optional(),
       costOverrides: z
         .record(
           z.string(),

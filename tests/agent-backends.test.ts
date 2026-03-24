@@ -135,6 +135,16 @@ describe('CopilotBackend', () => {
     expect(args).toContain('--allow-all-paths');
   });
 
+  it('should include --effort when configured in config', async () => {
+    const backend = new CopilotBackend(makeConfig({ effort: 'high' }), logger as never);
+    setupSpawn(makeProcessResult());
+    await backend.invoke(makeInvocation(), '/tmp/worktree');
+
+    const [, args] = mockSpawnProcess.mock.calls[0];
+    expect(args).toContain('--effort');
+    expect(args).toContain('high');
+  });
+
   it('should not include --allow-all-tools or --allow-all-paths when disabled in config', async () => {
     const restrictedConfig = makeConfig({ allowAllTools: false, allowAllPaths: false });
     const backend = new CopilotBackend(restrictedConfig, logger as never);
