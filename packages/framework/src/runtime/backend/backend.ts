@@ -16,10 +16,13 @@ export type { AgentBackend, BackendLoggerLike, BackendRuntimeConfig } from './co
 interface CopilotBackendOptions {
   cliCommand?: string;
   agentDir?: string;
+  allowAllTools?: boolean;
+  allowAllPaths?: boolean;
 }
 
 interface ClaudeBackendOptions {
   cliCommand?: string;
+  allowedTools?: string;
 }
 
 async function fsExists(path: string): Promise<boolean> {
@@ -103,30 +106,35 @@ function parseTokenUsage(result: ProcessResult): number {
 }
 
 /**
- * Shared helper: write a structured log file for an agent invocation.
+ * Write a structured log file for an agent invocation.
+ *
+ * Exported as a convenience utility — consumers can call this after `invoke()`
+ * to persist raw agent output to disk. The framework invoke pipeline itself
+ * does not write logs; this is opt-in.
  */
-async function writeAgentLog(
-  logFile: string,
+export async function writeAgentLog(
+  logDir: string,
   invocation: AgentInvocation,
-  startTime: number,
-  processResult: ProcessResult,
+  result: AgentResult,
 ): Promise<void> {
   try {
+    await ensureDir(logDir);
+    const sessionSuffix = invocation.sessionId ? `-${invocation.sessionId}` : '';
+    const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${Date.now()}.log`);
     const logContent = [
       `=== Agent: ${invocation.agent} ===`,
       `=== Work Item: ${invocation.workItemId} ===`,
       `=== Phase: ${invocation.phase} ===`,
       invocation.sessionId ? `=== Session: ${invocation.sessionId} ===` : '',
-      `=== Started: ${new Date(startTime).toISOString()} ===`,
-      `=== Duration: ${Date.now() - startTime}ms ===`,
-      `=== Exit Code: ${processResult.exitCode} ===`,
-      `=== Timed Out: ${processResult.timedOut} ===`,
+      `=== Duration: ${result.duration}ms ===`,
+      `=== Exit Code: ${result.exitCode} ===`,
+      `=== Timed Out: ${result.timedOut} ===`,
       '',
       '--- STDOUT ---',
-      processResult.stdout,
+      result.stdout,
       '',
       '--- STDERR ---',
-      processResult.stderr,
+      result.stderr,
     ]
       .filter(Boolean)
       .join('\n');
@@ -137,9 +145,9 @@ async function writeAgentLog(
 }
 
 /**
- * Shared invoke pipeline: handles log-dir creation, process spawn, log writing,
- * token parsing, and result construction. Backend-specific arg building and
- * success detection are injected as parameters.
+ * Shared invoke pipeline: handles process spawn, token parsing, and result
+ * construction. Backend-specific arg building and success detection are
+ * injected as parameters.
  *
  * @param detectSuccess - Returns `{ success, error, failureMessage? }` where
  *   `failureMessage` overrides the default logger message on failure.
@@ -156,12 +164,6 @@ async function runInvokePipeline(
   detectSuccess: (r: ProcessResult) => { success: boolean; error?: string; failureMessage?: string },
 ): Promise<AgentResult> {
   const startTime = Date.now();
-  const logDir = join(worktreePath, '.cadre', 'issues', invocation.workItemId, 'logs');
-  await ensureDir(logDir);
-
-  const timestamp = Date.now();
-  const sessionSuffix = invocation.sessionId ? `-${invocation.sessionId}` : '';
-  const logFile = join(logDir, `${invocation.agent}${sessionSuffix}-${timestamp}.log`);
 
   logger.info(`Launching agent (${backendName}): ${invocation.agent}`, {
     workItemId: invocation.workItemId,
@@ -178,8 +180,6 @@ async function runInvokePipeline(
 
   trackProcess(child);
   const processResult = await promise;
-
-  await writeAgentLog(logFile, invocation, startTime, processResult);
 
   const tokenUsage = parseTokenUsage(processResult);
   const outputExists = await fsExists(invocation.outputPath);
@@ -240,6 +240,8 @@ export class CopilotBackend implements AgentBackend {
   private readonly agentDir: string;
   private readonly defaultTimeout: number;
   private readonly defaultModel: string | undefined;
+  private readonly allowAllTools: boolean;
+  private readonly allowAllPaths: boolean;
 
   constructor(
     private readonly config: BackendRuntimeConfig,
@@ -250,6 +252,8 @@ export class CopilotBackend implements AgentBackend {
     this.agentDir = options?.agentDir?.trim() || '.github/agents';
     this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
+    this.allowAllTools = options?.allowAllTools ?? false;
+    this.allowAllPaths = options?.allowAllPaths ?? false;
   }
 
   async init(): Promise<void> {
@@ -261,18 +265,18 @@ export class CopilotBackend implements AgentBackend {
     const args = [
       '--agent', invocation.agent,
       '-p', prompt,
-      '--allow-all-tools',
-      '--allow-all-paths',
       '--no-ask-user',
       '-s',
     ];
+    if (this.allowAllTools) args.push('--allow-all-tools');
+    if (this.allowAllPaths) args.push('--allow-all-paths');
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }
     // Forward MCP server configs to agent subprocess
     if (invocation.mcpServers) {
       for (const [name, cfg] of Object.entries(invocation.mcpServers)) {
-        args.push('--additional-mcp-config', JSON.stringify({ [name]: { url: cfg.url } }));
+        args.push('--additional-mcp-config', JSON.stringify({ mcpServers: { [name]: cfg } }));
       }
     }
     const timeout = invocation.timeout ?? this.defaultTimeout;
@@ -309,6 +313,7 @@ export class ClaudeBackend implements AgentBackend {
   private readonly cliCommand: string;
   private readonly defaultTimeout: number;
   private readonly defaultModel: string | undefined;
+  private readonly allowedTools: string | undefined;
 
   constructor(
     private readonly config: BackendRuntimeConfig,
@@ -318,6 +323,7 @@ export class ClaudeBackend implements AgentBackend {
     this.cliCommand = options?.cliCommand?.trim() || 'claude';
     this.defaultTimeout = config.agent.timeout ?? 120_000;
     this.defaultModel = config.agent.model;
+    this.allowedTools = options?.allowedTools;
   }
 
   async init(): Promise<void> {
@@ -328,16 +334,18 @@ export class ClaudeBackend implements AgentBackend {
     const prompt = `Read your context file at: ${invocation.contextPath}`;
     const args = [
       '-p', prompt,
-      '--allowedTools', 'Bash,Read,Write,Edit,MultiEdit,Glob,Grep,TodoRead,TodoWrite,mcp__*',
-      '--output-format', 'json',
     ];
+    if (this.allowedTools) {
+      args.push('--allowedTools', this.allowedTools);
+    }
+    args.push('--output-format', 'json');
     if (this.defaultModel) {
       args.push('--model', this.defaultModel);
     }
     // Forward MCP server configs to agent subprocess
     if (invocation.mcpServers) {
       for (const [name, cfg] of Object.entries(invocation.mcpServers)) {
-        args.push('--mcp-config', JSON.stringify({ [name]: { type: 'url', url: cfg.url } }));
+        args.push('--mcp-config', JSON.stringify({ [name]: cfg }));
       }
     }
     const timeout = invocation.timeout ?? this.defaultTimeout;

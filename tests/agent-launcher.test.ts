@@ -12,6 +12,11 @@ vi.mock('../src/agents/backend-factory.js', () => ({
   createAgentBackend: vi.fn(),
 }));
 
+vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, writeAgentLog: vi.fn().mockResolvedValue(undefined) };
+});
+
 import { createAgentBackend } from '../src/agents/backend-factory.js';
 const mockCreateAgentBackend = vi.mocked(createAgentBackend);
 
@@ -22,6 +27,7 @@ function makeConfig(): CadreConfig {
     repoPath: '/tmp/repo',
     baseBranch: 'main',
     issues: { ids: [42] },
+    logsDir: '/tmp/test-logs',
     copilot: {
       cliCommand: 'copilot',
       agentDir: '.github/agents',
@@ -58,6 +64,7 @@ function makeLogger(): Logger {
 function makeInvocation(overrides: Partial<AgentInvocation> = {}): AgentInvocation {
   return {
     agent: 'code-writer',
+    workItemId: '42',
     issueNumber: 42,
     phase: 3,
     taskId: 'task-001',

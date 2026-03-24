@@ -34,4 +34,19 @@ describe('index public exports', () => {
     expect(err).toBeInstanceOf(Error);
     expect(err.unsupportedPolicies).toEqual(['cpu']);
   });
+
+  it('should export NerdctlKataAdapter', () => {
+    expect(indexExports.NerdctlKataAdapter).toBeDefined();
+    expect(typeof indexExports.NerdctlKataAdapter).toBe('function');
+  });
+
+  it('should export StubKataAdapter', () => {
+    expect(indexExports.StubKataAdapter).toBeDefined();
+    expect(typeof indexExports.StubKataAdapter).toBe('function');
+  });
+
+  it('should export DockerKataAdapter', () => {
+    expect(indexExports.DockerKataAdapter).toBeDefined();
+    expect(typeof indexExports.DockerKataAdapter).toBe('function');
+  });
 });

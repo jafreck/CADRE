@@ -22,6 +22,10 @@ const IsolationConfigSchema = z
     /** Kata Containers-specific options (used when provider is 'kata'). */
     kata: z
       .object({
+        /** CLI backend: 'nerdctl' (containerd-native) or 'docker' (Docker CLI with --runtime). */
+        backend: z.enum(['nerdctl', 'docker']).default('nerdctl'),
+        /** Container image to use for Kata sessions (e.g., 'alpine:3'). */
+        image: z.string().optional(),
         /** Path to the Kata runtime binary (e.g., /usr/bin/kata-runtime). */
         runtimePath: z.string().optional(),
       })
@@ -67,6 +71,8 @@ export const AgentConfigSchema = z.object({
     .object({
       cliCommand: z.string().default('copilot'),
       agentDir: z.string().default('agents'),
+      allowAllTools: z.boolean().default(true),
+      allowAllPaths: z.boolean().default(true),
       costOverrides: z
         .record(
           z.string(),
@@ -84,6 +90,7 @@ export const AgentConfigSchema = z.object({
       cliCommand: z.string().default('claude'),
       /** Directory where Claude subagent files live. */
       agentDir: z.string().default('agents'),
+      allowedTools: z.string().default('Bash,Read,Write,Edit,MultiEdit,Glob,Grep,TodoRead,TodoWrite,mcp__*'),
     })
     .default({}),
 });

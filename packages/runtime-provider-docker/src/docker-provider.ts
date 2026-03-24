@@ -4,6 +4,7 @@ import type {
   IsolationCapabilities,
   IsolationPolicy,
   IsolationProvider,
+  IsolationProviderHealthCheckResult,
   IsolationSession,
 } from '@cadre-dev/framework/runtime';
 import { DockerSession, type DockerRunner } from './docker-session.js';
@@ -47,6 +48,19 @@ export class DockerProvider implements IsolationProvider {
       secrets: false,
       resources: true,
     };
+  }
+
+  async healthCheck(): Promise<IsolationProviderHealthCheckResult> {
+    const runner = this.opts.runner ?? createDefaultRunner();
+    try {
+      const result = await runner(['info', '--format', '{{.ServerVersion}}']);
+      if (result.exitCode === 0) {
+        return { healthy: true, message: 'Docker daemon reachable', details: { version: result.stdout.trim() } };
+      }
+      return { healthy: false, message: result.stderr || 'docker info returned non-zero exit code' };
+    } catch (err) {
+      return { healthy: false, message: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   async createSession(policy: IsolationPolicy): Promise<IsolationSession> {

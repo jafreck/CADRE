@@ -103,7 +103,7 @@ describe('CopilotBackend', () => {
     );
   });
 
-  it('should include --agent, -p, --allow-all-tools, --allow-all-paths, --no-ask-user, -s args', async () => {
+  it('should include --agent and -p args', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult());
     const invocation = makeInvocation({ agent: 'test-writer' });
@@ -113,8 +113,38 @@ describe('CopilotBackend', () => {
     expect(args).toContain('--agent');
     expect(args).toContain('test-writer');
     expect(args).toContain('-p');
+  });
+
+  it('should always include --no-ask-user and -s for headless execution', async () => {
+    const backend = new CopilotBackend(config, logger as never);
+    setupSpawn(makeProcessResult());
+    await backend.invoke(makeInvocation(), '/tmp/worktree');
+
+    const [, args] = mockSpawnProcess.mock.calls[0];
+    expect(args).toContain('--no-ask-user');
+    expect(args).toContain('-s');
+  });
+
+  it('should include --allow-all-tools and --allow-all-paths when enabled in config', async () => {
+    const backend = new CopilotBackend(config, logger as never);
+    setupSpawn(makeProcessResult());
+    await backend.invoke(makeInvocation(), '/tmp/worktree');
+
+    const [, args] = mockSpawnProcess.mock.calls[0];
     expect(args).toContain('--allow-all-tools');
     expect(args).toContain('--allow-all-paths');
+  });
+
+  it('should not include --allow-all-tools or --allow-all-paths when disabled in config', async () => {
+    const restrictedConfig = makeConfig({ allowAllTools: false, allowAllPaths: false });
+    const backend = new CopilotBackend(restrictedConfig, logger as never);
+    setupSpawn(makeProcessResult());
+    await backend.invoke(makeInvocation(), '/tmp/worktree');
+
+    const [, args] = mockSpawnProcess.mock.calls[0];
+    expect(args).not.toContain('--allow-all-tools');
+    expect(args).not.toContain('--allow-all-paths');
+    // headless flags are still present
     expect(args).toContain('--no-ask-user');
     expect(args).toContain('-s');
   });
@@ -290,14 +320,11 @@ describe('CopilotBackend', () => {
     expect(pathVal.indexOf('/custom/bin')).toBeLessThan(pathVal.indexOf('/extra/bin') + 10);
   });
 
-  it('should write a log file for the invocation', async () => {
+  it('should not write a log file for the invocation', async () => {
     const backend = new CopilotBackend(config, logger as never);
     setupSpawn(makeProcessResult({ stdout: 'some output', stderr: 'some error' }));
     await backend.invoke(makeInvocation(), '/tmp/worktree');
-    expect(mockWriteFile).toHaveBeenCalledOnce();
-    const [logPath, content] = mockWriteFile.mock.calls[0];
-    expect(String(logPath)).toContain('/tmp/worktree');
-    expect(String(content)).toContain('some output');
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 
   it('should return tokenUsage=0 when stdout has no token info', async () => {
@@ -368,7 +395,7 @@ describe('ClaudeBackend', () => {
     );
   });
 
-  it('should include -p, --allowedTools, and --output-format json args', async () => {
+  it('should include -p, --allowedTools, and --output-format json args when allowedTools is configured', async () => {
     const backend = new ClaudeBackend(config, logger as never);
     setupSpawn(makeProcessResult());
     await backend.invoke(makeInvocation(), '/tmp/worktree');
@@ -376,6 +403,21 @@ describe('ClaudeBackend', () => {
     const [, args] = mockSpawnProcess.mock.calls[0];
     expect(args).toContain('-p');
     expect(args).toContain('--allowedTools');
+    expect(args).toContain('--output-format');
+    expect(args).toContain('json');
+  });
+
+  it('should not include --allowedTools when allowedTools is not configured', async () => {
+    const noToolsConfig = makeConfig({ allowedTools: undefined as unknown as string });
+    // Remove the allowedTools key entirely
+    delete (noToolsConfig as Record<string, unknown>).agent?.['claude']?.['allowedTools'];
+    (noToolsConfig.agent.claude as Record<string, unknown>).allowedTools = undefined;
+    const backend = new ClaudeBackend(noToolsConfig, logger as never);
+    setupSpawn(makeProcessResult());
+    await backend.invoke(makeInvocation(), '/tmp/worktree');
+
+    const [, args] = mockSpawnProcess.mock.calls[0];
+    expect(args).not.toContain('--allowedTools');
     expect(args).toContain('--output-format');
     expect(args).toContain('json');
   });
@@ -504,13 +546,11 @@ describe('ClaudeBackend', () => {
     expect(mockTrackProcess).toHaveBeenCalledWith(fakeChild);
   });
 
-  it('should write a log file for the invocation', async () => {
+  it('should not write a log file for the invocation', async () => {
     const backend = new ClaudeBackend(config, logger as never);
     setupSpawn(makeProcessResult({ stdout: 'claude output', stderr: '' }));
     await backend.invoke(makeInvocation(), '/tmp/worktree');
-    expect(mockWriteFile).toHaveBeenCalledOnce();
-    const [, content] = mockWriteFile.mock.calls[0];
-    expect(String(content)).toContain('claude output');
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 
   it('should use invocation.timeout when provided', async () => {
