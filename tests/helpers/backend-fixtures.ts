@@ -23,6 +23,7 @@ export function makeConfig(overrides: Partial<{
   timeout: number;
   extraPath: string[];
   claudeCli: string;
+  effort: 'low' | 'medium' | 'high' | 'xhigh';
   allowAllTools: boolean;
   allowAllPaths: boolean;
   allowedTools: string;
@@ -41,6 +42,7 @@ export function makeConfig(overrides: Partial<{
       copilot: {
         cliCommand: overrides.cliCommand ?? 'copilot',
         agentDir: overrides.agentDir ?? '.github/agents',
+        effort: overrides.effort,
         allowAllTools: overrides.allowAllTools ?? true,
         allowAllPaths: overrides.allowAllPaths ?? true,
       },

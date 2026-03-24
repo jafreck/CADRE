@@ -158,6 +158,7 @@ Advanced agent backend configuration.
 | `timeout` | `number` | `300000` | Timeout in ms override for all agents. |
 | `copilot.cliCommand` | `string` | `"copilot"` | Copilot CLI executable. |
 | `copilot.agentDir` | `string` | `".github/agents"` | Agent file directory. |
+| `copilot.effort` | `"low" \| "medium" \| "high" \| "xhigh"` | — | Optional Copilot reasoning effort passed through as `--effort`. |
 | `copilot.costOverrides` | `Record<string, { input, output }>` | — | Per-model cost overrides. |
 | `claude.cliCommand` | `string` | `"claude"` | Claude CLI executable. |
 

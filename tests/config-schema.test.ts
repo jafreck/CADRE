@@ -38,6 +38,7 @@ describe('CadreConfigSchema', () => {
     expect(result.agent.backend).toBe('copilot');
     expect(result.agent.copilot.cliCommand).toBe('copilot');
     expect(result.agent.copilot.agentDir).toBe('agents');
+    expect(result.agent.copilot.effort).toBeUndefined();
     expect(result.agent.timeout).toBe(300_000);
     expect(result.github?.mcpServer.command).toBe('github-mcp-server');
     expect(result.github?.mcpServer.args).toEqual(['stdio']);
@@ -832,13 +833,14 @@ describe('CadreConfigSchema', () => {
         ...validConfig,
         agent: {
           backend: 'copilot',
-          copilot: { cliCommand: 'gh copilot', agentDir: '.github/agents' },
+          copilot: { cliCommand: 'gh copilot', agentDir: '.github/agents', effort: 'high' },
         },
       });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.agent?.copilot.cliCommand).toBe('gh copilot');
         expect(result.data.agent?.copilot.agentDir).toBe('.github/agents');
+        expect(result.data.agent?.copilot.effort).toBe('high');
       }
     });
 
@@ -1087,6 +1089,11 @@ describe('AgentConfigSchema', () => {
     expect(result.copilot.agentDir).toBe('agents');
   });
 
+  it('should leave copilot.effort undefined by default', () => {
+    const result = AgentConfigSchema.parse({});
+    expect(result.copilot.effort).toBeUndefined();
+  });
+
   it('should default claude.cliCommand to claude', () => {
     const result = AgentConfigSchema.parse({});
     expect(result.claude.cliCommand).toBe('claude');
@@ -1106,6 +1113,16 @@ describe('AgentConfigSchema', () => {
     const result = AgentConfigSchema.parse({ backend: 'claude', claude: { cliCommand: '/usr/local/bin/claude' } });
     expect(result.backend).toBe('claude');
     expect(result.claude.cliCommand).toBe('/usr/local/bin/claude');
+  });
+
+  it('should accept copilot effort values', () => {
+    const result = AgentConfigSchema.parse({ copilot: { effort: 'xhigh' } });
+    expect(result.copilot.effort).toBe('xhigh');
+  });
+
+  it('should reject invalid copilot effort values', () => {
+    const result = AgentConfigSchema.safeParse({ copilot: { effort: 'max' } });
+    expect(result.success).toBe(false);
   });
 
   it('should leave costOverrides undefined by default', () => {
