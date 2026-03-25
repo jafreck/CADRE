@@ -14,16 +14,10 @@
 # Overview
 CADRE is automation for software development work that starts with an issue and ends with a verified pull request. It is designed for teams that want to move more work in parallel without giving up the structure of their existing repository, build, test, and review process.
 
-As an application, CADRE takes issues from GitHub or Azure DevOps, creates isolated git worktrees, and runs a coordinated set of specialized agents to analyze the task, plan the implementation, write code, write tests, verify results, and prepare a pull request. The value is practical: faster issue throughput, better isolation between parallel efforts, and a repeatable pipeline that produces auditable outputs instead of one-off agent sessions.
+CADRE pulls issues from your issue tracker, plans a dependency graph for optimal implementation ordering, launches a fleet of coordinated, specialized agents in parallel to analyze the requirements, plan the implementation, write the code and tests, and review before submitting a pull request. No longer do you need to manually jump between a dozen different sessions to maximize your AI-leverage, CADRE will handle the parallelization, isolation, and verification at a throughput not achievable manually, with a repeatable pipeline that produces auditable outputs instead of one-off agent sessions.
 
-As a framework, CADRE also exposes the orchestration pieces behind that workflow so you can build other multi-agent or multi-step systems. At a high level, CADRE combines workflow orchestration, runtime backends, checkpointing, notifications, and validation into a system that can reliably coordinate complex work from intake through completion.
+CADRE also ships with a generic agent orchestration framework that can be used to build any other multi-agent or multi-step systems. The CADRE framework combines workflow orchestration, supports multiple agent runtime backends, checkpointing, notifications, and validation into a system that can reliably coordinate complex work from intake through completion. See [CADRE The Framework](#cadre-the-framework) for more.
 
-CADRE currently ships two related but different things:
-
-| Package | What it is | Use it when |
-| --- | --- | --- |
-| `@cadre-dev/cadre` | The application and CLI for software development teams | You want to take open issues from GitHub or Azure DevOps, fan them out into isolated git worktrees, run a multi-agent implementation pipeline, and produce reviewed pull requests. |
-| `@cadre-dev/framework` | The reusable orchestration framework extracted from the app | You want the underlying flow, runtime, notification, checkpointing, and eventing primitives for your own agent system or workflow engine, even if it has nothing to do with software development. |
 
 ## CADRE The Application
 
@@ -38,17 +32,7 @@ CADRE currently ships two related but different things:
 
 Use the application when the outcome you want is simple to describe: take one or more issues from a repository and turn them into implementation branches or pull requests.
 
-## CADRE The Framework
 
-`@cadre-dev/framework` is the generic orchestration layer the application is built on top of. It exposes reusable packages for:
-
-- `@cadre-dev/framework/core`: logging, events, validation, and shared runtime types
-- `@cadre-dev/framework/engine`: queues, executors, retry logic, phase orchestration, and checkpointing
-- `@cadre-dev/framework/runtime`: agent backends, launchers, provider registration, and runtime contracts
-- `@cadre-dev/framework/flow`: a declarative flow DSL and the `FlowRunner` execution engine
-- `@cadre-dev/framework/notifications`: log, webhook, and Slack-style notification plumbing
-
-Use the framework when you want to coordinate agents or workflow steps in any domain, even when there is no repository, no issue tracker, and no pull request.
 
 ## Install The Application
 
@@ -260,6 +244,18 @@ Each issue runs in its own git worktree. Multiple issues run in parallel up to y
 | `fix-surgeon` | Repair issues found by review or tests |
 | `integration-checker` | Verify build and test commands pass |
 | `pr-composer` | Draft the pull request title and body |
+
+## CADRE The Framework
+
+`@cadre-dev/framework` is the generic orchestration layer the application is built on top of. It exposes reusable packages for:
+
+- `@cadre-dev/framework/core`: logging, events, validation, and shared runtime types
+- `@cadre-dev/framework/engine`: queues, executors, retry logic, phase orchestration, and checkpointing
+- `@cadre-dev/framework/runtime`: agent backends, launchers, provider registration, and runtime contracts
+- `@cadre-dev/framework/flow`: a declarative flow DSL and the `FlowRunner` execution engine
+- `@cadre-dev/framework/notifications`: log, webhook, and Slack-style notification plumbing
+
+Use the framework when you want to coordinate agents or workflow steps in any domain.
 
 ## Framework Packages And Extension Points
 
