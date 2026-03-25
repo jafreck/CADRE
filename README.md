@@ -63,22 +63,20 @@ claude login
 
 ### Ubuntu
 
-The cross-platform path is to use Docker for the GitHub MCP server and NodeSource for Node.js 20:
+For a native Ubuntu install, install Node.js 20 and Git, then install CADRE:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y curl git docker.io
+sudo apt-get install -y curl git
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
-sudo usermod -aG docker "$USER"
 npm install -g @cadre-dev/cadre
 export GITHUB_TOKEN=ghp_your_token
-export GITHUB_PERSONAL_ACCESS_TOKEN="$GITHUB_TOKEN"
 ```
 
-Log out and back in after adding yourself to the `docker` group.
+If you are using GitHub, make sure `github-mcp-server` is available on your `PATH` so CADRE can use the default `github-mcp-server stdio` configuration.
 
-If you prefer the default `github-mcp-server stdio` configuration, build the binary from the upstream GitHub MCP server repository and keep it on your `PATH`.
+If you do not want to install the GitHub MCP server binary directly, use the Docker-backed option in [GitHub MCP Server Setup](#github-mcp-server-setup).
 
 ### Windows
 
