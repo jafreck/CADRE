@@ -6,10 +6,12 @@ import type { CadreConfig } from '../src/config/schema.js';
 import type { IssueDetail } from '../src/github/issues.js';
 
 vi.mock('../src/github/issues.js', () => ({
-  IssueFetcher: vi.fn().mockImplementation(() => ({
-    resolveIssues: vi.fn(),
-    fetchIssue: vi.fn(),
-  })),
+  IssueFetcher: vi.fn().mockImplementation(function () {
+    return {
+      resolveIssues: vi.fn(),
+      fetchIssue: vi.fn(),
+    };
+  }),
 }));
 
 function makeLogger(): Logger {

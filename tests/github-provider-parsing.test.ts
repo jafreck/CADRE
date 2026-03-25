@@ -3,21 +3,23 @@ import { GitHubProvider } from '../src/platform/github-provider.js';
 import { GitHubAPI } from '../src/github/api.js';
 
 vi.mock('../src/github/api.js', () => ({
-  GitHubAPI: vi.fn().mockImplementation(() => ({
-    getIssue: vi.fn(),
-    listIssues: vi.fn(),
-    createPullRequest: vi.fn(),
-    getPullRequest: vi.fn(),
-    updatePullRequest: vi.fn(),
-    getPRComments: vi.fn(),
-    getPRReviewComments: vi.fn(),
-    getPRReviews: vi.fn(),
-    listPullRequests: vi.fn(),
-    ensureLabel: vi.fn(),
-    applyLabels: vi.fn(),
-    addIssueComment: vi.fn(),
-    checkAuth: vi.fn(),
-  })),
+  GitHubAPI: vi.fn().mockImplementation(function () {
+    return {
+      getIssue: vi.fn(),
+      listIssues: vi.fn(),
+      createPullRequest: vi.fn(),
+      getPullRequest: vi.fn(),
+      updatePullRequest: vi.fn(),
+      getPRComments: vi.fn(),
+      getPRReviewComments: vi.fn(),
+      getPRReviews: vi.fn(),
+      listPullRequests: vi.fn(),
+      ensureLabel: vi.fn(),
+      applyLabels: vi.fn(),
+      addIssueComment: vi.fn(),
+      checkAuth: vi.fn(),
+    };
+  }),
 }));
 
 const mockLogger = {

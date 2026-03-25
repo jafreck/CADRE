@@ -9,15 +9,21 @@ import type { CadreEvent, NotificationsConfig } from '../packages/framework/src/
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../packages/framework/src/notifications/webhook-provider.js', () => ({
-  WebhookProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
+  WebhookProvider: vi.fn().mockImplementation(function () {
+    return { notify: vi.fn().mockResolvedValue(undefined) };
+  }),
 }));
 
 vi.mock('../packages/framework/src/notifications/slack-provider.js', () => ({
-  SlackProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
+  SlackProvider: vi.fn().mockImplementation(function () {
+    return { notify: vi.fn().mockResolvedValue(undefined) };
+  }),
 }));
 
 vi.mock('../packages/framework/src/notifications/log-provider.js', () => ({
-  LogProvider: vi.fn().mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) })),
+  LogProvider: vi.fn().mockImplementation(function () {
+    return { notify: vi.fn().mockResolvedValue(undefined) };
+  }),
 }));
 
 import { WebhookProvider } from '../packages/framework/src/notifications/webhook-provider.js';
@@ -42,9 +48,15 @@ describe('NotificationManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetNotificationProviderFactories();
-    MockWebhookProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
-    MockSlackProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
-    MockLogProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
+    MockWebhookProvider.mockImplementation(function () {
+      return { notify: vi.fn().mockResolvedValue(undefined) };
+    });
+    MockSlackProvider.mockImplementation(function () {
+      return { notify: vi.fn().mockResolvedValue(undefined) };
+    });
+    MockLogProvider.mockImplementation(function () {
+      return { notify: vi.fn().mockResolvedValue(undefined) };
+    });
   });
 
   describe('no-op when disabled or absent', () => {
@@ -142,8 +154,12 @@ describe('NotificationManager', () => {
     it('should call notify on all providers with the event', async () => {
       const webhookNotify = vi.fn().mockResolvedValue(undefined);
       const slackNotify = vi.fn().mockResolvedValue(undefined);
-      MockWebhookProvider.mockImplementation(() => ({ notify: webhookNotify }));
-      MockSlackProvider.mockImplementation(() => ({ notify: slackNotify }));
+      MockWebhookProvider.mockImplementation(function () {
+        return { notify: webhookNotify };
+      });
+      MockSlackProvider.mockImplementation(function () {
+        return { notify: slackNotify };
+      });
 
       const manager = new NotificationManager(makeConfig({
         providers: [
@@ -163,8 +179,12 @@ describe('NotificationManager', () => {
     it('should not throw when one provider fails', async () => {
       const failingNotify = vi.fn().mockRejectedValue(new Error('provider error'));
       const successNotify = vi.fn().mockResolvedValue(undefined);
-      MockWebhookProvider.mockImplementation(() => ({ notify: failingNotify }));
-      MockLogProvider.mockImplementation(() => ({ notify: successNotify }));
+      MockWebhookProvider.mockImplementation(function () {
+        return { notify: failingNotify };
+      });
+      MockLogProvider.mockImplementation(function () {
+        return { notify: successNotify };
+      });
 
       const manager = new NotificationManager(makeConfig({
         providers: [
@@ -179,8 +199,12 @@ describe('NotificationManager', () => {
     it('should still call other providers when one fails', async () => {
       const failingNotify = vi.fn().mockRejectedValue(new Error('provider error'));
       const successNotify = vi.fn().mockResolvedValue(undefined);
-      MockWebhookProvider.mockImplementation(() => ({ notify: failingNotify }));
-      MockLogProvider.mockImplementation(() => ({ notify: successNotify }));
+      MockWebhookProvider.mockImplementation(function () {
+        return { notify: failingNotify };
+      });
+      MockLogProvider.mockImplementation(function () {
+        return { notify: successNotify };
+      });
 
       const manager = new NotificationManager(makeConfig({
         providers: [
@@ -215,7 +239,9 @@ describe('NotificationManager', () => {
 
     it('should add to existing providers when already enabled', async () => {
       const webhookNotify = vi.fn().mockResolvedValue(undefined);
-      MockWebhookProvider.mockImplementation(() => ({ notify: webhookNotify }));
+      MockWebhookProvider.mockImplementation(function () {
+        return { notify: webhookNotify };
+      });
 
       const manager = new NotificationManager(makeConfig({
         providers: [{ type: 'webhook', url: 'https://example.com/hook' }],
@@ -248,9 +274,15 @@ describe('NotificationManager', () => {
 describe('NotificationManager runtime config integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    MockWebhookProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
-    MockSlackProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
-    MockLogProvider.mockImplementation(() => ({ notify: vi.fn().mockResolvedValue(undefined) }));
+    MockWebhookProvider.mockImplementation(function () {
+      return { notify: vi.fn().mockResolvedValue(undefined) };
+    });
+    MockSlackProvider.mockImplementation(function () {
+      return { notify: vi.fn().mockResolvedValue(undefined) };
+    });
+    MockLogProvider.mockImplementation(function () {
+      return { notify: vi.fn().mockResolvedValue(undefined) };
+    });
   });
 
   it('should construct a NotificationManager from runtime config values', () => {
@@ -261,7 +293,9 @@ describe('NotificationManager runtime config integration', () => {
 
   it('should pass config.notifications to the NotificationManager', async () => {
     const webhookNotify = vi.fn().mockResolvedValue(undefined);
-    MockWebhookProvider.mockImplementation(() => ({ notify: webhookNotify }));
+    MockWebhookProvider.mockImplementation(function () {
+      return { notify: webhookNotify };
+    });
 
     const config = makeRuntimeConfig({
       notifications: makeConfig({

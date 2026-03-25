@@ -10,9 +10,11 @@ vi.mock('../src/config/loader.js', async (importOriginal) => {
 });
 
 vi.mock('../src/core/runtime.js', () => ({
-  CadreRuntime: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({ success: true }),
-  })),
+  CadreRuntime: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({ success: true }),
+    };
+  }),
 }));
 
 const originalArgv = process.argv;

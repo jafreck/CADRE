@@ -34,15 +34,17 @@ vi.mock('../src/cli/agents.js', async (importOriginal) => {
 });
 
 vi.mock('../src/core/runtime.js', () => ({
-  CadreRuntime: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({ success: true }),
-    status: vi.fn().mockResolvedValue(undefined),
-    reset: vi.fn().mockResolvedValue(undefined),
-    listWorktrees: vi.fn().mockResolvedValue(undefined),
-    pruneWorktrees: vi.fn().mockResolvedValue(undefined),
-    validate: vi.fn().mockResolvedValue(true),
-    report: vi.fn().mockResolvedValue(undefined),
-  })),
+  CadreRuntime: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({ success: true }),
+      status: vi.fn().mockResolvedValue(undefined),
+      reset: vi.fn().mockResolvedValue(undefined),
+      listWorktrees: vi.fn().mockResolvedValue(undefined),
+      pruneWorktrees: vi.fn().mockResolvedValue(undefined),
+      validate: vi.fn().mockResolvedValue(true),
+      report: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 /**
@@ -323,9 +325,11 @@ describe('cadre run autoscaffold behavior', () => {
       };
     });
     vi.doMock('../src/core/runtime.js', () => ({
-      CadreRuntime: vi.fn().mockImplementation(() => ({
-        run: vi.fn().mockResolvedValue({ success: true }),
-      })),
+      CadreRuntime: vi.fn().mockImplementation(function () {
+        return {
+          run: vi.fn().mockResolvedValue({ success: true }),
+        };
+      }),
     }));
     vi.doMock('../src/core/agent-launcher.js', () => ({
       AgentLauncher: { validateAgentFiles: validateAgentFilesMock },
@@ -404,7 +408,7 @@ describe('cadre run --dag flag runtime behavior', () => {
       };
     });
     vi.doMock('../src/core/runtime.js', () => ({
-      CadreRuntime: vi.fn().mockImplementation((cfg: Record<string, unknown>) => {
+      CadreRuntime: vi.fn().mockImplementation(function (cfg: Record<string, unknown>) {
         capturedConfig = cfg;
         return { run: vi.fn().mockResolvedValue({ success: true }) };
       }),
@@ -471,9 +475,11 @@ describe('cadre run typed error handling', () => {
       };
     });
     vi.doMock('../src/core/runtime.js', () => ({
-      CadreRuntime: vi.fn().mockImplementation(() => ({
-        run: vi.fn().mockImplementation(async () => { throw await errorFactory(); }),
-      })),
+      CadreRuntime: vi.fn().mockImplementation(function () {
+        return {
+          run: vi.fn().mockImplementation(async () => { throw await errorFactory(); }),
+        };
+      }),
     }));
     vi.doMock('../src/core/agent-launcher.js', () => ({
       AgentLauncher: { validateAgentFiles: vi.fn().mockResolvedValue([]) },

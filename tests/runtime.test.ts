@@ -3,17 +3,33 @@ import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 // Mock all heavy dependencies
 vi.mock('@cadre-dev/framework/core', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  })),
-  CostEstimator: vi.fn().mockImplementation(() => ({
-    estimate: vi.fn().mockReturnValue(0),
-    format: vi.fn().mockReturnValue('$0.00'),
-  })),
+  gitValidator: { name: 'git', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  diskValidator: { name: 'disk', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  agentBackendValidator: { name: 'agentBackend', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  platformValidator: { name: 'platform', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  commandValidator: { name: 'command', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  loreValidator: { name: 'lore', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  registryCompletenessValidator: { name: 'registryCompleteness', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  Logger: vi.fn().mockImplementation(function () {
+    return {
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    };
+  }),
+  CostEstimator: vi.fn().mockImplementation(function () {
+    return {
+      estimate: vi.fn().mockReturnValue(0),
+      format: vi.fn().mockReturnValue('$0.00'),
+    };
+  }),
+  PreRunValidationSuite: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue(true),
+    };
+  }),
 }));
 
 vi.mock('../src/platform/factory.js', () => ({
@@ -39,79 +55,93 @@ vi.mock('../src/platform/factory.js', () => ({
 }));
 
 vi.mock('@cadre-dev/framework/notifications', () => ({
-  NotificationManager: vi.fn().mockImplementation(() => ({
-    dispatch: vi.fn().mockResolvedValue(undefined),
-  })),
+  NotificationManager: vi.fn().mockImplementation(function () {
+    return {
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/core/fleet/fleet-orchestrator.js', () => ({
-  FleetOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({
-      success: true,
-      issues: [],
-      prsCreated: [],
-      failedIssues: [],
-      totalDuration: 100,
-      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
-    }),
-    runReviewResponse: vi.fn().mockResolvedValue({
-      success: true,
-      issues: [],
-      prsCreated: [],
-      failedIssues: [],
-      totalDuration: 100,
-      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
-    }),
-  })),
+  FleetOrchestrator: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
+      }),
+      runReviewResponse: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
+      }),
+    };
+  }),
 }));
 
 const mockDag = { getWaves: vi.fn().mockReturnValue([[{ number: 1, title: 'Test issue' }]]) };
 
 vi.mock('../src/core/fleet/dependency-resolver.js', () => ({
-  DependencyResolver: vi.fn().mockImplementation(() => ({
-    resolve: vi.fn().mockResolvedValue(mockDag),
-  })),
+  DependencyResolver: vi.fn().mockImplementation(function () {
+    return {
+      resolve: vi.fn().mockResolvedValue(mockDag),
+    };
+  }),
 }));
 
 vi.mock('../src/git/worktree.js', () => ({
-  WorktreeManager: vi.fn().mockImplementation(() => ({
-    buildAgentCache: vi.fn().mockResolvedValue(undefined),
-  })),
+  WorktreeManager: vi.fn().mockImplementation(function () {
+    return {
+      buildAgentCache: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/core/agent-launcher.js', () => ({
-  AgentLauncher: vi.fn().mockImplementation(() => ({
-    init: vi.fn().mockResolvedValue(undefined),
-  })),
+  AgentLauncher: vi.fn().mockImplementation(function () {
+    return {
+      init: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
-  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byWorkItem: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
-    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-  })),
-  CheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({
-      issueNumber: 1,
-      currentPhase: 1,
-      completedPhases: [],
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-      gateResults: {},
-      currentTask: null,
-      completedTasks: [],
-      failedTasks: [],
-      blockedTasks: [],
-      phaseOutputs: {},
-      version: 1,
-      worktreePath: '',
-      branchName: '',
-      baseCommit: '',
-      startedAt: '',
-      lastCheckpoint: '',
-      resumeCount: 0,
-    }),
-  })),
+  FleetCheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byWorkItem: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+  CheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        currentPhase: 1,
+        completedPhases: [],
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        gateResults: {},
+        currentTask: null,
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        version: 1,
+        worktreePath: '',
+        branchName: '',
+        baseCommit: '',
+        startedAt: '',
+        lastCheckpoint: '',
+        resumeCount: 0,
+      }),
+    };
+  }),
 }));
 
 vi.mock('../src/util/fs.js', () => ({
@@ -123,37 +153,45 @@ vi.mock('../src/util/fs.js', () => ({
 
 vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
-  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byWorkItem: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
-    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-  })),
-  CheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({
-      issueNumber: 1,
-      currentPhase: 1,
-      completedPhases: [],
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-      gateResults: {},
-      currentTask: null,
-      completedTasks: [],
-      failedTasks: [],
-      blockedTasks: [],
-      phaseOutputs: {},
-      version: 1,
-      worktreePath: '',
-      branchName: '',
-      baseCommit: '',
-      startedAt: '',
-      lastCheckpoint: '',
-      resumeCount: 0,
-    }),
-  })),
-  FleetProgressWriter: vi.fn().mockImplementation(() => ({
-    appendEvent: vi.fn().mockResolvedValue(undefined),
-  })),
-  RetryExecutor: vi.fn().mockImplementation(() => ({
-    execute: vi.fn(),
-  })),
+  FleetCheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({ issues: {}, tokenUsage: { total: 0, byWorkItem: {} }, lastCheckpoint: '', resumeCount: 0, projectName: 'test', version: 1, startedAt: '' }),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+  CheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        currentPhase: 1,
+        completedPhases: [],
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        gateResults: {},
+        currentTask: null,
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        version: 1,
+        worktreePath: '',
+        branchName: '',
+        baseCommit: '',
+        startedAt: '',
+        lastCheckpoint: '',
+        resumeCount: 0,
+      }),
+    };
+  }),
+  FleetProgressWriter: vi.fn().mockImplementation(function () {
+    return {
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+  RetryExecutor: vi.fn().mockImplementation(function () {
+    return {
+      execute: vi.fn(),
+    };
+  }),
   phaseNames: [
     'Analysis & Scouting',
     'Planning',
@@ -164,17 +202,33 @@ vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
 }));
 
 vi.mock('@cadre-dev/framework/core', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  })),
-  CostEstimator: vi.fn().mockImplementation(() => ({
-    estimate: vi.fn().mockReturnValue(0),
-    format: vi.fn().mockReturnValue('$0.00'),
-  })),
+  gitValidator: { name: 'git', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  diskValidator: { name: 'disk', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  agentBackendValidator: { name: 'agentBackend', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  platformValidator: { name: 'platform', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  commandValidator: { name: 'command', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  loreValidator: { name: 'lore', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  registryCompletenessValidator: { name: 'registryCompleteness', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
+  Logger: vi.fn().mockImplementation(function () {
+    return {
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    };
+  }),
+  CostEstimator: vi.fn().mockImplementation(function () {
+    return {
+      estimate: vi.fn().mockReturnValue(0),
+      format: vi.fn().mockReturnValue('$0.00'),
+    };
+  }),
+  PreRunValidationSuite: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue(true),
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/runtime', () => ({
@@ -206,9 +260,11 @@ vi.mock('@cadre-dev/framework/core', async (importActual) => {
     platformValidator: { name: 'platform', validate: vi.fn().mockResolvedValue(passResult) },
     commandValidator: { name: 'command', validate: vi.fn().mockResolvedValue(passResult) },
     registryCompletenessValidator: { name: 'registryCompleteness', validate: vi.fn().mockResolvedValue(passResult) },
-    PreRunValidationSuite: vi.fn().mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue(true),
-    })),
+    PreRunValidationSuite: vi.fn().mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue(true),
+      };
+    }),
   };
 });
 
@@ -302,8 +358,10 @@ describe('CadreRuntime — NotificationManager wiring', () => {
     // Prevent real SIGINT/SIGTERM listeners being registered on the process
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
 
-    MockCreateNotificationManager.mockReturnValue({
-      dispatch: vi.fn().mockResolvedValue(undefined),
+    MockCreateNotificationManager.mockImplementation(function () {
+      return {
+        dispatch: vi.fn().mockResolvedValue(undefined),
+      };
     });
 
     MockCreatePlatformProvider.mockReturnValue({
@@ -326,16 +384,18 @@ describe('CadreRuntime — NotificationManager wiring', () => {
       listIssues: vi.fn().mockResolvedValue([]),
     });
 
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        success: true,
-        issues: [],
-        prsCreated: [],
-        failedIssues: [],
-        totalDuration: 100,
-        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
-      }),
-    }));
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          issues: [],
+          prsCreated: [],
+          failedIssues: [],
+          totalDuration: 100,
+          tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
+        }),
+      };
+    });
   });
 
   it('constructs NotificationManager with notifications config and state dir', () => {
@@ -347,7 +407,9 @@ describe('CadreRuntime — NotificationManager wiring', () => {
 
   it('passes the NotificationManager instance to FleetOrchestrator', async () => {
     const mockNotifications = { dispatch: vi.fn().mockResolvedValue(undefined) };
-    MockCreateNotificationManager.mockReturnValue(mockNotifications);
+    MockCreateNotificationManager.mockImplementation(function () {
+      return mockNotifications;
+    });
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
@@ -399,8 +461,10 @@ describe('CadreRuntime — review-response routing', () => {
 
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
 
-    MockCreateNotificationManager.mockReturnValue({
-      dispatch: vi.fn().mockResolvedValue(undefined),
+    MockCreateNotificationManager.mockImplementation(function () {
+      return {
+        dispatch: vi.fn().mockResolvedValue(undefined),
+      };
     });
 
     MockCreatePlatformProvider.mockReturnValue({
@@ -423,24 +487,26 @@ describe('CadreRuntime — review-response routing', () => {
       listIssues: vi.fn().mockResolvedValue([]),
     });
 
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        success: true,
-        issues: [],
-        prsCreated: [],
-        failedIssues: [],
-        totalDuration: 100,
-        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
-      }),
-      runReviewResponse: vi.fn().mockResolvedValue({
-        success: true,
-        issues: [],
-        prsCreated: [],
-        failedIssues: [],
-        totalDuration: 100,
-        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
-      }),
-    }));
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          issues: [],
+          prsCreated: [],
+          failedIssues: [],
+          totalDuration: 100,
+          tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
+        }),
+        runReviewResponse: vi.fn().mockResolvedValue({
+          success: true,
+          issues: [],
+          prsCreated: [],
+          failedIssues: [],
+          totalDuration: 100,
+          tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
+        }),
+      };
+    });
   });
 
   afterEach(() => {
@@ -451,6 +517,7 @@ describe('CadreRuntime — review-response routing', () => {
     const config = makeRuntimeConfig({ ...makeConfig([1]), options: { ...makeConfig([1]).options, respondToReviews: true } });
     const runtime = new CadreRuntime(config);
     await runtime.run();
+    await runtime.run();
 
     const fleetInstance = MockFleetOrchestrator.mock.results[0].value;
     expect(fleetInstance.runReviewResponse).toHaveBeenCalledOnce();
@@ -460,6 +527,7 @@ describe('CadreRuntime — review-response routing', () => {
   it('calls fleet.run() when respondToReviews is false (default)', async () => {
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
+    await runtime.run();
     await runtime.run();
 
     const fleetInstance = MockFleetOrchestrator.mock.results[0].value;
@@ -479,10 +547,12 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
     capturedHandlers.clear();
 
     // Restore FleetProgressWriter implementation after clearAllMocks
-    MockFleetProgressWriter.mockImplementation(() => ({
-      write: vi.fn().mockResolvedValue(undefined),
-      appendEvent: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetProgressWriter.mockImplementation(function () {
+      return {
+        write: vi.fn().mockResolvedValue(undefined),
+        appendEvent: vi.fn().mockResolvedValue(undefined),
+      };
+    });
 
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((event: string | symbol, rawListener: (...args: unknown[]) => void) => {
       if (event === 'SIGINT' || event === 'SIGTERM') {
@@ -498,8 +568,10 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as unknown as (code?: string | number | null) => never);
 
-    MockCreateNotificationManager.mockReturnValue({
-      dispatch: vi.fn().mockResolvedValue(undefined),
+    MockCreateNotificationManager.mockImplementation(function () {
+      return {
+        dispatch: vi.fn().mockResolvedValue(undefined),
+      };
     });
 
     MockCreatePlatformProvider.mockReturnValue({
@@ -522,16 +594,18 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
       listIssues: vi.fn().mockResolvedValue([]),
     });
 
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        success: true,
-        issues: [],
-        prsCreated: [],
-        failedIssues: [],
-        totalDuration: 100,
-        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
-      }),
-    }));
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          issues: [],
+          prsCreated: [],
+          failedIssues: [],
+          totalDuration: 100,
+          tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} },
+        }),
+      };
+    });
   });
 
   afterEach(() => {
@@ -551,7 +625,9 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
   it('dispatches fleet-interrupted with SIGINT signal on SIGINT', async () => {
     const dispatchSpy = vi.fn().mockResolvedValue(undefined);
-    MockCreateNotificationManager.mockReturnValue({ dispatch: dispatchSpy });
+    MockCreateNotificationManager.mockImplementation(function () {
+      return { dispatch: dispatchSpy };
+    });
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
@@ -572,7 +648,9 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
   it('dispatches fleet-interrupted with SIGTERM signal on SIGTERM', async () => {
     const dispatchSpy = vi.fn().mockResolvedValue(undefined);
-    MockCreateNotificationManager.mockReturnValue({ dispatch: dispatchSpy });
+    MockCreateNotificationManager.mockImplementation(function () {
+      return { dispatch: dispatchSpy };
+    });
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
@@ -593,7 +671,9 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
   it('includes active issue numbers in fleet-interrupted event', async () => {
     const dispatchSpy = vi.fn().mockResolvedValue(undefined);
-    MockCreateNotificationManager.mockReturnValue({ dispatch: dispatchSpy });
+    MockCreateNotificationManager.mockImplementation(function () {
+      return { dispatch: dispatchSpy };
+    });
 
     MockCreatePlatformProvider.mockReturnValue({
       name: 'github',
@@ -620,12 +700,16 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
   });
 
   it('causes run() to reject with RuntimeInterruptedError(exitCode=130) on SIGINT', async () => {
-    MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
+    MockCreateNotificationManager.mockImplementation(function () {
+      return { dispatch: vi.fn().mockResolvedValue(undefined) };
+    });
 
     // Make fleet.run() never resolve so the interrupt can fire first
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockReturnValue(new Promise(() => {})),
-    }));
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockReturnValue(new Promise(() => {})),
+      };
+    });
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
@@ -645,12 +729,16 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
   });
 
   it('causes run() to reject with RuntimeInterruptedError(exitCode=143) on SIGTERM', async () => {
-    MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
+    MockCreateNotificationManager.mockImplementation(function () {
+      return { dispatch: vi.fn().mockResolvedValue(undefined) };
+    });
 
     // Make fleet.run() never resolve so the interrupt can fire first
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockReturnValue(new Promise(() => {})),
-    }));
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockReturnValue(new Promise(() => {})),
+      };
+    });
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
@@ -671,7 +759,9 @@ describe('CadreRuntime — shutdown handler dispatches fleet-interrupted', () =>
 
   it('does not dispatch fleet-interrupted twice if handler is called multiple times', async () => {
     const dispatchSpy = vi.fn().mockResolvedValue(undefined);
-    MockCreateNotificationManager.mockReturnValue({ dispatch: dispatchSpy });
+    MockCreateNotificationManager.mockImplementation(function () {
+      return { dispatch: dispatchSpy };
+    });
 
     const config = makeConfig([1]);
     const runtime = new CadreRuntime(config);
@@ -712,18 +802,20 @@ describe('CadreRuntime — status() rendering', () => {
 
   it('renders summary header with project name and total tokens', async () => {
     mockExists.mockResolvedValue(true);
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        projectName: 'my-awesome-project',
-        tokenUsage: { total: 0, byWorkItem: {} },
-        issues: {},
-        lastCheckpoint: new Date().toISOString(),
-        resumeCount: 0,
-        version: 1,
-        startedAt: new Date().toISOString(),
-      }),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          projectName: 'my-awesome-project',
+          tokenUsage: { total: 0, byWorkItem: {} },
+          issues: {},
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+          version: 1,
+          startedAt: new Date().toISOString(),
+        }),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
 
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status();
@@ -735,27 +827,29 @@ describe('CadreRuntime — status() rendering', () => {
 
   it('renders issue table with issue title and human-readable phase name', async () => {
     mockExists.mockResolvedValue(true);
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        projectName: 'test-project',
-        tokenUsage: { total: 0, byWorkItem: {} },
-        issues: {
-          42: {
-            status: 'in-progress',
-            issueTitle: 'Fix the widget bug',
-            worktreePath: '/tmp/wt',
-            branchName: 'cadre/issue-42',
-            lastPhase: 2,
-            updatedAt: new Date().toISOString(),
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          projectName: 'test-project',
+          tokenUsage: { total: 0, byWorkItem: {} },
+          issues: {
+            42: {
+              status: 'in-progress',
+              issueTitle: 'Fix the widget bug',
+              worktreePath: '/tmp/wt',
+              branchName: 'cadre/issue-42',
+              lastPhase: 2,
+              updatedAt: new Date().toISOString(),
+            },
           },
-        },
-        lastCheckpoint: new Date().toISOString(),
-        resumeCount: 0,
-        version: 1,
-        startedAt: new Date().toISOString(),
-      }),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+          version: 1,
+          startedAt: new Date().toISOString(),
+        }),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
 
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status();
@@ -770,49 +864,53 @@ describe('CadreRuntime — status() rendering', () => {
       Promise.resolve(path.includes('checkpoint')),
     );
 
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        projectName: 'test-project',
-        tokenUsage: { total: 0, byWorkItem: {} },
-        issues: {
-          42: {
-            status: 'in-progress',
-            issueTitle: 'Fix the widget bug',
-            worktreePath: '/tmp/wt',
-            branchName: 'cadre/issue-42',
-            lastPhase: 3,
-            updatedAt: new Date().toISOString(),
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          projectName: 'test-project',
+          tokenUsage: { total: 0, byWorkItem: {} },
+          issues: {
+            42: {
+              status: 'in-progress',
+              issueTitle: 'Fix the widget bug',
+              worktreePath: '/tmp/wt',
+              branchName: 'cadre/issue-42',
+              lastPhase: 3,
+              updatedAt: new Date().toISOString(),
+            },
           },
-        },
-        lastCheckpoint: new Date().toISOString(),
-        resumeCount: 0,
-        version: 1,
-        startedAt: new Date().toISOString(),
-      }),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+          version: 1,
+          startedAt: new Date().toISOString(),
+        }),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
 
-    MockCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        issueNumber: 42,
-        currentPhase: 3,
-        completedPhases: [1, 2],
-        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-        gateResults: {},
-        currentTask: null,
-        completedTasks: [],
-        failedTasks: [],
-        blockedTasks: [],
-        phaseOutputs: {},
-        version: 1,
-        worktreePath: '/tmp/wt',
-        branchName: 'cadre/issue-42',
-        baseCommit: 'abc123',
-        startedAt: new Date().toISOString(),
-        lastCheckpoint: new Date().toISOString(),
-        resumeCount: 0,
-      }),
-    }));
+    MockCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          issueNumber: 42,
+          currentPhase: 3,
+          completedPhases: [1, 2],
+          tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+          gateResults: {},
+          currentTask: null,
+          completedTasks: [],
+          failedTasks: [],
+          blockedTasks: [],
+          phaseOutputs: {},
+          version: 1,
+          worktreePath: '/tmp/wt',
+          branchName: 'cadre/issue-42',
+          baseCommit: 'abc123',
+          startedAt: new Date().toISOString(),
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+        }),
+      };
+    });
 
     const runtime = new CadreRuntime(makeConfig());
     await runtime.status(42);
@@ -875,8 +973,10 @@ describe('CadreRuntime — stale-state check wiring', () => {
     mockCheckStaleState = checkStaleState as unknown as ReturnType<typeof vi.fn>;
     mockCheckStaleState.mockResolvedValue({ hasConflicts: false, conflicts: new Map() });
 
-    MockCreateNotificationManager.mockReturnValue({
-      dispatch: vi.fn().mockResolvedValue(undefined),
+    MockCreateNotificationManager.mockImplementation(function () {
+      return {
+        dispatch: vi.fn().mockResolvedValue(undefined),
+      };
     });
 
     MockCreatePlatformProvider.mockReturnValue({
@@ -900,17 +1000,19 @@ describe('CadreRuntime — stale-state check wiring', () => {
       listIssues: vi.fn().mockResolvedValue([]),
     });
 
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        success: true,
-        issues: [],
-        prsCreated: [],
-        failedIssues: [],
-        codeDoneNoPR: [],
-        totalDuration: 100,
-        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
-      }),
-    }));
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          issues: [],
+          prsCreated: [],
+          failedIssues: [],
+          codeDoneNoPR: [],
+          totalDuration: 100,
+          tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        }),
+      };
+    });
   });
 
   afterEach(() => {
@@ -1047,8 +1149,10 @@ describe('CadreRuntime — DAG wiring', () => {
 
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
 
-    MockCreateNotificationManager.mockReturnValue({
-      dispatch: vi.fn().mockResolvedValue(undefined),
+    MockCreateNotificationManager.mockImplementation(function () {
+      return {
+        dispatch: vi.fn().mockResolvedValue(undefined),
+      };
     });
 
     MockCreatePlatformProvider.mockReturnValue({
@@ -1071,24 +1175,28 @@ describe('CadreRuntime — DAG wiring', () => {
       listIssues: vi.fn().mockResolvedValue([]),
     });
 
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        success: true,
-        issues: [],
-        prsCreated: [],
-        failedIssues: [],
-        codeDoneNoPR: [],
-        totalDuration: 100,
-        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
-      }),
-    }));
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          issues: [],
+          prsCreated: [],
+          failedIssues: [],
+          codeDoneNoPR: [],
+          totalDuration: 100,
+          tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        }),
+      };
+    });
 
     // Reset mock dag
     mockDag.getWaves.mockReturnValue([[{ number: 1, title: 'Test issue' }]]);
 
-    MockDependencyResolver.mockImplementation(() => ({
-      resolve: vi.fn().mockResolvedValue(mockDag),
-    }));
+    MockDependencyResolver.mockImplementation(function () {
+      return {
+        resolve: vi.fn().mockResolvedValue(mockDag),
+      };
+    });
   });
 
   afterEach(() => {
@@ -1141,11 +1249,13 @@ describe('CadreRuntime — DAG wiring', () => {
   });
 
   it('aborts run with a clear error message when DependencyResolutionError is thrown', async () => {
-    MockDependencyResolver.mockImplementation(() => ({
-      resolve: vi.fn().mockRejectedValue(
-        new DependencyResolutionError('Could not infer dependency graph'),
-      ),
-    }));
+    MockDependencyResolver.mockImplementation(function () {
+      return {
+        resolve: vi.fn().mockRejectedValue(
+          new DependencyResolutionError('Could not infer dependency graph'),
+        ),
+      };
+    });
 
     const config = makeRuntimeConfig({
       ...makeConfig([1]),
@@ -1164,9 +1274,11 @@ describe('CadreRuntime — validate()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
-    MockPreRunValidationSuite.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue(true),
-    }));
+    MockPreRunValidationSuite.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue(true),
+      };
+    });
   });
 
   afterEach(() => {
@@ -1174,18 +1286,22 @@ describe('CadreRuntime — validate()', () => {
   });
 
   it('should return true when all validators pass', async () => {
-    MockPreRunValidationSuite.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue(true),
-    }));
+    MockPreRunValidationSuite.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue(true),
+      };
+    });
     const runtime = new CadreRuntime(makeConfig());
     const result = await runtime.validate();
     expect(result).toBe(true);
   });
 
   it('should return false when validators fail', async () => {
-    MockPreRunValidationSuite.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue(false),
-    }));
+    MockPreRunValidationSuite.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue(false),
+      };
+    });
     const runtime = new CadreRuntime(makeConfig());
     const result = await runtime.validate();
     expect(result).toBe(false);
@@ -1211,21 +1327,23 @@ describe('CadreRuntime — reset()', () => {
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        issues: {
-          10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
-          20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
-        },
-        tokenUsage: { total: 0, byWorkItem: {} },
-        lastCheckpoint: '',
-        resumeCount: 0,
-        projectName: 'test',
-        version: 1,
-        startedAt: '',
-      }),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          issues: {
+            10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
+            20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
+          },
+          tokenUsage: { total: 0, byWorkItem: {} },
+          lastCheckpoint: '',
+          resumeCount: 0,
+          projectName: 'test',
+          version: 1,
+          startedAt: '',
+        }),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
   });
 
   afterEach(() => {
@@ -1235,20 +1353,22 @@ describe('CadreRuntime — reset()', () => {
 
   it('should reset a specific issue by number', async () => {
     const mockSetIssueStatus = vi.fn().mockResolvedValue(undefined);
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        issues: {
-          10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
-        },
-        tokenUsage: { total: 0, byWorkItem: {} },
-        lastCheckpoint: '',
-        resumeCount: 0,
-        projectName: 'test',
-        version: 1,
-        startedAt: '',
-      }),
-      setWorkItemStatus: mockSetIssueStatus,
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          issues: {
+            10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
+          },
+          tokenUsage: { total: 0, byWorkItem: {} },
+          lastCheckpoint: '',
+          resumeCount: 0,
+          projectName: 'test',
+          version: 1,
+          startedAt: '',
+        }),
+        setWorkItemStatus: mockSetIssueStatus,
+      };
+    });
 
     const runtime = new CadreRuntime(makeConfig());
     await runtime.reset(10);
@@ -1260,21 +1380,23 @@ describe('CadreRuntime — reset()', () => {
 
   it('should reset all issues when no issue number is provided', async () => {
     const mockSetIssueStatus = vi.fn().mockResolvedValue(undefined);
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        issues: {
-          10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
-          20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
-        },
-        tokenUsage: { total: 0, byWorkItem: {} },
-        lastCheckpoint: '',
-        resumeCount: 0,
-        projectName: 'test',
-        version: 1,
-        startedAt: '',
-      }),
-      setWorkItemStatus: mockSetIssueStatus,
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          issues: {
+            10: { status: 'completed', issueTitle: 'Issue 10', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' },
+            20: { status: 'in-progress', issueTitle: 'Issue 20', worktreePath: '', branchName: '', lastPhase: 3, updatedAt: '' },
+          },
+          tokenUsage: { total: 0, byWorkItem: {} },
+          lastCheckpoint: '',
+          resumeCount: 0,
+          projectName: 'test',
+          version: 1,
+          startedAt: '',
+        }),
+        setWorkItemStatus: mockSetIssueStatus,
+      };
+    });
 
     const runtime = new CadreRuntime(makeConfig());
     await runtime.reset();
@@ -1374,9 +1496,11 @@ describe('CadreRuntime — listWorktrees()', () => {
   });
 
   it('should print "No active worktrees" when none exist', async () => {
-    MockWorktreeManager.mockImplementation(() => ({
-      listActive: vi.fn().mockResolvedValue([]),
-    }));
+    MockWorktreeManager.mockImplementation(function () {
+      return {
+        listActive: vi.fn().mockResolvedValue([]),
+      };
+    });
     const runtime = new CadreRuntime(makeConfig());
     await runtime.listWorktrees();
     const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
@@ -1384,11 +1508,13 @@ describe('CadreRuntime — listWorktrees()', () => {
   });
 
   it('should print worktree details when worktrees exist', async () => {
-    MockWorktreeManager.mockImplementation(() => ({
-      listActive: vi.fn().mockResolvedValue([
-        { issueNumber: 42, path: '/tmp/wt-42', branch: 'cadre/issue-42', baseCommit: 'abc12345', exists: true, agentFiles: [] },
-      ]),
-    }));
+    MockWorktreeManager.mockImplementation(function () {
+      return {
+        listActive: vi.fn().mockResolvedValue([
+          { issueNumber: 42, path: '/tmp/wt-42', branch: 'cadre/issue-42', baseCommit: 'abc12345', exists: true, agentFiles: [] },
+        ]),
+      };
+    });
     const runtime = new CadreRuntime(makeConfig());
     await runtime.listWorktrees();
     const output = consoleSpy.mock.calls.map(([msg]) => msg).join('\n');
@@ -1407,8 +1533,10 @@ describe('CadreRuntime — pruneWorktrees()', () => {
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    MockCreateNotificationManager.mockReturnValue({
-      dispatch: vi.fn().mockResolvedValue(undefined),
+    MockCreateNotificationManager.mockImplementation(function () {
+      return {
+        dispatch: vi.fn().mockResolvedValue(undefined),
+      };
     });
 
     MockCreatePlatformProvider.mockReturnValue({
@@ -1421,18 +1549,20 @@ describe('CadreRuntime — pruneWorktrees()', () => {
       listIssues: vi.fn().mockResolvedValue([]),
     });
 
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        issues: {},
-        tokenUsage: { total: 0, byWorkItem: {} },
-        lastCheckpoint: '',
-        resumeCount: 0,
-        projectName: 'test',
-        version: 1,
-        startedAt: '',
-      }),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          issues: {},
+          tokenUsage: { total: 0, byWorkItem: {} },
+          lastCheckpoint: '',
+          resumeCount: 0,
+          projectName: 'test',
+          version: 1,
+          startedAt: '',
+        }),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
   });
 
   afterEach(() => {
@@ -1442,25 +1572,29 @@ describe('CadreRuntime — pruneWorktrees()', () => {
 
   it('should prune worktrees that are locally completed', async () => {
     const mockRemove = vi.fn().mockResolvedValue(undefined);
-    MockWorktreeManager.mockImplementation(() => ({
-      listActive: vi.fn().mockResolvedValue([
-        { issueNumber: 7, path: '/tmp/wt-7', branch: 'cadre/issue-7', baseCommit: 'abc1', exists: true, agentFiles: [] },
-      ]),
-      remove: mockRemove,
-    }));
+    MockWorktreeManager.mockImplementation(function () {
+      return {
+        listActive: vi.fn().mockResolvedValue([
+          { issueNumber: 7, path: '/tmp/wt-7', branch: 'cadre/issue-7', baseCommit: 'abc1', exists: true, agentFiles: [] },
+        ]),
+        remove: mockRemove,
+      };
+    });
 
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        issues: { 7: { status: 'completed', issueTitle: 'Issue 7', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' } },
-        tokenUsage: { total: 0, byWorkItem: {} },
-        lastCheckpoint: '',
-        resumeCount: 0,
-        projectName: 'test',
-        version: 1,
-        startedAt: '',
-      }),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          issues: { 7: { status: 'completed', issueTitle: 'Issue 7', worktreePath: '', branchName: '', lastPhase: 5, updatedAt: '' } },
+          tokenUsage: { total: 0, byWorkItem: {} },
+          lastCheckpoint: '',
+          resumeCount: 0,
+          projectName: 'test',
+          version: 1,
+          startedAt: '',
+        }),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
 
     const runtime = new CadreRuntime(makeConfig());
     await runtime.pruneWorktrees();
@@ -1473,12 +1607,14 @@ describe('CadreRuntime — pruneWorktrees()', () => {
 
   it('should prune worktrees whose PR is closed on the platform', async () => {
     const mockRemove = vi.fn().mockResolvedValue(undefined);
-    MockWorktreeManager.mockImplementation(() => ({
-      listActive: vi.fn().mockResolvedValue([
-        { issueNumber: 8, path: '/tmp/wt-8', branch: 'cadre/issue-8', baseCommit: 'abc2', exists: true, agentFiles: [] },
-      ]),
-      remove: mockRemove,
-    }));
+    MockWorktreeManager.mockImplementation(function () {
+      return {
+        listActive: vi.fn().mockResolvedValue([
+          { issueNumber: 8, path: '/tmp/wt-8', branch: 'cadre/issue-8', baseCommit: 'abc2', exists: true, agentFiles: [] },
+        ]),
+        remove: mockRemove,
+      };
+    });
 
     MockCreatePlatformProvider.mockReturnValue({
       name: 'github',
@@ -1501,12 +1637,14 @@ describe('CadreRuntime — pruneWorktrees()', () => {
 
   it('should skip worktrees whose PR is still open', async () => {
     const mockRemove = vi.fn().mockResolvedValue(undefined);
-    MockWorktreeManager.mockImplementation(() => ({
-      listActive: vi.fn().mockResolvedValue([
-        { issueNumber: 9, path: '/tmp/wt-9', branch: 'cadre/issue-9', baseCommit: 'abc3', exists: true, agentFiles: [] },
-      ]),
-      remove: mockRemove,
-    }));
+    MockWorktreeManager.mockImplementation(function () {
+      return {
+        listActive: vi.fn().mockResolvedValue([
+          { issueNumber: 9, path: '/tmp/wt-9', branch: 'cadre/issue-9', baseCommit: 'abc3', exists: true, agentFiles: [] },
+        ]),
+        remove: mockRemove,
+      };
+    });
 
     MockCreatePlatformProvider.mockReturnValue({
       name: 'github',
@@ -1535,21 +1673,27 @@ describe('CadreRuntime — resolveIssues() error handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     processOnSpy = vi.spyOn(process, 'on').mockImplementation((() => process) as any);
-    MockCreateNotificationManager.mockReturnValue({ dispatch: vi.fn().mockResolvedValue(undefined) });
-    MockWorktreeManager.mockImplementation(() => ({
-      buildAgentCache: vi.fn().mockResolvedValue(undefined),
-    }));
-    MockFleetOrchestrator.mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        success: true,
-        issues: [],
-        prsCreated: [],
-        failedIssues: [],
-        codeDoneNoPR: [],
-        totalDuration: 100,
-        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
-      }),
-    }));
+    MockCreateNotificationManager.mockImplementation(function () {
+      return { dispatch: vi.fn().mockResolvedValue(undefined) };
+    });
+    MockWorktreeManager.mockImplementation(function () {
+      return {
+        buildAgentCache: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+    MockFleetOrchestrator.mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          issues: [],
+          prsCreated: [],
+          failedIssues: [],
+          codeDoneNoPR: [],
+          totalDuration: 100,
+          tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+        }),
+      };
+    });
   });
 
   afterEach(() => {

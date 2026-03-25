@@ -28,21 +28,23 @@ import type {
 
 // ── GitHubAPI is fully mocked so GitHubProvider can be tested without network ──
 vi.mock('../src/github/api.js', () => ({
-  GitHubAPI: vi.fn().mockImplementation(() => ({
-    getIssue: vi.fn(),
-    listIssues: vi.fn(),
-    createPullRequest: vi.fn(),
-    getPullRequest: vi.fn(),
-    updatePullRequest: vi.fn(),
-    getPRComments: vi.fn(),
-    getPRReviewComments: vi.fn(),
-    getPRReviews: vi.fn(),
-    listPullRequests: vi.fn(),
-    ensureLabel: vi.fn(),
-    applyLabels: vi.fn(),
-    addIssueComment: vi.fn(),
-    checkAuth: vi.fn().mockResolvedValue(true),
-  })),
+  GitHubAPI: vi.fn().mockImplementation(function () {
+    return {
+      getIssue: vi.fn(),
+      listIssues: vi.fn(),
+      createPullRequest: vi.fn(),
+      getPullRequest: vi.fn(),
+      updatePullRequest: vi.fn(),
+      getPRComments: vi.fn(),
+      getPRReviewComments: vi.fn(),
+      getPRReviews: vi.fn(),
+      listPullRequests: vi.fn(),
+      ensureLabel: vi.fn(),
+      applyLabels: vi.fn(),
+      addIssueComment: vi.fn(),
+      checkAuth: vi.fn().mockResolvedValue(true),
+    };
+  }),
 }));
 
 const mockLogger = {

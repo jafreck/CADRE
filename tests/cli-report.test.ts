@@ -6,7 +6,9 @@ const mockReport = vi.fn().mockResolvedValue(undefined);
 const mockReportServiceInstance = {
   report: mockReport,
 };
-const MockReportService = vi.fn().mockReturnValue(mockReportServiceInstance);
+const MockReportService = vi.fn().mockImplementation(function () {
+  return mockReportServiceInstance;
+});
 
 const mockConfig = {
   projectName: 'test-project',
@@ -33,9 +35,11 @@ vi.mock('../src/config/loader.js', async (importOriginal) => {
 });
 
 vi.mock('../src/core/runtime.js', () => ({
-  CadreRuntime: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({ success: true }),
-  })),
+  CadreRuntime: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({ success: true }),
+    };
+  }),
 }));
 
 vi.mock('../src/core/services/report-service.js', () => ({
@@ -43,12 +47,14 @@ vi.mock('../src/core/services/report-service.js', () => ({
 }));
 
 vi.mock('@cadre-dev/framework/core', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  })),
+  Logger: vi.fn().mockImplementation(function () {
+    return {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    };
+  }),
 }));
 
 vi.mock('../src/platform/factory.js', () => ({
@@ -88,7 +94,9 @@ describe('cadre report CLI command', () => {
     mockLoadConfig.mockResolvedValue(mockConfig);
     mockApplyOverrides.mockImplementation((c: unknown) => c);
     mockReport.mockResolvedValue(undefined);
-    MockReportService.mockReturnValue(mockReportServiceInstance);
+    MockReportService.mockImplementation(function () {
+      return mockReportServiceInstance;
+    });
 
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

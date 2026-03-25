@@ -4,22 +4,26 @@ const mockListActive = vi.fn();
 const mockRemove = vi.fn();
 
 vi.mock('../../src/git/worktree.js', () => ({
-  WorktreeManager: vi.fn().mockImplementation(() => ({
-    listActive: mockListActive,
-    remove: mockRemove,
-  })),
+  WorktreeManager: vi.fn().mockImplementation(function () {
+    return {
+      listActive: mockListActive,
+      remove: mockRemove,
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/engine', () => ({
-  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({
-      projectName: 'test-project',
-      issues: {},
-      tokenUsage: { total: 0, byWorkItem: {} },
-      lastCheckpoint: '',
-      resumeCount: 0,
-    }),
-  })),
+  FleetCheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({
+        projectName: 'test-project',
+        issues: {},
+        tokenUsage: { total: 0, byWorkItem: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+      }),
+    };
+  }),
 }));
 
 import { WorktreeLifecycleService } from '../../src/core/services/worktree-lifecycle-service.js';
@@ -114,9 +118,11 @@ describe('WorktreeLifecycleService', () => {
   describe('pruneWorktrees()', () => {
     it('should connect and disconnect the provider', async () => {
       mockListActive.mockResolvedValue([]);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({ issues: {} }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({ issues: {} }),
+        };
+      });
       const provider = makeProvider();
 
       const service = new WorktreeLifecycleService(makeConfig(), makeLogger(), provider);
@@ -131,11 +137,13 @@ describe('WorktreeLifecycleService', () => {
         { issueNumber: 1, path: '/tmp/wt/1', branch: 'cadre/issue-1', baseCommit: 'abc123' },
       ]);
       mockRemove.mockResolvedValue(undefined);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: { 1: { status: 'completed' } },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: { 1: { status: 'completed' } },
+          }),
+        };
+      });
 
       const service = new WorktreeLifecycleService(makeConfig(), makeLogger(), makeProvider());
       await service.pruneWorktrees();
@@ -150,11 +158,13 @@ describe('WorktreeLifecycleService', () => {
         { issueNumber: 5, path: '/tmp/wt/5', branch: 'cadre/issue-5', baseCommit: 'abc123' },
       ]);
       mockRemove.mockResolvedValue(undefined);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: { 5: { status: 'in-progress' } },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: { 5: { status: 'in-progress' } },
+          }),
+        };
+      });
       const provider = makeProvider({
         listPullRequests: vi.fn().mockResolvedValue([
           { headBranch: 'cadre/issue-5', state: 'closed' },
@@ -173,11 +183,13 @@ describe('WorktreeLifecycleService', () => {
         { issueNumber: 6, path: '/tmp/wt/6', branch: 'cadre/issue-6', baseCommit: 'abc123' },
       ]);
       mockRemove.mockResolvedValue(undefined);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: { 6: { status: 'in-progress' } },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: { 6: { status: 'in-progress' } },
+          }),
+        };
+      });
       const provider = makeProvider({
         listPullRequests: vi.fn().mockResolvedValue([
           { headBranch: 'cadre/issue-6', state: 'merged' },
@@ -194,11 +206,13 @@ describe('WorktreeLifecycleService', () => {
       mockListActive.mockResolvedValue([
         { issueNumber: 3, path: '/tmp/wt/3', branch: 'cadre/issue-3', baseCommit: 'abc123' },
       ]);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: { 3: { status: 'in-progress' } },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: { 3: { status: 'in-progress' } },
+          }),
+        };
+      });
       const provider = makeProvider({
         listPullRequests: vi.fn().mockResolvedValue([
           { headBranch: 'cadre/issue-3', state: 'open' },
@@ -216,11 +230,13 @@ describe('WorktreeLifecycleService', () => {
       mockListActive.mockResolvedValue([
         { issueNumber: 4, path: '/tmp/wt/4', branch: 'cadre/issue-4', baseCommit: 'abc123' },
       ]);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: { 4: { status: 'in-progress' } },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: { 4: { status: 'in-progress' } },
+          }),
+        };
+      });
       const logger = makeLogger();
       const provider = makeProvider({
         listPullRequests: vi.fn().mockRejectedValue(new Error('API error')),
@@ -242,14 +258,16 @@ describe('WorktreeLifecycleService', () => {
         { issueNumber: 2, path: '/tmp/wt/2', branch: 'cadre/issue-2', baseCommit: 'def' },
       ]);
       mockRemove.mockResolvedValue(undefined);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: {
-            1: { status: 'completed' },
-            2: { status: 'completed' },
-          },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: {
+              1: { status: 'completed' },
+              2: { status: 'completed' },
+            },
+          }),
+        };
+      });
 
       const service = new WorktreeLifecycleService(makeConfig(), makeLogger(), makeProvider());
       await service.pruneWorktrees();
@@ -261,11 +279,13 @@ describe('WorktreeLifecycleService', () => {
       mockListActive.mockResolvedValue([
         { issueNumber: 1, path: '/tmp/wt/1', branch: 'cadre/issue-1', baseCommit: 'abc' },
       ]);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: { 1: { status: 'completed' } },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: { 1: { status: 'completed' } },
+          }),
+        };
+      });
       mockRemove.mockRejectedValue(new Error('Remove failed'));
       const provider = makeProvider();
 
@@ -280,11 +300,13 @@ describe('WorktreeLifecycleService', () => {
         { issueNumber: 10, path: '/tmp/wt/10', branch: 'cadre/issue-10', baseCommit: 'abc' },
       ]);
       mockRemove.mockResolvedValue(undefined);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          issues: { 10: { status: 'completed' } },
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            issues: { 10: { status: 'completed' } },
+          }),
+        };
+      });
       const provider = makeProvider({
         listPullRequests: vi.fn().mockResolvedValue([
           { headBranch: 'cadre/issue-10', state: 'merged' },

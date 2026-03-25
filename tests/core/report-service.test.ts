@@ -8,10 +8,12 @@ vi.mock('../../src/reporting/report-writer.js', () => ({
 }));
 
 vi.mock('@cadre-dev/framework/core', () => ({
-  CostEstimator: vi.fn().mockImplementation(() => ({
-    estimate: vi.fn().mockReturnValue({ totalCost: 0.05 }),
-    format: vi.fn().mockReturnValue('$0.05'),
-  })),
+  CostEstimator: vi.fn().mockImplementation(function () {
+    return {
+      estimate: vi.fn().mockReturnValue({ totalCost: 0.05 }),
+      format: vi.fn().mockReturnValue('$0.05'),
+    };
+  }),
 }));
 
 import { ReportService } from '../../src/core/services/report-service.js';

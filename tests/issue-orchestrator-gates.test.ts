@@ -90,7 +90,7 @@ const {
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('../src/core/issue/issue-notifier.js', () => ({
-  IssueNotifier: vi.fn().mockImplementation(() => {
+  IssueNotifier: vi.fn().mockImplementation(function () {
     const methods = {
       notifyStart: vi.fn().mockResolvedValue(undefined),
       notifyPhaseComplete: vi.fn().mockResolvedValue(undefined),
@@ -107,56 +107,15 @@ vi.mock('../src/core/issue/issue-notifier.js', () => ({
 }));
 
 vi.mock('../src/core/pipeline/phase-gate.js', () => ({
-  AnalysisToPlanningGate: vi.fn(() => ({ validate: mockAnalysisGateValidate })),
-  PlanningToImplementationGate: vi.fn(() => ({ validate: mockPlanningGateValidate })),
-  ImplementationToIntegrationGate: vi.fn(() => ({ validate: mockImplGateValidate })),
-  IntegrationToPRGate: vi.fn(() => ({ validate: mockIntegrationGateValidate })),
-  AnalysisAmbiguityGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
+  AnalysisToPlanningGate: vi.fn(function () { return { validate: mockAnalysisGateValidate }; }),
+  PlanningToImplementationGate: vi.fn(function () { return { validate: mockPlanningGateValidate }; }),
+  ImplementationToIntegrationGate: vi.fn(function () { return { validate: mockImplGateValidate }; }),
+  IntegrationToPRGate: vi.fn(function () { return { validate: mockIntegrationGateValidate }; }),
+  AnalysisAmbiguityGate: vi.fn(function () { return { validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) }; }),
   listGatePlugins: vi.fn(() => []),
   registerGatePlugin: vi.fn(),
   unregisterGatePlugin: vi.fn(),
   clearGatePlugins: vi.fn(),
-}));
-
-vi.mock('@cadre-dev/framework/engine', () => ({
-  IssueProgressWriter: vi.fn(() => ({
-    appendEvent: mockProgressAppendEvent,
-    write: mockProgressWrite,
-  })),
-}));
-
-vi.mock('../src/agents/context-builder.js', () => ({
-  ContextBuilder: vi.fn(() => ({
-    build: mockContextBuildForIssueAnalyst,
-  })),
-}));
-
-vi.mock('../src/agents/result-parser.js', () => ({
-  ResultParser: vi.fn(() => ({
-    parseAnalysis: mockResultParserParseAnalysis,
-    parseImplementationPlan: mockResultParserParsePlan,
-    parseReview: vi.fn().mockResolvedValue({ verdict: 'pass', issues: [], summary: '' }),
-    parsePRContent: vi.fn().mockResolvedValue({ title: 'PR', body: '', labels: [] }),
-  })),
-}));
-
-vi.mock('../src/git/commit.js', () => ({
-  CommitManager: vi.fn(() => ({
-    isClean: mockCommitIsClean,
-    getChangedFiles: mockCommitGetChangedFiles,
-    getDiff: mockCommitGetDiff,
-    commit: mockCommitCommit,
-    push: mockCommitPush,
-    squash: mockCommitSquash,
-    stripCadreFiles: mockCommitStripCadreFiles,
-  })),
-}));
-
-vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
-  RetryExecutor: vi.fn(() => ({
-    execute: mockRetryExecutorExecute,
-  })),
 }));
 
 const mockSessionQueueInstance = {
@@ -169,26 +128,64 @@ const mockSessionQueueInstance = {
 
 vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
-  TaskQueue: vi.fn(() => mockSessionQueueInstance),
-  SessionQueue: vi.fn(() => mockSessionQueueInstance),
-  // static method:
+  IssueProgressWriter: vi.fn(function () {
+    return {
+      appendEvent: mockProgressAppendEvent,
+      write: mockProgressWrite,
+    };
+  }),
+  RetryExecutor: vi.fn(function () {
+    return {
+      execute: mockRetryExecutorExecute,
+    };
+  }),
+  TaskQueue: vi.fn(function () { return mockSessionQueueInstance; }),
+  SessionQueue: vi.fn(function () { return mockSessionQueueInstance; }),
   selectNonOverlappingBatch: vi.fn().mockReturnValue([]),
-  IssueProgressWriter: vi.fn(() => ({
-    appendEvent: mockProgressAppendEvent,
-    write: mockProgressWrite,
-  })),
-  RetryExecutor: vi.fn(() => ({
-    execute: mockRetryExecutorExecute,
-  })),
+}));
+
+vi.mock('../src/agents/context-builder.js', () => ({
+  ContextBuilder: vi.fn(function () {
+    return {
+      build: mockContextBuildForIssueAnalyst,
+    };
+  }),
+}));
+
+vi.mock('../src/agents/result-parser.js', () => ({
+  ResultParser: vi.fn(function () {
+    return {
+      parseAnalysis: mockResultParserParseAnalysis,
+      parseImplementationPlan: mockResultParserParsePlan,
+      parseReview: vi.fn().mockResolvedValue({ verdict: 'pass', issues: [], summary: '' }),
+      parsePRContent: vi.fn().mockResolvedValue({ title: 'PR', body: '', labels: [] }),
+    };
+  }),
+}));
+
+vi.mock('../src/git/commit.js', () => ({
+  CommitManager: vi.fn(function () {
+    return {
+      isClean: mockCommitIsClean,
+      getChangedFiles: mockCommitGetChangedFiles,
+      getDiff: mockCommitGetDiff,
+      commit: mockCommitCommit,
+      push: mockCommitPush,
+      squash: mockCommitSquash,
+      stripCadreFiles: mockCommitStripCadreFiles,
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/runtime')>()),
-  TokenTracker: vi.fn(() => ({
-    record: vi.fn(),
-    getTotal: mockTokenTrackerGetTotal,
-    checkWorkItemBudget: vi.fn().mockReturnValue('ok'),
-  })),
+  TokenTracker: vi.fn(function () {
+    return {
+      record: vi.fn(),
+      getTotal: mockTokenTrackerGetTotal,
+      checkWorkItemBudget: vi.fn().mockReturnValue('ok'),
+    };
+  }),
 }));
 
 vi.mock('../src/util/fs.js', () => ({

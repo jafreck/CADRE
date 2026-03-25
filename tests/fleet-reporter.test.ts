@@ -9,14 +9,18 @@ vi.mock('../src/core/pipeline/phase-registry.js', () => ({
 }));
 
 vi.mock('../src/reporting/report-writer.js', () => ({
-  ReportWriter: vi.fn().mockImplementation(() => ({
-    buildReport: vi.fn().mockReturnValue({ summary: 'test' }),
-    write: vi.fn().mockResolvedValue('/tmp/report.md'),
-  })),
+  ReportWriter: vi.fn().mockImplementation(function () {
+    return {
+      buildReport: vi.fn().mockReturnValue({ summary: 'test' }),
+      write: vi.fn().mockResolvedValue('/tmp/report.md'),
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/core', () => ({
-  CostEstimator: vi.fn().mockImplementation(() => ({})),
+  CostEstimator: vi.fn().mockImplementation(function () {
+    return {};
+  }),
 }));
 
 function makeIssue(number: number): IssueDetail {
@@ -336,7 +340,7 @@ describe('FleetReporter', () => {
 
     it('should log a warning when report writing fails', async () => {
       const { ReportWriter } = await import('../src/reporting/report-writer.js');
-      vi.mocked(ReportWriter).mockImplementationOnce(() => {
+      vi.mocked(ReportWriter).mockImplementationOnce(function () {
         throw new Error('disk full');
       });
 

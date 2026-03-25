@@ -27,17 +27,19 @@ import type { AgentInvocation, AgentResult } from '../src/agents/types.js';
 
 // Mock CommitManager to avoid real git operations in temp directories
 vi.mock('../src/git/commit.js', () => ({
-  CommitManager: vi.fn().mockImplementation(() => ({
-    commit: vi.fn().mockResolvedValue('abc123'),
-    commitFiles: vi.fn().mockResolvedValue('abc123'),
-    getChangedFiles: vi.fn().mockResolvedValue([]),
-    isClean: vi.fn().mockResolvedValue(true),
-    getDiff: vi.fn().mockResolvedValue(''),
-    getTaskDiff: vi.fn().mockResolvedValue(''),
-    push: vi.fn().mockResolvedValue(undefined),
-    squash: vi.fn().mockResolvedValue('abc123'),
-    stripCadreFiles: vi.fn().mockResolvedValue('abc123'),
-  })),
+  CommitManager: vi.fn().mockImplementation(function () {
+    return {
+      commit: vi.fn().mockResolvedValue('abc123'),
+      commitFiles: vi.fn().mockResolvedValue('abc123'),
+      getChangedFiles: vi.fn().mockResolvedValue([]),
+      isClean: vi.fn().mockResolvedValue(true),
+      getDiff: vi.fn().mockResolvedValue(''),
+      getTaskDiff: vi.fn().mockResolvedValue(''),
+      push: vi.fn().mockResolvedValue(undefined),
+      squash: vi.fn().mockResolvedValue('abc123'),
+      stripCadreFiles: vi.fn().mockResolvedValue('abc123'),
+    };
+  }),
 }));
 
 // Mock simple-git so ImplementationToIntegrationGate (gate 3) can compute a

@@ -4,14 +4,16 @@ import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 // Mock heavy dependencies before importing CadreRuntime
 vi.mock('@cadre-dev/framework/core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/core')>()),
-  Logger: vi.fn().mockImplementation(() => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnValue({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
-    agentLogger: vi.fn().mockReturnValue({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
-  })),
+  Logger: vi.fn().mockImplementation(function () {
+    return {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnValue({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+      agentLogger: vi.fn().mockReturnValue({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+    };
+  }),
   PreRunValidationSuite: vi.fn(),
   gitValidator: { name: 'git', validate: vi.fn() },
   agentBackendValidator: { name: 'agent-backend', validate: vi.fn() },
@@ -23,9 +25,11 @@ vi.mock('@cadre-dev/framework/core', async (importOriginal) => ({
 
 vi.mock('@cadre-dev/framework/notifications', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/notifications')>()),
-  NotificationManager: vi.fn().mockImplementation(() => ({
-    dispatch: vi.fn().mockResolvedValue(undefined),
-  })),
+  NotificationManager: vi.fn().mockImplementation(function () {
+    return {
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/platform/factory.js', () => ({
@@ -73,9 +77,11 @@ describe('CadreRuntime.validate()', () => {
 
   beforeEach(() => {
     mockRunSuite = vi.fn();
-    (PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-      run: mockRunSuite,
-    }));
+    (PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>).mockImplementation(function () {
+      return {
+        run: mockRunSuite,
+      };
+    });
   });
 
   afterEach(() => {
@@ -123,9 +129,11 @@ describe('CadreRuntime.run() – validation integration', () => {
     // Prevent real SIGINT/SIGTERM listeners from being registered on the process
     processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
     mockRunSuite = vi.fn();
-    (PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-      run: mockRunSuite,
-    }));
+    (PreRunValidationSuite as unknown as ReturnType<typeof vi.fn>).mockImplementation(function () {
+      return {
+        run: mockRunSuite,
+      };
+    });
   });
 
   afterEach(() => {

@@ -5,11 +5,11 @@ import { AzureDevOpsProvider } from '../src/platform/azure-devops-provider.js';
 import { makeRuntimeConfig } from './helpers/make-runtime-config.js';
 
 vi.mock('../src/platform/github-provider.js', () => ({
-  GitHubProvider: vi.fn().mockImplementation(() => ({ name: 'GitHub' })),
+  GitHubProvider: vi.fn().mockImplementation(function () { return { name: 'GitHub' }; }),
 }));
 
 vi.mock('../src/platform/azure-devops-provider.js', () => ({
-  AzureDevOpsProvider: vi.fn().mockImplementation(() => ({ name: 'Azure DevOps' })),
+  AzureDevOpsProvider: vi.fn().mockImplementation(function () { return { name: 'Azure DevOps' }; }),
 }));
 
 function makeLogger() {

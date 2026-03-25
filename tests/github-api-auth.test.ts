@@ -3,13 +3,15 @@ import { GitHubAPI } from '../src/github/api.js';
 import { Octokit } from '@octokit/rest';
 
 vi.mock('@octokit/rest', () => ({
-  Octokit: vi.fn().mockImplementation(() => ({
-    rest: {
-      users: {
-        getAuthenticated: vi.fn(),
+  Octokit: vi.fn().mockImplementation(function () {
+    return {
+      rest: {
+        users: {
+          getAuthenticated: vi.fn(),
+        },
       },
-    },
-  })),
+    };
+  }),
 }));
 
 function makeLogger() {

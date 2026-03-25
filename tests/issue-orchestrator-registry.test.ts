@@ -33,15 +33,17 @@ vi.mock('../src/executors/pr-composition-phase-executor.js', () => ({
 }));
 
 vi.mock('../src/git/commit.js', () => ({
-  CommitManager: vi.fn().mockImplementation(() => ({
-    isClean: vi.fn().mockResolvedValue(true),
-    getChangedFiles: vi.fn().mockResolvedValue([]),
-    getDiff: vi.fn().mockResolvedValue(''),
-    commit: vi.fn().mockResolvedValue(undefined),
-    push: vi.fn().mockResolvedValue(undefined),
-    squash: vi.fn().mockResolvedValue(undefined),
-    stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-  })),
+  CommitManager: vi.fn().mockImplementation(function () {
+    return {
+      isClean: vi.fn().mockResolvedValue(true),
+      getChangedFiles: vi.fn().mockResolvedValue([]),
+      getDiff: vi.fn().mockResolvedValue(''),
+      commit: vi.fn().mockResolvedValue(undefined),
+      push: vi.fn().mockResolvedValue(undefined),
+      squash: vi.fn().mockResolvedValue(undefined),
+      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 // Mock phase gates so they always pass
@@ -50,11 +52,11 @@ vi.mock('../src/core/pipeline/phase-gate.js', () => {
     validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })),
   });
   return {
-    AnalysisToPlanningGate: vi.fn(() => makeGate()),
-    PlanningToImplementationGate: vi.fn(() => makeGate()),
-    ImplementationToIntegrationGate: vi.fn(() => makeGate()),
-    IntegrationToPRGate: vi.fn(() => makeGate()),
-    AnalysisAmbiguityGate: vi.fn(() => makeGate()),
+    AnalysisToPlanningGate: vi.fn(function () { return makeGate(); }),
+    PlanningToImplementationGate: vi.fn(function () { return makeGate(); }),
+    ImplementationToIntegrationGate: vi.fn(function () { return makeGate(); }),
+    IntegrationToPRGate: vi.fn(function () { return makeGate(); }),
+    AnalysisAmbiguityGate: vi.fn(function () { return makeGate(); }),
     listGatePlugins: vi.fn(() => []),
     registerGatePlugin: vi.fn(),
     unregisterGatePlugin: vi.fn(),
@@ -171,11 +173,11 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
   function setupExecutorMocks(executors: ReturnType<typeof makeExecutorMock>[]) {
     const [a, p, i, n, pr] = executors;
-    vi.mocked(AnalysisPhaseExecutor).mockImplementation(() => a as never);
-    vi.mocked(PlanningPhaseExecutor).mockImplementation(() => p as never);
-    vi.mocked(ImplementationPhaseExecutor).mockImplementation(() => i as never);
-    vi.mocked(IntegrationPhaseExecutor).mockImplementation(() => n as never);
-    vi.mocked(PRCompositionPhaseExecutor).mockImplementation(() => pr as never);
+    vi.mocked(AnalysisPhaseExecutor).mockImplementation(function () { return a as never; });
+    vi.mocked(PlanningPhaseExecutor).mockImplementation(function () { return p as never; });
+    vi.mocked(ImplementationPhaseExecutor).mockImplementation(function () { return i as never; });
+    vi.mocked(IntegrationPhaseExecutor).mockImplementation(function () { return n as never; });
+    vi.mocked(PRCompositionPhaseExecutor).mockImplementation(function () { return pr as never; });
     return executors;
   }
 
@@ -183,11 +185,11 @@ describe('IssueOrchestrator – PhaseRegistry dispatch (task-008)', () => {
 
   describe('constructor', () => {
     it('should instantiate all five executor classes exactly once', () => {
-      vi.mocked(AnalysisPhaseExecutor).mockImplementation(() => makeExecutorMock(1, 'Analysis & Scouting') as never);
-      vi.mocked(PlanningPhaseExecutor).mockImplementation(() => makeExecutorMock(2, 'Planning') as never);
-      vi.mocked(ImplementationPhaseExecutor).mockImplementation(() => makeExecutorMock(3, 'Implementation') as never);
-      vi.mocked(IntegrationPhaseExecutor).mockImplementation(() => makeExecutorMock(4, 'Integration Verification') as never);
-      vi.mocked(PRCompositionPhaseExecutor).mockImplementation(() => makeExecutorMock(5, 'PR Composition') as never);
+      vi.mocked(AnalysisPhaseExecutor).mockImplementation(function () { return makeExecutorMock(1, 'Analysis & Scouting') as never; });
+      vi.mocked(PlanningPhaseExecutor).mockImplementation(function () { return makeExecutorMock(2, 'Planning') as never; });
+      vi.mocked(ImplementationPhaseExecutor).mockImplementation(function () { return makeExecutorMock(3, 'Implementation') as never; });
+      vi.mocked(IntegrationPhaseExecutor).mockImplementation(function () { return makeExecutorMock(4, 'Integration Verification') as never; });
+      vi.mocked(PRCompositionPhaseExecutor).mockImplementation(function () { return makeExecutorMock(5, 'PR Composition') as never; });
 
       new IssueOrchestrator(
         makeConfig(),

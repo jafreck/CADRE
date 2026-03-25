@@ -26,9 +26,11 @@ vi.mock('../src/core/pipeline/phase-registry.js', () => ({
 
 // Mock AnalysisAmbiguityGate constructor
 vi.mock('../src/core/pipeline/phase-gate.js', () => ({
-  AnalysisAmbiguityGate: vi.fn().mockImplementation(() => ({
-    validate: mockGate1AmbiguityValidate,
-  })),
+  AnalysisAmbiguityGate: vi.fn().mockImplementation(function () {
+    return {
+      validate: mockGate1AmbiguityValidate,
+    };
+  }),
   listGatePlugins: vi.fn(() => []),
   registerGatePlugin: vi.fn(),
   unregisterGatePlugin: vi.fn(),
