@@ -4,13 +4,15 @@ import { makeRuntimeConfig } from '../helpers/make-runtime-config.js';
 // ─── Module mocks ────────────────────────────────────────────────────────────
 
 vi.mock('../@cadre-dev/framework/core', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  })),
+  Logger: vi.fn().mockImplementation(function () {
+    return {
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    };
+  }),
 }));
 
 vi.mock('../../src/util/fs.js', () => ({
@@ -22,59 +24,71 @@ vi.mock('../../src/util/process.js', () => ({
 }));
 
 vi.mock('../../src/core/fleet/fleet-orchestrator.js', () => ({
-  FleetOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({
-      success: true,
-      issues: [],
-      prsCreated: [],
-      failedIssues: [],
-      codeDoneNoPR: [],
-      totalDuration: 100,
-      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
-    }),
-    runReviewResponse: vi.fn().mockResolvedValue({
-      success: true,
-      issues: [],
-      prsCreated: [],
-      failedIssues: [],
-      codeDoneNoPR: [],
-      totalDuration: 100,
-      tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
-    }),
-  })),
+  FleetOrchestrator: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        codeDoneNoPR: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      }),
+      runReviewResponse: vi.fn().mockResolvedValue({
+        success: true,
+        issues: [],
+        prsCreated: [],
+        failedIssues: [],
+        codeDoneNoPR: [],
+        totalDuration: 100,
+        tokenUsage: { total: 0, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+      }),
+    };
+  }),
 }));
 
 vi.mock('../../src/git/worktree.js', () => ({
-  WorktreeManager: vi.fn().mockImplementation(() => ({
-    buildAgentCache: vi.fn().mockResolvedValue(undefined),
-  })),
+  WorktreeManager: vi.fn().mockImplementation(function () {
+    return {
+      buildAgentCache: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../../src/core/agent-launcher.js', () => ({
-  AgentLauncher: vi.fn().mockImplementation(() => ({
-    init: vi.fn().mockResolvedValue(undefined),
-  })),
+  AgentLauncher: vi.fn().mockImplementation(function () {
+    return {
+      init: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 const mockDag = { getWaves: vi.fn().mockReturnValue([[{ number: 1, title: 'Test issue' }]]) };
 
 vi.mock('../../src/core/fleet/dependency-resolver.js', () => ({
-  DependencyResolver: vi.fn().mockImplementation(() => ({
-    resolve: vi.fn().mockResolvedValue(mockDag),
-  })),
+  DependencyResolver: vi.fn().mockImplementation(function () {
+    return {
+      resolve: vi.fn().mockResolvedValue(mockDag),
+    };
+  }),
 }));
 
 vi.mock('../@cadre-dev/framework/core', () => ({
-  CostEstimator: vi.fn().mockImplementation(() => ({
-    estimate: vi.fn().mockReturnValue(0),
-    format: vi.fn().mockReturnValue('$0.00'),
-  })),
+  CostEstimator: vi.fn().mockImplementation(function () {
+    return {
+      estimate: vi.fn().mockReturnValue(0),
+      format: vi.fn().mockReturnValue('$0.00'),
+    };
+  }),
 }));
 
 vi.mock('../@cadre-dev/framework/engine', () => ({
-  FleetProgressWriter: vi.fn().mockImplementation(() => ({
-    appendEvent: vi.fn().mockResolvedValue(undefined),
-  })),
+  FleetProgressWriter: vi.fn().mockImplementation(function () {
+    return {
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('simple-git', () => ({
@@ -85,9 +99,11 @@ vi.mock('@cadre-dev/framework/core', async (importActual) => {
   const actual = await importActual<typeof import('@cadre-dev/framework/core')>();
   return {
     ...actual,
-    PreRunValidationSuite: vi.fn().mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue(true),
-    })),
+    PreRunValidationSuite: vi.fn().mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue(true),
+      };
+    }),
     gitValidator: { name: 'git', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
     agentBackendValidator: { name: 'agent-backend-validator', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
     platformValidator: { name: 'platform', validate: vi.fn().mockResolvedValue({ passed: true, errors: [], warnings: [] }) },
@@ -214,9 +230,11 @@ describe('RunCoordinator', () => {
     });
 
     it('should return false when validators fail', async () => {
-      MockPreRunValidationSuite.mockImplementationOnce(() => ({
-        run: vi.fn().mockResolvedValue(false),
-      }));
+      MockPreRunValidationSuite.mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockResolvedValue(false),
+        };
+      });
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());
       const result = await coordinator.validate();
       expect(result).toBe(false);
@@ -345,9 +363,11 @@ describe('RunCoordinator', () => {
     });
 
     it('should throw when validation fails', async () => {
-      MockPreRunValidationSuite.mockImplementationOnce(() => ({
-        run: vi.fn().mockResolvedValue(false),
-      }));
+      MockPreRunValidationSuite.mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockResolvedValue(false),
+        };
+      });
       const config = makeConfig({
         options: {
           ...makeConfig().options,
@@ -482,9 +502,11 @@ describe('RunCoordinator', () => {
     });
 
     it('should throw with a clear message when DependencyResolutionError occurs', async () => {
-      MockDependencyResolver.mockImplementationOnce(() => ({
-        resolve: vi.fn().mockRejectedValue(new DependencyResolutionError('cycle detected')),
-      }));
+      MockDependencyResolver.mockImplementationOnce(function () {
+        return {
+          resolve: vi.fn().mockRejectedValue(new DependencyResolutionError('cycle detected')),
+        };
+      });
       const config = makeConfig({ dag: { enabled: true } } as any);
       const coordinator = new RunCoordinator(config, makeLogger(), makeProvider(), makeNotifications());
       await expect(coordinator.run()).rejects.toThrow('DAG dependency resolution failed: cycle detected');
@@ -516,34 +538,38 @@ describe('RunCoordinator', () => {
 
   describe('run() — summary printing', () => {
     it('should print PR links when PRs are created', async () => {
-      MockFleetOrchestrator.mockImplementationOnce(() => ({
-        run: vi.fn().mockResolvedValue({
-          success: true,
-          issues: [{ number: 1 }],
-          prsCreated: [{ number: 10, url: 'https://github.com/owner/repo/pull/10' }],
-          failedIssues: [],
-          codeDoneNoPR: [],
-          totalDuration: 5000,
-          tokenUsage: { total: 100, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
-        }),
-      }));
+      MockFleetOrchestrator.mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockResolvedValue({
+            success: true,
+            issues: [{ number: 1 }],
+            prsCreated: [{ number: 10, url: 'https://github.com/owner/repo/pull/10' }],
+            failedIssues: [],
+            codeDoneNoPR: [],
+            totalDuration: 5000,
+            tokenUsage: { total: 100, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+          }),
+        };
+      });
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());
       await coordinator.run();
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('#10'));
     });
 
     it('should print failure details when issues fail', async () => {
-      MockFleetOrchestrator.mockImplementationOnce(() => ({
-        run: vi.fn().mockResolvedValue({
-          success: false,
-          issues: [{ number: 1 }],
-          prsCreated: [],
-          failedIssues: [{ issueNumber: 1, error: 'build failed' }],
-          codeDoneNoPR: [],
-          totalDuration: 5000,
-          tokenUsage: { total: 100, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
-        }),
-      }));
+      MockFleetOrchestrator.mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockResolvedValue({
+            success: false,
+            issues: [{ number: 1 }],
+            prsCreated: [],
+            failedIssues: [{ issueNumber: 1, error: 'build failed' }],
+            codeDoneNoPR: [],
+            totalDuration: 5000,
+            tokenUsage: { total: 100, byWorkItem: {}, byAgent: {}, byPhase: {}, recordCount: 0 },
+          }),
+        };
+      });
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());
       await coordinator.run();
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('build failed'));
@@ -615,9 +641,11 @@ describe('RunCoordinator', () => {
       });
 
       // Make fleet.run() hang so the signal can interrupt it
-      MockFleetOrchestrator.mockImplementationOnce(() => ({
-        run: vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
-      }));
+      MockFleetOrchestrator.mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockReturnValue(new Promise(() => {})),
+        };
+      });
 
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());
       const runPromise = coordinator.run();
@@ -640,9 +668,11 @@ describe('RunCoordinator', () => {
         return process;
       });
 
-      MockFleetOrchestrator.mockImplementationOnce(() => ({
-        run: vi.fn().mockReturnValue(new Promise(() => {})),
-      }));
+      MockFleetOrchestrator.mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockReturnValue(new Promise(() => {})),
+        };
+      });
 
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());
       const runPromise = coordinator.run();
@@ -670,9 +700,11 @@ describe('RunCoordinator', () => {
         return process;
       });
 
-      MockFleetOrchestrator.mockImplementationOnce(() => ({
-        run: vi.fn().mockReturnValue(new Promise(() => {})),
-      }));
+      MockFleetOrchestrator.mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockReturnValue(new Promise(() => {})),
+        };
+      });
 
       const coordinator = new RunCoordinator(makeConfig(), makeLogger(), makeProvider(), makeNotifications());
       const runPromise = coordinator.run();

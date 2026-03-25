@@ -5,10 +5,12 @@ import { Logger } from '@cadre-dev/framework/core';
 import type { CadreConfig } from '../src/config/schema.js';
 
 vi.mock('../src/github/api.js', () => ({
-  GitHubAPI: vi.fn().mockImplementation(() => ({
-    getIssue: vi.fn(),
-    listIssues: vi.fn(),
-  })),
+  GitHubAPI: vi.fn().mockImplementation(function () {
+    return {
+      getIssue: vi.fn(),
+      listIssues: vi.fn(),
+    };
+  }),
 }));
 
 function makeLogger(): Logger {

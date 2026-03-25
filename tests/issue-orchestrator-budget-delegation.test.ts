@@ -24,10 +24,12 @@ vi.mock('../src/core/issue/issue-budget-guard.js', () => {
       this.name = 'BudgetExceededError';
     }
   }
-  const IssueBudgetGuard = vi.fn().mockImplementation(() => ({
-    recordTokens: guardRecordTokens,
-    checkBudget: guardCheckBudget,
-  }));
+  const IssueBudgetGuard = vi.fn().mockImplementation(function () {
+    return {
+      recordTokens: guardRecordTokens,
+      checkBudget: guardCheckBudget,
+    };
+  });
   return { IssueBudgetGuard, BudgetExceededError };
 });
 
@@ -35,15 +37,17 @@ const commitMock = vi.fn().mockResolvedValue(undefined);
 const isCleanMock = vi.fn().mockResolvedValue(false);
 
 vi.mock('../src/git/commit.js', () => ({
-  CommitManager: vi.fn().mockImplementation(() => ({
-    isClean: isCleanMock,
-    commit: commitMock,
-    push: vi.fn().mockResolvedValue(undefined),
-    squash: vi.fn().mockResolvedValue(undefined),
-    getChangedFiles: vi.fn().mockResolvedValue([]),
-    getDiff: vi.fn().mockResolvedValue(''),
-    stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-  })),
+  CommitManager: vi.fn().mockImplementation(function () {
+    return {
+      isClean: isCleanMock,
+      commit: commitMock,
+      push: vi.fn().mockResolvedValue(undefined),
+      squash: vi.fn().mockResolvedValue(undefined),
+      getChangedFiles: vi.fn().mockResolvedValue([]),
+      getDiff: vi.fn().mockResolvedValue(''),
+      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/executors/analysis-phase-executor.js', () => ({ AnalysisPhaseExecutor: vi.fn() }));
@@ -55,11 +59,11 @@ vi.mock('../src/executors/pr-composition-phase-executor.js', () => ({ PRComposit
 vi.mock('../src/core/pipeline/phase-gate.js', () => {
   const makeGate = () => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) });
   return {
-    AnalysisToPlanningGate: vi.fn(() => makeGate()),
-    PlanningToImplementationGate: vi.fn(() => makeGate()),
-    ImplementationToIntegrationGate: vi.fn(() => makeGate()),
-    IntegrationToPRGate: vi.fn(() => makeGate()),
-    AnalysisAmbiguityGate: vi.fn(() => makeGate()),
+    AnalysisToPlanningGate: vi.fn(function () { return makeGate(); }),
+    PlanningToImplementationGate: vi.fn(function () { return makeGate(); }),
+    ImplementationToIntegrationGate: vi.fn(function () { return makeGate(); }),
+    IntegrationToPRGate: vi.fn(function () { return makeGate(); }),
+    AnalysisAmbiguityGate: vi.fn(function () { return makeGate(); }),
     listGatePlugins: vi.fn(() => []),
     registerGatePlugin: vi.fn(),
     unregisterGatePlugin: vi.fn(),
@@ -68,9 +72,11 @@ vi.mock('../src/core/pipeline/phase-gate.js', () => {
 });
 
 vi.mock('../src/core/issue/issue-notifier.js', () => ({
-  IssueNotifier: vi.fn().mockImplementation(() => ({
-    notify: vi.fn().mockResolvedValue(undefined),
-  })),
+  IssueNotifier: vi.fn().mockImplementation(function () {
+    return {
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 // ── Imports ──
@@ -164,11 +170,11 @@ function makeExecutorMock(id: number, name: string) {
 
 function setupExecutorMocks(executors: ReturnType<typeof makeExecutorMock>[]) {
   const [a, p, i, n, pr] = executors;
-  vi.mocked(AnalysisPhaseExecutor).mockImplementation(() => a as never);
-  vi.mocked(PlanningPhaseExecutor).mockImplementation(() => p as never);
-  vi.mocked(ImplementationPhaseExecutor).mockImplementation(() => i as never);
-  vi.mocked(IntegrationPhaseExecutor).mockImplementation(() => n as never);
-  vi.mocked(PRCompositionPhaseExecutor).mockImplementation(() => pr as never);
+  vi.mocked(AnalysisPhaseExecutor).mockImplementation(function () { return a as never; });
+  vi.mocked(PlanningPhaseExecutor).mockImplementation(function () { return p as never; });
+  vi.mocked(ImplementationPhaseExecutor).mockImplementation(function () { return i as never; });
+  vi.mocked(IntegrationPhaseExecutor).mockImplementation(function () { return n as never; });
+  vi.mocked(PRCompositionPhaseExecutor).mockImplementation(function () { return pr as never; });
 }
 
 // ── Test suites ──
@@ -183,27 +189,33 @@ describe('IssueOrchestrator – budget callback delegation (session-003 refactor
     guardCheckBudget.mockReset();
     commitMock.mockReset().mockResolvedValue(undefined);
     isCleanMock.mockReset().mockResolvedValue(false);
-    vi.mocked(IssueBudgetGuard).mockClear().mockImplementation(() => ({
-      recordTokens: guardRecordTokens,
-      checkBudget: guardCheckBudget,
-    }));
-    vi.mocked(IssueNotifier).mockClear().mockImplementation(() => ({
-      notify: vi.fn().mockResolvedValue(undefined),
-    }));
+    vi.mocked(IssueBudgetGuard).mockClear().mockImplementation(function () {
+      return {
+        recordTokens: guardRecordTokens,
+        checkBudget: guardCheckBudget,
+      };
+    });
+    vi.mocked(IssueNotifier).mockClear().mockImplementation(function () {
+      return {
+        notify: vi.fn().mockResolvedValue(undefined),
+      };
+    });
     vi.mocked(AnalysisPhaseExecutor).mockClear();
     vi.mocked(PlanningPhaseExecutor).mockClear();
     vi.mocked(ImplementationPhaseExecutor).mockClear();
     vi.mocked(IntegrationPhaseExecutor).mockClear();
     vi.mocked(PRCompositionPhaseExecutor).mockClear();
-    vi.mocked(CommitManager).mockClear().mockImplementation(() => ({
-      isClean: isCleanMock,
-      commit: commitMock,
-      push: vi.fn().mockResolvedValue(undefined),
-      squash: vi.fn().mockResolvedValue(undefined),
-      getChangedFiles: vi.fn().mockResolvedValue([]),
-      getDiff: vi.fn().mockResolvedValue(''),
-      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-    }));
+    vi.mocked(CommitManager).mockClear().mockImplementation(function () {
+      return {
+        isClean: isCleanMock,
+        commit: commitMock,
+        push: vi.fn().mockResolvedValue(undefined),
+        squash: vi.fn().mockResolvedValue(undefined),
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getDiff: vi.fn().mockResolvedValue(''),
+        stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+      };
+    });
     tempDir = join(tmpdir(), `cadre-budget-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     worktreePath = join(tempDir, 'worktree');
     await mkdir(worktreePath, { recursive: true });
@@ -399,13 +411,17 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
     guardCheckBudget.mockReset();
     commitMock.mockReset().mockResolvedValue(undefined);
     isCleanMock.mockReset().mockResolvedValue(false);
-    vi.mocked(IssueBudgetGuard).mockClear().mockImplementation(() => ({
-      recordTokens: guardRecordTokens,
-      checkBudget: guardCheckBudget,
-    }));
-    vi.mocked(IssueNotifier).mockClear().mockImplementation(() => ({
-      notify: vi.fn().mockResolvedValue(undefined),
-    }));
+    vi.mocked(IssueBudgetGuard).mockClear().mockImplementation(function () {
+      return {
+        recordTokens: guardRecordTokens,
+        checkBudget: guardCheckBudget,
+      };
+    });
+    vi.mocked(IssueNotifier).mockClear().mockImplementation(function () {
+      return {
+        notify: vi.fn().mockResolvedValue(undefined),
+      };
+    });
     vi.mocked(AnalysisPhaseExecutor).mockClear();
     vi.mocked(PlanningPhaseExecutor).mockClear();
     vi.mocked(ImplementationPhaseExecutor).mockClear();
@@ -427,15 +443,17 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
 
   it('should call CommitManager.commit after each phase when commitPerPhase is true', async () => {
     isCleanMock.mockResolvedValue(false);
-    vi.mocked(CommitManager).mockImplementation(() => ({
-      isClean: isCleanMock,
-      commit: commitMock,
-      push: vi.fn().mockResolvedValue(undefined),
-      squash: vi.fn().mockResolvedValue(undefined),
-      getChangedFiles: vi.fn().mockResolvedValue([]),
-      getDiff: vi.fn().mockResolvedValue(''),
-      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-    }) as never);
+    vi.mocked(CommitManager).mockImplementation(function () {
+      return {
+        isClean: isCleanMock,
+        commit: commitMock,
+        push: vi.fn().mockResolvedValue(undefined),
+        squash: vi.fn().mockResolvedValue(undefined),
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getDiff: vi.fn().mockResolvedValue(''),
+        stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+      } as never;
+    });
 
     const execs = [
       makeExecutorMock(1, 'Analysis & Scouting'),
@@ -464,15 +482,17 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
 
   it('should NOT call CommitManager.commit when commitPerPhase is false', async () => {
     isCleanMock.mockResolvedValue(false);
-    vi.mocked(CommitManager).mockImplementation(() => ({
-      isClean: isCleanMock,
-      commit: commitMock,
-      push: vi.fn().mockResolvedValue(undefined),
-      squash: vi.fn().mockResolvedValue(undefined),
-      getChangedFiles: vi.fn().mockResolvedValue([]),
-      getDiff: vi.fn().mockResolvedValue(''),
-      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-    }) as never);
+    vi.mocked(CommitManager).mockImplementation(function () {
+      return {
+        isClean: isCleanMock,
+        commit: commitMock,
+        push: vi.fn().mockResolvedValue(undefined),
+        squash: vi.fn().mockResolvedValue(undefined),
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getDiff: vi.fn().mockResolvedValue(''),
+        stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+      } as never;
+    });
 
     const execs = [
       makeExecutorMock(1, 'Analysis & Scouting'),
@@ -500,15 +520,17 @@ describe('IssueOrchestrator – commitPerPhase delegation (session-003 refactor)
 
   it('should NOT call CommitManager.commit when worktree is clean even with commitPerPhase=true', async () => {
     isCleanMock.mockResolvedValue(true); // clean → no commit
-    vi.mocked(CommitManager).mockImplementation(() => ({
-      isClean: isCleanMock,
-      commit: commitMock,
-      push: vi.fn().mockResolvedValue(undefined),
-      squash: vi.fn().mockResolvedValue(undefined),
-      getChangedFiles: vi.fn().mockResolvedValue([]),
-      getDiff: vi.fn().mockResolvedValue(''),
-      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-    }) as never);
+    vi.mocked(CommitManager).mockImplementation(function () {
+      return {
+        isClean: isCleanMock,
+        commit: commitMock,
+        push: vi.fn().mockResolvedValue(undefined),
+        squash: vi.fn().mockResolvedValue(undefined),
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        getDiff: vi.fn().mockResolvedValue(''),
+        stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+      } as never;
+    });
 
     const execs = [
       makeExecutorMock(1, 'Analysis & Scouting'),

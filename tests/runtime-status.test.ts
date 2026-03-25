@@ -6,17 +6,21 @@ vi.mock('@cadre-dev/framework/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@cadre-dev/framework/core')>();
   return {
     ...actual,
-    Logger: vi.fn().mockImplementation(() => ({
-      info: vi.fn(),
-      debug: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      child: vi.fn().mockReturnThis(),
-    })),
-    CostEstimator: vi.fn().mockImplementation(() => ({
-      estimate: vi.fn().mockReturnValue({ totalCost: 0 }),
-      format: vi.fn().mockReturnValue('$0.00'),
-    })),
+    Logger: vi.fn().mockImplementation(function () {
+      return {
+        info: vi.fn(),
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      };
+    }),
+    CostEstimator: vi.fn().mockImplementation(function () {
+      return {
+        estimate: vi.fn().mockReturnValue({ totalCost: 0 }),
+        format: vi.fn().mockReturnValue('$0.00'),
+      };
+    }),
   };
 });
 
@@ -37,20 +41,26 @@ vi.mock('@cadre-dev/framework/notifications', () => ({
 }));
 
 vi.mock('../src/core/fleet/fleet-orchestrator.js', () => ({
-  FleetOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({ success: true, issues: [], prsCreated: [], failedIssues: [], totalDuration: 0, tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} } }),
-  })),
+  FleetOrchestrator: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({ success: true, issues: [], prsCreated: [], failedIssues: [], totalDuration: 0, tokenUsage: { total: 0, byWorkItem: {}, byAgent: {} } }),
+    };
+  }),
 }));
 
 vi.mock('../src/git/worktree.js', () => ({
 
-  WorktreeManager: vi.fn().mockImplementation(() => ({
-    buildAgentCache: vi.fn().mockResolvedValue(undefined),
-  })),
+  WorktreeManager: vi.fn().mockImplementation(function () {
+    return {
+      buildAgentCache: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/core/agent-launcher.js', () => ({
-  AgentLauncher: vi.fn().mockImplementation(() => ({ init: vi.fn().mockResolvedValue(undefined) })),
+  AgentLauncher: vi.fn().mockImplementation(function () {
+    return { init: vi.fn().mockResolvedValue(undefined) };
+  }),
 }));
 
 vi.mock('../src/util/process.js', () => ({ killAllTrackedProcesses: vi.fn() }));
@@ -73,40 +83,46 @@ vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@cadre-dev/framework/engine')>();
   return {
     ...actual,
-    FleetProgressWriter: vi.fn().mockImplementation(() => ({
-      appendEvent: vi.fn().mockResolvedValue(undefined),
-    })),
-    FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        projectName: 'test-project',
-        issues: {},
-        tokenUsage: { total: 0, byWorkItem: {} },
-        lastCheckpoint: '',
-        resumeCount: 0,
-      }),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    })),
-    CheckpointManager: vi.fn().mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        version: 1,
-        currentPhase: 1,
-        currentTask: null,
-        completedPhases: [],
-        completedTasks: [],
-        failedTasks: [],
-        blockedTasks: [],
-        phaseOutputs: {},
-        gateResults: {},
-        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-        worktreePath: '',
-        branchName: '',
-        baseCommit: '',
-        startedAt: new Date().toISOString(),
-        lastCheckpoint: new Date().toISOString(),
-        resumeCount: 0,
-      }),
-    })),
+    FleetProgressWriter: vi.fn().mockImplementation(function () {
+      return {
+        appendEvent: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+    FleetCheckpointManager: vi.fn().mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          projectName: 'test-project',
+          issues: {},
+          tokenUsage: { total: 0, byWorkItem: {} },
+          lastCheckpoint: '',
+          resumeCount: 0,
+        }),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+    CheckpointManager: vi.fn().mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          version: 1,
+          currentPhase: 1,
+          currentTask: null,
+          completedPhases: [],
+          completedTasks: [],
+          failedTasks: [],
+          blockedTasks: [],
+          phaseOutputs: {},
+          gateResults: {},
+          tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+          worktreePath: '',
+          branchName: '',
+          baseCommit: '',
+          startedAt: new Date().toISOString(),
+          lastCheckpoint: new Date().toISOString(),
+          resumeCount: 0,
+        }),
+      };
+    }),
   };
 });
 
@@ -215,10 +231,12 @@ describe('CadreRuntime.status() — fleet checkpoint exists, no issue filter', (
     vi.clearAllMocks();
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockExists.mockResolvedValue(true);
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(fleetState),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue(fleetState),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
     mockRenderFleetStatus.mockReturnValue('fleet status table');
   });
 
@@ -269,10 +287,12 @@ describe('CadreRuntime.status() — with issueNumber, issue NOT in fleet checkpo
     vi.clearAllMocks();
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockExists.mockResolvedValue(true);
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(fleetState),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue(fleetState),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
   });
 
   afterEach(() => {
@@ -329,10 +349,12 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint missi
     mockExists
       .mockResolvedValueOnce(true)   // fleet-checkpoint.json exists
       .mockResolvedValueOnce(false); // per-issue checkpoint.json does not exist
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(fleetState),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue(fleetState),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
   });
 
   afterEach(() => {
@@ -406,13 +428,17 @@ describe('CadreRuntime.status() — with issueNumber, per-issue checkpoint prese
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     // Both fleet and issue checkpoints exist
     mockExists.mockResolvedValue(true);
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(fleetState),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
-    MockCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(issueCheckpointState),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue(fleetState),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+    MockCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue(issueCheckpointState),
+      };
+    });
     mockRenderIssueDetail.mockReturnValue('issue detail table');
   });
 
@@ -478,14 +504,18 @@ describe('CadreRuntime.status() — with issueNumber, CheckpointManager.load() t
     // Both fleet and issue checkpoint files exist, but load() throws
     mockExists.mockResolvedValue(true);
 
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue(fleetState),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue(fleetState),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      };
+    });
 
-    MockCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockRejectedValue(new Error('EACCES: permission denied')),
-    }));
+    MockCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockRejectedValue(new Error('EACCES: permission denied')),
+      };
+    });
   });
 
   afterEach(() => {
@@ -529,10 +559,12 @@ describe('CadreRuntime.reset() — setWorkItemStatus call-sites pass issueTitle'
   });
 
   function setUpCheckpoint(issues: Record<number, { status: string; issueTitle?: string }>) {
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({ issues }),
-      setWorkItemStatus: mockSetIssueStatus,
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({ issues }),
+        setWorkItemStatus: mockSetIssueStatus,
+      };
+    });
   }
 
   it('calls setWorkItemStatus with not-started and issueTitle when resetting a single issue', async () => {

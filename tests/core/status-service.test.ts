@@ -5,36 +5,40 @@ vi.mock('../../src/util/fs.js', () => ({
 }));
 
 vi.mock('@cadre-dev/framework/engine', () => ({
-  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({
-      projectName: 'test-project',
-      issues: {},
-      tokenUsage: { total: 0, byWorkItem: {} },
-      lastCheckpoint: '',
-      resumeCount: 0,
-    }),
-  })),
-  CheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({
-      issueNumber: 1,
-      version: 1,
-      currentPhase: 1,
-      currentTask: null,
-      completedPhases: [],
-      completedTasks: [],
-      failedTasks: [],
-      blockedTasks: [],
-      phaseOutputs: {},
-      gateResults: {},
-      tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
-      worktreePath: '',
-      branchName: '',
-      baseCommit: '',
-      startedAt: new Date().toISOString(),
-      lastCheckpoint: new Date().toISOString(),
-      resumeCount: 0,
-    }),
-  })),
+  FleetCheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({
+        projectName: 'test-project',
+        issues: {},
+        tokenUsage: { total: 0, byWorkItem: {} },
+        lastCheckpoint: '',
+        resumeCount: 0,
+      }),
+    };
+  }),
+  CheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        version: 1,
+        currentPhase: 1,
+        currentTask: null,
+        completedPhases: [],
+        completedTasks: [],
+        failedTasks: [],
+        blockedTasks: [],
+        phaseOutputs: {},
+        gateResults: {},
+        tokenUsage: { total: 0, byPhase: {}, byAgent: {} },
+        worktreePath: '',
+        branchName: '',
+        baseCommit: '',
+        startedAt: new Date().toISOString(),
+        lastCheckpoint: new Date().toISOString(),
+        resumeCount: 0,
+      }),
+    };
+  }),
 }));
 
 vi.mock('../../src/cli/status-renderer.js', () => ({
@@ -138,9 +142,11 @@ describe('StatusService', () => {
 
     beforeEach(() => {
       mockExists.mockResolvedValue(true);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue(fleetState),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue(fleetState),
+        };
+      });
     });
 
     it('should call renderFleetStatus with fleet state and agent copilot config', async () => {
@@ -173,15 +179,17 @@ describe('StatusService', () => {
   describe('status() — with issueNumber not in fleet', () => {
     beforeEach(() => {
       mockExists.mockResolvedValue(true);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          projectName: 'test-project',
-          issues: {},
-          tokenUsage: { total: 0, byWorkItem: {} },
-          lastCheckpoint: '',
-          resumeCount: 0,
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            projectName: 'test-project',
+            issues: {},
+            tokenUsage: { total: 0, byWorkItem: {} },
+            lastCheckpoint: '',
+            resumeCount: 0,
+          }),
+        };
+      });
     });
 
     it('should print "Issue #n not found" message', async () => {
@@ -213,15 +221,17 @@ describe('StatusService', () => {
       mockExists
         .mockResolvedValueOnce(true)   // fleet checkpoint exists
         .mockResolvedValueOnce(false); // per-issue checkpoint does not
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          projectName: 'test-project',
-          issues: { 5: issueStatus },
-          tokenUsage: { total: 0, byWorkItem: {} },
-          lastCheckpoint: '',
-          resumeCount: 0,
-        }),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            projectName: 'test-project',
+            issues: { 5: issueStatus },
+            tokenUsage: { total: 0, byWorkItem: {} },
+            lastCheckpoint: '',
+            resumeCount: 0,
+          }),
+        };
+      });
     });
 
     it('should print "No per-issue checkpoint found" message', async () => {
@@ -271,18 +281,22 @@ describe('StatusService', () => {
 
     beforeEach(() => {
       mockExists.mockResolvedValue(true);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          projectName: 'test-project',
-          issues: { 7: issueStatus },
-          tokenUsage: { total: 500, byWorkItem: { 7: 500 } },
-          lastCheckpoint: new Date().toISOString(),
-          resumeCount: 1,
-        }),
-      }));
-      MockCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue(issueCheckpointState),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            projectName: 'test-project',
+            issues: { 7: issueStatus },
+            tokenUsage: { total: 500, byWorkItem: { 7: 500 } },
+            lastCheckpoint: new Date().toISOString(),
+            resumeCount: 1,
+          }),
+        };
+      });
+      MockCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue(issueCheckpointState),
+        };
+      });
     });
 
     it('should call renderIssueDetail with issue number, status, and checkpoint', async () => {
@@ -310,18 +324,22 @@ describe('StatusService', () => {
   describe('status() — CheckpointManager.load() throws', () => {
     beforeEach(() => {
       mockExists.mockResolvedValue(true);
-      MockFleetCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockResolvedValue({
-          projectName: 'test-project',
-          issues: { 8: { status: 'in-progress', issueTitle: 'Broken' } },
-          tokenUsage: { total: 0, byWorkItem: {} },
-          lastCheckpoint: '',
-          resumeCount: 0,
-        }),
-      }));
-      MockCheckpointManager.mockImplementation(() => ({
-        load: vi.fn().mockRejectedValue(new Error('EACCES')),
-      }));
+      MockFleetCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockResolvedValue({
+            projectName: 'test-project',
+            issues: { 8: { status: 'in-progress', issueTitle: 'Broken' } },
+            tokenUsage: { total: 0, byWorkItem: {} },
+            lastCheckpoint: '',
+            resumeCount: 0,
+          }),
+        };
+      });
+      MockCheckpointManager.mockImplementation(function () {
+        return {
+          load: vi.fn().mockRejectedValue(new Error('EACCES')),
+        };
+      });
     });
 
     it('should print graceful fallback message when load throws', async () => {

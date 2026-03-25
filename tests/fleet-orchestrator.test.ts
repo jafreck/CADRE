@@ -8,28 +8,30 @@ import type { IssueDetail } from '../src/platform/provider.js';
 
 // Mock heavy dependencies to keep tests fast and isolated
 vi.mock('../src/core/review-response-orchestrator.js', () => ({
-  ReviewResponseOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({
-      processed: 1,
-      skipped: 0,
-      succeeded: 1,
-      failed: 0,
-      issues: [
-        {
-          issueNumber: 1,
-          skipped: false,
-          result: {
+  ReviewResponseOrchestrator: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({
+        processed: 1,
+        skipped: 0,
+        succeeded: 1,
+        failed: 0,
+        issues: [
+          {
             issueNumber: 1,
-            issueTitle: 'Test issue',
-            success: true,
-            phases: [],
-            totalDuration: 100,
-            tokenUsage: 500,
+            skipped: false,
+            result: {
+              issueNumber: 1,
+              issueTitle: 'Test issue',
+              success: true,
+              phases: [],
+              totalDuration: 100,
+              tokenUsage: 500,
+            },
           },
-        },
-      ],
-    }),
-  })),
+        ],
+      }),
+    };
+  }),
 }));
 vi.mock('../src/git/worktree.js', () => {
   class RemoteBranchMissingError extends Error {
@@ -39,9 +41,11 @@ vi.mock('../src/git/worktree.js', () => {
     }
   }
   return {
-    WorktreeManager: vi.fn().mockImplementation(() => ({
-      buildAgentCache: vi.fn().mockResolvedValue(undefined),
-    })),
+    WorktreeManager: vi.fn().mockImplementation(function () {
+      return {
+        buildAgentCache: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
     RemoteBranchMissingError,
   };
 });
@@ -50,60 +54,74 @@ vi.mock('../src/core/agent-launcher.js', () => ({
 }));
 vi.mock('@cadre-dev/framework/engine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cadre-dev/framework/engine')>()),
-  CheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({}),
-    setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
-    startPhase: vi.fn().mockResolvedValue(undefined),
-    completePhase: vi.fn().mockResolvedValue(undefined),
-  })),
-  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue(undefined),
-    isWorkItemCompleted: vi.fn().mockReturnValue(false),
-    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-    setDag: vi.fn().mockResolvedValue(undefined),
-    markWaveComplete: vi.fn().mockResolvedValue(undefined),
-    getWorkItemStatus: vi.fn().mockReturnValue(null),
-    getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
-  })),
+  CheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({}),
+      setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
+      startPhase: vi.fn().mockResolvedValue(undefined),
+      completePhase: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+  FleetCheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue(undefined),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      setDag: vi.fn().mockResolvedValue(undefined),
+      markWaveComplete: vi.fn().mockResolvedValue(undefined),
+      getWorkItemStatus: vi.fn().mockReturnValue(null),
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
+    };
+  }),
 }));
 vi.mock('@cadre-dev/framework/engine', () => ({
-  CheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue({}),
-    setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
-    startPhase: vi.fn().mockResolvedValue(undefined),
-    completePhase: vi.fn().mockResolvedValue(undefined),
-  })),
-  FleetCheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue(undefined),
-    isWorkItemCompleted: vi.fn().mockReturnValue(false),
-    setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-    recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-    setDag: vi.fn().mockResolvedValue(undefined),
-    markWaveComplete: vi.fn().mockResolvedValue(undefined),
-    getWorkItemStatus: vi.fn().mockReturnValue(null),
-    getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
-  })),
-  FleetProgressWriter: vi.fn().mockImplementation(() => ({
-    write: vi.fn().mockResolvedValue(undefined),
-    appendEvent: vi.fn().mockResolvedValue(undefined),
-  })),
+  CheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue({}),
+      setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
+      startPhase: vi.fn().mockResolvedValue(undefined),
+      completePhase: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+  FleetCheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue(undefined),
+      isWorkItemCompleted: vi.fn().mockReturnValue(false),
+      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+      setDag: vi.fn().mockResolvedValue(undefined),
+      markWaveComplete: vi.fn().mockResolvedValue(undefined),
+      getWorkItemStatus: vi.fn().mockReturnValue(null),
+      getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
+    };
+  }),
+  FleetProgressWriter: vi.fn().mockImplementation(function () {
+    return {
+      write: vi.fn().mockResolvedValue(undefined),
+      appendEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
   IssueProgressWriter: vi.fn(),
-  RetryExecutor: vi.fn().mockImplementation(() => ({
-    execute: vi.fn(),
-  })),
+  RetryExecutor: vi.fn().mockImplementation(function () {
+    return {
+      execute: vi.fn(),
+    };
+  }),
 }));
 vi.mock('../src/core/pipeline/issue-orchestrator.js', () => ({
-  IssueOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({
-      issueNumber: 1,
-      issueTitle: 'Test issue',
-      success: true,
-      phases: [],
-      totalDuration: 100,
-      tokenUsage: 500,
-    }),
-  })),
+  IssueOrchestrator: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Test issue',
+        success: true,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 500,
+      }),
+    };
+  }),
 }));
 vi.mock('../src/core/pipeline/phase-registry.js', () => ({
   getPhaseCount: vi.fn().mockReturnValue(5),
@@ -420,16 +438,18 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
 
   it('dispatches budget-exceeded when token budget is exceeded', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Test issue',
-        success: true,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500_000, // exceeds the 250k budget after recording
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          issueTitle: 'Test issue',
+          success: true,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500_000, // exceeds the 250k budget after recording
+        }),
+      };
+    });
 
     const config = makeConfig({ tokenBudget: 250_000 }); // budget that passes pre-flight estimate but is exceeded by token usage
     const issues = [makeIssue(1)];
@@ -462,16 +482,18 @@ describe('FleetOrchestrator — NotificationManager integration', () => {
 
   it('dispatches budget-warning when token usage is between 80-100% of budget', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Test issue',
-        success: true,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 225_000, // 90% of 250_000
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          issueTitle: 'Test issue',
+          success: true,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 225_000, // 90% of 250_000
+        }),
+      };
+    });
 
     const config = makeConfig({ tokenBudget: 250_000 });
     const issues = [makeIssue(1)];
@@ -624,9 +646,11 @@ describe('FleetOrchestrator — runReviewResponse', () => {
       failed: 0,
       issues: [],
     });
-    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: runMock,
-    }));
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: runMock,
+      };
+    });
 
     const config = makeConfig();
     const issues = [makeIssue(1)];
@@ -674,17 +698,19 @@ describe('FleetOrchestrator — runReviewResponse', () => {
 
   it('marks result as failed when ReviewResponseOrchestrator reports failures', async () => {
     const { ReviewResponseOrchestrator } = await import('../src/core/review-response-orchestrator.js');
-    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        processed: 1,
-        skipped: 0,
-        succeeded: 0,
-        failed: 1,
-        issues: [
-          { issueNumber: 5, skipped: false, result: undefined },
-        ],
-      }),
-    }));
+    (ReviewResponseOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          processed: 1,
+          skipped: 0,
+          succeeded: 0,
+          failed: 1,
+          issues: [
+            { issueNumber: 5, skipped: false, result: undefined },
+          ],
+        }),
+      };
+    });
 
     const config = makeConfig();
     const issues = [makeIssue(5)];
@@ -1070,13 +1096,15 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
   it('records the issue as code-complete in the fleet checkpoint when skipping (PR not yet merged)', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     const setWorkItemStatusMock = vi.fn().mockResolvedValue(undefined);
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      load: vi.fn().mockResolvedValue(undefined),
-      isWorkItemCompleted: vi.fn().mockReturnValue(false),
-      setWorkItemStatus: setWorkItemStatusMock,
-      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getWorkItemStatus: vi.fn().mockReturnValue(null),
-    }));
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        load: vi.fn().mockResolvedValue(undefined),
+        isWorkItemCompleted: vi.fn().mockReturnValue(false),
+        setWorkItemStatus: setWorkItemStatusMock,
+        recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+        getWorkItemStatus: vi.fn().mockReturnValue(null),
+      };
+    });
 
     const config = makeConfig();
     const issues = [makeIssue(1)];
@@ -1217,18 +1245,20 @@ describe('FleetOrchestrator — skip issues with existing open PRs', () => {
     setWorkItemStatusMock.mockImplementation(async (id: string, status: string, wt: string, branch: string, phase: number, title: string) => {
       issueStatuses[id] = { status, worktreePath: wt, branchName: branch, lastPhase: phase, issueTitle: title };
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      load: vi.fn().mockResolvedValue(undefined),
-      isWorkItemCompleted: vi.fn().mockReturnValue(false),
-      setWorkItemStatus: setWorkItemStatusMock,
-      clearWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getWorkItemStatus: vi.fn().mockImplementation((id: string) => issueStatuses[id] ?? null),
-      setDag: vi.fn().mockResolvedValue(undefined),
-      markWaveComplete: vi.fn().mockResolvedValue(undefined),
-      getState: vi.fn().mockReturnValue({ completedWaves: [] }),
-      getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
-    }));
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        load: vi.fn().mockResolvedValue(undefined),
+        isWorkItemCompleted: vi.fn().mockReturnValue(false),
+        setWorkItemStatus: setWorkItemStatusMock,
+        clearWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+        recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+        getWorkItemStatus: vi.fn().mockImplementation((id: string) => issueStatuses[id] ?? null),
+        setDag: vi.fn().mockResolvedValue(undefined),
+        markWaveComplete: vi.fn().mockResolvedValue(undefined),
+        getState: vi.fn().mockReturnValue({ completedWaves: [] }),
+        getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
+      };
+    });
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -1520,27 +1550,31 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
 
   it('codeDoneNoPR is populated when an issue has codeComplete: true and success: false', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Issue 1',
-        success: false,
-        codeComplete: true,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-        error: 'PR creation failed',
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          issueTitle: 'Issue 1',
+          success: false,
+          codeComplete: true,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500,
+          error: 'PR creation failed',
+        }),
+      };
+    });
 
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      load: vi.fn().mockResolvedValue(undefined),
-      isWorkItemCompleted: vi.fn().mockReturnValue(false),
-      setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
-      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getWorkItemStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-1' }),
-    }));
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        load: vi.fn().mockResolvedValue(undefined),
+        isWorkItemCompleted: vi.fn().mockReturnValue(false),
+        setWorkItemStatus: vi.fn().mockResolvedValue(undefined),
+        recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+        getWorkItemStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-1' }),
+      };
+    });
 
     const config = makeConfig();
     const issues = [makeIssue(1)];
@@ -1568,18 +1602,20 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
 
   it('codeDoneNoPR is empty when codeComplete is false and success is false', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Issue 1',
-        success: false,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 0,
-        error: 'Pipeline failed',
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          issueTitle: 'Issue 1',
+          success: false,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 0,
+          error: 'Pipeline failed',
+        }),
+      };
+    });
 
     const config = makeConfig();
     const issues = [makeIssue(1)];
@@ -1603,28 +1639,32 @@ describe('FleetOrchestrator — codeDoneNoPR', () => {
 
   it('sets code-complete fleet checkpoint status when codeComplete is true and success is false', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 2,
-        issueTitle: 'Issue 2',
-        success: false,
-        codeComplete: true,
-        phases: [{ phase: 4, phaseName: 'Integration Verification', success: true, duration: 100, tokenUsage: 0 }],
-        totalDuration: 200,
-        tokenUsage: 300,
-        error: 'PR creation failed',
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 2,
+          issueTitle: 'Issue 2',
+          success: false,
+          codeComplete: true,
+          phases: [{ phase: 4, phaseName: 'Integration Verification', success: true, duration: 100, tokenUsage: 0 }],
+          totalDuration: 200,
+          tokenUsage: 300,
+          error: 'PR creation failed',
+        }),
+      };
+    });
 
     const setWorkItemStatus = vi.fn().mockResolvedValue(undefined);
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      load: vi.fn().mockResolvedValue(undefined),
-      isWorkItemCompleted: vi.fn().mockReturnValue(false),
-      setWorkItemStatus,
-      recordTokenUsage: vi.fn().mockResolvedValue(undefined),
-      getWorkItemStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-2' }),
-    }));
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        load: vi.fn().mockResolvedValue(undefined),
+        isWorkItemCompleted: vi.fn().mockReturnValue(false),
+        setWorkItemStatus,
+        recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+        getWorkItemStatus: vi.fn().mockReturnValue({ branchName: 'cadre/issue-2' }),
+      };
+    });
 
     const config = makeConfig();
     const issues = [makeIssue(2)];
@@ -1710,7 +1750,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('calls setDag() on the fleet checkpoint when dag is provided', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint();
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const config = makeConfig();
     const issue1 = makeIssue(1);
@@ -1740,7 +1780,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('passes a resolver callback to provisionWithDeps when dag.onDependencyMergeConflict is resolve', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      () => makeMockFleetCheckpoint(),
+      function () { return makeMockFleetCheckpoint(); },
     );
 
     const config = makeRuntimeConfig({
@@ -1779,7 +1819,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('does not pass a resolver callback when dag.onDependencyMergeConflict is fail', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      () => makeMockFleetCheckpoint(),
+      function () { return makeMockFleetCheckpoint(); },
     );
 
     const config = makeRuntimeConfig({
@@ -1897,7 +1937,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('logs the DAG plan before executing', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint();
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const config = makeConfig();
     const issue1 = makeIssue(1);
@@ -1938,7 +1978,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('issues with no deps are dispatched before their dependents', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      () => makeMockFleetCheckpoint(),
+      function () { return makeMockFleetCheckpoint(); },
     );
 
     const config = makeConfig();
@@ -1975,7 +2015,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('calls provision() for issues with no deps and provisionWithDeps() for issues with deps', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      () => makeMockFleetCheckpoint(),
+      function () { return makeMockFleetCheckpoint(); },
     );
 
     const config = makeConfig();
@@ -2022,7 +2062,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
         return null;
       }),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { DependencyMergeConflictError: DMCError } = await import('../src/errors.js');
 
@@ -2072,7 +2112,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
       getState: vi.fn().mockReturnValue({ completedWaves: [] }),
       isWorkItemCompleted: vi.fn().mockImplementation((id: string) => id === '1'),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const config = makeConfig({ resume: true });
     const issue1 = makeIssue(1);
@@ -2106,21 +2146,23 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('does not perform autoMerge when config.dag.autoMerge is false', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      () => makeMockFleetCheckpoint(),
+      function () { return makeMockFleetCheckpoint(); },
     );
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Issue 1',
-        success: true,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-        pr: { number: 42, url: 'https://github.com/owner/repo/pull/42' },
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          issueTitle: 'Issue 1',
+          success: true,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500,
+          pr: { number: 42, url: 'https://github.com/owner/repo/pull/42' },
+        }),
+      };
+    });
 
     const config = makeConfig();
     const issue1 = makeIssue(1);
@@ -2150,33 +2192,37 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('merges successful PRs after each wave when config.dag.autoMerge is true', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      () => makeMockFleetCheckpoint(),
+      function () { return makeMockFleetCheckpoint(); },
     );
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>)
-      .mockImplementationOnce(() => ({
-        run: vi.fn().mockResolvedValue({
-          issueNumber: 1,
-          issueTitle: 'Issue 1',
-          success: true,
-          codeComplete: true,
-          phases: [],
-          totalDuration: 100,
-          tokenUsage: 500,
-          pr: { number: 42, url: 'https://github.com/owner/repo/pull/42' },
-        }),
-      }))
-      .mockImplementationOnce(() => ({
-        run: vi.fn().mockResolvedValue({
-          issueNumber: 2,
-          issueTitle: 'Issue 2',
-          success: true,
-          codeComplete: true,
-          phases: [],
-          totalDuration: 100,
-          tokenUsage: 500,
-        }),
-      }));
+      .mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockResolvedValue({
+            issueNumber: 1,
+            issueTitle: 'Issue 1',
+            success: true,
+            codeComplete: true,
+            phases: [],
+            totalDuration: 100,
+            tokenUsage: 500,
+            pr: { number: 42, url: 'https://github.com/owner/repo/pull/42' },
+          }),
+        };
+      })
+      .mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockResolvedValue({
+            issueNumber: 2,
+            issueTitle: 'Issue 2',
+            success: true,
+            codeComplete: true,
+            phases: [],
+            totalDuration: 100,
+            tokenUsage: 500,
+          }),
+        };
+      });
 
     const config = makeConfig();
     (config as any).dag = { enabled: true, autoMerge: true, verifyDepsBuild: false };
@@ -2218,22 +2264,24 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
       setWorkItemStatus,
       getWorkItemStatus: vi.fn().mockReturnValue(null),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
     (IssueOrchestrator as ReturnType<typeof vi.fn>)
-      .mockImplementationOnce(() => ({
-        run: vi.fn().mockResolvedValue({
-          issueNumber: 1,
-          issueTitle: 'Issue 1',
-          success: true,
-          codeComplete: true,
-          phases: [],
-          totalDuration: 100,
-          tokenUsage: 500,
-          pr: { number: 42, url: 'https://github.com/owner/repo/pull/42' },
-        }),
-      }));
+      .mockImplementationOnce(function () {
+        return {
+          run: vi.fn().mockResolvedValue({
+            issueNumber: 1,
+            issueTitle: 'Issue 1',
+            success: true,
+            codeComplete: true,
+            phases: [],
+            totalDuration: 100,
+            tokenUsage: 500,
+            pr: { number: 42, url: 'https://github.com/owner/repo/pull/42' },
+          }),
+        };
+      });
 
     const config = makeConfig();
     (config as any).dag = { enabled: true, autoMerge: true, verifyDepsBuild: false };
@@ -2283,21 +2331,23 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
         return null;
       }),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Issue 1',
-        success: false,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 0,
-        error: 'dep-failed',
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          issueTitle: 'Issue 1',
+          success: false,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 0,
+          error: 'dep-failed',
+        }),
+      };
+    });
 
     const config = makeConfig();
     const issue1 = makeIssue(1);
@@ -2341,21 +2391,23 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
         return null;
       }),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        issueTitle: 'Issue 1',
-        success: false,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 0,
-        error: 'dep-build-broken',
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          issueTitle: 'Issue 1',
+          success: false,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 0,
+          error: 'dep-build-broken',
+        }),
+      };
+    });
 
     const config = makeConfig();
     const issue1 = makeIssue(1);
@@ -2392,7 +2444,7 @@ describe('FleetOrchestrator — DAG per-dependency execution', () => {
   it('passes dagDepMap to setDag() when provided', async () => {
     const { FleetCheckpointManager } = await import('@cadre-dev/framework/engine');
     const mockCheckpoint = makeMockFleetCheckpoint();
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const config = makeConfig();
     const issue1 = makeIssue(1);
@@ -2481,20 +2533,22 @@ describe('FleetOrchestrator — resume reconciliation', () => {
       ]),
       isWorkItemCompleted: vi.fn().mockReturnValue(false),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 16,
-        issueTitle: 'Issue 16',
-        success: true,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 16,
+          issueTitle: 'Issue 16',
+          success: true,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500,
+        }),
+      };
+    });
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -2558,7 +2612,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
     const mockCheckpoint = makeMockFleetCheckpointForReconcile({
       getAllWorkItemStatuses,
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const config = makeConfig({ resume: false });
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -2589,20 +2643,22 @@ describe('FleetOrchestrator — resume reconciliation', () => {
         [16, { status: 'failed', branchName: 'cadre/issue-16', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 16' }],
       ]),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 16,
-        issueTitle: 'Issue 16',
-        success: true,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 16,
+          issueTitle: 'Issue 16',
+          success: true,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500,
+        }),
+      };
+    });
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -2677,20 +2733,22 @@ describe('FleetOrchestrator — resume reconciliation', () => {
         [17, { status: 'dep-blocked', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 17' }],
       ]),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 17,
-        issueTitle: 'Issue 17',
-        success: true,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 17,
+          issueTitle: 'Issue 17',
+          success: true,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500,
+        }),
+      };
+    });
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -2760,7 +2818,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
         [17, { status: 'dep-blocked', branchName: '', worktreePath: '', lastPhase: 0, issueTitle: 'Issue 17' }],
       ]),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -2829,20 +2887,22 @@ describe('FleetOrchestrator — resume reconciliation', () => {
       const calls = setWorkItemStatus.mock.calls;
       return calls.some(([n, s]: [string, string]) => n === id && s === 'completed');
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 16,
-        issueTitle: 'Issue 16',
-        success: true,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 16,
+          issueTitle: 'Issue 16',
+          success: true,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500,
+        }),
+      };
+    });
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -2926,20 +2986,22 @@ describe('FleetOrchestrator — resume reconciliation', () => {
       ]),
       isWorkItemCompleted: vi.fn().mockReturnValue(false),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 20,
-        issueTitle: 'Issue 20',
-        success: true,
-        codeComplete: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 500,
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementation(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 20,
+          issueTitle: 'Issue 20',
+          success: true,
+          codeComplete: false,
+          phases: [],
+          totalDuration: 100,
+          tokenUsage: 500,
+        }),
+      };
+    });
 
     const config = makeRuntimeConfig({
       branchTemplate: 'cadre/issue-{issue}',
@@ -3012,7 +3074,7 @@ describe('FleetOrchestrator — resume reconciliation', () => {
       setWorkItemStatus,
       getAllWorkItemStatuses: vi.fn().mockReturnValue([]),
     });
-    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mockCheckpoint);
+    (FleetCheckpointManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () { return mockCheckpoint; });
 
     const config = makeConfig({ resume: false });
     const issue1 = makeIssue(1);

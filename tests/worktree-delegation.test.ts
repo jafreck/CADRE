@@ -10,23 +10,25 @@ import { Logger } from '@cadre-dev/framework/core';
 // Mock the provisioner module so we can spy on its prototype methods without
 // needing real git or file-system access.
 vi.mock('../src/git/worktree-provisioner.js', () => {
-  const MockProvisioner = vi.fn().mockImplementation(() => ({
-    provision: vi.fn().mockResolvedValue({ issueNumber: 1, path: '/p', branch: 'b', exists: true, baseCommit: 'abc', syncedAgentFiles: [] }),
-    provisionWithDeps: vi.fn().mockResolvedValue({ issueNumber: 1, path: '/p', branch: 'b', exists: true, baseCommit: 'abc', syncedAgentFiles: [] }),
-    provisionFromBranch: vi.fn().mockResolvedValue({ issueNumber: 1, path: '/p', branch: 'b', exists: true, baseCommit: 'abc', syncedAgentFiles: [] }),
-    provisionForDependencyAnalyst: vi.fn().mockResolvedValue('/tmp/dag-dir'),
-    prefetch: vi.fn().mockResolvedValue(undefined),
-    remove: vi.fn().mockResolvedValue(undefined),
-    removeWorktreeAtPath: vi.fn().mockResolvedValue(undefined),
-    listActive: vi.fn().mockResolvedValue([]),
-    exists: vi.fn().mockResolvedValue(false),
-    rebase: vi.fn().mockResolvedValue({ success: true }),
-    rebaseStart: vi.fn().mockResolvedValue({ status: 'clean' }),
-    rebaseContinue: vi.fn().mockResolvedValue({ success: true }),
-    rebaseAbort: vi.fn().mockResolvedValue(undefined),
-    resolveBranchName: vi.fn().mockReturnValue('cadre/issue-42'),
-    getWorktreePath: vi.fn().mockReturnValue('/tmp/worktrees/issue-42'),
-  }));
+  const MockProvisioner = vi.fn().mockImplementation(function () {
+    return {
+      provision: vi.fn().mockResolvedValue({ issueNumber: 1, path: '/p', branch: 'b', exists: true, baseCommit: 'abc', syncedAgentFiles: [] }),
+      provisionWithDeps: vi.fn().mockResolvedValue({ issueNumber: 1, path: '/p', branch: 'b', exists: true, baseCommit: 'abc', syncedAgentFiles: [] }),
+      provisionFromBranch: vi.fn().mockResolvedValue({ issueNumber: 1, path: '/p', branch: 'b', exists: true, baseCommit: 'abc', syncedAgentFiles: [] }),
+      provisionForDependencyAnalyst: vi.fn().mockResolvedValue('/tmp/dag-dir'),
+      prefetch: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      removeWorktreeAtPath: vi.fn().mockResolvedValue(undefined),
+      listActive: vi.fn().mockResolvedValue([]),
+      exists: vi.fn().mockResolvedValue(false),
+      rebase: vi.fn().mockResolvedValue({ success: true }),
+      rebaseStart: vi.fn().mockResolvedValue({ status: 'clean' }),
+      rebaseContinue: vi.fn().mockResolvedValue({ success: true }),
+      rebaseAbort: vi.fn().mockResolvedValue(undefined),
+      resolveBranchName: vi.fn().mockReturnValue('cadre/issue-42'),
+      getWorktreePath: vi.fn().mockReturnValue('/tmp/worktrees/issue-42'),
+    };
+  });
   return { WorktreeProvisioner: MockProvisioner, RemoteBranchMissingError: class RemoteBranchMissingError extends Error {} };
 });
 

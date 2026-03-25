@@ -12,44 +12,54 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 vi.mock('../src/git/commit.js', () => ({
-  CommitManager: vi.fn().mockImplementation(() => ({
-    push: vi.fn().mockResolvedValue(undefined),
-  })),
+  CommitManager: vi.fn().mockImplementation(function () {
+    return {
+      push: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/agents/result-parser.js', () => ({
-  ResultParser: vi.fn().mockImplementation(() => ({
-    parsePRContent: vi.fn().mockResolvedValue({ title: 'Updated PR Title', body: 'Updated body addressing review comments' }),
-  })),
+  ResultParser: vi.fn().mockImplementation(function () {
+    return {
+      parsePRContent: vi.fn().mockResolvedValue({ title: 'Updated PR Title', body: 'Updated body addressing review comments' }),
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/engine', () => ({
-  CheckpointManager: vi.fn().mockImplementation(() => ({
-    load: vi.fn().mockResolvedValue(undefined),
-    resetPhases: vi.fn().mockResolvedValue(undefined),
-    completePhase: vi.fn().mockResolvedValue(undefined),
-    setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
-  })),
+  CheckpointManager: vi.fn().mockImplementation(function () {
+    return {
+      load: vi.fn().mockResolvedValue(undefined),
+      resetPhases: vi.fn().mockResolvedValue(undefined),
+      completePhase: vi.fn().mockResolvedValue(undefined),
+      setWorktreeInfo: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/core/pipeline/issue-orchestrator.js', () => ({
-  IssueOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockResolvedValue({
-      issueNumber: 1,
-      issueTitle: 'Test issue',
-      success: true,
-      phases: [],
-      totalDuration: 100,
-      tokenUsage: 500,
-    }),
-  })),
+  IssueOrchestrator: vi.fn().mockImplementation(function () {
+    return {
+      run: vi.fn().mockResolvedValue({
+        issueNumber: 1,
+        issueTitle: 'Test issue',
+        success: true,
+        phases: [],
+        totalDuration: 100,
+        tokenUsage: 500,
+      }),
+    };
+  }),
 }));
 
 vi.mock('../src/agents/context-builder.js', () => ({
-  ContextBuilder: vi.fn().mockImplementation(() => ({
-    buildForReviewResponse: vi.fn().mockReturnValue('# Review context'),
-    build: vi.fn().mockResolvedValue('/tmp/worktree/1/.cadre/issues/1/contexts/conflict-resolver-123.json'),
-  })),
+  ContextBuilder: vi.fn().mockImplementation(function () {
+    return {
+      buildForReviewResponse: vi.fn().mockReturnValue('# Review context'),
+      build: vi.fn().mockResolvedValue('/tmp/worktree/1/.cadre/issues/1/contexts/conflict-resolver-123.json'),
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/core', () => ({
@@ -57,9 +67,11 @@ vi.mock('@cadre-dev/framework/core', () => ({
 }));
 
 vi.mock('@cadre-dev/framework/notifications', () => ({
-  NotificationManager: vi.fn().mockImplementation(() => ({
-    dispatch: vi.fn().mockResolvedValue(undefined),
-  })),
+  NotificationManager: vi.fn().mockImplementation(function () {
+    return {
+      dispatch: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 function makeConfig(reviewResponseOverrides: Partial<RuntimeConfig['reviewResponse']> = {}) {
@@ -558,7 +570,9 @@ describe('ReviewResponseOrchestrator — run() rebase step', () => {
   it('force-pushes after a successful rebase and pipeline', async () => {
     const { CommitManager } = await import('../src/git/commit.js');
     const pushMock = vi.fn().mockResolvedValue(undefined);
-    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({ push: pushMock }));
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return { push: pushMock };
+    });
 
     const config = makeConfig();
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -670,7 +684,9 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
   it('pushes the branch after a successful pipeline', async () => {
     const { CommitManager } = await import('../src/git/commit.js');
     const pushSpy = vi.fn().mockResolvedValue(undefined);
-    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({ push: pushSpy }));
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return { push: pushSpy };
+    });
 
     const config = makeConfig();
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -717,9 +733,11 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
 
   it('does not push or update PR when pipeline fails', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({ issueNumber: 1, success: false, phases: [], totalDuration: 0, tokenUsage: 0 }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({ issueNumber: 1, success: false, phases: [], totalDuration: 0, tokenUsage: 0 }),
+      };
+    });
 
     const { CommitManager } = await import('../src/git/commit.js');
 
@@ -744,9 +762,11 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
 
   it('does not post a reply comment when autoReplyOnResolved is true but pipeline fails', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({ issueNumber: 1, success: false, phases: [], totalDuration: 0, tokenUsage: 0 }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({ issueNumber: 1, success: false, phases: [], totalDuration: 0, tokenUsage: 0 }),
+      };
+    });
 
     const config = makeConfig({ autoReplyOnResolved: true });
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -768,9 +788,11 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
 
   it('counts the issue as failed and logs when push throws', async () => {
     const { CommitManager } = await import('../src/git/commit.js');
-    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      push: vi.fn().mockRejectedValue(new Error('push error')),
-    }));
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        push: vi.fn().mockRejectedValue(new Error('push error')),
+      };
+    });
 
     const config = makeConfig();
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -797,9 +819,11 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
 
   it('counts the issue as failed and logs when updatePullRequest throws', async () => {
     const { CommitManager } = await import('../src/git/commit.js');
-    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      push: vi.fn().mockResolvedValue(undefined),
-    }));
+    (CommitManager as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        push: vi.fn().mockResolvedValue(undefined),
+      };
+    });
 
     const config = makeConfig();
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -827,9 +851,11 @@ describe('ReviewResponseOrchestrator — run() pipeline execution', () => {
 
   it('increments failed count and logs error when pipeline throws', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockRejectedValue(new Error('pipeline error')),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockRejectedValue(new Error('pipeline error')),
+      };
+    });
 
     const config = makeConfig();
     const { worktreeManager, launcher, platform, logger } = makeMockDeps();
@@ -1089,15 +1115,17 @@ describe('ReviewResponseOrchestrator — isCadreSelfRun label guarantee', () => 
 
   it('does not call ensureLabel or applyLabels when isCadreSelfRun is true but pipeline fails', async () => {
     const { IssueOrchestrator } = await import('../src/core/pipeline/issue-orchestrator.js');
-    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
-      run: vi.fn().mockResolvedValue({
-        issueNumber: 1,
-        success: false,
-        phases: [],
-        totalDuration: 100,
-        tokenUsage: 0,
-      }),
-    }));
+    (IssueOrchestrator as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        run: vi.fn().mockResolvedValue({
+          issueNumber: 1,
+          success: false,
+          phases: [],
+          totalDuration: 0,
+          tokenUsage: 0,
+        }),
+      };
+    });
 
     const selfRunConfig = makeRuntimeConfig({
       repository: 'jafreck/cadre',

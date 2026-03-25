@@ -42,10 +42,12 @@ describe('ResetService', () => {
   });
 
   function setUpCheckpoint(issues: Record<number, { status: string; issueTitle?: string }>) {
-    MockFleetCheckpointManager.mockImplementation(() => ({
-      load: vi.fn().mockResolvedValue({ issues }),
-      setWorkItemStatus: mockSetIssueStatus,
-    }));
+    MockFleetCheckpointManager.mockImplementation(function () {
+      return {
+        load: vi.fn().mockResolvedValue({ issues }),
+        setWorkItemStatus: mockSetIssueStatus,
+      };
+    });
   }
 
   describe('reset() — single issue', () => {

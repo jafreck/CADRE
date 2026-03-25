@@ -29,7 +29,7 @@ const {
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('../src/core/issue/issue-notifier.js', () => ({
-  IssueNotifier: vi.fn().mockImplementation(() => {
+  IssueNotifier: vi.fn().mockImplementation(function () {
     const methods = {
       notifyStart: vi.fn().mockResolvedValue(undefined),
       notifyPhaseComplete: vi.fn().mockResolvedValue(undefined),
@@ -46,11 +46,11 @@ vi.mock('../src/core/issue/issue-notifier.js', () => ({
 }));
 
 vi.mock('../src/core/pipeline/phase-gate.js', () => ({
-  AnalysisToPlanningGate: vi.fn(() => ({ validate: mockAnalysisGateValidate })),
-  PlanningToImplementationGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
-  ImplementationToIntegrationGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
-  IntegrationToPRGate: vi.fn(() => ({ validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) })),
-  AnalysisAmbiguityGate: vi.fn(() => ({ validate: mockAmbiguityGateValidate })),
+  AnalysisToPlanningGate: vi.fn(function () { return { validate: mockAnalysisGateValidate }; }),
+  PlanningToImplementationGate: vi.fn(function () { return { validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) }; }),
+  ImplementationToIntegrationGate: vi.fn(function () { return { validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) }; }),
+  IntegrationToPRGate: vi.fn(function () { return { validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })) }; }),
+  AnalysisAmbiguityGate: vi.fn(function () { return { validate: mockAmbiguityGateValidate }; }),
   listGatePlugins: vi.fn(() => []),
   registerGatePlugin: vi.fn(),
   unregisterGatePlugin: vi.fn(),
@@ -61,66 +61,78 @@ vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@cadre-dev/framework/engine')>();
   return {
     ...actual,
-    IssueProgressWriter: vi.fn(() => ({
-      appendEvent: mockProgressAppendEvent,
-      write: vi.fn().mockResolvedValue(undefined),
-    })),
-    RetryExecutor: vi.fn(() => ({ execute: mockRetryExecutorExecute })),
-    TaskQueue: vi.fn(() => ({
-      topologicalSort: vi.fn().mockReturnValue([]),
-      isComplete: vi.fn().mockReturnValue(true),
-      getReady: vi.fn().mockReturnValue([]),
-      getCounts: vi.fn().mockReturnValue({ total: 0, completed: 0, blocked: 0 }),
-      restoreState: vi.fn(),
-    })),
+    IssueProgressWriter: vi.fn(function () {
+      return {
+        appendEvent: mockProgressAppendEvent,
+        write: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+    RetryExecutor: vi.fn(function () { return { execute: mockRetryExecutorExecute }; }),
+    TaskQueue: vi.fn(function () {
+      return {
+        topologicalSort: vi.fn().mockReturnValue([]),
+        isComplete: vi.fn().mockReturnValue(true),
+        getReady: vi.fn().mockReturnValue([]),
+        getCounts: vi.fn().mockReturnValue({ total: 0, completed: 0, blocked: 0 }),
+        restoreState: vi.fn(),
+      };
+    }),
     selectNonOverlappingBatch: vi.fn().mockReturnValue([]),
   };
 });
 
 vi.mock('../src/agents/context-builder.js', () => ({
-  ContextBuilder: vi.fn(() => ({
-    build: vi.fn().mockResolvedValue('/tmp/ctx.json'),
-  })),
+  ContextBuilder: vi.fn(function () {
+    return {
+      build: vi.fn().mockResolvedValue('/tmp/ctx.json'),
+    };
+  }),
 }));
 
 vi.mock('../src/agents/result-parser.js', () => ({
-  ResultParser: vi.fn(() => ({
-    parseAnalysis: vi.fn().mockResolvedValue({
-      requirements: ['Some requirement'],
-      changeType: 'bug-fix',
-      scope: 'small',
-      affectedAreas: ['src/foo.ts'],
-      ambiguities: [],
-      scoutPolicy: 'required',
-    }),
-    parseScoutReport: vi.fn().mockResolvedValue({ files: [], dependencies: [], tests: [] }),
-    parseImplementationPlan: vi.fn().mockResolvedValue([]),
-    parseReview: vi.fn().mockResolvedValue({ verdict: 'pass', issues: [], summary: '' }),
-    parsePRContent: vi.fn().mockResolvedValue({ title: 'PR', body: '', labels: [] }),
-  })),
+  ResultParser: vi.fn(function () {
+    return {
+      parseAnalysis: vi.fn().mockResolvedValue({
+        requirements: ['Some requirement'],
+        changeType: 'bug-fix',
+        scope: 'small',
+        affectedAreas: ['src/foo.ts'],
+        ambiguities: [],
+        scoutPolicy: 'required',
+      }),
+      parseScoutReport: vi.fn().mockResolvedValue({ files: [], dependencies: [], tests: [] }),
+      parseImplementationPlan: vi.fn().mockResolvedValue([]),
+      parseReview: vi.fn().mockResolvedValue({ verdict: 'pass', issues: [], summary: '' }),
+      parsePRContent: vi.fn().mockResolvedValue({ title: 'PR', body: '', labels: [] }),
+    };
+  }),
 }));
 
 vi.mock('../src/git/commit.js', () => ({
-  CommitManager: vi.fn(() => ({
-    isClean: vi.fn().mockResolvedValue(true),
-    getChangedFiles: vi.fn().mockResolvedValue([]),
-    getDiff: vi.fn().mockResolvedValue(''),
-    commit: vi.fn().mockResolvedValue(undefined),
-    push: vi.fn().mockResolvedValue(undefined),
-    squash: vi.fn().mockResolvedValue(undefined),
-    stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-  })),
+  CommitManager: vi.fn(function () {
+    return {
+      isClean: vi.fn().mockResolvedValue(true),
+      getChangedFiles: vi.fn().mockResolvedValue([]),
+      getDiff: vi.fn().mockResolvedValue(''),
+      commit: vi.fn().mockResolvedValue(undefined),
+      push: vi.fn().mockResolvedValue(undefined),
+      squash: vi.fn().mockResolvedValue(undefined),
+      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/runtime', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@cadre-dev/framework/runtime')>();
   return {
     ...actual,
-    TokenTracker: vi.fn(() => ({
-      record: vi.fn(),
-      getTotal: vi.fn().mockReturnValue(0),
-      checkWorkItemBudget: vi.fn().mockReturnValue('ok'),
-    })),
+    TokenTracker: vi.fn(function () {
+      return {
+        record: vi.fn(),
+        getTotal: vi.fn().mockReturnValue(0),
+        checkWorkItemBudget: vi.fn().mockReturnValue('ok'),
+      };
+    }),
   };
 });
 

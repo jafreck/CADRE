@@ -56,7 +56,9 @@ const mockNotifierMethods = {
 };
 
 vi.mock('../src/core/issue/issue-notifier.js', () => ({
-  IssueNotifier: vi.fn().mockImplementation(() => mockNotifierMethods),
+  IssueNotifier: vi.fn().mockImplementation(function () {
+    return mockNotifierMethods;
+  }),
 }));
 
 // Mock phase gates so they always pass
@@ -65,11 +67,11 @@ vi.mock('../src/core/pipeline/phase-gate.js', () => {
     validate: vi.fn(async () => ({ status: 'pass', warnings: [], errors: [] })),
   });
   return {
-    AnalysisToPlanningGate: vi.fn(() => makeGate()),
-    PlanningToImplementationGate: vi.fn(() => makeGate()),
-    ImplementationToIntegrationGate: vi.fn(() => makeGate()),
-    IntegrationToPRGate: vi.fn(() => makeGate()),
-    AnalysisAmbiguityGate: vi.fn(() => makeGate()),
+    AnalysisToPlanningGate: vi.fn(function () { return makeGate(); }),
+    PlanningToImplementationGate: vi.fn(function () { return makeGate(); }),
+    ImplementationToIntegrationGate: vi.fn(function () { return makeGate(); }),
+    IntegrationToPRGate: vi.fn(function () { return makeGate(); }),
+    AnalysisAmbiguityGate: vi.fn(function () { return makeGate(); }),
     listGatePlugins: vi.fn(() => []),
     registerGatePlugin: vi.fn(),
     unregisterGatePlugin: vi.fn(),
@@ -82,40 +84,54 @@ vi.mock('@cadre-dev/framework/engine', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@cadre-dev/framework/engine')>();
   return {
     ...actual,
-    IssueProgressWriter: vi.fn().mockImplementation(() => ({
-      appendEvent: vi.fn().mockResolvedValue(undefined),
-      write: vi.fn().mockResolvedValue(undefined),
-    })),
-    RetryExecutor: vi.fn().mockImplementation(() => ({})),
-    TaskQueue: vi.fn().mockImplementation(() => ({})),
+    IssueProgressWriter: vi.fn().mockImplementation(function () {
+      return {
+        appendEvent: vi.fn().mockResolvedValue(undefined),
+        write: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+    RetryExecutor: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+    TaskQueue: vi.fn().mockImplementation(function () {
+      return {};
+    }),
   };
 });
 
 vi.mock('../src/git/commit.js', () => ({
-  CommitManager: vi.fn().mockImplementation(() => ({
-    getChangedFiles: vi.fn().mockResolvedValue([]),
-    getDiff: vi.fn().mockResolvedValue(''),
-    isClean: vi.fn().mockResolvedValue(true),
-    commit: vi.fn().mockResolvedValue(undefined),
-    push: vi.fn().mockResolvedValue(undefined),
-    squash: vi.fn().mockResolvedValue(undefined),
-    stripCadreFiles: vi.fn().mockResolvedValue(undefined),
-  })),
+  CommitManager: vi.fn().mockImplementation(function () {
+    return {
+      getChangedFiles: vi.fn().mockResolvedValue([]),
+      getDiff: vi.fn().mockResolvedValue(''),
+      isClean: vi.fn().mockResolvedValue(true),
+      commit: vi.fn().mockResolvedValue(undefined),
+      push: vi.fn().mockResolvedValue(undefined),
+      squash: vi.fn().mockResolvedValue(undefined),
+      stripCadreFiles: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../src/agents/context-builder.js', () => ({
-  ContextBuilder: vi.fn().mockImplementation(() => ({})),
+  ContextBuilder: vi.fn().mockImplementation(function () {
+    return {};
+  }),
 }));
 
 vi.mock('../src/agents/result-parser.js', () => ({
-  ResultParser: vi.fn().mockImplementation(() => ({})),
+  ResultParser: vi.fn().mockImplementation(function () {
+    return {};
+  }),
 }));
 
 vi.mock('@cadre-dev/framework/runtime', () => ({
-  TokenTracker: vi.fn().mockImplementation(() => ({
-    getTotal: vi.fn().mockReturnValue(0),
-    record: vi.fn(),
-  })),
+  TokenTracker: vi.fn().mockImplementation(function () {
+    return {
+      getTotal: vi.fn().mockReturnValue(0),
+      record: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('../src/util/fs.js', () => ({
