@@ -430,5 +430,3 @@ For the full DSL reference, see `docs/flow-dsl.md`.
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
-Copyright (c) 2026 Jacob Freck
