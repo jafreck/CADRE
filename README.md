@@ -33,6 +33,43 @@ At a high level, CADRE:
 - writes code and tests, then verifies the results against your build and test commands
 - prepares the final change for pull request creation and review
 
+## Artifact Layout
+
+By default, CADRE keeps runtime state outside the target repository under `~/.cadre/<projectName>/`. Worktrees, checkpoints, reports, and per-issue artifacts are stored there so the repo under development stays clean.
+
+```text
+~/.cadre/<projectName>/
+  fleet-checkpoint.json
+  fleet-progress.json
+  reports/
+    run-report-<timestamp>.json
+  worktrees/
+    issue-<N>/                      # isolated git worktree for the issue
+      .github/agents/
+        *.agent.md
+  issues/
+    <N>/
+      checkpoint.json
+      checkpoint.backup.json
+      issue.json
+      repo-file-tree.txt
+      analysis.md
+      scout-report.md
+      implementation-plan.md
+      session-<id>.md
+      diff-<id>.patch
+      review-<id>.md
+      review-<id>-summary.json
+      whole-pr-diff.patch
+      whole-pr-review.md
+      integration-report.md
+      pr-content.md
+      contexts/
+        <agent>-<timestamp>.json
+```
+
+The exact files present depend on how far a run has progressed, but this is the normal text-based layout for checkpoints, reports, and intermediate artifacts.
+
 ## Install The Application
 
 ### Shared prerequisites
