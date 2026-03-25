@@ -11,6 +11,13 @@
   </p>
 </div>
 
+# Overview
+CADRE is automation for software development work that starts with an issue and ends with a verified pull request. It is designed for teams that want to move more work in parallel without giving up the structure of their existing repository, build, test, and review process.
+
+As an application, CADRE takes issues from GitHub or Azure DevOps, creates isolated git worktrees, and runs a coordinated set of specialized agents to analyze the task, plan the implementation, write code, write tests, verify results, and prepare a pull request. The value is practical: faster issue throughput, better isolation between parallel efforts, and a repeatable pipeline that produces auditable outputs instead of one-off agent sessions.
+
+As a framework, CADRE also exposes the orchestration pieces behind that workflow so you can build other multi-agent or multi-step systems. At a high level, CADRE combines workflow orchestration, runtime backends, checkpointing, notifications, and validation into a system that can reliably coordinate complex work from intake through completion.
+
 CADRE currently ships two related but different things:
 
 | Package | What it is | Use it when |
@@ -103,7 +110,7 @@ winget install Docker.DockerDesktop
 
 Then open the Ubuntu shell inside WSL2 and run the Ubuntu setup commands from the previous section.
 
-If you prefer to stay outside WSL2, Git Bash is a better fit than plain PowerShell, but WSL2 is the configuration this README recommends.
+If you prefer to stay outside WSL2, Git Bash is a better fit than plain PowerShell, but WSL2 is the recommended configuration.
 
 ## GitHub MCP Server Setup
 
