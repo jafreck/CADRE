@@ -19,20 +19,19 @@ CADRE pulls issues from your issue tracker, plans a dependency graph for optimal
 CADRE also ships with a generic agent orchestration framework that can be used to build any other multi-agent or multi-step systems. The CADRE framework combines workflow orchestration, supports multiple agent runtime backends, checkpointing, notifications, and validation into a system that can reliably coordinate complex work from intake through completion. See [CADRE The Framework](#cadre-the-framework) for more.
 
 
-## CADRE The Application
+## How does it work?
 
-`@cadre-dev/cadre` is opinionated about software delivery. It knows about:
+`@cadre-dev/cadre` is opinionated about software delivery because effective teams use a structured process to avoid common pitfalls. They plan before implementing, verify that the result matches the requirements, make sure there is test coverage, and have teammates review the work before it is merged.
 
-- issue queues
-- git worktrees
-- build and test verification
-- code review and fix loops
-- pull request creation
-- issue updates and progress reporting
+CADRE automates that same loop. Instead of manually iterating back and forth with an agent across multiple sessions, CADRE coordinates specialized agents through planning, implementation, testing, verification, and review so work moves through a repeatable pipeline from issue to pull request.
 
-Use the application when the outcome you want is simple to describe: take one or more issues from a repository and turn them into implementation branches or pull requests.
+At a high level, CADRE:
 
-
+- pulls work from your issue tracker
+- analyzes the issue and plans an implementation order
+- runs specialized agents in parallel inside isolated git worktrees
+- writes code and tests, then verifies the results against your build and test commands
+- prepares the final change for pull request creation and review
 
 ## Install The Application
 
@@ -247,7 +246,7 @@ Each issue runs in its own git worktree. Multiple issues run in parallel up to y
 
 ## CADRE The Framework
 
-`@cadre-dev/framework` is the generic orchestration layer the application is built on top of. It exposes reusable packages for:
+`@cadre-dev/framework` is the generic orchestration layer the CADRE application is built on top of. It exposes reusable packages for:
 
 - `@cadre-dev/framework/core`: logging, events, validation, and shared runtime types
 - `@cadre-dev/framework/engine`: queues, executors, retry logic, phase orchestration, and checkpointing
