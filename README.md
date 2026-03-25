@@ -1,40 +1,159 @@
-# CADRE — Coordinated Agent Development Runtime Engine
+<div align="center">
+  <h1>CADRE</h1>
+  <p><strong>Coordinated Agent Development Runtime Engine</strong></p>
+  <p>Parallel issue-to-PR automation for software teams, plus reusable framework packages for building your own agent workflows.</p>
+  <p>
+    <a href="https://github.com/jafreck/cadre/actions/workflows/ci.yml"><img src="https://github.com/jafreck/cadre/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://www.npmjs.com/package/@cadre-dev/cadre"><img src="https://img.shields.io/npm/v/@cadre-dev/cadre" alt="npm version" /></a>
+    <a href="https://www.npmjs.com/package/@cadre-dev/cadre"><img src="https://img.shields.io/npm/dw/@cadre-dev/cadre" alt="npm downloads" /></a>
+    <a href="https://codecov.io/gh/jafreck/cadre"><img src="https://img.shields.io/codecov/c/github/jafreck/cadre" alt="Coverage" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  </p>
+</div>
 
-[![CI](https://github.com/jafreck/cadre/actions/workflows/ci.yml/badge.svg)](https://github.com/jafreck/cadre/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/@cadre-dev/cadre)](https://www.npmjs.com/package/@cadre-dev/cadre)
-[![npm downloads](https://img.shields.io/npm/dw/@cadre-dev/cadre)](https://www.npmjs.com/package/@cadre-dev/cadre)
-[![Coverage](https://img.shields.io/codecov/c/github/jafreck/cadre)](https://codecov.io/gh/jafreck/cadre)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+CADRE currently ships two related but different things:
 
-CADRE is a framework for **parallel agent-based software development** against a set of open GitHub issues. Given a repository and a list of issues, CADRE provisions one git worktree per issue, then orchestrates a coordinated team of single-purpose agents within each worktree to analyze the issue, plan the implementation, write code, write tests, verify correctness, and open a pull request — all in parallel across issues, with checkpointing and resume at every level.
+| Package | What it is | Use it when |
+| --- | --- | --- |
+| `@cadre-dev/cadre` | The application and CLI for software development teams | You want to take open issues from GitHub or Azure DevOps, fan them out into isolated git worktrees, run a multi-agent implementation pipeline, and produce reviewed pull requests. |
+| `@cadre-dev/framework` | The reusable orchestration framework extracted from the app | You want the underlying flow, runtime, notification, checkpointing, and eventing primitives for your own agent system or workflow engine, even if it has nothing to do with software development. |
+
+## CADRE The Application
+
+`@cadre-dev/cadre` is opinionated about software delivery. It knows about:
+
+- issue queues
+- git worktrees
+- build and test verification
+- code review and fix loops
+- pull request creation
+- issue updates and progress reporting
+
+Use the application when the outcome you want is simple to describe: take one or more issues from a repository and turn them into implementation branches or pull requests.
+
+## CADRE The Framework
+
+`@cadre-dev/framework` is the generic orchestration layer the application is built on top of. It exposes reusable packages for:
+
+- `@cadre-dev/framework/core`: logging, events, validation, and shared runtime types
+- `@cadre-dev/framework/engine`: queues, executors, retry logic, phase orchestration, and checkpointing
+- `@cadre-dev/framework/runtime`: agent backends, launchers, provider registration, and runtime contracts
+- `@cadre-dev/framework/flow`: a declarative flow DSL and the `FlowRunner` execution engine
+- `@cadre-dev/framework/notifications`: log, webhook, and Slack-style notification plumbing
+
+Use the framework when you want to coordinate agents or workflow steps in any domain, even when there is no repository, no issue tracker, and no pull request.
+
+## Install The Application
+
+### Shared prerequisites
+
+- Node.js 20+
+- Git
+- A local clone of the repository you want CADRE to work on
+- A GitHub token in `GITHUB_TOKEN` when `platform` is `github`, or an Azure DevOps PAT when `platform` is `azure-devops`
+- An agent backend CLI on `PATH`. CADRE defaults to `copilot`. If your install exposes a different command such as `gh copilot`, set `agent.copilot.cliCommand` accordingly.
+- A GitHub MCP server command when `platform` is `github`. The default is `github-mcp-server stdio`, but a Docker-backed local server also works well on every OS.
+
+### macOS
+
+Install the default prerequisites with Homebrew:
+
+```bash
+brew install node git github/gh-mcp/github-mcp-server
+npm install -g @cadre-dev/cadre
+export GITHUB_TOKEN=ghp_your_token
+```
+
+If you want to use Claude instead of the default Copilot backend:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude login
+```
+
+### Ubuntu
+
+The cross-platform path is to use Docker for the GitHub MCP server and NodeSource for Node.js 20:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y curl git docker.io
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+sudo usermod -aG docker "$USER"
+npm install -g @cadre-dev/cadre
+export GITHUB_TOKEN=ghp_your_token
+export GITHUB_PERSONAL_ACCESS_TOKEN="$GITHUB_TOKEN"
+```
+
+Log out and back in after adding yourself to the `docker` group.
+
+If you prefer the default `github-mcp-server stdio` configuration, build the binary from the upstream GitHub MCP server repository and keep it on your `PATH`.
+
+### Windows
+
+The recommended setup is WSL2 with Ubuntu plus Docker Desktop. CADRE's current validation path uses Unix-style `which` lookups, so WSL2 is the practical path today.
+
+Install the host-side pieces from PowerShell:
+
+```powershell
+wsl --install -d Ubuntu
+winget install Docker.DockerDesktop
+```
+
+Then open the Ubuntu shell inside WSL2 and run the Ubuntu setup commands from the previous section.
+
+If you prefer to stay outside WSL2, Git Bash is a better fit than plain PowerShell, but WSL2 is the configuration this README recommends.
+
+## GitHub MCP Server Setup
+
+If you install the `github-mcp-server` binary directly and keep it on `PATH`, the default configuration works.
+
+If you want a cross-platform local server without installing the binary, use Docker and add this to `cadre.config.json`:
+
+```json
+{
+  "github": {
+    "auth": { "token": "${GITHUB_TOKEN}" },
+    "mcpServer": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+Before running CADRE with that configuration, make sure `GITHUB_PERSONAL_ACCESS_TOKEN` is set in the shell you are using:
+
+```bash
+export GITHUB_PERSONAL_ACCESS_TOKEN="$GITHUB_TOKEN"
+```
+
+GitHub App authentication is also supported if you do not want to use a token. See `docs/config-schema.md` for the full auth options.
 
 ## Quick Start
 
+Install globally or use `npx`:
+
 ```bash
 npm install -g @cadre-dev/cadre
-
-# Create a cadre.config.json in your repo
-cadre run -c path/to/cadre.config.json
-
-# Resume from last checkpoint
-cadre run -c path/to/cadre.config.json --resume
-
-# Check progress
-cadre status -c path/to/cadre.config.json
-
-# List active worktrees
-cadre worktrees -c path/to/cadre.config.json
 ```
 
-## Configuration
-
-Create a `cadre.config.json`:
+Create a `cadre.config.json` in the repository you want CADRE to work on:
 
 ```json
 {
   "projectName": "my-project",
+  "platform": "github",
   "repository": "owner/repo",
-  "repoPath": "/path/to/local/clone",
+  "repoPath": ".",
   "baseBranch": "main",
   "issues": {
     "ids": [42, 57, 61]
@@ -49,98 +168,44 @@ Create a `cadre.config.json`:
     "test": "npm test"
   },
   "github": {
-    "auth": {
-      "appId": "12345",
-      "installationId": "67890",
-      "privateKeyFile": "/path/to/private-key.pem"
+    "auth": { "token": "${GITHUB_TOKEN}" },
+    "mcpServer": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
+      ]
     }
   }
 }
 ```
 
-See [docs/config-schema.md](docs/config-schema.md) for the full schema reference.
-
-### GitHub MCP Server
-
-CADRE uses the [GitHub MCP server](https://github.com/github/github-mcp-server) for all GitHub interactions (issues, pull requests, comments) and authenticates as a **GitHub App**.
-
-Install the server:
+Run the pipeline:
 
 ```bash
-brew install github/gh-mcp/github-mcp-server
+cadre run -c cadre.config.json
+cadre status -c cadre.config.json
+cadre run -c cadre.config.json --resume
+cadre worktrees -c cadre.config.json
 ```
 
-### GitHub App Authentication
+If you do not want a global install, the same commands work with `npx @cadre-dev/cadre`.
 
-CADRE authenticates to GitHub as a [GitHub App](https://docs.github.com/en/apps). You need:
+## Using Claude Instead Of Copilot
 
-1. A registered GitHub App with permissions for issues (read/write) and pull requests (read/write)
-2. The App installed on the target repository or organization
-3. The App's private key file (`.pem`)
-
-Configure in `cadre.config.json`:
-
-```json
-{
-  "github": {
-    "auth": {
-      "appId": "12345",
-      "installationId": "67890",
-      "privateKeyFile": "/path/to/private-key.pem"
-    }
-  }
-}
-```
-
-Values support `${ENV_VAR}` syntax to reference host environment variables:
-
-```json
-{
-  "github": {
-    "auth": {
-      "appId": "${CADRE_GITHUB_APP_ID}",
-      "installationId": "${CADRE_GITHUB_INSTALLATION_ID}",
-      "privateKeyFile": "${CADRE_GITHUB_PRIVATE_KEY_FILE}"
-    }
-  }
-}
-```
-
-### Claude CLI Setup
-
-CADRE supports [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli) (`claude`) as an alternative agent backend alongside the default GitHub Copilot CLI.
-
-**Install the Claude CLI:**
+CADRE defaults to the Copilot backend. To switch to Claude, install the Claude CLI and set `agent.backend` to `claude`.
 
 ```bash
 npm install -g @anthropic-ai/claude-code
-```
-
-**Authenticate:**
-
-```bash
 claude login
 ```
 
-This opens a browser to authenticate with your Anthropic account. Alternatively, set the `ANTHROPIC_API_KEY` environment variable:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-**Configure CADRE to use Claude:**
-
-Set `agent.backend` to `"claude"` in `cadre.config.json`:
-
 ```json
 {
-  "projectName": "my-project",
-  "repository": "owner/repo",
-  "repoPath": "/path/to/local/clone",
-  "baseBranch": "main",
-  "issues": {
-    "ids": [42, 57, 61]
-  },
   "agent": {
     "backend": "claude",
     "model": "claude-opus-4-5",
@@ -152,128 +217,215 @@ Set `agent.backend` to `"claude"` in `cadre.config.json`:
 }
 ```
 
-**`agent` config reference:**
+Relevant agent fields:
 
 | Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `agent.backend` | `"copilot"` \| `"claude"` | `"copilot"` | Which AI backend to use for agent invocations |
-| `agent.model` | string | backend default | Model identifier (overrides the backend's default model) |
-| `agent.timeout` | number (ms) | backend default | Timeout in milliseconds for agent invocations |
-| `agent.claude.cliCommand` | string | `"claude"` | Path or name of the `claude` CLI executable |
+| --- | --- | --- | --- |
+| `agent.backend` | `"copilot" \| "claude"` | `"copilot"` | Which AI backend CADRE uses for agent invocations |
+| `agent.model` | `string` | backend default | Model override |
+| `agent.timeout` | `number` | backend default | Timeout in milliseconds |
+| `agent.copilot.cliCommand` | `string` | `"copilot"` | Copilot CLI executable |
+| `agent.claude.cliCommand` | `string` | `"claude"` | Claude CLI executable |
 
-## Architecture
+## How The Application Works
 
-CADRE processes issues through a 5-phase pipeline:
+CADRE processes each issue through a five-phase pipeline:
 
-1. **Analysis & Scouting** — Understand the issue and locate relevant code
-2. **Planning** — Break the issue into implementation tasks with dependencies
-3. **Implementation** — Execute tasks with code-writer, test-writer, and code-reviewer agents
-4. **Integration Verification** — Run build and tests to verify correctness
-5. **PR Composition** — Generate and create a pull request
+1. Analysis and scouting
+2. Planning
+3. Implementation
+4. Integration verification
+5. Pull request composition
 
-Each issue runs in its own git worktree with full isolation. Multiple issues are processed in parallel up to a configurable concurrency limit.
+Each issue runs in its own git worktree. Multiple issues run in parallel up to your configured concurrency limit.
 
-## Plugin / Extension APIs
-
-Cadre supports runtime extension points without patching core switches:
-
-- `@cadre-dev/framework/runtime`: `registerAgentBackendFactory()` for backend plugins.
-- `@cadre-dev/framework/runtime`: `ProviderRegistry` enhancements (`registerProviders`, `describe`, `getCapabilities`, `healthCheck`).
-- `@cadre-dev/framework/engine`: pluggable `CheckpointStore` with default `FileSystemCheckpointStore`.
-- `@cadre-dev/framework/notifications`: `registerNotificationProviderFactory()` for custom notification providers.
-- `@cadre-dev/framework/engine`: `registerGatePlugin()` for custom phase gates.
-- `@cadre-dev/framework/core`: `FleetEventBus.use()` middleware hooks for event lifecycle interception.
-- `src/agents/registry.ts`: `defineAgent()` and registry discovery helpers.
-
-### Agent Roster
+### Built-in agent roster
 
 | Agent | Purpose |
-|-------|---------|
+| --- | --- |
 | `issue-analyst` | Analyze issue requirements and scope |
 | `codebase-scout` | Locate relevant files in the codebase |
-| `implementation-planner` | Plan implementation as dependency-aware tasks |
+| `implementation-planner` | Break work into dependency-aware tasks |
 | `adjudicator` | Choose between competing plans |
 | `code-writer` | Implement code changes |
-| `test-writer` | Write tests for changes |
+| `test-writer` | Write tests for the change |
 | `code-reviewer` | Review changes for correctness |
-| `fix-surgeon` | Fix issues found by review or tests |
-| `integration-checker` | Verify build and test pass |
-| `pr-composer` | Compose PR title and body |
+| `fix-surgeon` | Repair issues found by review or tests |
+| `integration-checker` | Verify build and test commands pass |
+| `pr-composer` | Draft the pull request title and body |
 
-## CLI Commands
+## Framework Packages And Extension Points
 
-- `cadre run` — Process issues with agent pipelines
-- `cadre status` — Show fleet and issue progress
-- `cadre reset` — Reset fleet or issue state
-- `cadre worktrees` — List or manage active worktrees
+The framework exposes reusable extension points without patching CADRE core:
 
-When installed globally (`npm install -g @cadre-dev/cadre`), the `cadre` command is available directly. You can also use `npx @cadre-dev/cadre` without installing.
+- `@cadre-dev/framework/runtime`: `registerAgentBackendFactory()` for backend plugins
+- `@cadre-dev/framework/runtime`: provider registration and capability discovery
+- `@cadre-dev/framework/engine`: pluggable `CheckpointStore` support
+- `@cadre-dev/framework/notifications`: `registerNotificationProviderFactory()` for notification plugins
+- `@cadre-dev/framework/engine`: `registerGatePlugin()` for custom phase gates
+- `@cadre-dev/framework/core`: `FleetEventBus.use()` middleware hooks for lifecycle interception
 
-## Key Design Principles
+The application uses those primitives to build the software-development workflow. The framework lets you use the same primitives for a completely different workflow.
 
-1. **No AI logic in the runtime** — The runtime manages processes, git, and files. Intelligence lives in agent prompts.
-2. **File-based IPC** — Agents communicate through files, not APIs.
-3. **Worktree isolation** — Each issue gets its own git worktree. No cross-contamination.
-4. **Idempotent resume** — Safe to run `--resume` repeatedly.
-5. **Git operations are the runtime's job** — Agents write files; the runtime handles git.
-6. **MCP-native GitHub access** — GitHub interactions use the MCP protocol, not CLI wrappers.
+## A More Realistic Framework Example
 
-## Flow DSL Package (`@cadre-dev/framework/flow`)
+The example below is intentionally not about code generation. It shows a support escalation workflow that filters for urgent incidents, gathers customer context in parallel, builds a briefing packet, and routes enterprise customers directly to an on-call response.
 
-Cadre now includes a framework package for declarative pipeline orchestration graphs.
-This package is additive and does not replace the existing app orchestrators yet.
-See [docs/flow-dsl.md](docs/flow-dsl.md) for a complete reference.
+That is an easy-to-evaluate example because the value is obvious: less manual triage, faster response time, and better context when a human needs to step in.
 
 ```ts
 import {
   FlowRunner,
-  defineFlow,
-  step,
-  gate,
-  loop,
-  parallel,
   conditional,
-  fromStep,
+  defineFlow,
   fromContext,
+  fromStep,
+  gate,
+  parallel,
+  step,
 } from '@cadre-dev/framework/flow';
 
-const flow = defineFlow('example', [
+type Ticket = {
+  id: string;
+  customerId: string;
+  plan: 'standard' | 'enterprise';
+  severity: 'low' | 'medium' | 'high' | 'urgent';
+  summary: string;
+};
+
+async function getCustomerProfile(customerId: string) {
+  return { customerId, name: 'Acme Corp', owner: 'oncall-enterprise' };
+}
+
+async function getRecentIncidents(customerId: string) {
+  return [{ id: 'INC-991', status: 'resolved' }, { id: 'INC-1040', status: 'open' }];
+}
+
+async function notifyOnCall(brief: unknown) {
+  return { routedTo: 'pager', brief };
+}
+
+async function enqueueForFollowUp(brief: unknown) {
+  return { routedTo: 'priority-queue', brief };
+}
+
+const flow = defineFlow<{ ticket: Ticket }>('support-escalation', [
   step({
-    id: 'seed',
-    input: fromContext('start'),
-    run: (_ctx, input) => Number(input),
+    id: 'intake',
+    input: fromContext('ticket'),
+    run: (_ctx, ticket) => ticket as Ticket,
   }),
   gate({
-    id: 'non-negative',
-    input: fromStep('seed'),
-    evaluate: (_ctx, value) => Number(value) >= 0,
+    id: 'urgent-only',
+    input: fromStep('intake'),
+    evaluate: (_ctx, ticket) => {
+      const current = ticket as Ticket;
+      return current.severity === 'high' || current.severity === 'urgent';
+    },
   }),
-  loop({
-    id: 'retry-loop',
-    maxIterations: 3,
-    do: [
-      parallel({
-        id: 'fan-out',
-        concurrency: 2,
-        branches: {
-          a: [step({ id: 'a-task', run: () => 'a' })],
-          b: [step({ id: 'b-task', run: () => 'b' })],
-        },
-      }),
-      conditional({
-        id: 'exit-check',
-        when: (ctx) => Boolean(ctx.getStepOutput('a-task')),
-        then: [step({ id: 'done', run: () => true })],
-        else: [step({ id: 'retry', run: () => false })],
+  parallel({
+    id: 'collect-context',
+    concurrency: 2,
+    branches: {
+      customer: [
+        step({
+          id: 'load-customer',
+          input: fromStep('intake'),
+          run: async (_ctx, ticket) => getCustomerProfile((ticket as Ticket).customerId),
+        }),
+      ],
+      history: [
+        step({
+          id: 'load-history',
+          input: fromStep('intake'),
+          run: async (_ctx, ticket) => getRecentIncidents((ticket as Ticket).customerId),
+        }),
+      ],
+    },
+  }),
+  step({
+    id: 'build-brief',
+    input: {
+      ticket: fromStep('intake'),
+      context: fromStep('collect-context'),
+    },
+    run: (_ctx, input) => {
+      const ticket = input.ticket as Ticket;
+      const context = input.context as {
+        customer: { 'load-customer': unknown };
+        history: { 'load-history': unknown };
+      };
+
+      return {
+        ticketId: ticket.id,
+        plan: ticket.plan,
+        summary: ticket.summary,
+        customer: context.customer['load-customer'],
+        recentIncidents: context.history['load-history'],
+      };
+    },
+  }),
+  conditional({
+    id: 'route-ticket',
+    when: (ctx) => {
+      const brief = ctx.getStepOutput('build-brief') as { plan: string };
+      return brief.plan === 'enterprise';
+    },
+    then: [
+      step({
+        id: 'page-on-call',
+        input: fromStep('build-brief'),
+        run: async (_ctx, brief) => notifyOnCall(brief),
       }),
     ],
-    until: (ctx) => Boolean(ctx.getStepOutput('done')),
+    else: [
+      step({
+        id: 'create-priority-queue-item',
+        input: fromStep('build-brief'),
+        run: async (_ctx, brief) => enqueueForFollowUp(brief),
+      }),
+    ],
   }),
 ]);
 
-const runner = new FlowRunner();
-await runner.run(flow, { start: 0 });
+const runner = new FlowRunner({ concurrency: 2 });
+
+await runner.run(flow, {
+  ticket: {
+    id: 'SUP-1042',
+    customerId: 'cust_123',
+    plan: 'enterprise',
+    severity: 'urgent',
+    summary: 'Checkout is timing out for all EU users',
+  },
+});
 ```
+
+For the full DSL reference, see `docs/flow-dsl.md`.
+
+## CLI Commands
+
+- `cadre run`: process issues with the agent pipeline
+- `cadre status`: show fleet and issue progress
+- `cadre reset`: reset fleet or issue state
+- `cadre worktrees`: list or manage active worktrees
+
+## Design Principles
+
+1. No AI logic in the runtime. The runtime manages processes, git, files, and orchestration.
+2. File-based IPC. Agents communicate through files, not in-process APIs.
+3. Worktree isolation. Each issue gets its own git worktree.
+4. Idempotent resume. Re-running with `--resume` is safe.
+5. Git operations belong to the runtime. Agents write files, while CADRE handles the git lifecycle.
+6. MCP-native GitHub access. GitHub interactions go through the GitHub MCP server.
+
+## Docs
+
+- `docs/config-schema.md`: full configuration schema
+- `docs/architecture.md`: high-level architecture and package boundaries
+- `docs/flow-dsl.md`: framework flow DSL reference
+- `docs/container-usage.md`: containerized usage
+- `docs/security.md`: security model and isolation notes
 
 ## License
 
