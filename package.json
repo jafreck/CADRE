@@ -51,7 +51,7 @@
     "p-limit": "^7",
     "p-queue": "^9",
     "simple-git": "^3.32",
-    "zod": "^3.25",
+    "zod": "^4.3",
     "zod-to-json-schema": "^3.25"
   },
   "devDependencies": {
