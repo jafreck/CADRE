@@ -51,7 +51,13 @@ export type {
   FlowLoopTermination,
 } from './types.js';
 
-export { FlowExecutionError, FlowCycleError, FlowContractError, FlowLoopExhaustionError } from './types.js';
+export {
+  FlowExecutionError,
+  FlowCycleError,
+  FlowContractError,
+  FlowLoopExhaustionError,
+  FlowTimeoutError,
+} from './types.js';
 
 export {
   phaseExecutorAsStep,

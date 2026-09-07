@@ -280,6 +280,8 @@ export interface FlowRunnerOptions<TContext = Record<string, unknown>> {
   timeoutMs?: number;
   /** AbortSignal for external cancellation. When aborted, the run completes with status 'cancelled'. */
   signal?: AbortSignal;
+  /** Prefix nested execution IDs and checkpoint identity. Primarily used by subflows. */
+  executionPathPrefix?: readonly string[];
 }
 
 export interface FlowRunResult<TContext = Record<string, unknown>> {
@@ -315,6 +317,13 @@ export class FlowCycleError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'FlowCycleError';
+  }
+}
+
+export class FlowTimeoutError extends FlowExecutionError {
+  constructor(message: string, flowId: string, nodeId: string, executionId: string, cause?: unknown) {
+    super(message, flowId, nodeId, executionId, cause);
+    this.name = 'FlowTimeoutError';
   }
 }
 

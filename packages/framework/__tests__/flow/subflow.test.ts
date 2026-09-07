@@ -80,8 +80,43 @@ describe('subflow node', () => {
     await new FlowRunner().run(parent, {}, { hooks: { onEvent: events } });
 
     expect(events).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'node-complete', flowId: 'event-child', executionId: 'event-child/child-work',
+      type: 'node-complete', flowId: 'event-child',
+      executionId: 'event-parent/nested/event-child/child-work',
     }));
+  });
+
+  it('isolates checkpoints when two subflows reuse the same child definition', async () => {
+    const snapshots = new Map<string, import('@cadre-dev/framework/flow').FlowCheckpointSnapshot>();
+    const checkpoint = {
+      load: (flowId: string) => snapshots.get(flowId) ?? null,
+      save: (snapshot: import('@cadre-dev/framework/flow').FlowCheckpointSnapshot) => {
+        snapshots.set(snapshot.flowId, snapshot);
+      },
+    };
+    const child = defineFlow<{ value: number }>('shared-child', [
+      step({ id: 'read', run: ctx => ctx.context.value }),
+    ]);
+    const parent = defineFlow<{ first: number; second: number }>('checkpoint-parent', [
+      subflow({
+        id: 'first-child', flow: child,
+        contextMap: ctx => ({ value: ctx.context.first }),
+        runnerOptions: { checkpoint },
+      }),
+      subflow({
+        id: 'second-child', flow: child,
+        contextMap: ctx => ({ value: ctx.context.second }),
+        runnerOptions: { checkpoint },
+      }),
+    ]);
+
+    const result = await new FlowRunner().run(parent, { first: 1, second: 2 });
+
+    expect((result.outputs['first-child'] as { outputs: { read: number } }).outputs.read).toBe(1);
+    expect((result.outputs['second-child'] as { outputs: { read: number } }).outputs.read).toBe(2);
+    expect([...snapshots.keys()].sort()).toEqual([
+      'checkpoint-parent/first-child/shared-child',
+      'checkpoint-parent/second-child/shared-child',
+    ]);
   });
 
   it('derives child runner options from the current parent execution', async () => {
