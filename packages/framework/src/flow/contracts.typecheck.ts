@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { fromStep, step, type StepContract } from './index.js';
+import { defineFlow, fromStep, step, subflow, type FlowNode, type StepContract } from './index.js';
 
 type Contracts = {
   producer: StepContract<unknown, { value: number }>;
@@ -37,6 +37,30 @@ step<Record<string, unknown>, { value: number }, string>({
     value: fromStep<Contracts, 'producer'>('producer', 'value.missing'),
   },
   run: (_ctx, input) => String(input.value),
+});
+
+type ParentContext = { seed: number };
+type ChildContext = { value: string };
+
+const childFlow = defineFlow<ChildContext>('typed-child', [
+  step<ChildContext>({ id: 'read', run: ctx => ctx.context.value }),
+]);
+
+const typedSubflow = subflow<ParentContext, ChildContext>({
+  id: 'typed-subflow',
+  flow: childFlow,
+  contextMap: ctx => ({ value: String(ctx.context.seed) }),
+  runnerOptions: ctx => ({ concurrency: ctx.context.seed }),
+});
+
+const _heterogeneousNodes: FlowNode<ParentContext>[] = [typedSubflow];
+defineFlow('typed-parent', _heterogeneousNodes);
+
+subflow<ParentContext, ChildContext>({
+  id: 'invalid-context-map',
+  flow: childFlow,
+  // @ts-expect-error child context requires a string value
+  contextMap: ctx => ({ value: ctx.context.seed }),
 });
 
 step<Record<string, unknown>, { value: number }, string>({

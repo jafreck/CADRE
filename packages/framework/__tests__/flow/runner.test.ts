@@ -18,6 +18,255 @@ import {
 } from '@cadre-dev/framework/flow';
 
 describe('@cadre/flow FlowRunner', () => {
+  it('exposes execution identity, attempt, timing, and cancellation to node work', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const flow = defineFlow('execution-context', [
+      step({
+        id: 'work',
+        run: (ctx) => {
+          captured = {
+            executionId: ctx.executionId,
+            executionPath: ctx.executionPath,
+            attempt: ctx.attempt,
+            startedAt: ctx.startedAt,
+            signal: ctx.signal,
+          };
+        },
+      }),
+    ]);
+
+    await new FlowRunner().run(flow, {});
+
+    expect(captured).toMatchObject({
+      executionId: 'execution-context/work',
+      executionPath: ['execution-context', 'work'],
+      attempt: 1,
+    });
+    expect(captured?.startedAt).toEqual(expect.any(String));
+    expect(captured?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('cancels active work, waits for settlement, and does not schedule later nodes', async () => {
+    const controller = new AbortController();
+    const order: string[] = [];
+    let markStarted!: () => void;
+    const started = new Promise<void>(resolve => { markStarted = resolve; });
+    const flow = defineFlow('active-cancel', [
+      step({
+        id: 'active',
+        run: async (ctx) => {
+          order.push('active-start');
+          markStarted();
+          await waitForAbort(ctx.signal);
+          order.push('active-settled');
+        },
+      }),
+      step({ id: 'later', dependsOn: ['active'], run: () => { order.push('later'); } }),
+    ]);
+
+    const running = new FlowRunner().run(flow, {}, { signal: controller.signal });
+    await started;
+    controller.abort();
+    const result = await running;
+
+    expect(result.status).toBe('cancelled');
+    expect(order).toEqual(['active-start', 'active-settled']);
+    expect(result.completedExecutionIds).not.toContain('active-cancel/active');
+  });
+
+  it('aborts timed-out node work and waits for it to settle before rejecting', async () => {
+    const order: string[] = [];
+    const flow = defineFlow('node-timeout', [
+      step({
+        id: 'slow',
+        timeoutMs: 10,
+        run: async (ctx) => {
+          await waitForAbort(ctx.signal);
+          order.push('node-settled');
+        },
+      }),
+    ]);
+
+    await expect(new FlowRunner().run(flow, {})).rejects.toThrow('timed out');
+    order.push('runner-returned');
+
+    expect(order).toEqual(['node-settled', 'runner-returned']);
+  });
+
+  it('aborts parallel siblings and reaches quiescence before failure returns', async () => {
+    const order: string[] = [];
+    let markSiblingStarted!: () => void;
+    const siblingStarted = new Promise<void>(resolve => { markSiblingStarted = resolve; });
+    const flow = defineFlow('parallel-quiescence', [
+      parallel({
+        id: 'scope',
+        branches: {
+          failing: [step({ id: 'fail', run: async () => { await siblingStarted; throw new Error('fatal branch'); } })],
+          sibling: [step({
+            id: 'sibling',
+            run: async (ctx) => {
+              markSiblingStarted();
+              await waitForAbort(ctx.signal);
+              order.push('sibling-settled');
+            },
+          })],
+        },
+      }),
+    ]);
+
+    await expect(new FlowRunner().run(flow, {})).rejects.toThrow('fatal branch');
+    order.push('runner-returned');
+
+    expect(order).toEqual(['sibling-settled', 'runner-returned']);
+  });
+
+  it('emits ordered lifecycle events with execution identity and attempts', async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const snapshots: string[] = [];
+    const flow = defineFlow('lifecycle', [step({ id: 'ok', run: () => 1 })]);
+
+    await new FlowRunner().run(flow, {}, {
+      hooks: { onEvent: event => { events.push(event as unknown as Record<string, unknown>); } },
+      checkpoint: {
+        load: () => null,
+        save: snapshot => { snapshots.push(snapshot.status); },
+      },
+    });
+
+    expect(events.map(event => event.type)).toEqual(['node-start', 'node-complete']);
+    expect(events[0]).toMatchObject({
+      flowId: 'lifecycle', nodeId: 'ok', executionId: 'lifecycle/ok', attempt: 1,
+    });
+    expect(snapshots.at(-1)).toBe('completed');
+  });
+
+  it('reports loop convergence and maximum-iteration exhaustion explicitly', async () => {
+    const converged = defineFlow('loop-converged', [
+      loop({ id: 'repeat', maxIterations: 2, do: [step({ id: 'work', run: () => 1 })], until: () => true }),
+    ]);
+    const exhausted = defineFlow('loop-exhausted', [
+      loop({ id: 'repeat', maxIterations: 2, do: [step({ id: 'work', run: () => 1 })], until: () => false }),
+    ]);
+
+    const convergedResult = await new FlowRunner().run(converged, {});
+    const exhaustedResult = await new FlowRunner().run(exhausted, {});
+
+    expect(convergedResult.outputs.repeat).toMatchObject({ termination: 'until', converged: true, exhausted: false });
+    expect(exhaustedResult.outputs.repeat).toMatchObject({ termination: 'max-iterations', converged: false, exhausted: true });
+  });
+
+  it('aborts active work on a flow timeout and returns timed-out after settlement', async () => {
+    const order: string[] = [];
+    const flow = defineFlow('flow-timeout', [
+      step({
+        id: 'active',
+        run: async ctx => {
+          await waitForAbort(ctx.signal);
+          order.push('active-settled');
+        },
+      }),
+    ]);
+
+    const result = await new FlowRunner().run(flow, {}, { timeoutMs: 10 });
+    order.push('runner-returned');
+
+    expect(result.status).toBe('timed-out');
+    expect(order).toEqual(['active-settled', 'runner-returned']);
+    expect(result.completedExecutionIds).toEqual([]);
+  });
+
+  it('aborts map siblings, stops queued items, and waits for active items', async () => {
+    const order: string[] = [];
+    let started = 0;
+    const flow = defineFlow('map-quiescence', [
+      {
+        kind: 'map', id: 'items', input: [0, 1, 2, 3], concurrency: 2,
+        do: async (ctx, item) => {
+          started++;
+          if (item === 0) {
+            while (started < 2) await delay(1);
+            throw new Error('map failure');
+          }
+          await waitForAbort(ctx.signal);
+          order.push(`settled-${item}`);
+        },
+      },
+    ]);
+
+    await expect(new FlowRunner().run(flow, {})).rejects.toThrow('map failure');
+    order.push('runner-returned');
+
+    expect(started).toBe(2);
+    expect(order).toEqual(['settled-1', 'runner-returned']);
+  });
+
+  it('quiesces concurrent top-level nodes before persisting terminal failure', async () => {
+    const order: string[] = [];
+    const snapshots: FlowCheckpointSnapshot[] = [];
+    let markSiblingStarted!: () => void;
+    const siblingStarted = new Promise<void>(resolve => { markSiblingStarted = resolve; });
+    const flow = defineFlow('concurrent-quiescence', [
+      step({ id: 'fail', run: async () => { await siblingStarted; throw new Error('top-level failure'); } }),
+      step({
+        id: 'sibling',
+        run: async ctx => {
+          markSiblingStarted();
+          await waitForAbort(ctx.signal);
+          order.push('sibling-settled');
+        },
+      }),
+    ]);
+
+    await expect(new FlowRunner().run(flow, {}, {
+      concurrentNodes: true,
+      concurrency: 2,
+      checkpoint: { load: () => null, save: snapshot => { snapshots.push(snapshot); } },
+    })).rejects.toThrow('top-level failure');
+    order.push('runner-returned');
+
+    expect(order).toEqual(['sibling-settled', 'runner-returned']);
+    expect(snapshots.at(-1)?.status).toBe('failed');
+    expect(snapshots.at(-1)?.completedExecutionIds).not.toContain('concurrent-quiescence/sibling');
+  });
+
+  it('emits attempt-aware failure and completion events around retries', async () => {
+    const eventTypes: string[] = [];
+    let attempts = 0;
+    const flow = defineFlow('retry-events', [
+      step({
+        id: 'retrying', retry: { maxAttempts: 1, delayMs: 0 },
+        run: () => {
+          attempts++;
+          if (attempts === 1) throw new Error('retry me');
+          return 'ok';
+        },
+      }),
+    ]);
+
+    await new FlowRunner().run(flow, {}, {
+      hooks: { onEvent: event => { eventTypes.push(`${event.type}:${event.attempt}`); } },
+    });
+
+    expect(eventTypes).toEqual([
+      'node-start:1', 'node-failed:1', 'node-start:2', 'node-complete:2',
+    ]);
+  });
+
+  it('can require loop convergence and exposes exhaustion evidence', async () => {
+    const flow = defineFlow('required-convergence', [
+      loop({
+        id: 'repeat', maxIterations: 2, requireConvergence: true,
+        do: [step({ id: 'work', run: () => 1 })],
+        until: () => false,
+      }),
+    ]);
+
+    await expect(new FlowRunner().run(flow, {})).rejects.toMatchObject({
+      name: 'FlowLoopExhaustionError',
+      result: { termination: 'max-iterations', exhausted: true, iterations: 2 },
+    });
+  });
+
   it('runs a linear flow with data routing from context and prior steps', async () => {
     const runner = new FlowRunner<{ numbers: number[] }>({});
 
@@ -538,4 +787,9 @@ describe('@cadre/flow FlowRunner', () => {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
 }
