@@ -63,9 +63,9 @@ function buildProgram(): Command {
     .option('-d, --dry-run', 'Validate configuration without executing')
     .option('-i, --issue <numbers...>', 'Override: process specific issue numbers')
     .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
-    .option('--no-pr', 'Skip PR creation')
+    .option('--no-pr', 'Skip PR creation', true)
     .option('--respond-to-reviews', 'Respond to pull request reviews instead of processing new issues')
-    .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files')
+    .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files', true)
     .option('--dag', 'Enable DAG-based dependency ordering of issues (overrides config)');
   program.command('status').description('Show current pipeline status');
   program.command('reset').description('Reset pipeline state');

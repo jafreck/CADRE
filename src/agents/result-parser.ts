@@ -47,7 +47,7 @@ export class ResultParser {
    */
   private async parseArtifact<T>(
     filePath: string,
-    schema: ZodType<T, any, unknown>,
+    schema: ZodType<T>,
     agentDescription: string,
     transform?: (result: T) => T,
   ): Promise<T> {

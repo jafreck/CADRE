@@ -1,25 +1,26 @@
 import {
   ZodAny,
   ZodArray,
+  ZodCatch,
   ZodDefault,
   ZodDiscriminatedUnion,
-  ZodEffects,
   ZodEnum,
   ZodLiteral,
-  ZodNativeEnum,
   ZodNullable,
   ZodNumber,
   ZodObject,
   ZodOptional,
+  ZodPipe,
+  ZodPrefault,
+  ZodReadonly,
   ZodString,
-  ZodType,
-  ZodTypeAny,
   ZodUnion,
   ZodUnknown,
   ZodBoolean,
   ZodNull,
   ZodUndefined,
 } from 'zod';
+import type { ZodType } from 'zod';
 import type {
   DataRef,
   FlowContractIssue,
@@ -33,8 +34,8 @@ import type {
 export interface IndexedNode {
   id: string;
   input?: unknown;
-  inputSchema?: ZodTypeAny;
-  outputSchema?: ZodTypeAny;
+  inputSchema?: ZodType;
+  outputSchema?: ZodType;
 }
 
 export interface IndexedFlow {
@@ -122,13 +123,13 @@ export function getContractForStep(
   };
 }
 
-export function schemaAtPath(schema: ZodTypeAny | undefined, path?: string): ZodTypeAny | undefined {
+export function schemaAtPath(schema: ZodType | undefined, path?: string): ZodType | undefined {
   if (!schema || !path || path.trim().length === 0) {
     return schema;
   }
 
   const parts = path.split('.').filter(Boolean);
-  let cursor: ZodTypeAny | undefined = schema;
+  let cursor: ZodType | undefined = schema;
 
   for (const part of parts) {
     if (!cursor) {
@@ -139,7 +140,7 @@ export function schemaAtPath(schema: ZodTypeAny | undefined, path?: string): Zod
 
     if (base instanceof ZodObject) {
       const shape = base.shape;
-      cursor = shape[part] as ZodTypeAny | undefined;
+      cursor = shape[part] as ZodType | undefined;
       continue;
     }
 
@@ -148,7 +149,7 @@ export function schemaAtPath(schema: ZodTypeAny | undefined, path?: string): Zod
       if (Number.isNaN(index)) {
         return undefined;
       }
-      cursor = base.element;
+      cursor = base.element as ZodType;
       continue;
     }
 
@@ -317,7 +318,7 @@ function isDataRef(value: unknown): value is DataRef {
   return candidate.kind === 'fromStep' || candidate.kind === 'fromSteps' || candidate.kind === 'fromContext';
 }
 
-function compatibilityReason(source: ZodTypeAny, target: ZodTypeAny): string | undefined {
+function compatibilityReason(source: ZodType, target: ZodType): string | undefined {
   const src = unwrapSchema(source);
   const dst = unwrapSchema(target);
 
@@ -329,27 +330,14 @@ function compatibilityReason(source: ZodTypeAny, target: ZodTypeAny): string | u
     return undefined;
   }
 
-  if (dst instanceof ZodUnion) {
-    const works = (dst.options as ZodTypeAny[]).some((option: ZodTypeAny) => compatibilityReason(src, option) === undefined);
-    return works ? undefined : `Source type ${schemaLabel(src)} is incompatible with union target ${schemaLabel(dst)}`;
-  }
-
-  if (src instanceof ZodUnion) {
-    const incompatible = (src.options as ZodTypeAny[]).find((option: ZodTypeAny) => compatibilityReason(option, dst) !== undefined);
-    if (!incompatible) {
-      return undefined;
-    }
-    return `Union source ${schemaLabel(src)} includes incompatible variant ${schemaLabel(incompatible as ZodTypeAny)} for ${schemaLabel(dst)}`;
-  }
-
   if (dst instanceof ZodDiscriminatedUnion) {
-    const options = Array.from(dst.options.values()) as ZodTypeAny[];
+    const options = Array.from(dst.options) as ZodType[];
     const works = options.some((option) => compatibilityReason(src, option) === undefined);
     return works ? undefined : `Source type ${schemaLabel(src)} is incompatible with discriminated union target ${schemaLabel(dst)}`;
   }
 
   if (src instanceof ZodDiscriminatedUnion) {
-    const options = Array.from(src.options.values()) as ZodTypeAny[];
+    const options = Array.from(src.options) as ZodType[];
     const incompatible = options.find((option) => compatibilityReason(option, dst) !== undefined);
     if (!incompatible) {
       return undefined;
@@ -357,11 +345,24 @@ function compatibilityReason(source: ZodTypeAny, target: ZodTypeAny): string | u
     return `Discriminated union source ${schemaLabel(src)} includes incompatible variant ${schemaLabel(incompatible)} for ${schemaLabel(dst)}`;
   }
 
+  if (dst instanceof ZodUnion) {
+    const works = (dst.options as ZodType[]).some((option) => compatibilityReason(src, option) === undefined);
+    return works ? undefined : `Source type ${schemaLabel(src)} is incompatible with union target ${schemaLabel(dst)}`;
+  }
+
+  if (src instanceof ZodUnion) {
+    const incompatible = (src.options as ZodType[]).find((option) => compatibilityReason(option, dst) !== undefined);
+    if (!incompatible) {
+      return undefined;
+    }
+    return `Union source ${schemaLabel(src)} includes incompatible variant ${schemaLabel(incompatible)} for ${schemaLabel(dst)}`;
+  }
+
   if (src instanceof ZodLiteral) {
     if (dst instanceof ZodString || dst instanceof ZodNumber || dst instanceof ZodBoolean || dst instanceof ZodNull || dst instanceof ZodUndefined) {
       return undefined;
     }
-    if (dst instanceof ZodEnum || dst instanceof ZodNativeEnum) {
+    if (dst instanceof ZodEnum) {
       return undefined;
     }
     if (dst instanceof ZodLiteral) {
@@ -371,21 +372,21 @@ function compatibilityReason(source: ZodTypeAny, target: ZodTypeAny): string | u
 
   if (src.constructor === dst.constructor) {
     if (src instanceof ZodArray && dst instanceof ZodArray) {
-      return compatibilityReason(src.element, dst.element);
+      return compatibilityReason(src.element as ZodType, dst.element as ZodType);
     }
     if (src instanceof ZodObject && dst instanceof ZodObject) {
       const sourceShape = src.shape;
       const targetShape = dst.shape;
       for (const [key, targetSchema] of Object.entries(targetShape)) {
-        const sourceSchema = sourceShape[key] as ZodTypeAny | undefined;
+        const sourceSchema = sourceShape[key] as ZodType | undefined;
         if (!sourceSchema) {
-          const targetIsOptional = unwrapSchema(targetSchema as ZodTypeAny) instanceof ZodOptional;
+          const targetIsOptional = (targetSchema as ZodType).safeParse(undefined).success;
           if (!targetIsOptional) {
             return `Missing required field '${key}'`;
           }
           continue;
         }
-        const mismatch = compatibilityReason(sourceSchema, targetSchema as ZodTypeAny);
+        const mismatch = compatibilityReason(sourceSchema, targetSchema as ZodType);
         if (mismatch) {
           return `Field '${key}' is incompatible: ${mismatch}`;
         }
@@ -398,17 +399,26 @@ function compatibilityReason(source: ZodTypeAny, target: ZodTypeAny): string | u
   return `Type ${schemaLabel(src)} is not assignable to ${schemaLabel(dst)}`;
 }
 
-function unwrapSchema(schema: ZodTypeAny): ZodTypeAny {
-  if (schema instanceof ZodOptional || schema instanceof ZodNullable || schema instanceof ZodDefault) {
-    return unwrapSchema(schema._def.innerType as ZodTypeAny);
+function unwrapSchema(schema: ZodType): ZodType {
+  if (schema instanceof ZodOptional || schema instanceof ZodNullable || schema instanceof ZodReadonly) {
+    return unwrapSchema(schema.unwrap() as ZodType);
   }
-  if (schema instanceof ZodEffects) {
-    return unwrapSchema(schema._def.schema as ZodTypeAny);
+  if (schema instanceof ZodDefault) {
+    return unwrapSchema(schema.unwrap() as ZodType);
+  }
+  if (schema instanceof ZodPrefault) {
+    return unwrapSchema(schema.unwrap() as ZodType);
+  }
+  if (schema instanceof ZodCatch) {
+    return unwrapSchema(schema.removeCatch() as ZodType);
+  }
+  if (schema instanceof ZodPipe) {
+    return unwrapSchema(schema.in as ZodType);
   }
   return schema;
 }
 
-function schemaLabel(schema: ZodTypeAny): string {
+function schemaLabel(schema: ZodType): string {
   const unwrapped = unwrapSchema(schema);
-  return unwrapped._def.typeName.replace('Zod', '').toLowerCase();
+  return unwrapped.type;
 }

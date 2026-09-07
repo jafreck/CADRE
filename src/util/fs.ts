@@ -1,7 +1,7 @@
 import { writeFile, rename, mkdir, readFile, access, readdir, stat, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, type Stats } from 'node:fs';
 
 /**
  * Atomically write a file by writing to a temp location first, then renaming.
@@ -110,7 +110,7 @@ export async function writeTextFile(filePath: string, content: string): Promise<
 /**
  * Get file stats or null if the file doesn't exist.
  */
-export async function statOrNull(filePath: string): Promise<Awaited<ReturnType<typeof stat>> | null> {
+export async function statOrNull(filePath: string): Promise<Stats | null> {
   try {
     return await stat(filePath);
   } catch {

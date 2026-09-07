@@ -42,11 +42,11 @@ program
   .option('-d, --dry-run', 'Validate configuration without executing')
   .option('-i, --issue <numbers...>', 'Override: process specific issue numbers')
   .option('-p, --parallel <n>', 'Override: max parallel issues', parseInt)
-  .option('--no-pr', 'Skip PR creation')
+  .option('--no-pr', 'Skip PR creation', true)
   .option('--respond-to-reviews', 'Address open PR review comments instead of starting a new pipeline')
   .option('--skip-agent-validation', 'Skip pre-flight agent file validation')
   .option('--skip-validation', 'Skip pre-run validation checks')
-  .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files')
+  .option('--no-autoscaffold', 'Skip auto-scaffolding of missing agent files', true)
   .option('--dag', 'Enable DAG-based dependency ordering of issues (overrides config)')
   .action(withCommandHandler(async (opts) => {
     let config = await loadConfig(opts.config);

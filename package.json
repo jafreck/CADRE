@@ -41,24 +41,23 @@
     "@cadre-dev/runtime-provider-docker": "*",
     "@cadre-dev/runtime-provider-kata": "*",
     "@inquirer/prompts": "^8",
-    "@jafreck/lore": "^0.3.7",
-    "@modelcontextprotocol/sdk": "^1.27",
+    "@jafreck/lore": "^0.4.0",
+    "@modelcontextprotocol/sdk": "^1.30",
     "@octokit/rest": "^22",
-    "chalk": "^5",
-    "commander": "^14",
+    "chalk": "^6",
+    "commander": "^15",
     "date-fns": "^4",
     "ora": "^9",
     "p-limit": "^7",
     "p-queue": "^9",
-    "simple-git": "^3.32",
-    "zod": "^3.25",
-    "zod-to-json-schema": "^3.25"
+    "simple-git": "^3.36",
+    "zod": "^4.5"
   },
   "devDependencies": {
-    "@types/node": "^25",
-    "@vitest/coverage-v8": "^4",
+    "@types/node": "^26",
+    "@vitest/coverage-v8": "^5",
     "tsx": "^4",
-    "typescript": "^5.9",
-    "vitest": "^4"
+    "typescript": "^7.0",
+    "vitest": "^5"
   }
 }

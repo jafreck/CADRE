@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 import { atomicWriteJSON, ensureDir, exists } from '../util/fs.js';
 import type { CadreConfig } from '../config/schema.js';
 import type {
@@ -34,13 +34,13 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
     phase: 1,
     outputFile: (args) => join(args.progressDir, 'analysis.md'),
     inputFiles: async (args) => [args.issueJsonPath!],
-    outputSchema: zodToJsonSchema(analysisSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(analysisSchema) as Record<string, unknown>,
   },
   'codebase-scout': {
     phase: 1,
     outputFile: (args) => join(args.progressDir, 'scout-report.md'),
     inputFiles: async (args) => [args.analysisPath!, args.fileTreePath!],
-    outputSchema: zodToJsonSchema(scoutReportSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(scoutReportSchema) as Record<string, unknown>,
   },
   'dependency-analyst': {
     phase: 1,
@@ -68,14 +68,14 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       scoutAvailable: args.scoutAvailable ?? false,
       scoutRequired: args.scoutRequired ?? true,
     }),
-    outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(implementationPlanSchema) as Record<string, unknown>,
   },
   'adjudicator': {
     phase: 2,
     outputFile: (args) => join(args.progressDir, 'adjudication.md'),
     inputFiles: async (args) => [...args.planPaths!],
     payload: () => ({ decisionType: 'implementation-strategy' }),
-    outputSchema: zodToJsonSchema(implementationPlanSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(implementationPlanSchema) as Record<string, unknown>,
   },
   'code-writer': {
     phase: 3,
@@ -131,7 +131,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       acceptanceCriteria: args.session!.steps.flatMap((s) => s.acceptanceCriteria),
       ...(args.issueBody ? { issueBody: args.issueBody } : {}),
     }),
-    outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(reviewSchema) as Record<string, unknown>,
   },
   'whole-pr-reviewer': {
     phase: 3,
@@ -156,7 +156,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       sessionSummaries: args.sessionSummaries ?? [],
       ...(args.issueBody ? { issueBody: args.issueBody } : {}),
     }),
-    outputSchema: zodToJsonSchema(reviewSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(reviewSchema) as Record<string, unknown>,
   },
   'fix-surgeon': {
     phase: (args) => args.phase ?? 3,
@@ -217,7 +217,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
         lint: helpers.commands.lint,
       },
     }),
-    outputSchema: zodToJsonSchema(integrationReportSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(integrationReportSchema) as Record<string, unknown>,
   },
   'pr-composer': {
     phase: 5,
@@ -228,7 +228,7 @@ export const AGENT_CONTEXT_REGISTRY: Record<string, AgentContextDescriptor> = {
       issueBody: args.issue!.body,
       ...(args.previousParseError ? { previousParseError: args.previousParseError } : {}),
     }),
-    outputSchema: zodToJsonSchema(prContentSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(prContentSchema) as Record<string, unknown>,
   },
   'conflict-resolver': {
     phase: 0,
