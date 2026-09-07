@@ -45,9 +45,19 @@ export type {
   FlowCheckpointAdapter,
   FlowCheckpointSnapshot,
   FlowLifecycleHooks,
+  FlowLifecycleEvent,
+  FlowLifecycleEventType,
+  FlowLoopResult,
+  FlowLoopTermination,
 } from './types.js';
 
-export { FlowExecutionError, FlowCycleError, FlowContractError } from './types.js';
+export {
+  FlowExecutionError,
+  FlowCycleError,
+  FlowContractError,
+  FlowLoopExhaustionError,
+  FlowTimeoutError,
+} from './types.js';
 
 export {
   phaseExecutorAsStep,
