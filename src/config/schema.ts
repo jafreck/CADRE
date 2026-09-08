@@ -87,7 +87,7 @@ export const AgentConfigSchema = z.object({
         )
         .optional(),
     })
-    .default({}),
+    .prefault({}),
   /** Claude-backend-specific options. */
   claude: z
     .object({
@@ -96,7 +96,7 @@ export const AgentConfigSchema = z.object({
       agentDir: z.string().default('agents'),
       allowedTools: z.string().default('Bash,Read,Write,Edit,MultiEdit,Glob,Grep,TodoRead,TodoWrite,mcp__*'),
     })
-    .default({}),
+    .prefault({}),
 });
 
 export const CadreConfigSchema = z.object({
@@ -160,7 +160,7 @@ export const CadreConfigSchema = z.object({
       /** Squash all phase commits into one before PR. */
       squashBeforePR: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
 
   /** Pull request configuration. */
   pullRequest: z
@@ -178,7 +178,7 @@ export const CadreConfigSchema = z.object({
               /** Merge strategy to use for PR auto-complete. */
               merge_method: z.enum(['merge', 'squash', 'rebase']).default('squash'),
             })
-            .default({}),
+            .prefault({}),
         ])
         .default(false),
       /** Draft PR instead of ready-for-review. */
@@ -190,7 +190,7 @@ export const CadreConfigSchema = z.object({
       /** Link PR to the issue (closes #N). */
       linkIssue: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
 
   options: z
     .object({
@@ -237,7 +237,7 @@ export const CadreConfigSchema = z.object({
       /** Post an issue comment with the cost summary when the pipeline finishes. */
       postCostComment: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
 
   /** Build and test commands to run inside the worktree. */
   commands: z
@@ -251,7 +251,7 @@ export const CadreConfigSchema = z.object({
       /** Lint command. */
       lint: z.string().optional(),
     })
-    .default({}),
+    .prefault({}),
 
   environment: z
     .object({
@@ -259,7 +259,7 @@ export const CadreConfigSchema = z.object({
       shell: z.string().optional(),
       extraPath: z.array(z.string()).default([]),
     })
-    .default({}),
+    .prefault({}),
 
   /**
    * GitHub MCP server and authentication configuration.
@@ -335,7 +335,7 @@ export const CadreConfigSchema = z.object({
       /** Post a comment when approaching the token budget limit. */
       onBudgetWarning: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
 
   /**
    * Azure DevOps configuration.
@@ -364,7 +364,7 @@ export const CadreConfigSchema = z.object({
   notifications: NotificationsConfigSchema,
 
   /** Agent backend configuration. */
-  agent: AgentConfigSchema.default({}),
+  agent: AgentConfigSchema.prefault({}),
 
   /** Review response configuration. */
   reviewResponse: z
@@ -372,7 +372,7 @@ export const CadreConfigSchema = z.object({
       /** Automatically post a reply comment when a review thread is resolved. */
       autoReplyOnResolved: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
 
   /** DAG (dependency graph) configuration for ordering issues by dependency. */
   dag: z
@@ -421,7 +421,6 @@ export const CadreConfigSchema = z.object({
        */
       indexTimeout: z.number().int().min(1000).default(120_000),
     })
-    .default({ enabled: false })
     .optional(),
 });
 

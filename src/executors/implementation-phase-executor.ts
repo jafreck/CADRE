@@ -282,7 +282,7 @@ export class ImplementationPhaseExecutor implements PhaseExecutor {
                 review = await ctx.services.resultParser.parseReview(reviewPath);
               } catch (err) {
                 if (err instanceof ZodError) {
-                  const msg = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
+                  const msg = err.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
                   ctx.services.logger.warn(`Review validation failed (will retry): ${msg}`, {
                     workItemId: String(ctx.issue.number),
                     sessionId: session.id,
