@@ -26,7 +26,7 @@ jobs:
       - name: Install latest npm
         run: npm install -g npm@latest
 
-      - run: npm install --legacy-peer-deps
+      - run: npm ci
 
       - name: Build framework
         run: npm run build -w packages/framework
