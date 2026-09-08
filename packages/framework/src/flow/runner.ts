@@ -4,12 +4,16 @@ import {
   FlowContractError,
   FlowCycleError,
   FlowExecutionError,
+  FlowLoopExhaustionError,
+  FlowTimeoutError,
   type DataRef,
   type FlowCheckpointSnapshot,
   type FlowContracts,
   type FlowDefinition,
   type FlowExecutionContext,
   type FlowNode,
+  type FlowLifecycleEvent,
+  type FlowLoopResult,
   type FlowRunResult,
   type FlowRunnerOptions,
   type FlowRunStatus,
@@ -17,11 +21,16 @@ import {
 
 interface RunnerState<TContext> {
   flow: FlowDefinition<TContext>;
+  checkpointId: string;
+  executionRoot: string[];
   indexedNodes: Map<string, FlowNode<TContext>>;
   contracts: FlowContracts;
   context: TContext;
   outputs: Record<string, unknown>;
+  outputOwners: Map<string, string>;
   executionOutputs: Record<string, unknown>;
+  executionOutputOrder: Map<string, number>;
+  nextOutputOrder: number;
   completedExecutionIds: Set<string>;
   failedExecutionIds: Set<string>;
   hadError: boolean;
@@ -29,9 +38,32 @@ interface RunnerState<TContext> {
   startedAt: string;
   aborted: boolean;
   abortReason?: FlowRunStatus;
+  terminalError?: FlowExecutionError;
+  controller: AbortController;
+  checkpointWriteTail: Promise<void>;
   options: Required<Pick<FlowRunnerOptions<TContext>, 'concurrency' | 'continueOnError'>>
-    & Pick<FlowRunnerOptions<TContext>, 'checkpoint' | 'hooks' | 'timeoutMs' | 'signal'>
+    & Pick<FlowRunnerOptions<TContext>, 'checkpoint' | 'hooks' | 'timeoutMs' | 'signal' | 'executionPathPrefix'>
     & { concurrentNodes: boolean };
+}
+
+interface NodeExecutionOutcome {
+  output: unknown;
+  attempt: number;
+  startedAt: string;
+}
+
+type FatalHandler = (error: FlowExecutionError) => void;
+
+interface RetryStateSnapshot {
+  outputs: Record<string, unknown>;
+  outputOwners: Map<string, string>;
+  executionOutputs: Record<string, unknown>;
+  executionOutputOrder: Map<string, number>;
+  completedExecutionIds: Set<string>;
+  failedExecutionIds: Set<string>;
+  hadError: boolean;
+  lastError?: FlowExecutionError;
+  terminalError?: FlowExecutionError;
 }
 
 export class FlowRunner<TContext = Record<string, unknown>> {
@@ -46,7 +78,11 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       hooks: options.hooks ?? this.defaults.hooks,
       timeoutMs: options.timeoutMs ?? this.defaults.timeoutMs,
       signal: options.signal ?? this.defaults.signal,
+      executionPathPrefix: options.executionPathPrefix ?? this.defaults.executionPathPrefix,
     };
+    const externalSignal = merged.signal;
+    const controller = new AbortController();
+    merged.signal = controller.signal;
 
     // Validate all dependsOn references point to real node IDs
     this.validateDependsOnRefs(flow);
@@ -54,31 +90,27 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     const startedAt = new Date().toISOString();
     const state: RunnerState<TContext> = {
       flow,
+      checkpointId: [...(merged.executionPathPrefix ?? []), flow.id].join('/'),
+      executionRoot: [...(merged.executionPathPrefix ?? []), flow.id],
       indexedNodes: this.indexNodes(flow.nodes),
       contracts: mergeContracts(flow.contracts, options.contracts ?? this.defaults.contracts),
       context,
       outputs: {},
+      outputOwners: new Map(),
       executionOutputs: {},
+      executionOutputOrder: new Map(),
+      nextOutputOrder: 0,
       completedExecutionIds: new Set(),
       failedExecutionIds: new Set(),
       hadError: false,
       startedAt,
       aborted: false,
+      controller,
+      checkpointWriteTail: Promise.resolve(),
       options: merged,
     };
 
     await this.loadCheckpoint(state);
-
-    // Wire up external abort signal
-    if (merged.signal) {
-      if (merged.signal.aborted) {
-        state.aborted = true;
-        state.abortReason = 'cancelled';
-      } else {
-        const onAbort = (): void => { state.aborted = true; state.abortReason = 'cancelled'; };
-        merged.signal.addEventListener('abort', onAbort, { once: true });
-      }
-    }
 
     if (Object.keys(state.contracts).length > 0) {
       const validation = validateFlowContracts(flow, state.contracts);
@@ -95,19 +127,59 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       }
     }
 
+    // Wire up external abort signal
+    let removeExternalAbortListener: (() => void) | undefined;
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        state.aborted = true;
+        state.abortReason = 'cancelled';
+        controller.abort(externalSignal.reason);
+      } else {
+        const onAbort = (): void => {
+          if (controller.signal.aborted || state.terminalError) return;
+          state.aborted = true;
+          state.abortReason = 'cancelled';
+          controller.abort(externalSignal.reason);
+        };
+        externalSignal.addEventListener('abort', onAbort, { once: true });
+        removeExternalAbortListener = () => externalSignal.removeEventListener('abort', onAbort);
+      }
+    }
+
     // Flow-level timeout
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     if (merged.timeoutMs && merged.timeoutMs > 0) {
       timeoutHandle = setTimeout(() => {
+        if (controller.signal.aborted || state.terminalError) return;
         state.aborted = true;
         state.abortReason = 'timed-out';
+        controller.abort(new Error(`Flow '${flow.id}' timed out after ${merged.timeoutMs}ms`));
       }, merged.timeoutMs);
     }
 
+    let cancellationBoundaryClosed = false;
+    const closeCancellationBoundary = (): void => {
+      if (cancellationBoundaryClosed) return;
+      cancellationBoundaryClosed = true;
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      timeoutHandle = undefined;
+      removeExternalAbortListener?.();
+      removeExternalAbortListener = undefined;
+    };
+
     try {
-      await this.executeNodeList(state, flow.nodes, [flow.id]);
+      await this.executeNodeList(
+        state,
+        flow.nodes,
+        state.executionRoot,
+        controller.signal,
+        error => { state.terminalError ??= error; },
+      );
+      closeCancellationBoundary();
       const finishedAt = new Date().toISOString();
-      const status: FlowRunStatus = state.aborted
+      const status: FlowRunStatus = state.terminalError
+        ? 'failed'
+        : state.aborted
         ? (state.abortReason ?? 'cancelled')
         : state.hadError ? 'failed' : 'completed';
       await this.persistCheckpoint(state, status, state.lastError?.message);
@@ -123,12 +195,15 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         error: state.lastError,
       };
     } catch (error) {
-      const wrapped = this.wrapError(flow.id, 'flow', flow.id, error);
-      const status: FlowRunStatus = state.aborted
+      closeCancellationBoundary();
+      const wrapped = state.terminalError ?? this.wrapError(flow.id, 'flow', state.checkpointId, error);
+      const status: FlowRunStatus = state.terminalError
+        ? 'failed'
+        : state.aborted
         ? (state.abortReason ?? 'cancelled')
         : 'failed';
       await this.persistCheckpoint(state, status, wrapped.message);
-      if (!merged.continueOnError) {
+      if (!merged.continueOnError && (state.terminalError || !state.aborted)) {
         throw wrapped;
       }
       return {
@@ -143,18 +218,23 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         error: wrapped,
       };
     } finally {
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+      closeCancellationBoundary();
     }
   }
 
   private async loadCheckpoint(state: RunnerState<TContext>): Promise<void> {
     if (!state.options.checkpoint) return;
-    const snapshot = await state.options.checkpoint.load(state.flow.id);
+    const snapshot = await state.options.checkpoint.load(state.checkpointId);
     if (!snapshot) return;
     state.outputs = { ...snapshot.outputs };
     state.executionOutputs = { ...snapshot.executionOutputs };
     for (const executionId of snapshot.completedExecutionIds) {
       state.completedExecutionIds.add(executionId);
+      state.executionOutputOrder.set(executionId, ++state.nextOutputOrder);
+      const nodeId = executionId.split('/').at(-1);
+      if (nodeId && Object.prototype.hasOwnProperty.call(snapshot.outputs, nodeId)) {
+        state.outputOwners.set(nodeId, executionId);
+      }
     }
     // Restore context from checkpoint if available
     if (snapshot.context !== undefined) {
@@ -169,7 +249,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
   ): Promise<void> {
     if (!state.options.checkpoint) return;
     const snapshot: FlowCheckpointSnapshot<TContext> = {
-      flowId: state.flow.id,
+      flowId: state.checkpointId,
       status,
       startedAt: state.startedAt,
       updatedAt: new Date().toISOString(),
@@ -179,13 +259,26 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       context: state.context,
       error,
     };
-    await state.options.checkpoint.save(snapshot);
+    const write = state.checkpointWriteTail.then(() => state.options.checkpoint!.save(snapshot));
+    state.checkpointWriteTail = write.catch(() => undefined);
+    await write;
   }
 
-  private buildExecutionContext(state: RunnerState<TContext>, executionPath: string[]): FlowExecutionContext<TContext> {
+  private buildExecutionContext(
+    state: RunnerState<TContext>,
+    executionPath: string[],
+    executionId = executionPath.join('/'),
+    attempt = 1,
+    signal: AbortSignal = state.options.signal!,
+    startedAt = new Date().toISOString(),
+  ): FlowExecutionContext<TContext> {
     return {
       flowId: state.flow.id,
+      executionId,
       executionPath,
+      attempt,
+      startedAt,
+      signal,
       context: state.context,
       outputs: state.outputs,
       executionOutputs: state.executionOutputs,
@@ -198,11 +291,18 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     state: RunnerState<TContext>,
     nodes: FlowNode<TContext>[],
     executionPath: string[],
+    signal: AbortSignal = state.options.signal!,
+    onFatal?: FatalHandler,
+    continueOnError = state.options.continueOnError,
   ): Promise<Record<string, unknown>> {
     if (state.options.concurrentNodes) {
-      return this.executeNodeListConcurrent(state, nodes, executionPath);
+      return this.executeNodeListConcurrent(
+        state, nodes, executionPath, signal, onFatal, continueOnError,
+      );
     }
-    return this.executeNodeListSequential(state, nodes, executionPath);
+    return this.executeNodeListSequential(
+      state, nodes, executionPath, signal, onFatal, continueOnError,
+    );
   }
 
   // ── Sequential path (default — preserves declaration-order execution) ─────
@@ -211,6 +311,9 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     state: RunnerState<TContext>,
     nodes: FlowNode<TContext>[],
     executionPath: string[],
+    signal: AbortSignal,
+    onFatal?: FatalHandler,
+    continueOnError = state.options.continueOnError,
   ): Promise<Record<string, unknown>> {
     this.validateNodeIds(nodes, executionPath.join('/'));
 
@@ -221,7 +324,7 @@ export class FlowRunner<TContext = Record<string, unknown>> {
 
     while (pending.length > 0) {
       // Check for abort
-      if (state.aborted) break;
+      if (signal.aborted) break;
 
       const ready = pending.filter((node) => (node.dependsOn ?? []).every((dependency) => localResolved.has(dependency)));
 
@@ -231,22 +334,30 @@ export class FlowRunner<TContext = Record<string, unknown>> {
       }
 
       for (const node of ready) {
-        if (state.aborted) break;
+        if (signal.aborted) break;
 
         const executionId = `${executionPath.join('/')}/${node.id}`;
 
         // ── Upstream failure propagation ───────────────────────────────
         const failedDeps = (node.dependsOn ?? []).filter((d) => localFailed.has(d));
         if (failedDeps.length > 0) {
+          const now = new Date().toISOString();
           if (state.options.hooks?.onUpstreamFailure) {
             const output = await state.options.hooks.onUpstreamFailure(node.id, node, failedDeps);
             localOutputs[node.id] = output;
             state.outputs[node.id] = output;
+            state.outputOwners.set(node.id, executionId);
           }
           state.hadError = true;
           localResolved.add(node.id);
           localFailed.add(node.id);
           state.failedExecutionIds.add(executionId);
+          await this.emitLifecycle(state, {
+            type: 'node-upstream-failed', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath: [...executionPath, node.id], attempt: 0,
+            startedAt: now, finishedAt: now, durationMs: 0,
+            reason: 'upstream-failure', failedDependencies: failedDeps,
+          });
           await this.persistCheckpoint(state, 'failed');
           const index = pending.findIndex((candidate) => candidate.id === node.id);
           pending.splice(index, 1);
@@ -255,6 +366,12 @@ export class FlowRunner<TContext = Record<string, unknown>> {
 
         if (state.completedExecutionIds.has(executionId)) {
           await state.options.hooks?.onNodeSkip?.(node.id, node);
+          const now = new Date().toISOString();
+          await this.emitLifecycle(state, {
+            type: 'node-skipped', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath: [...executionPath, node.id], attempt: 0,
+            startedAt: now, finishedAt: now, durationMs: 0, reason: 'checkpoint',
+          });
           localResolved.add(node.id);
           localOutputs[node.id] = state.executionOutputs[executionId];
           const index = pending.findIndex((candidate) => candidate.id === node.id);
@@ -262,27 +379,64 @@ export class FlowRunner<TContext = Record<string, unknown>> {
           continue;
         }
 
+        let completedOutcome: NodeExecutionOutcome | undefined;
         try {
-          await state.options.hooks?.onNodeStart?.(node.id, node);
-          const output = await this.executeNodeWithRetry(state, node, [...executionPath, node.id], executionId);
+          const outcome = await this.executeNodeWithRetry(
+            state,
+            node,
+            [...executionPath, node.id],
+            executionId,
+            signal,
+            continueOnError ? undefined : onFatal,
+          );
+          completedOutcome = outcome;
+          const output = outcome.output;
+          await state.options.hooks?.onNodeComplete?.(node.id, node, output);
+          const finishedAt = new Date().toISOString();
+          await this.emitLifecycle(state, {
+            type: 'node-complete', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath: [...executionPath, node.id],
+            attempt: outcome.attempt, startedAt: outcome.startedAt, finishedAt,
+            durationMs: Date.parse(finishedAt) - Date.parse(outcome.startedAt), output,
+          });
           state.outputs[node.id] = output;
+          state.outputOwners.set(node.id, executionId);
           state.executionOutputs[executionId] = output;
+          state.executionOutputOrder.set(executionId, ++state.nextOutputOrder);
           state.completedExecutionIds.add(executionId);
           localOutputs[node.id] = output;
           localResolved.add(node.id);
-          await state.options.hooks?.onNodeComplete?.(node.id, node, output);
           await this.persistCheckpoint(state, 'completed');
         } catch (error) {
           const wrapped = this.wrapError(state.flow.id, node.id, executionId, error);
+          if (signal.aborted) {
+            state.lastError = wrapped;
+            throw wrapped;
+          }
           state.hadError = true;
           state.lastError = wrapped;
+          if (completedOutcome) {
+            const finishedAt = new Date().toISOString();
+            try {
+              await this.emitLifecycle(state, {
+                type: 'node-failed', flowId: state.flow.id, nodeId: node.id, node,
+                executionId, executionPath: [...executionPath, node.id],
+                attempt: completedOutcome.attempt, startedAt: completedOutcome.startedAt,
+                finishedAt,
+                durationMs: Date.parse(finishedAt) - Date.parse(completedOutcome.startedAt),
+                error: wrapped, willRetry: false,
+              });
+            } catch { /* preserve the original completion-hook failure */ }
+          }
           localResolved.add(node.id);
           localFailed.add(node.id);
           state.failedExecutionIds.add(executionId);
-          await this.persistCheckpoint(state, 'failed', wrapped.message);
-          if (!state.options.continueOnError) {
+          if (!continueOnError) {
+            state.terminalError ??= wrapped;
+            onFatal?.(wrapped);
             throw wrapped;
           }
+          await this.persistCheckpoint(state, 'failed', wrapped.message);
         }
 
         const index = pending.findIndex((candidate) => candidate.id === node.id);
@@ -295,10 +449,13 @@ export class FlowRunner<TContext = Record<string, unknown>> {
 
   // ── Concurrent path (event-driven, fine-grained dep scheduling) ───────────
 
-  private executeNodeListConcurrent(
+  private async executeNodeListConcurrent(
     state: RunnerState<TContext>,
     nodes: FlowNode<TContext>[],
     executionPath: string[],
+    signal: AbortSignal,
+    onFatal?: FatalHandler,
+    continueOnError = state.options.continueOnError,
   ): Promise<Record<string, unknown>> {
     this.validateNodeIds(nodes, executionPath.join('/'));
 
@@ -306,118 +463,166 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     const localResolved = new Set<string>();
     const localFailed = new Set<string>();
     const localOutputs: Record<string, unknown> = {};
-    const limit = pLimit(state.options.concurrency);
-    const inFlight = new Set<string>();
+    const scheduled = new Set<string>();
+    const active = new Set<Promise<void>>();
+    const scope = this.createLinkedController(signal);
+    const concurrency = Number.isFinite(state.options.concurrency)
+      ? Math.max(1, Math.floor(state.options.concurrency))
+      : Math.max(1, nodes.length);
+    let firstFatalError: FlowExecutionError | undefined;
 
-    if (nodeMap.size === 0) {
-      return Promise.resolve(localOutputs);
-    }
+    const selectFatal = (error: FlowExecutionError): void => {
+      if (firstFatalError) return;
+      firstFatalError = error;
+      onFatal?.(error);
+      scope.controller.abort(error);
+    };
 
-    return new Promise<Record<string, unknown>>((resolve, reject) => {
-      let settled = false;
-
-      const finish = (error?: Error): void => {
-        if (settled) return;
-        settled = true;
-        if (error) reject(error);
-        else resolve(localOutputs);
-      };
-
-      const processNode = async (node: FlowNode<TContext>): Promise<void> => {
-        if (settled || state.aborted) return;
-        const executionId = `${executionPath.join('/')}/${node.id}`;
-
-        // ── Upstream failure propagation ─────────────────────────────
-        const failedDeps = (node.dependsOn ?? []).filter((d) => localFailed.has(d));
+    const processNode = async (node: FlowNode<TContext>): Promise<void> => {
+      if (scope.controller.signal.aborted) return;
+      const executionId = `${executionPath.join('/')}/${node.id}`;
+      const nodePath = [...executionPath, node.id];
+      try {
+        const failedDeps = (node.dependsOn ?? []).filter(dependency => localFailed.has(dependency));
         if (failedDeps.length > 0) {
-          if (state.options.hooks?.onUpstreamFailure) {
-            try {
-              const output = await state.options.hooks.onUpstreamFailure(node.id, node, failedDeps);
-              localOutputs[node.id] = output;
-              state.outputs[node.id] = output;
-            } catch { /* hook errors do not stop propagation */ }
+          const now = new Date().toISOString();
+          const output = await state.options.hooks?.onUpstreamFailure?.(node.id, node, failedDeps);
+          if (output !== undefined) {
+            localOutputs[node.id] = output;
+            state.outputs[node.id] = output;
+            state.outputOwners.set(node.id, executionId);
           }
           state.hadError = true;
           localResolved.add(node.id);
           localFailed.add(node.id);
           state.failedExecutionIds.add(executionId);
+          await this.emitLifecycle(state, {
+            type: 'node-upstream-failed', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath: nodePath, attempt: 0,
+            startedAt: now, finishedAt: now, durationMs: 0,
+            reason: 'upstream-failure', failedDependencies: failedDeps,
+          });
+          await this.persistCheckpoint(state, 'failed');
           return;
         }
 
-        // ── Checkpoint skip ─────────────────────────────────────────
         if (state.completedExecutionIds.has(executionId)) {
-          try {
-            await state.options.hooks?.onNodeSkip?.(node.id, node);
-          } catch { /* swallow */ }
+          await state.options.hooks?.onNodeSkip?.(node.id, node);
+          const now = new Date().toISOString();
+          await this.emitLifecycle(state, {
+            type: 'node-skipped', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath: nodePath, attempt: 0,
+            startedAt: now, finishedAt: now, durationMs: 0, reason: 'checkpoint',
+          });
           localResolved.add(node.id);
           localOutputs[node.id] = state.executionOutputs[executionId];
           return;
         }
 
-        // ── Normal execution ────────────────────────────────────────
+        let completedOutcome: NodeExecutionOutcome | undefined;
         try {
-          await state.options.hooks?.onNodeStart?.(node.id, node);
-          const output = await this.executeNodeWithRetry(state, node, [...executionPath, node.id], executionId);
+          const outcome = await this.executeNodeWithRetry(
+            state,
+            node,
+            nodePath,
+            executionId,
+            scope.controller.signal,
+            continueOnError ? undefined : selectFatal,
+          );
+          completedOutcome = outcome;
+          if (scope.controller.signal.aborted) return;
+          const output = outcome.output;
+          await state.options.hooks?.onNodeComplete?.(node.id, node, output);
+          const finishedAt = new Date().toISOString();
+          await this.emitLifecycle(state, {
+            type: 'node-complete', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath: nodePath, attempt: outcome.attempt,
+            startedAt: outcome.startedAt, finishedAt,
+            durationMs: Date.parse(finishedAt) - Date.parse(outcome.startedAt), output,
+          });
           state.outputs[node.id] = output;
+          state.outputOwners.set(node.id, executionId);
           state.executionOutputs[executionId] = output;
+          state.executionOutputOrder.set(executionId, ++state.nextOutputOrder);
           state.completedExecutionIds.add(executionId);
           localOutputs[node.id] = output;
           localResolved.add(node.id);
-          await state.options.hooks?.onNodeComplete?.(node.id, node, output);
           await this.persistCheckpoint(state, 'completed');
         } catch (error) {
           const wrapped = this.wrapError(state.flow.id, node.id, executionId, error);
+          if (signal.aborted || (scope.controller.signal.aborted && firstFatalError)) return;
           state.hadError = true;
           state.lastError = wrapped;
+          if (completedOutcome) {
+            const finishedAt = new Date().toISOString();
+            try {
+              await this.emitLifecycle(state, {
+                type: 'node-failed', flowId: state.flow.id, nodeId: node.id, node,
+                executionId, executionPath: nodePath,
+                attempt: completedOutcome.attempt, startedAt: completedOutcome.startedAt,
+                finishedAt,
+                durationMs: Date.parse(finishedAt) - Date.parse(completedOutcome.startedAt),
+                error: wrapped, willRetry: false,
+              });
+            } catch { /* preserve the original completion-hook failure */ }
+          }
           localResolved.add(node.id);
           localFailed.add(node.id);
           state.failedExecutionIds.add(executionId);
-          await this.persistCheckpoint(state, 'failed', wrapped.message);
-          if (!state.options.continueOnError) {
-            finish(wrapped);
+          if (!continueOnError) {
+            selectFatal(wrapped);
             return;
           }
+          await this.persistCheckpoint(state, 'failed', wrapped.message);
         }
-      };
+      } catch (error) {
+        if (signal.aborted || (scope.controller.signal.aborted && firstFatalError)) return;
+        const wrapped = this.wrapError(state.flow.id, node.id, executionId, error);
+        state.hadError = true;
+        state.lastError = wrapped;
+        localResolved.add(node.id);
+        localFailed.add(node.id);
+        state.failedExecutionIds.add(executionId);
+        selectFatal(wrapped);
+      }
+    };
 
-      const scheduleReady = (): void => {
-        if (settled || state.aborted) {
-          if (state.aborted && !settled) finish();
-          return;
-        }
+    try {
+      while (localResolved.size < nodeMap.size && !scope.controller.signal.aborted) {
+        const ready = [...nodeMap.values()].filter(node =>
+          !localResolved.has(node.id) &&
+          !scheduled.has(node.id) &&
+          (node.dependsOn ?? []).every(dependency => localResolved.has(dependency)),
+        );
 
-        // Check completion
-        if (localResolved.size >= nodeMap.size) {
-          finish();
-          return;
-        }
-
-        let newlyScheduled = false;
-        for (const [id, node] of nodeMap) {
-          if (localResolved.has(id) || inFlight.has(id)) continue;
-          const deps = node.dependsOn ?? [];
-          if (!deps.every((d) => localResolved.has(d))) continue;
-
-          newlyScheduled = true;
-          inFlight.add(id);
-          limit(async () => {
-            await processNode(node);
-            inFlight.delete(id);
-            scheduleReady();
-          }).catch((err) => {
-            if (!settled) finish(err instanceof Error ? err : new Error(String(err)));
-          });
+        while (active.size < concurrency && ready.length > 0 && !scope.controller.signal.aborted) {
+          const node = ready.shift()!;
+          scheduled.add(node.id);
+          let job!: Promise<void>;
+          job = processNode(node).finally(() => active.delete(job));
+          active.add(job);
         }
 
-        // Cycle detection: nothing in flight, nothing new, but not all resolved
-        if (!newlyScheduled && inFlight.size === 0 && localResolved.size < nodeMap.size) {
-          const unresolved = [...nodeMap.keys()].filter((id) => !localResolved.has(id)).join(', ');
-          finish(new FlowCycleError(`No executable nodes remain in scope ${executionPath.join('/')} (pending: ${unresolved})`));
+        if (active.size === 0) {
+          if (scope.controller.signal.aborted) break;
+          const unresolved = [...nodeMap.keys()].filter(id => !localResolved.has(id)).join(', ');
+          throw new FlowCycleError(
+            `No executable nodes remain in scope ${executionPath.join('/')} (pending: ${unresolved})`,
+          );
         }
-      };
 
-      scheduleReady();
-    });
+        await Promise.race(active);
+      }
+
+      await Promise.allSettled(active);
+      if (firstFatalError) {
+        await this.persistCheckpoint(state, 'failed', firstFatalError.message);
+        throw firstFatalError;
+      }
+      return localOutputs;
+    } finally {
+      scope.unlink();
+    }
   }
 
   // ── Per-node retry + timeout wrapper ───────────────────────────────────────
@@ -427,27 +632,90 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     node: FlowNode<TContext>,
     executionPath: string[],
     executionId: string,
-  ): Promise<unknown> {
+    signal: AbortSignal,
+    onFatal?: FatalHandler,
+  ): Promise<NodeExecutionOutcome> {
     const maxAttempts = (node.retry?.maxAttempts ?? 0) + 1;
     const backoff = node.retry?.backoff ?? 'fixed';
     const baseDelay = node.retry?.delayMs ?? 1000;
 
     let lastError: unknown;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (state.aborted) {
+    for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex++) {
+      const attempt = attemptIndex + 1;
+      const retryState = this.captureRetryState(state);
+      const attemptFatalHandler = attemptIndex === maxAttempts - 1 ? onFatal : undefined;
+      if (signal.aborted) {
         throw new Error(`Flow aborted (${state.abortReason ?? 'cancelled'})`);
       }
+      const startedAt = new Date().toISOString();
       try {
-        return await this.executeNodeWithTimeout(state, node, executionPath, executionId);
+        await state.options.hooks?.onNodeStart?.(node.id, node);
+        await this.emitLifecycle(state, {
+          type: 'node-start', flowId: state.flow.id, nodeId: node.id, node,
+          executionId, executionPath, attempt, startedAt,
+        });
+        if (signal.aborted) {
+          throw new FlowExecutionError(
+            `Flow aborted (${state.abortReason ?? 'cancelled'})`,
+            state.flow.id, node.id, executionId, signal.reason,
+          );
+        }
+        const output = await this.executeNodeWithTimeout(
+          state, node, executionPath, executionId, attempt, signal, startedAt,
+          attemptFatalHandler,
+        );
+        if (signal.aborted) throw new Error(`Flow aborted (${state.abortReason ?? 'cancelled'})`);
+        return { output, attempt, startedAt };
       } catch (error) {
         lastError = error;
-        if (attempt < maxAttempts - 1) {
+        const wrapped = this.wrapError(state.flow.id, node.id, executionId, error);
+        const finishedAt = new Date().toISOString();
+        if (signal.aborted) {
+          await this.emitLifecycle(state, {
+            type: 'node-cancelled', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath, attempt, startedAt, finishedAt,
+            durationMs: Date.parse(finishedAt) - Date.parse(startedAt),
+            error: wrapped,
+            reason: state.abortReason === 'timed-out' ? 'timed-out' : 'cancelled',
+          });
+          throw wrapped;
+        }
+        const willRetry = attemptIndex < maxAttempts - 1;
+        if (!willRetry) onFatal?.(wrapped);
+        await this.emitLifecycle(state, {
+          type: 'node-failed', flowId: state.flow.id, nodeId: node.id, node,
+          executionId, executionPath, attempt, startedAt, finishedAt,
+          durationMs: Date.parse(finishedAt) - Date.parse(startedAt),
+          error: wrapped, willRetry,
+          ...(wrapped instanceof FlowTimeoutError ? { reason: 'timed-out' as const } : {}),
+        });
+        if (willRetry) {
+          this.restoreRetryState(state, retryState, executionId);
+          await this.persistCheckpoint(state, 'running');
           const delay = backoff === 'exponential'
-            ? baseDelay * Math.pow(2, attempt)
+            ? baseDelay * Math.pow(2, attemptIndex)
             : backoff === 'linear'
-              ? baseDelay * (attempt + 1)
+              ? baseDelay * attempt
               : baseDelay;
-          await new Promise((r) => setTimeout(r, delay));
+          try {
+            await this.waitForDelay(delay, signal);
+          } catch (backoffError) {
+            if (signal.aborted) {
+              const cancellation = this.wrapError(
+                state.flow.id, node.id, executionId, backoffError,
+              );
+              const cancelledAt = new Date().toISOString();
+              await this.emitLifecycle(state, {
+                type: 'node-cancelled', flowId: state.flow.id, nodeId: node.id, node,
+                executionId, executionPath, attempt, startedAt, finishedAt: cancelledAt,
+                durationMs: Date.parse(cancelledAt) - Date.parse(startedAt),
+                error: cancellation,
+                reason: state.abortReason === 'timed-out' ? 'timed-out' : 'cancelled',
+              });
+              throw cancellation;
+            }
+            throw backoffError;
+          }
         }
       }
     }
@@ -459,25 +727,51 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     node: FlowNode<TContext>,
     executionPath: string[],
     executionId: string,
+    attempt: number,
+    signal: AbortSignal,
+    startedAt: string,
+    onFatal?: FatalHandler,
   ): Promise<unknown> {
     if (!node.timeoutMs || node.timeoutMs <= 0) {
-      return this.executeNode(state, node, executionPath, executionId);
+      return this.executeNode(
+        state, node, executionPath, executionId, attempt, signal, startedAt, onFatal,
+      );
     }
 
-    return new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new FlowExecutionError(
-          `Node '${node.id}' timed out after ${node.timeoutMs}ms`,
-          state.flow.id,
-          node.id,
-          executionId,
-        ));
-      }, node.timeoutMs);
+    const controller = new AbortController();
+    const onParentAbort = (): void => controller.abort(signal.reason);
+    if (signal.aborted) controller.abort(signal.reason);
+    else signal.addEventListener('abort', onParentAbort, { once: true });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      if (controller.signal.aborted) return;
+      timedOut = true;
+      controller.abort(new Error(`Node '${node.id}' timed out after ${node.timeoutMs}ms`));
+    }, node.timeoutMs);
 
-      this.executeNode(state, node, executionPath, executionId)
-        .then(resolve, reject)
-        .finally(() => clearTimeout(timer));
-    });
+    try {
+      const output = await this.executeNode(
+        state, node, executionPath, executionId, attempt, controller.signal, startedAt, onFatal,
+      );
+      if (timedOut) {
+        throw new FlowTimeoutError(
+          `Node '${node.id}' timed out after ${node.timeoutMs}ms`,
+          state.flow.id, node.id, executionId,
+        );
+      }
+      return output;
+    } catch (error) {
+      if (timedOut) {
+        throw new FlowTimeoutError(
+          `Node '${node.id}' timed out after ${node.timeoutMs}ms`,
+          state.flow.id, node.id, executionId, error,
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onParentAbort);
+    }
   }
 
   private async executeNode(
@@ -485,8 +779,12 @@ export class FlowRunner<TContext = Record<string, unknown>> {
     node: FlowNode<TContext>,
     executionPath: string[],
     executionId: string,
+    attempt: number,
+    signal: AbortSignal,
+    startedAt: string,
+    onFatal?: FatalHandler,
   ): Promise<unknown> {
-    const context = this.buildExecutionContext(state, executionPath);
+    const context = this.buildExecutionContext(state, executionPath, executionId, attempt, signal, startedAt);
     const resolvedInput = this.resolveInput(state, node.input, context, node.id, executionId, 'input');
     this.validateConsumerInput(state, node.id, executionId, resolvedInput, 'input', 'flow-input');
 
@@ -507,45 +805,121 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         const matches = await node.when(context, resolvedInput);
         const branch = matches ? node.then : (node.else ?? []);
         const branchKey = matches ? 'then' : 'else';
-        const branchOutputs = await this.executeNodeList(state, branch, [...executionPath, branchKey]);
+        const branchOutputs = await this.executeNodeList(
+          state, branch, [...executionPath, branchKey], signal, onFatal, false,
+        );
         return { branch: branchKey, outputs: branchOutputs };
       }
       case 'loop': {
         const outputs: unknown[] = [];
         let iterations = 0;
+        let termination: FlowLoopResult['termination'] = 'max-iterations';
+        let converged = false;
+        let skipped = false;
 
         while (iterations < node.maxIterations) {
-          if (state.aborted) break;
-          const loopCtx = this.buildExecutionContext(state, [...executionPath, `iteration-${iterations + 1}`]);
+          if (signal.aborted) {
+            termination = 'cancelled';
+            break;
+          }
+          const loopCtx = this.buildExecutionContext(
+            state, [...executionPath, `iteration-${iterations + 1}`],
+            executionId, attempt, signal, startedAt,
+          );
           if (node.while) {
             const shouldContinue = await node.while(loopCtx);
-            if (!shouldContinue) break;
+            if (signal.aborted) {
+              termination = 'cancelled';
+              break;
+            }
+            if (!shouldContinue) {
+              termination = 'while';
+              converged = true;
+              skipped = iterations === 0;
+              break;
+            }
           }
 
           const iterationOutputs = await this.executeNodeList(
             state,
             node.do,
             [...executionPath, `iteration-${iterations + 1}`],
+            signal,
+            onFatal,
+            false,
           );
+          if (signal.aborted) {
+            termination = 'cancelled';
+            break;
+          }
           outputs.push(iterationOutputs);
           iterations += 1;
 
           if (node.until) {
-            const done = await node.until(this.buildExecutionContext(state, [...executionPath, `iteration-${iterations}`]));
+            const done = await node.until(this.buildExecutionContext(
+              state, [...executionPath, `iteration-${iterations}`],
+              executionId, attempt, signal, startedAt,
+            ));
+            if (signal.aborted) {
+              termination = 'cancelled';
+              break;
+            }
             if (done) {
+              termination = 'until';
+              converged = true;
               break;
             }
           }
         }
 
-        // Fire onSkip when the loop ran 0 iterations
-        if (iterations === 0 && node.onSkip) {
-          const skipCtx = this.buildExecutionContext(state, executionPath);
-          const skipOutput = await node.onSkip(skipCtx);
-          return { iterations: 0, outputs: [], skipped: true, skipOutput };
+        if (
+          termination === 'max-iterations' &&
+          node.while &&
+          iterations === node.maxIterations &&
+          !signal.aborted
+        ) {
+          const shouldContinue = await node.while(this.buildExecutionContext(
+            state, [...executionPath, `iteration-${iterations + 1}`],
+            executionId, attempt, signal, startedAt,
+          ));
+          if (signal.aborted) {
+            termination = 'cancelled';
+          } else if (!shouldContinue) {
+            termination = 'while';
+            converged = true;
+          }
         }
 
-        return { iterations, outputs };
+        if (signal.aborted) termination = 'cancelled';
+        skipped = skipped || (iterations === 0 && termination !== 'cancelled');
+        const result: FlowLoopResult = {
+          iterations,
+          outputs,
+          termination,
+          converged,
+          exhausted: termination === 'max-iterations',
+        };
+
+        if (skipped) {
+          const skipCtx = this.buildExecutionContext(
+            state, executionPath, executionId, attempt, signal, startedAt,
+          );
+          const skipOutput = await node.onSkip?.(skipCtx);
+          result.skipped = true;
+          if (node.onSkip) result.skipOutput = skipOutput;
+          await state.options.hooks?.onNodeSkip?.(node.id, node);
+          const finishedAt = new Date().toISOString();
+          await this.emitLifecycle(state, {
+            type: 'node-skipped', flowId: state.flow.id, nodeId: node.id, node,
+            executionId, executionPath, attempt, startedAt, finishedAt,
+            durationMs: Date.parse(finishedAt) - Date.parse(startedAt), output: skipOutput,
+          });
+        }
+
+        if (node.requireConvergence && result.exhausted) {
+          throw new FlowLoopExhaustionError(state.flow.id, node.id, executionId, result);
+        }
+        return result;
       }
       case 'sequence': {
         // Expand sequence: auto-wire dependsOn to previous sibling
@@ -557,22 +931,50 @@ export class FlowRunner<TContext = Record<string, unknown>> {
             dependsOn: child.dependsOn ?? [prev.id],
           };
         });
-        const seqOutputs = await this.executeNodeList(state, wiredNodes, executionPath);
+        const seqOutputs = await this.executeNodeList(
+          state, wiredNodes, executionPath, signal, onFatal, false,
+        );
         return seqOutputs;
       }
       case 'parallel': {
         const entries = Object.entries(node.branches);
         const branchResults: Record<string, unknown> = {};
         const limit = pLimit(Math.max(1, Math.floor(node.concurrency ?? state.options.concurrency)));
-
-        await Promise.all(
-          entries.map(([branchId, branchNodes]) =>
-            limit(async () => {
-              const result = await this.executeNodeList(state, branchNodes, [...executionPath, branchId]);
-              branchResults[branchId] = result;
-            }),
-          ),
-        );
+        const scope = this.createLinkedController(signal);
+        let hasFirstError = false;
+        let firstError: unknown;
+        const jobs = entries.map(([branchId, branchNodes]) => limit(async () => {
+          if (scope.controller.signal.aborted) return;
+          try {
+            const result = await this.executeNodeList(
+              state,
+              branchNodes,
+              [...executionPath, branchId],
+              scope.controller.signal,
+              error => {
+                if (!hasFirstError) {
+                  hasFirstError = true;
+                  firstError = error;
+                  onFatal?.(error);
+                  scope.controller.abort(error);
+                }
+              },
+              false,
+            );
+            if (!scope.controller.signal.aborted) branchResults[branchId] = result;
+          } catch (error) {
+            if (signal.aborted) return;
+            if (!hasFirstError) {
+              hasFirstError = true;
+              firstError = error;
+              onFatal?.(this.wrapError(state.flow.id, node.id, executionId, error));
+              scope.controller.abort(error);
+            }
+          }
+        }));
+        await Promise.allSettled(jobs);
+        scope.unlink();
+        if (hasFirstError) throw firstError;
 
         return branchResults;
       }
@@ -587,29 +989,72 @@ export class FlowRunner<TContext = Record<string, unknown>> {
           );
         }
         const mapLimit = pLimit(Math.max(1, Math.floor(node.concurrency ?? state.options.concurrency)));
-        const results = await Promise.all(
-          items.map((item, index) =>
-            mapLimit(async () => {
-              if (state.aborted) return undefined;
-              const itemCtx = this.buildExecutionContext(state, [...executionPath, `item-${index}`]);
-              return node.do(itemCtx, item, index);
-            }),
-          ),
-        );
+        const scope = this.createLinkedController(signal);
+        let hasFirstError = false;
+        let firstError: unknown;
+        const results = new Array<unknown>(items.length);
+        const jobs = items.map((item, index) => mapLimit(async () => {
+          if (scope.controller.signal.aborted) return;
+          try {
+            const itemCtx = this.buildExecutionContext(
+              state, [...executionPath, `item-${index}`],
+              `${executionId}/item-${index}`, attempt, scope.controller.signal, startedAt,
+            );
+            const output = await node.do(itemCtx, item, index);
+            if (!scope.controller.signal.aborted) results[index] = output;
+          } catch (error) {
+            if (!hasFirstError) {
+              hasFirstError = true;
+              firstError = error;
+              onFatal?.(this.wrapError(state.flow.id, node.id, executionId, error));
+              scope.controller.abort(error);
+            }
+          }
+        }));
+        await Promise.allSettled(jobs);
+        scope.unlink();
+        if (hasFirstError) throw firstError;
         return results;
       }
       case 'catch': {
         let tryOutput: unknown;
         let caughtError: Error | undefined;
+        const catchState: RunnerState<TContext> = {
+          ...state,
+          hadError: false,
+          lastError: undefined,
+          terminalError: undefined,
+          failedExecutionIds: new Set(),
+          checkpointWriteTail: Promise.resolve(),
+          options: {
+            ...state.options,
+            continueOnError: false,
+            checkpoint: undefined,
+          },
+        };
         try {
-          tryOutput = await this.executeNodeList(state, node.try, [...executionPath, 'try']);
-        } catch (error) {
-          caughtError = error instanceof Error ? error : new Error(String(error));
-          const catchCtx = this.buildExecutionContext(state, [...executionPath, 'catch']);
-          tryOutput = await node.catch(catchCtx, caughtError);
-        }
-        if (node.finally) {
-          await this.executeNodeList(state, node.finally, [...executionPath, 'finally']);
+          try {
+            tryOutput = await this.executeNodeList(
+              catchState, node.try, [...executionPath, 'try'], signal, undefined, false,
+            );
+          } catch (error) {
+            if (signal.aborted) throw error;
+            caughtError = error instanceof Error ? error : new Error(String(error));
+            const catchCtx = this.buildExecutionContext(
+              state, [...executionPath, 'catch'], executionId, attempt, signal, startedAt,
+            );
+            tryOutput = await node.catch(catchCtx, caughtError);
+          }
+        } finally {
+          if (node.finally) {
+            // Cleanup receives a fresh non-aborted scope so it can release
+            // resources after cancellation without starting recovery work.
+            await this.executeNodeList(
+              state, node.finally, [...executionPath, 'finally'], new AbortController().signal,
+              onFatal,
+              false,
+            );
+          }
         }
         return { output: tryOutput, caught: caughtError?.message };
       }
@@ -619,20 +1064,47 @@ export class FlowRunner<TContext = Record<string, unknown>> {
           : node.flow;
         const childContext = await node.contextMap(context, resolvedInput);
         const childRunner = new FlowRunner();
-        const childOptions: FlowRunnerOptions = { ...(node.runnerOptions ?? {}) };
-        // Propagate abort signal from parent
-        if (state.options.signal && !childOptions.signal) {
-          childOptions.signal = state.options.signal;
-        }
+        const configuredChildOptions = typeof node.runnerOptions === 'function'
+          ? await node.runnerOptions(context, resolvedInput)
+          : (node.runnerOptions ?? {});
+        const childOptions: FlowRunnerOptions = { ...configuredChildOptions };
+        const combinedSignal = this.combineSignals([signal, childOptions.signal]);
+        childOptions.signal = combinedSignal.signal;
+        childOptions.executionPathPrefix = executionPath;
         // Inherit continueOnError from parent when not explicitly set
         if (state.options.continueOnError && childOptions.continueOnError === undefined) {
           childOptions.continueOnError = state.options.continueOnError;
         }
-        const result = await childRunner.run(childFlow, childContext, childOptions);
+        const parentEventHook = state.options.hooks?.onEvent;
+        const childEventHook = childOptions.hooks?.onEvent;
+        if (parentEventHook || childEventHook) {
+          childOptions.hooks = {
+            ...(childOptions.hooks ?? {}),
+            onEvent: async (event) => {
+              await parentEventHook?.(event as FlowLifecycleEvent<TContext>);
+              if (childEventHook !== parentEventHook) await childEventHook?.(event);
+            },
+          };
+        }
+        let result;
+        try {
+          result = await childRunner.run(childFlow, childContext, childOptions);
+        } finally {
+          combinedSignal.dispose();
+        }
         if (result.status === 'failed' && result.error) {
           throw result.error;
         }
-        if (result.status === 'cancelled' || result.status === 'timed-out') {
+        if (result.status === 'timed-out') {
+          throw new FlowTimeoutError(
+            `Subflow '${childFlow.id}' timed out`,
+            state.flow.id,
+            node.id,
+            executionId,
+            result.error,
+          );
+        }
+        if (result.status === 'cancelled') {
           throw new FlowExecutionError(
             `Subflow '${childFlow.id}' ${result.status}`,
             state.flow.id,
@@ -647,6 +1119,159 @@ export class FlowRunner<TContext = Record<string, unknown>> {
         throw new Error(`Unsupported node kind ${(_exhaustive as { kind?: string }).kind ?? 'unknown'}`);
       }
     }
+  }
+
+  private createLinkedController(parent: AbortSignal): {
+    controller: AbortController;
+    unlink: () => void;
+  } {
+    const controller = new AbortController();
+    const onAbort = (): void => controller.abort(parent.reason);
+    if (parent.aborted) controller.abort(parent.reason);
+    else parent.addEventListener('abort', onAbort, { once: true });
+    return {
+      controller,
+      unlink: () => parent.removeEventListener('abort', onAbort),
+    };
+  }
+
+  private captureRetryState(state: RunnerState<TContext>): RetryStateSnapshot {
+    return {
+      outputs: { ...state.outputs },
+      outputOwners: new Map(state.outputOwners),
+      executionOutputs: { ...state.executionOutputs },
+      executionOutputOrder: new Map(state.executionOutputOrder),
+      completedExecutionIds: new Set(state.completedExecutionIds),
+      failedExecutionIds: new Set(state.failedExecutionIds),
+      hadError: state.hadError,
+      lastError: state.lastError,
+      terminalError: state.terminalError,
+    };
+  }
+
+  private restoreRetryState(
+    state: RunnerState<TContext>,
+    snapshot: RetryStateSnapshot,
+    executionId: string,
+  ): void {
+    const prefix = `${executionId}/`;
+    const isAttemptLocal = (id: string): boolean => id === executionId || id.startsWith(prefix);
+    const affectedStepIds = new Set<string>();
+
+    for (const id of [
+      ...state.completedExecutionIds,
+      ...state.failedExecutionIds,
+      ...Object.keys(state.executionOutputs),
+      ...snapshot.completedExecutionIds,
+      ...snapshot.failedExecutionIds,
+      ...Object.keys(snapshot.executionOutputs),
+    ]) {
+      if (isAttemptLocal(id)) {
+        const stepId = id.split('/').at(-1);
+        if (stepId) affectedStepIds.add(stepId);
+      }
+    }
+
+    for (const id of [...state.completedExecutionIds]) {
+      if (isAttemptLocal(id)) state.completedExecutionIds.delete(id);
+    }
+    for (const id of snapshot.completedExecutionIds) {
+      if (isAttemptLocal(id)) state.completedExecutionIds.add(id);
+    }
+    for (const id of [...state.failedExecutionIds]) {
+      if (isAttemptLocal(id)) state.failedExecutionIds.delete(id);
+    }
+    for (const id of snapshot.failedExecutionIds) {
+      if (isAttemptLocal(id)) state.failedExecutionIds.add(id);
+    }
+    for (const id of Object.keys(state.executionOutputs)) {
+      if (isAttemptLocal(id)) {
+        delete state.executionOutputs[id];
+        state.executionOutputOrder.delete(id);
+      }
+    }
+    for (const [id, output] of Object.entries(snapshot.executionOutputs)) {
+      if (isAttemptLocal(id)) {
+        state.executionOutputs[id] = output;
+        const order = snapshot.executionOutputOrder.get(id);
+        if (order !== undefined) state.executionOutputOrder.set(id, order);
+      }
+    }
+
+    for (const stepId of affectedStepIds) {
+      const currentOwner = state.outputOwners.get(stepId);
+      if (currentOwner && !isAttemptLocal(currentOwner)) continue;
+      const snapshotOwner = snapshot.outputOwners.get(stepId);
+      if (snapshotOwner && Object.prototype.hasOwnProperty.call(snapshot.outputs, stepId)) {
+        state.outputs[stepId] = snapshot.outputs[stepId];
+        state.outputOwners.set(stepId, snapshotOwner);
+      } else {
+        const survivingOwner = [...state.completedExecutionIds]
+          .filter(id => id.split('/').at(-1) === stepId && Object.prototype.hasOwnProperty.call(state.executionOutputs, id))
+          .sort((left, right) =>
+            (state.executionOutputOrder.get(right) ?? 0) - (state.executionOutputOrder.get(left) ?? 0),
+          )[0];
+        if (survivingOwner) {
+          state.outputs[stepId] = state.executionOutputs[survivingOwner];
+          state.outputOwners.set(stepId, survivingOwner);
+        } else {
+          delete state.outputs[stepId];
+          state.outputOwners.delete(stepId);
+        }
+      }
+    }
+
+    state.hadError = snapshot.hadError || state.failedExecutionIds.size > 0;
+    if (state.lastError && isAttemptLocal(state.lastError.executionId)) {
+      state.lastError = snapshot.lastError;
+    }
+    if (state.terminalError && isAttemptLocal(state.terminalError.executionId)) {
+      state.terminalError = snapshot.terminalError;
+    }
+  }
+
+  private combineSignals(signals: Array<AbortSignal | undefined>): {
+    signal: AbortSignal;
+    dispose: () => void;
+  } {
+    const controller = new AbortController();
+    const cleanups: Array<() => void> = [];
+    for (const signal of signals) {
+      if (!signal) continue;
+      if (signal.aborted) {
+        controller.abort(signal.reason);
+        break;
+      }
+      const onAbort = (): void => controller.abort(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      cleanups.push(() => signal.removeEventListener('abort', onAbort));
+    }
+    return {
+      signal: controller.signal,
+      dispose: () => cleanups.forEach(cleanup => cleanup()),
+    };
+  }
+
+  private async waitForDelay(delayMs: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) throw new Error('Flow aborted during retry backoff');
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, delayMs);
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        reject(new Error('Flow aborted during retry backoff'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  private async emitLifecycle(
+    state: RunnerState<TContext>,
+    event: FlowLifecycleEvent<TContext>,
+  ): Promise<void> {
+    await state.options.hooks?.onEvent?.(event);
   }
 
   private resolveInput(

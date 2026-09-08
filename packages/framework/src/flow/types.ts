@@ -48,7 +48,11 @@ export interface FlowContractValidationResult {
 
 export interface FlowExecutionContext<TContext = Record<string, unknown>> {
   readonly flowId: string;
+  readonly executionId: string;
   readonly executionPath: readonly string[];
+  readonly attempt: number;
+  readonly startedAt: string;
+  readonly signal: AbortSignal;
   readonly context: TContext;
   readonly outputs: Readonly<Record<string, unknown>>;
   readonly executionOutputs: Readonly<Record<string, unknown>>;
@@ -112,6 +116,20 @@ export interface FlowLoopNode<TContext = Record<string, unknown>> extends FlowNo
   until?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<boolean>;
   /** Called when the loop runs 0 iterations (e.g. `while` returns false immediately). */
   onSkip?: (ctx: FlowExecutionContext<TContext>) => MaybePromise<unknown>;
+  /** Fail the node when maxIterations is reached before while/until converges. */
+  requireConvergence?: boolean;
+}
+
+export type FlowLoopTermination = 'while' | 'until' | 'max-iterations' | 'cancelled';
+
+export interface FlowLoopResult {
+  iterations: number;
+  outputs: unknown[];
+  termination: FlowLoopTermination;
+  converged: boolean;
+  exhausted: boolean;
+  skipped?: boolean;
+  skipOutput?: unknown;
 }
 
 export interface FlowParallelNode<TContext = Record<string, unknown>> extends FlowNodeBase<TContext> {
@@ -157,10 +175,11 @@ export interface FlowSubflowNode<TContext = Record<string, unknown>, TChildConte
   /** Map parent context/inputs to the child flow's context. */
   contextMap: (ctx: FlowExecutionContext<TContext>, input: TInput) => MaybePromise<TChildContext>;
   /** Optional runner options for the child flow. */
-  runnerOptions?: FlowRunnerOptions<TChildContext>;
+  runnerOptions?: FlowRunnerOptions<TChildContext>
+    | ((ctx: FlowExecutionContext<TContext>, input: TInput) => MaybePromise<FlowRunnerOptions<TChildContext>>);
 }
 
-export type FlowNode<TContext = Record<string, unknown>> =
+export type FlowNode<TContext = Record<string, unknown>, TChildContext = any> =
   | FlowStepNode<TContext>
   | FlowGateNode<TContext>
   | FlowConditionalNode<TContext>
@@ -169,7 +188,7 @@ export type FlowNode<TContext = Record<string, unknown>> =
   | FlowSequenceNode<TContext>
   | FlowMapNode<TContext>
   | FlowCatchNode<TContext>
-  | FlowSubflowNode<TContext>;
+  | FlowSubflowNode<TContext, TChildContext>;
 
 export interface FlowDefinition<TContext = Record<string, unknown>> {
   id: string;
@@ -198,7 +217,35 @@ export interface FlowCheckpointAdapter<TContext = Record<string, unknown>> {
 }
 
 /** Lifecycle hooks called by FlowRunner during execution. */
+export type FlowLifecycleEventType =
+  | 'node-start'
+  | 'node-complete'
+  | 'node-failed'
+  | 'node-skipped'
+  | 'node-cancelled'
+  | 'node-upstream-failed';
+
+export interface FlowLifecycleEvent<TContext = Record<string, unknown>> {
+  type: FlowLifecycleEventType;
+  flowId: string;
+  nodeId: string;
+  node: FlowNode<TContext>;
+  executionId: string;
+  executionPath: readonly string[];
+  attempt: number;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  output?: unknown;
+  error?: FlowExecutionError;
+  reason?: 'checkpoint' | 'upstream-failure' | 'cancelled' | 'timed-out';
+  failedDependencies?: string[];
+  willRetry?: boolean;
+}
+
 export interface FlowLifecycleHooks<TContext = Record<string, unknown>> {
+  /** Rich event stream containing stable execution identity and timing. */
+  onEvent?: (event: FlowLifecycleEvent<TContext>) => MaybePromise<void>;
   /** Called before a node starts executing. */
   onNodeStart?: (nodeId: string, node: FlowNode<TContext>) => MaybePromise<void>;
   /** Called after a node completes successfully. */
@@ -233,6 +280,8 @@ export interface FlowRunnerOptions<TContext = Record<string, unknown>> {
   timeoutMs?: number;
   /** AbortSignal for external cancellation. When aborted, the run completes with status 'cancelled'. */
   signal?: AbortSignal;
+  /** Prefix nested execution IDs and checkpoint identity. Primarily used by subflows. */
+  executionPathPrefix?: readonly string[];
 }
 
 export interface FlowRunResult<TContext = Record<string, unknown>> {
@@ -271,6 +320,13 @@ export class FlowCycleError extends Error {
   }
 }
 
+export class FlowTimeoutError extends FlowExecutionError {
+  constructor(message: string, flowId: string, nodeId: string, executionId: string, cause?: unknown) {
+    super(message, flowId, nodeId, executionId, cause);
+    this.name = 'FlowTimeoutError';
+  }
+}
+
 export class FlowContractError extends FlowExecutionError {
   readonly fromStep: string;
   readonly toStep: string;
@@ -298,5 +354,20 @@ export class FlowContractError extends FlowExecutionError {
     this.toStep = toStep;
     this.fieldPath = fieldPath;
     this.reason = reason;
+  }
+}
+
+export class FlowLoopExhaustionError extends FlowExecutionError {
+  readonly result: FlowLoopResult;
+
+  constructor(flowId: string, nodeId: string, executionId: string, result: FlowLoopResult) {
+    super(
+      `Loop '${nodeId}' exhausted after ${result.iterations} iteration(s) without convergence`,
+      flowId,
+      nodeId,
+      executionId,
+    );
+    this.name = 'FlowLoopExhaustionError';
+    this.result = result;
   }
 }

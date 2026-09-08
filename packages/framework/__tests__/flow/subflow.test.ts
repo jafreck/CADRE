@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   FlowRunner,
   defineFlow,
@@ -9,6 +9,138 @@ import {
 } from '@cadre-dev/framework/flow';
 
 describe('subflow node', () => {
+  it('propagates parent cancellation to active child work and waits for settlement', async () => {
+    const controller = new AbortController();
+    const order: string[] = [];
+    let markStarted!: () => void;
+    const started = new Promise<void>(resolve => { markStarted = resolve; });
+    const child = defineFlow('active-child', [
+      step({
+        id: 'active',
+        run: async ctx => {
+          markStarted();
+          await waitForAbort(ctx.signal);
+          order.push('child-settled');
+        },
+      }),
+    ]);
+    const parent = defineFlow('active-parent', [
+      subflow({ id: 'nested', flow: child, contextMap: () => ({}) }),
+    ]);
+
+    const running = new FlowRunner().run(parent, {}, { signal: controller.signal });
+    await started;
+    controller.abort();
+    const result = await running;
+    order.push('parent-returned');
+
+    expect(result.status).toBe('cancelled');
+    expect(order).toEqual(['child-settled', 'parent-returned']);
+  });
+
+  it('combines explicit child signal with parent cancellation', async () => {
+    const parentController = new AbortController();
+    const childController = new AbortController();
+    let observedAbort = false;
+    let markStarted!: () => void;
+    const started = new Promise<void>(resolve => { markStarted = resolve; });
+    const child = defineFlow('combined-child', [
+      step({
+        id: 'active',
+        run: async ctx => {
+          markStarted();
+          await waitForAbort(ctx.signal);
+          observedAbort = true;
+        },
+      }),
+    ]);
+    const parent = defineFlow('combined-parent', [
+      subflow({
+        id: 'nested', flow: child, contextMap: () => ({}),
+        runnerOptions: { signal: childController.signal },
+      }),
+    ]);
+
+    const running = new FlowRunner().run(parent, {}, { signal: parentController.signal });
+    await started;
+    parentController.abort();
+    const result = await running;
+
+    expect(result.status).toBe('cancelled');
+    expect(observedAbort).toBe(true);
+  });
+
+  it('forwards child lifecycle events with child execution identity', async () => {
+    const events = vi.fn();
+    const child = defineFlow('event-child', [step({ id: 'child-work', run: () => 1 })]);
+    const parent = defineFlow('event-parent', [
+      subflow({ id: 'nested', flow: child, contextMap: () => ({}) }),
+    ]);
+
+    await new FlowRunner().run(parent, {}, { hooks: { onEvent: events } });
+
+    expect(events).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'node-complete', flowId: 'event-child',
+      executionId: 'event-parent/nested/event-child/child-work',
+    }));
+  });
+
+  it('isolates checkpoints when two subflows reuse the same child definition', async () => {
+    const snapshots = new Map<string, import('@cadre-dev/framework/flow').FlowCheckpointSnapshot>();
+    const checkpoint = {
+      load: (flowId: string) => snapshots.get(flowId) ?? null,
+      save: (snapshot: import('@cadre-dev/framework/flow').FlowCheckpointSnapshot) => {
+        snapshots.set(snapshot.flowId, snapshot);
+      },
+    };
+    const child = defineFlow<{ value: number }>('shared-child', [
+      step({ id: 'read', run: ctx => ctx.context.value }),
+    ]);
+    const parent = defineFlow<{ first: number; second: number }>('checkpoint-parent', [
+      subflow({
+        id: 'first-child', flow: child,
+        contextMap: ctx => ({ value: ctx.context.first }),
+        runnerOptions: { checkpoint },
+      }),
+      subflow({
+        id: 'second-child', flow: child,
+        contextMap: ctx => ({ value: ctx.context.second }),
+        runnerOptions: { checkpoint },
+      }),
+    ]);
+
+    const result = await new FlowRunner().run(parent, { first: 1, second: 2 });
+
+    expect((result.outputs['first-child'] as { outputs: { read: number } }).outputs.read).toBe(1);
+    expect((result.outputs['second-child'] as { outputs: { read: number } }).outputs.read).toBe(2);
+    expect([...snapshots.keys()].sort()).toEqual([
+      'checkpoint-parent/first-child/shared-child',
+      'checkpoint-parent/second-child/shared-child',
+    ]);
+  });
+
+  it('derives child runner options from the current parent execution', async () => {
+    const optionsFactory = vi.fn().mockReturnValue({ concurrency: 1 });
+    const child = defineFlow<{ value: number }>('options-child', [
+      step({ id: 'read', run: ctx => ctx.context.value }),
+    ]);
+    const parent = defineFlow<{ value: number }>('options-parent', [
+      subflow({
+        id: 'nested', flow: child,
+        contextMap: ctx => ({ value: ctx.context.value }),
+        runnerOptions: optionsFactory,
+      }),
+    ]);
+
+    const result = await new FlowRunner<{ value: number }>().run(parent, { value: 7 });
+
+    expect(result.status).toBe('completed');
+    expect(optionsFactory).toHaveBeenCalledWith(
+      expect.objectContaining({ executionId: 'options-parent/nested', attempt: 1 }),
+      undefined,
+    );
+  });
+
   it('executes a child flow and returns its outputs', async () => {
     const childFlow = defineFlow<{ value: number }>('child', [
       step({
@@ -249,3 +381,8 @@ describe('subflow node', () => {
     expect(subB.outputs['tag']).toBe('b:right');
   });
 });
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+}
