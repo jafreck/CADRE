@@ -50,7 +50,7 @@
     "ora": "^9",
     "p-limit": "^7",
     "p-queue": "^9",
-    "simple-git": "^3.36",
+    "simple-git": "^4.0",
     "zod": "^4.5"
   },
   "devDependencies": {
